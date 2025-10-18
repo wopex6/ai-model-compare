@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Chatbot - Multi-User Environment</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='multi_user_styles.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div id="app">
+        <!-- Login Screen -->
+        <div id="login-screen" class="screen">
+            <div class="container">
+                <div class="auth-card">
+                    <h1>AI Chatbot Login</h1>
+                    <form id="login-form">
+                        <div class="form-group">
+                            <label for="login-username">Username</label>
+                            <input type="text" id="login-username" name="username" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="login-password">Password</label>
+                            <div class="password-input-container">
+                                <input type="password" id="login-password" name="password" required>
+                                <button type="button" class="password-toggle" id="password-toggle">
+                                    <span class="toggle-text">Show</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="remember-username" name="rememberUsername">
+                                Remember Username
+                            </label>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Login</button>
+                    </form>
+                    <div class="auth-links">
+                        <p>Don't have an account? <a href="#" id="show-signup">Sign up here</a></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Signup Screen -->
+        <div id="signup-screen" class="screen">
+            <div class="container">
+                <div class="auth-card">
+                    <h1>Create Account</h1>
+                    <form id="signup-form">
+                        <div class="form-group">
+                            <label for="signup-username">Username</label>
+                            <input type="text" id="signup-username" name="username" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="signup-email">Email</label>
+                            <input type="email" id="signup-email" name="email" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="signup-password">Password</label>
+                            <input type="password" id="signup-password" name="password" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="signup-confirm-password">Confirm Password</label>
+                            <input type="password" id="signup-confirm-password" name="confirmPassword" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Sign Up</button>
+                    </form>
+                    <div class="auth-links">
+                        <p>Already have an account? <a href="#" id="show-login">Login here</a></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Dashboard -->
+        <div id="dashboard-screen" class="screen">
+            <nav class="navbar">
+                <div class="nav-brand">
+                    <h2>AI Chatbot - Multi-User</h2>
+                </div>
+                <div class="nav-menu">
+                    <button class="nav-btn active" data-tab="chat">AI Chat</button>
+                    <button class="nav-btn" data-tab="profile">Profile</button>
+                    <button class="nav-btn" data-tab="psychology">Psychology</button>
+                    <button class="nav-btn" data-tab="conversations">Conversations</button>
+                    <button class="nav-btn" data-tab="settings">Settings</button>
+                    <button class="btn btn-secondary" id="logout-btn">Logout</button>
+                </div>
+            </nav>
+
+            <main class="main-content">
+                <!-- AI Chat Tab -->
+                <div id="chat-tab" class="tab-content">
+                    <div class="content-header">
+                        <h2>AI Chat</h2>
+                        <button class="btn btn-primary" id="new-chat-btn">New Chat</button>
+                    </div>
+                    <div class="chat-layout">
+                        <div class="chat-sidebar">
+                            <div id="chat-sessions-list">
+                                <!-- Chat sessions will be loaded here -->
+                            </div>
+                        </div>
+                        <div class="chat-main">
+                            <!-- Personality Controls -->
+                            <div class="personality-controls">
+                                <h6><i class="fas fa-user-cog"></i> Personality Settings</h6>
+                                <div class="d-flex flex-wrap mb-2">
+                                    <span class="personality-preset active" data-preset="helpful_assistant">
+                                        <i class="fas fa-hands-helping"></i> Helpful
+                                    </span>
+                                    <span class="personality-preset" data-preset="creative_mentor">
+                                        <i class="fas fa-lightbulb"></i> Creative
+                                    </span>
+                                    <span class="personality-preset" data-preset="technical_expert">
+                                        <i class="fas fa-code"></i> Technical
+                                    </span>
+                                    <span class="personality-preset" data-preset="curious_explorer">
+                                        <i class="fas fa-compass"></i> Explorer
+                                    </span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div class="bot-info">
+                                        <span class="bot-avatar" id="botAvatar">A</span>
+                                        <span id="botName">Alex</span> • 
+                                        <small id="botMood">Helpful</small>
+                                    </div>
+                                    <button class="btn btn-outline-info btn-sm" id="showSummaryBtn">
+                                        <i class="fas fa-chart-line"></i> Summary
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div id="chat-messages" class="messages-container">
+                                <div class="welcome-message">
+                                    <h3>Welcome to AI Chatbot!</h3>
+                                    <p>Start a conversation or select an existing chat from the sidebar.</p>
+                                    <p>Your conversations are personalized based on your profile and psychology traits.</p>
+                                </div>
+                                
+                                <!-- Typing Indicator -->
+                                <div class="typing-indicator" id="typingIndicator" style="display: none;">
+                                    <i class="fas fa-robot"></i> <span class="typing-dots">Thinking</span>
+                                </div>
+                            </div>
+                            <div id="message-usage-info" class="message-usage-container"></div>
+                            <div id="chat-input-area" class="message-input-area">
+                                <div class="message-input">
+                                    <textarea id="chat-input" placeholder="Type your message to the AI..." rows="1" style="resize: none; overflow-y: hidden; max-height: 120px; min-height: 40px;"></textarea>
+                                    <button id="send-chat-btn" class="btn btn-primary">Send</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Profile Tab -->
+                <div id="profile-tab" class="tab-content">
+                    <div class="content-header">
+                        <h2>Comprehensive Profile</h2>
+                        <div class="profile-completion">
+                            <span id="profile-completion-text">Profile: 0% Complete</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Profile Navigation -->
+                    <div class="profile-nav">
+                        <button class="profile-nav-btn active" data-page="personal">Personal Info</button>
+                        <button class="profile-nav-btn" data-page="preferences">Preferences</button>
+                        <button class="profile-nav-btn" data-page="privacy">Privacy Settings</button>
+                    </div>
+                    
+                    <!-- Page 1: Personal Information -->
+                    <div id="profile-page-personal" class="profile-page active">
+                        <h3>Personal Information</h3>
+                        <form id="personal-info-form">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="personal-name">Full Name</label>
+                                    <input type="text" id="personal-name" name="name" placeholder="Enter your full name">
+                                </div>
+                                <div class="form-group">
+                                    <label for="personal-email">Email Address</label>
+                                    <input type="email" id="personal-email" name="email" placeholder="Enter your email">
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="personal-age">Age</label>
+                                    <input type="number" id="personal-age" name="age" placeholder="Enter your age">
+                                </div>
+                                <div class="form-group">
+                                    <label for="personal-location">Location</label>
+                                    <input type="text" id="personal-location" name="location" placeholder="Enter your location">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="personal-occupation">Occupation</label>
+                                <input type="text" id="personal-occupation" name="occupation" placeholder="Enter your occupation">
+                            </div>
+                            <div class="form-group">
+                                <label for="personal-interests">Interests</label>
+                                <textarea id="personal-interests" name="interests" placeholder="Enter your interests (comma-separated)"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="personal-bio">Bio</label>
+                                <textarea id="personal-bio" name="bio" rows="4" placeholder="Tell us about yourself"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Update Personal Info</button>
+                        </form>
+                    </div>
+                    
+                    <!-- Page 2: Preferences -->
+                    <div id="profile-page-preferences" class="profile-page">
+                        <h3>Preferences & Personality</h3>
+                        <form id="preferences-form">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="pref-communication-style">Communication Style</label>
+                                    <select id="pref-communication-style" name="communication_style">
+                                        <option value="friendly">Friendly</option>
+                                        <option value="professional">Professional</option>
+                                        <option value="casual">Casual</option>
+                                        <option value="formal">Formal</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="pref-language">Language Preference</label>
+                                    <select id="pref-language" name="language_preference">
+                                        <option value="en">English</option>
+                                        <option value="es">Spanish</option>
+                                        <option value="fr">French</option>
+                                        <option value="de">German</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="pref-personality-type">Personality Type</label>
+                                    <input type="text" id="pref-personality-type" name="personality_type" placeholder="e.g., INTJ, ENFP">
+                                </div>
+                                <div class="form-group">
+                                    <label for="pref-learning-style">Learning Style</label>
+                                    <select id="pref-learning-style" name="learning_style">
+                                        <option value="visual">Visual</option>
+                                        <option value="auditory">Auditory</option>
+                                        <option value="kinesthetic">Kinesthetic</option>
+                                        <option value="mixed">Mixed</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="pref-topics">Topics of Interest</label>
+                                <textarea id="pref-topics" name="topics_of_interest" placeholder="Enter topics you're interested in (comma-separated)"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="pref-goals">Goals</label>
+                                <textarea id="pref-goals" name="goals" placeholder="Enter your goals (comma-separated)"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Update Preferences</button>
+                        </form>
+                    </div>
+                    
+                    <!-- Page 3: Privacy Settings -->
+                    <div id="profile-page-privacy" class="profile-page">
+                        <h3>Privacy & Data Settings</h3>
+                        <form id="privacy-form">
+                            <div class="privacy-section">
+                                <div class="privacy-item">
+                                    <label class="privacy-label">
+                                        <input type="checkbox" id="privacy-data-sharing" name="data_sharing">
+                                        <span class="checkmark"></span>
+                                        Allow data sharing for research purposes
+                                    </label>
+                                    <p class="privacy-description">Help improve AI systems by sharing anonymized interaction data</p>
+                                </div>
+                                <div class="privacy-item">
+                                    <label class="privacy-label">
+                                        <input type="checkbox" id="privacy-analytics" name="analytics">
+                                        <span class="checkmark"></span>
+                                        Enable analytics and usage tracking
+                                    </label>
+                                    <p class="privacy-description">Allow collection of usage statistics to improve your experience</p>
+                                </div>
+                                <div class="privacy-item">
+                                    <label class="privacy-label">
+                                        <input type="checkbox" id="privacy-personalization" name="personalization">
+                                        <span class="checkmark"></span>
+                                        Enable personalized AI responses
+                                    </label>
+                                    <p class="privacy-description">Use your profile data to customize AI interactions</p>
+                                </div>
+                                <div class="privacy-item">
+                                    <label class="privacy-label">
+                                        <input type="checkbox" id="privacy-marketing" name="marketing">
+                                        <span class="checkmark"></span>
+                                        Receive marketing communications
+                                    </label>
+                                    <p class="privacy-description">Get updates about new features and improvements</p>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Update Privacy Settings</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Psychology Tab -->
+                <div id="psychology-tab" class="tab-content">
+                    <div class="content-header">
+                        <h2>Psychology Profile & History</h2>
+                        <div class="psychology-nav">
+                            <button class="psychology-nav-btn active" data-section="current">Current Traits</button>
+                            <button class="psychology-nav-btn" data-section="history">Assessment History</button>
+                            <button class="psychology-nav-btn" data-section="chart">Progress Chart</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Current Traits Section -->
+                    <div id="psychology-current" class="psychology-section active">
+                        <div class="section-header">
+                            <h3>Current Psychology Traits</h3>
+                            <button class="btn btn-primary" id="add-trait-btn">Add Trait</button>
+                        </div>
+                        <div class="psychology-info">
+                            <p>Your psychology traits help the AI understand your personality and provide more personalized responses.</p>
+                        </div>
+                        <div class="traits-grid" id="traits-grid">
+                            <!-- Traits will be loaded here -->
+                        </div>
+                    </div>
+                    
+                    <!-- Assessment History Section -->
+                    <div id="psychology-history" class="psychology-section">
+                        <div class="section-header">
+                            <h3>Assessment History</h3>
+                            <p>Track how your psychological profile has evolved over time</p>
+                        </div>
+                        <div id="assessment-history-container">
+                            <!-- Assessment history will be loaded here -->
+                        </div>
+                    </div>
+                    
+                    <!-- Progress Chart Section -->
+                    <div id="psychology-chart" class="psychology-section">
+                        <div class="section-header">
+                            <h3>Psychology Progress Chart</h3>
+                            <p>Visual representation of your psychological trait changes over time</p>
+                        </div>
+                        <div class="chart-controls">
+                            <label>
+                                <input type="radio" name="chart-type" value="jung" checked> Carl Jung Types
+                            </label>
+                            <label>
+                                <input type="radio" name="chart-type" value="bigfive"> Big Five Traits
+                            </label>
+                        </div>
+                        <div id="psychology-chart-container">
+                            <canvas id="psychology-chart-canvas" width="800" height="400"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Conversations Tab -->
+                <div id="conversations-tab" class="tab-content">
+                    <div class="content-header">
+                        <h2>All Conversations</h2>
+                        <button class="btn btn-primary" id="new-conversation-btn">New Conversation</button>
+                    </div>
+                    <div class="conversations-layout">
+                        <div class="conversations-sidebar">
+                            <div id="conversations-list">
+                                <!-- Conversations will be loaded here -->
+                            </div>
+                        </div>
+                        <div class="conversation-main">
+                            <div id="conversation-messages" class="messages-container">
+                                <p class="no-conversation">Select a conversation to view messages</p>
+                            </div>
+                            <div id="message-input-area" class="message-input-area" style="display: none;">
+                                <div class="message-input">
+                                    <input type="text" id="message-input" placeholder="Type your message...">
+                                    <button id="send-message-btn" class="btn btn-primary">Send</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Settings Tab -->
+                <div id="settings-tab" class="tab-content">
+                    <div class="content-header">
+                        <h2>Settings</h2>
+                    </div>
+                    <div class="settings-section">
+                        <h3>Change Password</h3>
+                        <form id="change-password-form">
+                            <div class="form-group">
+                                <label for="current-password">Current Password</label>
+                                <input type="password" id="current-password" name="currentPassword" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="new-password">New Password</label>
+                                <input type="password" id="new-password" name="newPassword" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="confirm-new-password">Confirm New Password</label>
+                                <input type="password" id="confirm-new-password" name="confirmNewPassword" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Change Password</button>
+                        </form>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="trait-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="trait-modal-title">Add Psychology Trait</h3>
+                <button class="close-btn" id="close-trait-modal">&times;</button>
+            </div>
+            <form id="trait-form">
+                <div class="form-group">
+                    <label for="trait-name">Trait Name</label>
+                    <input type="text" id="trait-name" name="traitName" required>
+                </div>
+                <div class="form-group">
+                    <label for="trait-value">Trait Value (0-1)</label>
+                    <input type="number" id="trait-value" name="traitValue" min="0" max="1" step="0.1" required>
+                </div>
+                <div class="form-group">
+                    <label for="trait-description">Description</label>
+                    <textarea id="trait-description" name="description" rows="3"></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-trait">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Trait</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="conversation-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>New Conversation</h3>
+                <button class="close-btn" id="close-conversation-modal">&times;</button>
+            </div>
+            <form id="conversation-form">
+                <div class="form-group">
+                    <label for="conversation-title">Conversation Title</label>
+                    <input type="text" id="conversation-title" name="title" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-conversation">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Conversation</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="notification" class="notification"></div>
+
+    <script src="{{ url_for('static', filename='multi_user_app.js') }}?v=20251018_2127"></script>
+    <style>
+        /* Prevent scroll flash by setting initial scroll position */
+        html {
+            scroll-behavior: auto !important;
+        }
+        
+        /* Aggressive flash prevention */
+        body {
+            opacity: 0;
+            transition: opacity 0.1s ease-in;
+        }
+        
+        body.loaded {
+            opacity: 1;
+        }
+        
+        /* Prevent scroll interference during restoration */
+        html.scroll-locked {
+            scroll-behavior: auto !important;
+        }
+        
+        /* Ensure screens are hidden by default */
+        .screen {
+            display: none;
+        }
+        
+        .screen.active {
+            display: block;
+        }
+        
+        /* Prevent scrolling on auth screens */
+        #login-screen,
+        #signup-screen {
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        
+        /* Ensure body doesn't have extra height on auth screens */
+        #login-screen.active ~ #dashboard-screen,
+        #signup-screen.active ~ #dashboard-screen {
+            display: none !important;
+        }
+        
+        
+        /* Password toggle styling */
+        .password-input-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        
+        .password-input-container input {
+            flex: 1;
+            padding-right: 60px;
+        }
+        
+        .password-toggle {
+            position: absolute;
+            right: 8px;
+            background: none;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            padding: 4px 8px;
+            font-size: 12px;
+            border-radius: 3px;
+        }
+        
+        .password-toggle:hover {
+            background-color: #f0f0f0;
+            color: #333;
+        }
+        
+        /* Message usage display */
+        .message-usage-container {
+            padding: 8px 15px;
+            background: #f8f9fa;
+            border-top: 1px solid #dee2e6;
+            text-align: center;
+            font-size: 14px;
+        }
+        
+        .role-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-weight: 500;
+        }
+        
+        .role-badge.admin {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .role-badge.paid {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+        
+        .role-badge.guest {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        /* Chat session item with delete button */
+        .chat-session-item {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .chat-session-item .session-content {
+            flex: 1;
+            cursor: pointer;
+        }
+        
+        .delete-chat-btn {
+            background: transparent;
+            border: none;
+            color: #dc3545;
+            font-size: 24px;
+            line-height: 1;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            opacity: 0;
+            transition: opacity 0.2s, background 0.2s;
+        }
+        
+        .chat-session-item:hover .delete-chat-btn {
+            opacity: 1;
+        }
+        
+        .delete-chat-btn:hover {
+            background: #ffe5e5;
+            color: #c82333;
+        }
+        
+        /* Personality Controls Styling */
+        .personality-controls {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .personality-preset {
+            cursor: pointer;
+            padding: 6px 12px;
+            border-radius: 15px;
+            margin: 3px;
+            background: #ffffff;
+            border: 1px solid #dee2e6;
+            transition: all 0.3s ease;
+            font-size: 0.85rem;
+            display: inline-block;
+        }
+        
+        .personality-preset:hover {
+            background: #e9ecef;
+            transform: translateY(-1px);
+        }
+        
+        .personality-preset.active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        
+        .bot-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+        
+        .bot-avatar {
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        /* Typing Indicator */
+        .typing-indicator {
+            padding: 10px 15px;
+            font-style: italic;
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+        
+        .typing-dots::after {
+            content: '';
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+        
+        @keyframes dots {
+            0%, 20% { content: ''; }
+            40% { content: '.'; }
+            60% { content: '..'; }
+            80%, 100% { content: '...'; }
+        }
+        
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 8px 0;
+            line-height: 1.4;
+        }
+        
+        .checkbox-label input[type="checkbox"] {
+            margin: 0;
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+            position: relative;
+            top: 0;
+        }
+    </style>
+    
+    <script>
+        // DEBUG: Flash prevention debugging
+        console.log('🔧 Flash Debug: Script starting at', performance.now(), 'ms');
+        
+        // Store scroll position for restoration
+        (function() {
+            const savedScrollTop = parseInt(localStorage.getItem('mainScroll_top')) || 0;
+            const savedScrollLeft = parseInt(localStorage.getItem('mainScroll_left')) || 0;
+            window.targetScrollTop = savedScrollTop;
+            window.targetScrollLeft = savedScrollLeft;
+            console.log('🔧 Flash Debug: Stored scroll position for restoration:', savedScrollTop, savedScrollLeft);
+        })();
+        
+        // Prevent flash by checking auth status and scroll position before showing content
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🔧 Flash Debug: DOM ready at', performance.now(), 'ms');
+            
+            const authToken = localStorage.getItem('authToken');
+            const currentUser = localStorage.getItem('currentUser');
+            
+            if (authToken && currentUser) {
+                console.log('🔧 Flash Debug: DOM ready - user logged in');
+                
+                // Only do screen switching if not already done
+                if (!window.flashPreventionDone) {
+                    const loginScreen = document.getElementById('login-screen');
+                    const dashboard = document.getElementById('dashboard-screen');
+                    if (loginScreen) {
+                        loginScreen.style.display = 'none';
+                        console.log('🔧 Flash Debug: Login screen hidden in DOM ready');
+                    }
+                    if (dashboard) {
+                        dashboard.style.display = 'block';
+                        console.log('🔧 Flash Debug: Dashboard shown in DOM ready');
+                    }
+                    window.flashPreventionDone = true;
+                }
+                
+                // Always add ready class
+                const dashboard = document.getElementById('dashboard-screen');
+                if (dashboard) {
+                    setTimeout(() => {
+                        dashboard.classList.add('ready');
+                        console.log('🔧 Flash Debug: Dashboard ready class added');
+                    }, 50);
+                }
+            } else {
+                console.log('🔧 Flash Debug: DOM ready - user not logged in');
+                // User not logged in, setup remember username functionality
+                const savedUsername = localStorage.getItem('rememberedUsername');
+                const rememberCheckbox = document.getElementById('remember-username');
+                const usernameInput = document.getElementById('login-username');
+                
+                if (savedUsername && usernameInput) {
+                    usernameInput.value = savedUsername;
+                    if (rememberCheckbox) {
+                        rememberCheckbox.checked = true;
+                    }
+                }
+                
+                // Setup password toggle functionality
+                const passwordInput = document.getElementById('login-password');
+                const passwordToggle = document.getElementById('password-toggle');
+                const toggleText = passwordToggle.querySelector('.toggle-text');
+                
+                passwordToggle.addEventListener('click', function() {
+                    if (passwordInput.type === 'password') {
+                        passwordInput.type = 'text';
+                        toggleText.textContent = 'Hide';
+                    } else {
+                        passwordInput.type = 'password';
+                        toggleText.textContent = 'Show';
+                    }
+                });
+            }
+            
+            // Make body visible to prevent flash
+            document.body.classList.add('loaded');
+            console.log('🔧 Flash Debug: Body loaded class added at', performance.now(), 'ms');
+            
+            // Debug button removed - was blocking navigation buttons
+            // (Character encoding fixes are now handled automatically)
+            
+            // Initialize the app
+            console.log('🔧 Flash Debug: Initializing app at', performance.now(), 'ms');
+            console.log('🔧 Flash Debug: Document ready state:', document.readyState);
+            console.log('🔧 Flash Debug: Page dimensions at init - body height:', document.body.scrollHeight, 'window height:', window.innerHeight);
+            
+            const app = new IntegratedAIChatbot();
+            window.integratedAIChatbot = app; // Make globally accessible
+            
+            // Personality Controls
+            document.querySelectorAll('.personality-preset').forEach(preset => {
+                preset.addEventListener('click', function() {
+                    // Update active state
+                    document.querySelectorAll('.personality-preset').forEach(p => p.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    // Update bot info
+                    const presetName = this.dataset.preset;
+                    const displayName = this.textContent.trim();
+                    document.getElementById('botName').textContent = displayName;
+                    document.getElementById('botAvatar').textContent = displayName[0];
+                    document.getElementById('botMood').textContent = displayName;
+                    
+                    console.log('Personality changed to:', presetName);
+                    // TODO: Send personality change to backend
+                });
+            });
+            
+            // Summary button
+            document.getElementById('showSummaryBtn').addEventListener('click', function() {
+                alert('Conversation Summary feature - TODO: Implement modal with session stats');
+                // TODO: Implement summary modal
+            });
+            
+            // Auto-expanding textarea for chat input
+            const chatInput = document.getElementById('chat-input');
+            if (chatInput) {
+                chatInput.addEventListener('input', function() {
+                    // Reset height to calculate new height
+                    this.style.height = 'auto';
+                    
+                    // If content fits within 5 lines, expand the textarea
+                    if (this.scrollHeight <= 120) {
+                        this.style.height = this.scrollHeight + 'px';
+                        this.style.overflowY = 'hidden';
+                    } else {
+                        // If content exceeds 5 lines, fix height and show scrollbar
+                        this.style.height = '120px';
+                        this.style.overflowY = 'auto';
+                    }
+                });
+                
+                // Handle Enter key (Enter to send, Shift+Enter for new line)
+                chatInput.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        if (e.shiftKey) {
+                            // Shift+Enter: Allow new line (don't prevent default)
+                            return;
+                        } else {
+                            // Enter alone: Send message
+                            e.preventDefault();
+                            const sendBtn = document.getElementById('send-chat-btn');
+                            if (sendBtn) sendBtn.click();
+                        }
+                    }
+                });
+            }
+            
+            // Let the StateManager handle scroll restoration with proper timing
+        });
+    </script>
+</body>
+</html>

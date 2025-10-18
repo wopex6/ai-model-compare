@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Personality Assessment Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+        .question-card { background: #f5f5f5; padding: 20px; margin: 20px 0; border-radius: 8px; }
+        .option { margin: 10px 0; padding: 10px; background: white; border-radius: 4px; cursor: pointer; }
+        .option:hover { background: #e3f2fd; }
+        .progress { background: #ddd; height: 20px; border-radius: 10px; margin: 20px 0; }
+        .progress-bar { background: #4caf50; height: 100%; border-radius: 10px; transition: width 0.3s; }
+        button { background: #2196f3; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; margin: 10px 5px; }
+        button:hover { background: #1976d2; }
+        .feedback { background: #e8f5e9; padding: 15px; border-radius: 4px; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <h1>🧠 Personality Assessment</h1>
+    <div id="content">
+        <div class="question-card">
+            <h2>Welcome to the Personality Assessment</h2>
+            <p>This assessment will help me understand your communication preferences and adapt my responses to better suit your style.</p>
+            <p><strong>Time needed:</strong> 3-5 minutes</p>
+            <p><strong>Benefits:</strong></p>
+            <ul>
+                <li>More personalized AI responses</li>
+                <li>Better communication style matching</li>
+                <li>Improved learning experience</li>
+            </ul>
+            <button onclick="startAssessment()">Start Assessment</button>
+            <button onclick="window.location.href='/'">Maybe Later</button>
+        </div>
+    </div>
+
+    <script>
+        let currentUser = 'test_user_' + Date.now();
+        let currentQuestion = null;
+
+        async function startAssessment() {
+            try {
+                const response = await fetch('/personality/assessment/start', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({user_id: currentUser})
+                });
+                
+                const data = await response.json();
+                console.log('Assessment started:', data);
+                
+                // Get first question
+                getNextQuestion();
+                
+            } catch (error) {
+                console.error('Error starting assessment:', error);
+                document.getElementById('content').innerHTML = '<p>Error starting assessment. Please try again.</p>';
+            }
+        }
+
+        async function getNextQuestion() {
+            try {
+                const response = await fetch(`/personality/assessment/question/${currentUser}`);
+                const data = await response.json();
+                
+                if (data.ui_type === 'assessment_question') {
+                    displayQuestion(data);
+                } else if (data.ui_type === 'assessment_complete') {
+                    displayResults(data);
+                } else {
+                    console.log('Assessment response:', data);
+                }
+                
+            } catch (error) {
+                console.error('Error getting question:', error);
+            }
+        }
+
+        function displayQuestion(questionData) {
+            currentQuestion = questionData;
+            
+            const html = `
+                <div class="question-card">
+                    <div class="progress">
+                        <div class="progress-bar" style="width: ${(questionData.progress.split('/')[0] / questionData.progress.split('/')[1]) * 100}%"></div>
+                    </div>
+                    <p><strong>Progress:</strong> ${questionData.progress}</p>
+                    
+                    <h3>${questionData.question}</h3>
+                    
+                    <div id="options">
+                        ${questionData.options.map((option, index) => `
+                            <div class="option" onclick="selectOption(${index})">
+                                ${option.text}
+                            </div>
+                        `).join('')}
+                    </div>
+                    
+                    <button onclick="pauseAssessment()">Pause Assessment</button>
+                    <button onclick="skipQuestion()">Skip Question</button>
+                </div>
+            `;
+            
+            document.getElementById('content').innerHTML = html;
+        }
+
+        async function selectOption(optionIndex) {
+            try {
+                const response = await fetch('/personality/assessment/respond', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        user_id: currentUser,
+                        question_id: currentQuestion.question_id,
+                        option_id: optionIndex
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.ui_type === 'assessment_question') {
+                    displayQuestion(data);
+                } else if (data.ui_type === 'assessment_complete') {
+                    displayResults(data);
+                } else {
+                    console.log('Response result:', data);
+                }
+                
+            } catch (error) {
+                console.error('Error submitting response:', error);
+            }
+        }
+
+        function displayResults(resultsData) {
+            const profile = resultsData.profile_summary;
+            
+            const html = `
+                <div class="question-card">
+                    <h2>🎉 Assessment Complete!</h2>
+                    <p>${resultsData.message}</p>
+                    
+                    <div class="feedback">
+                        <h3>Your Personality Profile:</h3>
+                        <ul>
+                            <li><strong>Communication Style:</strong> ${profile.communication_style}</li>
+                            <li><strong>Learning Preference:</strong> ${profile.learning_preference}</li>
+                            <li><strong>Goal Orientation:</strong> ${profile.goal_orientation}</li>
+                            <li><strong>Profile Confidence:</strong> ${profile.confidence_level}</li>
+                        </ul>
+                    </div>
+                    
+                    <h4>Next Steps:</h4>
+                    <ul>
+                        ${resultsData.next_steps.map(step => `<li>${step}</li>`).join('')}
+                    </ul>
+                    
+                    <button onclick="viewFullProfile()">View Full Profile</button>
+                    <button onclick="window.location.href='/chat'">Start Chatting</button>
+                    <button onclick="window.location.href='/'">Go to Main Page</button>
+                </div>
+            `;
+            
+            document.getElementById('content').innerHTML = html;
+        }
+
+        async function viewFullProfile() {
+            try {
+                const response = await fetch(`/personality/profile/${currentUser}`);
+                const data = await response.json();
+                console.log('Full profile:', data);
+                
+                // Display full profile (you can enhance this)
+                alert('Full profile logged to console. Check developer tools.');
+                
+            } catch (error) {
+                console.error('Error getting profile:', error);
+            }
+        }
+
+        function pauseAssessment() {
+            alert('Assessment paused. You can resume anytime by returning to this page.');
+        }
+
+        function skipQuestion() {
+            getNextQuestion();
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Max - Your Super Motivational Coach</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #ff6b6b 0%, #4ecdc4 50%, #45b7d1 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            animation: gradientShift 10s ease infinite;
+        }
+        
+        @keyframes gradientShift {
+            0%, 100% { background: linear-gradient(135deg, #ff6b6b 0%, #4ecdc4 50%, #45b7d1 100%); }
+            50% { background: linear-gradient(135deg, #4ecdc4 0%, #45b7d1 50%, #ff6b6b 100%); }
+        }
+        
+        .coach-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .coach-header {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+            text-align: center;
+        }
+        
+        .coach-avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 32px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .stats-dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #ff6b6b;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .chat-section {
+            display: grid;
+            grid-template-columns: 1fr 300px;
+            gap: 20px;
+        }
+        
+        .main-chat {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+        
+        .chat-messages {
+            height: 500px;
+            overflow-y: auto;
+            padding: 20px;
+            background: linear-gradient(to bottom, #f8f9fa, #ffffff);
+        }
+        
+        .message {
+            margin-bottom: 20px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+        
+        .message.user {
+            flex-direction: row-reverse;
+        }
+        
+        .message-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            flex-shrink: 0;
+        }
+        
+        .message.user .message-avatar {
+            background: #007bff;
+        }
+        
+        .message.coach .message-avatar {
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            animation: glow 2s ease-in-out infinite alternate;
+        }
+        
+        @keyframes glow {
+            from { box-shadow: 0 0 5px rgba(255, 107, 107, 0.5); }
+            to { box-shadow: 0 0 20px rgba(78, 205, 196, 0.8); }
+        }
+        
+        .message-content {
+            max-width: 75%;
+            padding: 15px 20px;
+            border-radius: 20px;
+            position: relative;
+        }
+        
+        .message.user .message-content {
+            background: #007bff;
+            color: white;
+            border-bottom-right-radius: 5px;
+        }
+        
+        .message.coach .message-content {
+            background: linear-gradient(135deg, #fff 0%, #f8f9fa 100%);
+            border: 2px solid #4ecdc4;
+            border-bottom-left-radius: 5px;
+        }
+        
+        .message-meta {
+            font-size: 11px;
+            color: #6c757d;
+            margin-top: 8px;
+        }
+        
+        .chat-input-section {
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.9);
+            border-top: 2px solid #4ecdc4;
+        }
+        
+        .quick-actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .quick-action-btn {
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            transition: all 0.3s ease;
+        }
+        
+        .quick-action-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .sidebar-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .progress-ring {
+            width: 100px;
+            height: 100px;
+            margin: 0 auto 15px;
+        }
+        
+        .progress-ring circle {
+            fill: transparent;
+            stroke: #e9ecef;
+            stroke-width: 8;
+        }
+        
+        .progress-ring .progress {
+            stroke: #4ecdc4;
+            stroke-linecap: round;
+            transition: stroke-dasharray 0.5s ease;
+        }
+        
+        .upcoming-activity {
+            background: linear-gradient(135deg, #fff3cd, #ffeaa7);
+            border-left: 4px solid #ff6b6b;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        
+        .streak-counter {
+            text-align: center;
+            padding: 20px;
+            background: linear-gradient(135deg, #ff6b6b, #4ecdc4);
+            color: white;
+            border-radius: 15px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .streak-counter::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(45deg, transparent, rgba(255,255,255,0.1), transparent);
+            animation: shine 3s infinite;
+        }
+        
+        @keyframes shine {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .streak-number {
+            font-size: 3rem;
+            font-weight: bold;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .typing-indicator {
+            display: none;
+            padding: 15px;
+            font-style: italic;
+            color: #4ecdc4;
+            background: rgba(78, 205, 196, 0.1);
+            border-radius: 10px;
+            margin: 10px 0;
+        }
+        
+        .energy-boost {
+            animation: energyPulse 1s ease-in-out;
+        }
+        
+        @keyframes energyPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.02); background: rgba(255, 107, 107, 0.1); }
+        }
+        
+        @media (max-width: 768px) {
+            .chat-section {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats-dashboard {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="coach-container">
+        <!-- Header -->
+        <div class="coach-header">
+            <div class="coach-avatar" id="coachAvatar">M</div>
+            <h1 class="mb-2">🚀 MAX - Your Super Motivational Coach! 🚀</h1>
+            <p class="lead mb-0">Ready to CRUSH your goals and build unstoppable momentum? Let's GO! 💪⚡</p>
+        </div>
+
+        <!-- Stats Dashboard -->
+        <div class="stats-dashboard" id="statsDashboard">
+            <div class="stat-card">
+                <div class="stat-number" id="totalGoals">0</div>
+                <div class="stat-label">Total Goals</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="completedGoals">0</div>
+                <div class="stat-label">Completed</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="currentStreak">0</div>
+                <div class="stat-label">Day Streak</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number" id="totalAchievements">0</div>
+                <div class="stat-label">Achievements</div>
+            </div>
+        </div>
+
+        <!-- Main Chat Section -->
+        <div class="chat-section">
+            <div class="main-chat">
+                <div class="chat-messages" id="chatMessages">
+                    <div class="message coach">
+                        <div class="message-avatar">M</div>
+                        <div class="message-content">
+                            <div>🔥 HEY CHAMPION! I'm Max, your SUPER MOTIVATIONAL COACH! 🔥<br><br>
+                            I'm here to help you CRUSH your goals, stay on track, and build UNSTOPPABLE momentum! 
+                            I'll track your progress, send you reminders, and keep you FIRED UP every step of the way! 💪⚡<br><br>
+                            <strong>Try these commands:</strong><br>
+                            • "add goal" - Set a new goal<br>
+                            • "schedule activity" - Plan your next move<br>
+                            • "show progress" - See your amazing progress<br>
+                            • "motivate me" - Get an instant energy boost!<br><br>
+                            What goal are we going to DOMINATE today? 🚀</div>
+                            <div class="message-meta">Just now • Powered by multiple AI models • Ready to INSPIRE!</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chat-input-section">
+                    <div class="typing-indicator" id="typingIndicator">
+                        <i class="fas fa-rocket"></i> Max is generating AMAZING motivation for you<span class="typing-dots">...</span>
+                    </div>
+                    
+                    <div class="quick-actions">
+                        <button class="quick-action-btn" onclick="sendQuickMessage('add goal \"Learn something new\" \"Master a new skill in 30 days\"')">
+                            🎯 Add Goal
+                        </button>
+                        <button class="quick-action-btn" onclick="sendQuickMessage('schedule activity \"Workout session\"')">
+                            ⏰ Schedule Activity
+                        </button>
+                        <button class="quick-action-btn" onclick="sendQuickMessage('show progress')">
+                            📊 Show Progress
+                        </button>
+                        <button class="quick-action-btn" onclick="sendQuickMessage('motivate me')">
+                            🚀 Motivate Me!
+                        </button>
+                        <button class="quick-action-btn" onclick="sendQuickMessage('upcoming activities')">
+                            📅 What\'s Next
+                        </button>
+                    </div>
+
+                    <div class="input-group input-group-lg">
+                        <input type="text" class="form-control" id="messageInput" 
+                               placeholder="Tell me about your goals, ask for motivation, or try a command..." 
+                               style="border-radius: 25px 0 0 25px; border: 2px solid #4ecdc4;">
+                        <button class="btn btn-primary btn-lg" id="sendBtn" 
+                                style="border-radius: 0 25px 25px 0; background: linear-gradient(45deg, #ff6b6b, #4ecdc4); border: 2px solid #4ecdc4;">
+                            <i class="fas fa-rocket"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <!-- Streak Counter -->
+                <div class="streak-counter">
+                    <div class="streak-number" id="streakDisplay">0</div>
+                    <div>🔥 DAY STREAK 🔥</div>
+                    <small>Keep the momentum going!</small>
+                </div>
+
+                <!-- Progress Overview -->
+                <div class="sidebar-card">
+                    <h6><i class="fas fa-chart-line"></i> Progress Overview</h6>
+                    <div class="progress-ring">
+                        <svg width="100" height="100">
+                            <circle cx="50" cy="50" r="42"></circle>
+                            <circle cx="50" cy="50" r="42" class="progress" id="progressCircle"></circle>
+                        </svg>
+                    </div>
+                    <div class="text-center">
+                        <strong id="overallProgress">0%</strong><br>
+                        <small class="text-muted">Overall Progress</small>
+                    </div>
+                </div>
+
+                <!-- Upcoming Activities -->
+                <div class="sidebar-card">
+                    <h6><i class="fas fa-clock"></i> Coming Up</h6>
+                    <div id="upcomingActivities">
+                        <p class="text-muted text-center">No upcoming activities.<br>Time to schedule something AMAZING! 🚀</p>
+                    </div>
+                </div>
+
+                <!-- Quick Stats -->
+                <div class="sidebar-card">
+                    <h6><i class="fas fa-trophy"></i> Quick Stats</h6>
+                    <div class="row text-center">
+                        <div class="col-6">
+                            <strong id="completionRate">0%</strong><br>
+                            <small>Success Rate</small>
+                        </div>
+                        <div class="col-6">
+                            <strong id="motivationTrend">Stable</strong><br>
+                            <small>Motivation</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Settings -->
+                <div class="sidebar-card">
+                    <h6><i class="fas fa-cog"></i> Settings</h6>
+                    <div class="form-check form-switch">
+                        <input class="form-check-input" type="checkbox" id="remindersToggle" checked>
+                        <label class="form-check-label" for="remindersToggle">
+                            Reminders Active
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        class MotivationalCoach {
+            constructor() {
+                this.messageInput = document.getElementById('messageInput');
+                this.sendBtn = document.getElementById('sendBtn');
+                this.chatMessages = document.getElementById('chatMessages');
+                this.typingIndicator = document.getElementById('typingIndicator');
+                
+                this.initializeEventListeners();
+                this.loadStats();
+                this.startPeriodicUpdates();
+            }
+            
+            initializeEventListeners() {
+                this.sendBtn.addEventListener('click', () => this.sendMessage());
+                this.messageInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.sendMessage();
+                });
+                
+                document.getElementById('remindersToggle').addEventListener('change', (e) => {
+                    this.toggleReminders(e.target.checked);
+                });
+            }
+            
+            async sendMessage(message = null) {
+                const messageText = message || this.messageInput.value.trim();
+                if (!messageText) return;
+                
+                // Add user message
+                this.addMessage(messageText, 'user');
+                if (!message) this.messageInput.value = '';
+                
+                // Show typing indicator
+                this.showTyping();
+                
+                try {
+                    const response = await fetch('/coach/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            message: messageText,
+                            include_context: true
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.error) {
+                        this.addMessage(`❌ ${data.error}`, 'coach', true);
+                    } else {
+                        this.addMessage(data.response, 'coach', false, data);
+                        
+                        // Add energy boost animation for motivational responses
+                        if (data.motivational_action) {
+                            document.body.classList.add('energy-boost');
+                            setTimeout(() => document.body.classList.remove('energy-boost'), 1000);
+                        }
+                        
+                        // Update stats if progress was made
+                        if (data.motivational_action === 'progress_updated' || data.motivational_action === 'goal_added') {
+                            setTimeout(() => this.loadStats(), 1000);
+                        }
+                    }
+                } catch (error) {
+                    this.addMessage(`🔥 Connection error, but don't let that stop you! Keep pushing forward! 💪`, 'coach', true);
+                } finally {
+                    this.hideTyping();
+                }
+            }
+            
+            addMessage(content, sender, isError = false, metadata = null) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${sender}`;
+                
+                const avatar = sender === 'user' ? 'U' : 'M';
+                const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                
+                let metaInfo = time;
+                if (metadata && metadata.response_metadata) {
+                    metaInfo += ` • ${metadata.response_metadata.models_used} AI models`;
+                }
+                if (metadata && metadata.motivational_action) {
+                    metaInfo += ` • ${metadata.motivational_action.replace('_', ' ')}`;
+                }
+                
+                messageDiv.innerHTML = `
+                    <div class="message-avatar">${avatar}</div>
+                    <div class="message-content ${isError ? 'text-danger' : ''}">
+                        <div>${content}</div>
+                        <div class="message-meta">${metaInfo}</div>
+                    </div>
+                `;
+                
+                this.chatMessages.appendChild(messageDiv);
+                this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+            }
+            
+            async loadStats() {
+                try {
+                    const response = await fetch('/coach/stats');
+                    const stats = await response.json();
+                    
+                    if (stats.system_stats) {
+                        const s = stats.system_stats;
+                        document.getElementById('totalGoals').textContent = s.goals.total;
+                        document.getElementById('completedGoals').textContent = s.goals.completed;
+                        document.getElementById('currentStreak').textContent = s.streak;
+                        document.getElementById('streakDisplay').textContent = s.streak;
+                        document.getElementById('totalAchievements').textContent = s.total_achievements;
+                        document.getElementById('overallProgress').textContent = `${s.goals.average_progress.toFixed(1)}%`;
+                        document.getElementById('completionRate').textContent = `${s.goals.completion_rate.toFixed(1)}%`;
+                        document.getElementById('motivationTrend').textContent = s.motivation_trend.charAt(0).toUpperCase() + s.motivation_trend.slice(1);
+                        
+                        // Update progress ring
+                        this.updateProgressRing(s.goals.average_progress);
+                    }
+                } catch (error) {
+                    console.error('Error loading stats:', error);
+                }
+            }
+            
+            updateProgressRing(progress) {
+                const circle = document.getElementById('progressCircle');
+                const circumference = 2 * Math.PI * 42;
+                const offset = circumference - (progress / 100) * circumference;
+                
+                circle.style.strokeDasharray = circumference;
+                circle.style.strokeDashoffset = offset;
+            }
+            
+            async toggleReminders(active) {
+                try {
+                    await fetch('/coach/toggle-reminders', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ active: active })
+                    });
+                } catch (error) {
+                    console.error('Error toggling reminders:', error);
+                }
+            }
+            
+            showTyping() {
+                this.typingIndicator.style.display = 'block';
+                this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+            }
+            
+            hideTyping() {
+                this.typingIndicator.style.display = 'none';
+            }
+            
+            startPeriodicUpdates() {
+                // Update stats every 30 seconds
+                setInterval(() => this.loadStats(), 30000);
+            }
+        }
+        
+        // Global function for quick action buttons
+        function sendQuickMessage(message) {
+            if (window.coach) {
+                window.coach.sendMessage(message);
+            }
+        }
+        
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            window.coach = new MotivationalCoach();
+        });
+        
+        // Add some dynamic effects
+        setInterval(() => {
+            const avatar = document.getElementById('coachAvatar');
+            avatar.style.transform = 'scale(1.1)';
+            setTimeout(() => avatar.style.transform = 'scale(1)', 200);
+        }, 5000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Psychological Assessment</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .assessment-container {
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        
+        .assessment-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        
+        .assessment-header {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            padding: 30px;
+            text-align: center;
+            position: relative;
+        }
+        
+        .home-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .home-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            color: white;
+            text-decoration: none;
+            transform: translateY(-2px);
+        }
+        
+        .question-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .scale-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 15px;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+        }
+        
+        .scale-label {
+            font-size: 12px;
+            color: #666;
+            font-weight: 500;
+        }
+        
+        .scale-input {
+            width: 100%;
+            margin: 0 15px;
+        }
+        
+        .progress-section {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .btn-submit {
+            background: linear-gradient(45deg, #28a745, #20c997);
+            border: none;
+            color: white;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-submit:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="assessment-container">
+        <div class="assessment-card">
+            <div class="assessment-header">
+                <a href="/" class="home-btn">
+                    <i class="fas fa-home me-2"></i>Home
+                </a>
+                <h2><i class="fas fa-brain me-2"></i>Psychological Assessment</h2>
+                <p>Complete this assessment to help us understand your personality better</p>
+            </div>
+            
+            <div class="p-4">
+                <div class="progress-section">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span><strong>Progress:</strong> <span id="progress-text">0/40</span></span>
+                        <div class="progress flex-grow-1 mx-3">
+                            <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
+                        </div>
+                        <span id="progress-percent">0%</span>
+                    </div>
+                </div>
+                
+                <form id="assessment-form">
+                    <div id="questions-container">
+                        <!-- Questions will be inserted here by JavaScript -->
+                    </div>
+                    
+                    <div class="text-center mt-4">
+                        <button type="submit" class="btn btn-submit btn-lg">
+                            <i class="fas fa-chart-line me-2"></i>Complete Assessment
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Mixed psychological questions (Jung + Big Five + additional traits)
+        const questions = [
+            // Mixed questions to hide which trait is being measured
+            { text: "I enjoy being the center of attention at social gatherings", trait: "extraversion", reverse: false },
+            { text: "I prefer to plan things well in advance rather than be spontaneous", trait: "judging", reverse: false },
+            { text: "I often worry about things that might go wrong", trait: "neuroticism", reverse: false },
+            { text: "I enjoy exploring new ideas and concepts", trait: "openness", reverse: false },
+            { text: "I trust people easily and assume they have good intentions", trait: "agreeableness", reverse: false },
+            { text: "I prefer working with concrete facts rather than abstract theories", trait: "sensing", reverse: false },
+            { text: "I make decisions based on logic rather than emotions", trait: "thinking", reverse: false },
+            { text: "I am always prepared and organized", trait: "conscientiousness", reverse: false },
+            { text: "I feel comfortable in large groups of people", trait: "extraversion", reverse: false },
+            { text: "I like to keep my options open rather than make firm plans", trait: "perceiving", reverse: false },
+            
+            { text: "I rarely feel anxious or stressed", trait: "neuroticism", reverse: true },
+            { text: "I enjoy trying new and unusual experiences", trait: "openness", reverse: false },
+            { text: "I tend to be skeptical of others' motives", trait: "agreeableness", reverse: true },
+            { text: "I rely on my intuition when making important decisions", trait: "intuition", reverse: false },
+            { text: "I consider people's feelings when making decisions", trait: "feeling", reverse: false },
+            { text: "I often procrastinate on important tasks", trait: "conscientiousness", reverse: true },
+            { text: "I prefer quiet, intimate conversations over large social events", trait: "introversion", reverse: false },
+            { text: "I like to have a structured routine in my daily life", trait: "judging", reverse: false },
+            { text: "I remain calm under pressure", trait: "neuroticism", reverse: true },
+            { text: "I appreciate art, music, and creative expression", trait: "openness", reverse: false },
+            
+            { text: "I am quick to forgive others when they make mistakes", trait: "agreeableness", reverse: false },
+            { text: "I focus on details and specifics rather than the big picture", trait: "sensing", reverse: false },
+            { text: "I analyze problems objectively without letting emotions interfere", trait: "thinking", reverse: false },
+            { text: "I complete tasks thoroughly and on time", trait: "conscientiousness", reverse: false },
+            { text: "I energize myself by spending time with others", trait: "extraversion", reverse: false },
+            { text: "I adapt easily to unexpected changes", trait: "perceiving", reverse: false },
+            { text: "I experience mood swings frequently", trait: "neuroticism", reverse: false },
+            { text: "I enjoy intellectual discussions and debates", trait: "openness", reverse: false },
+            { text: "I compete rather than cooperate with others", trait: "agreeableness", reverse: true },
+            { text: "I see patterns and connections that others might miss", trait: "intuition", reverse: false },
+            
+            { text: "I value harmony and avoid conflict", trait: "feeling", reverse: false },
+            { text: "I set high standards for myself and others", trait: "conscientiousness", reverse: false },
+            { text: "I need time alone to recharge after social activities", trait: "introversion", reverse: false },
+            { text: "I prefer to make decisions quickly rather than deliberate", trait: "perceiving", reverse: false },
+            { text: "I handle criticism well without getting upset", trait: "neuroticism", reverse: true },
+            { text: "I prefer traditional approaches over innovative solutions", trait: "openness", reverse: true },
+            { text: "I am willing to help others even when it's inconvenient", trait: "agreeableness", reverse: false },
+            { text: "I prefer practical solutions over theoretical possibilities", trait: "sensing", reverse: false },
+            { text: "I make decisions based on facts and evidence", trait: "thinking", reverse: false },
+            { text: "I am reliable and keep my commitments", trait: "conscientiousness", reverse: false },
+            
+            // Additional 40 situational questions for improved accuracy
+            { text: "When facing a difficult decision, I prefer to sleep on it rather than decide immediately", trait: "judging", reverse: true },
+            { text: "I feel energized after attending a large party or social event", trait: "extraversion", reverse: false },
+            { text: "I often imagine how things could be different or better", trait: "intuition", reverse: false },
+            { text: "I find it easy to remain objective when others are emotional", trait: "thinking", reverse: false },
+            { text: "I worry about making mistakes even on routine tasks", trait: "neuroticism", reverse: false },
+            { text: "I enjoy learning about different cultures and philosophies", trait: "openness", reverse: false },
+            { text: "I go out of my way to help someone in need", trait: "agreeableness", reverse: false },
+            { text: "I double-check my work to ensure accuracy", trait: "conscientiousness", reverse: false },
+            
+            { text: "I prefer working alone rather than in teams", trait: "introversion", reverse: false },
+            { text: "I like to have backup plans for important events", trait: "judging", reverse: false },
+            { text: "I stay calm when others around me are panicking", trait: "neuroticism", reverse: true },
+            { text: "I enjoy abstract discussions about life and meaning", trait: "openness", reverse: false },
+            { text: "I find it hard to say no when people ask for favors", trait: "agreeableness", reverse: false },
+            { text: "I notice small details that others often miss", trait: "sensing", reverse: false },
+            { text: "I can separate my personal feelings from professional decisions", trait: "thinking", reverse: false },
+            { text: "I finish projects well before their deadlines", trait: "conscientiousness", reverse: false },
+            
+            { text: "I feel drained after spending time in crowded places", trait: "introversion", reverse: false },
+            { text: "I prefer to keep my schedule flexible and open", trait: "perceiving", reverse: false },
+            { text: "I bounce back quickly from disappointments", trait: "neuroticism", reverse: true },
+            { text: "I enjoy experimenting with new ways of doing things", trait: "openness", reverse: false },
+            { text: "I assume people have good intentions until proven otherwise", trait: "agreeableness", reverse: false },
+            { text: "I focus on what is rather than what could be", trait: "sensing", reverse: false },
+            { text: "I make decisions quickly based on logical analysis", trait: "thinking", reverse: false },
+            { text: "I maintain high personal standards even when no one is watching", trait: "conscientiousness", reverse: false },
+            
+            { text: "I think out loud and process ideas by talking them through", trait: "extraversion", reverse: false },
+            { text: "I like to plan my vacations in detail before traveling", trait: "judging", reverse: false },
+            { text: "I feel overwhelmed when facing multiple stressful situations", trait: "neuroticism", reverse: false },
+            { text: "I appreciate unconventional art and experimental music", trait: "openness", reverse: false },
+            { text: "I avoid confrontation even when I disagree strongly", trait: "agreeableness", reverse: false },
+            { text: "I prefer step-by-step instructions over general guidelines", trait: "sensing", reverse: false },
+            { text: "I can critique ideas without worrying about hurting feelings", trait: "thinking", reverse: false },
+            { text: "I organize my living and working spaces systematically", trait: "conscientiousness", reverse: false },
+            
+            { text: "I prefer intimate gatherings over large social events", trait: "introversion", reverse: false },
+            { text: "I enjoy the excitement of last-minute changes to plans", trait: "perceiving", reverse: false },
+            { text: "I rarely feel anxious about upcoming events or deadlines", trait: "neuroticism", reverse: true },
+            { text: "I seek out new experiences even if they seem risky", trait: "openness", reverse: false },
+            { text: "I give people the benefit of the doubt in ambiguous situations", trait: "agreeableness", reverse: false },
+            { text: "I prefer concrete examples over abstract concepts", trait: "sensing", reverse: false },
+            { text: "I can make tough decisions without being swayed by emotions", trait: "thinking", reverse: false },
+            { text: "I create detailed to-do lists and follow them closely", trait: "conscientiousness", reverse: false },
+            
+            { text: "I need quiet time to think through complex problems", trait: "introversion", reverse: false },
+            { text: "I prefer having closure rather than leaving things open-ended", trait: "judging", reverse: false },
+            { text: "I maintain my composure even in highly stressful situations", trait: "neuroticism", reverse: true },
+            { text: "I enjoy exploring ideas that challenge conventional thinking", trait: "openness", reverse: false },
+            { text: "I prioritize group harmony over individual preferences", trait: "agreeableness", reverse: false },
+            { text: "I trust information I can verify through direct experience", trait: "sensing", reverse: false },
+            { text: "I evaluate options based on their logical merits", trait: "thinking", reverse: false },
+            { text: "I take pride in completing tasks thoroughly and correctly", trait: "conscientiousness", reverse: false }
+        ];
+        
+        let currentUserId = localStorage.getItem('user_id') || 'eb049813-e28a-4ae6-8c7b-fa80250d0e51';
+        let responses = {};
+        
+        // Shuffle questions to randomize order
+        function shuffleArray(array) {
+            const shuffled = [...array];
+            for (let i = shuffled.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+            }
+            return shuffled;
+        }
+        
+        // Generate questions HTML
+        function generateQuestions() {
+            const shuffledQuestions = shuffleArray(questions);
+            const container = document.getElementById('questions-container');
+            
+            shuffledQuestions.forEach((question, index) => {
+                const questionDiv = document.createElement('div');
+                questionDiv.className = 'question-card';
+                questionDiv.innerHTML = `
+                    <h6 class="mb-3">Question ${index + 1}</h6>
+                    <p class="mb-3">${question.text}</p>
+                    <div class="scale-container">
+                        <span class="scale-label">Strongly<br>Disagree</span>
+                        <input type="range" class="form-range scale-input" 
+                               min="1" max="10" value="5" 
+                               id="q${index}" 
+                               data-trait="${question.trait}"
+                               data-reverse="${question.reverse}"
+                               oninput="updateProgress()">
+                        <span class="scale-label">Strongly<br>Agree</span>
+                    </div>
+                    <div class="text-center mt-2">
+                        <small class="text-muted">Current value: <span id="value${index}">5</span></small>
+                    </div>
+                `;
+                container.appendChild(questionDiv);
+                
+                // Add event listener to show current value
+                const slider = questionDiv.querySelector(`#q${index}`);
+                slider.addEventListener('input', function() {
+                    document.getElementById(`value${index}`).textContent = this.value;
+                });
+            });
+        }
+        
+        // Update progress
+        function updateProgress() {
+            const sliders = document.querySelectorAll('.scale-input');
+            const answered = Array.from(sliders).filter(slider => slider.value !== '5').length;
+            const total = sliders.length;
+            const percentage = Math.round((answered / total) * 100);
+            
+            document.getElementById('progress-text').textContent = `${answered}/${total}`;
+            document.getElementById('progress-bar').style.width = `${percentage}%`;
+            document.getElementById('progress-percent').textContent = `${percentage}%`;
+        }
+        
+        // Calculate trait scores
+        function calculateScores() {
+            const sliders = document.querySelectorAll('.scale-input');
+            const scores = {
+                extraversion: [],
+                introversion: [],
+                sensing: [],
+                intuition: [],
+                thinking: [],
+                feeling: [],
+                judging: [],
+                perceiving: [],
+                openness: [],
+                conscientiousness: [],
+                agreeableness: [],
+                neuroticism: []
+            };
+            
+            sliders.forEach(slider => {
+                const trait = slider.dataset.trait;
+                const value = parseInt(slider.value);
+                const isReverse = slider.dataset.reverse === 'true';
+                const score = isReverse ? (11 - value) : value;
+                
+                if (scores[trait]) {
+                    scores[trait].push(score);
+                }
+            });
+            
+            // Calculate averages
+            const averages = {};
+            Object.keys(scores).forEach(trait => {
+                if (scores[trait].length > 0) {
+                    averages[trait] = Math.round(scores[trait].reduce((a, b) => a + b, 0) / scores[trait].length * 10) / 10;
+                }
+            });
+            
+            return averages;
+        }
+        
+        // Submit assessment
+        document.getElementById('assessment-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const scores = calculateScores();
+            const assessmentData = {
+                user_id: currentUserId,
+                scores: scores,
+                completed_at: new Date().toISOString()
+            };
+            
+            try {
+                const response = await fetch('/api/psychological-assessment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(assessmentData)
+                });
+                
+                if (response.ok) {
+                    alert('Assessment completed successfully! Your personality profile has been updated.');
+                    window.location.href = '/profile';
+                } else {
+                    alert('Error saving assessment. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error submitting assessment. Please try again.');
+            }
+        });
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            generateQuestions();
+            updateProgress();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Psychological Profile</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .profile-container {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        
+        .profile-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        
+        .profile-header {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            padding: 60px 30px 30px;
+            text-align: center;
+            position: relative;
+        }
+        
+        .nav-btn {
+            position: absolute;
+            top: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            color: white;
+            text-decoration: none;
+            transform: translateY(-2px);
+        }
+        
+        .nav-home { left: 20px; }
+        .nav-profile { left: 160px; }
+        .nav-assessment { right: 20px; }
+        
+        .trait-section {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 25px;
+            border-left: 5px solid #667eea;
+        }
+        
+        .trait-card {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .trait-bar {
+            height: 25px;
+            background: #e9ecef;
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+            margin-top: 10px;
+        }
+        
+        .trait-fill {
+            height: 100%;
+            border-radius: 15px;
+            transition: width 0.8s ease;
+            position: relative;
+        }
+        
+        .trait-value {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: white;
+            font-weight: bold;
+            font-size: 12px;
+        }
+        
+        .jung-positive { background: linear-gradient(45deg, #28a745, #20c997); }
+        .jung-negative { background: linear-gradient(45deg, #dc3545, #fd7e14); }
+        .big-five { background: linear-gradient(45deg, #007bff, #6610f2); }
+        
+        .interpretation {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 15px;
+            margin-top: 15px;
+            border-radius: 5px;
+        }
+        
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .retake-btn {
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            border: none;
+            color: white;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .retake-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .chart-container {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .chart-tabs {
+            margin-bottom: 20px;
+        }
+        
+        .chart-tab {
+            background: #f8f9fa;
+            border: 2px solid #dee2e6;
+            color: #495057;
+            padding: 10px 20px;
+            border-radius: 25px;
+            margin-right: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .chart-tab.active {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border-color: #667eea;
+        }
+        
+        .chart-canvas {
+            max-height: 400px;
+        }
+    </style>
+</head>
+<body>
+    <div class="profile-container">
+        <div class="profile-card">
+            <div class="profile-header">
+                <a href="/" class="nav-btn nav-home">
+                    <i class="fas fa-home me-2"></i>Home
+                </a>
+                <a href="/profile" class="nav-btn nav-profile">
+                    <i class="fas fa-user me-2"></i>Profile
+                </a>
+                <a href="/psychological-assessment" class="nav-btn nav-assessment">
+                    <i class="fas fa-brain me-2"></i>Assessment
+                </a>
+                <h2><i class="fas fa-chart-line me-2"></i>Psychological Profile</h2>
+                <p id="profile-subtitle">Your personality traits and psychological attributes</p>
+            </div>
+            
+            <div class="p-4" id="profile-content">
+                <div class="no-data" id="no-data">
+                    <i class="fas fa-brain fa-3x mb-3 text-muted"></i>
+                    <h4>No Psychological Assessment Data</h4>
+                    <p>Complete the psychological assessment to see your personality profile here.</p>
+                    <a href="/psychological-assessment" class="btn retake-btn">
+                        <i class="fas fa-brain me-2"></i>Take Assessment
+                    </a>
+                </div>
+                
+                <!-- Progress Charts -->
+                <div class="chart-container" id="charts-section" style="display: none;">
+                    <h4><i class="fas fa-chart-line me-2"></i>Progress Over Time</h4>
+                    <p class="text-muted">Track changes in your personality traits across multiple assessments</p>
+                    
+                    <div class="chart-tabs">
+                        <button class="chart-tab active" onclick="showChart('jung')">Jung Types</button>
+                        <button class="chart-tab" onclick="showChart('bigfive')">Big Five</button>
+                    </div>
+                    
+                    <div id="jung-chart-container">
+                        <canvas id="jung-chart" class="chart-canvas"></canvas>
+                    </div>
+                    
+                    <div id="bigfive-chart-container" style="display: none;">
+                        <canvas id="bigfive-chart" class="chart-canvas"></canvas>
+                    </div>
+                </div>
+                
+                <!-- Jung's Psychological Types -->
+                <div class="trait-section" id="jung-section" style="display: none;">
+                    <h4><i class="fas fa-balance-scale me-2"></i>Carl Jung's Psychological Types</h4>
+                    <p class="text-muted">Based on your responses, here are your psychological type preferences:</p>
+                    
+                    <div class="trait-card">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0">Extraversion ↔ Introversion</h6>
+                            <small class="text-muted" id="ei-timestamp"></small>
+                        </div>
+                        <div class="trait-bar">
+                            <div class="trait-fill" id="ei-bar">
+                                <span class="trait-value" id="ei-value"></span>
+                            </div>
+                        </div>
+                        <div class="interpretation" id="ei-interpretation"></div>
+                    </div>
+                    
+                    <div class="trait-card">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0">Sensing ↔ Intuition</h6>
+                            <small class="text-muted" id="sn-timestamp"></small>
+                        </div>
+                        <div class="trait-bar">
+                            <div class="trait-fill" id="sn-bar">
+                                <span class="trait-value" id="sn-value"></span>
+                            </div>
+                        </div>
+                        <div class="interpretation" id="sn-interpretation"></div>
+                    </div>
+                    
+                    <div class="trait-card">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0">Thinking ↔ Feeling</h6>
+                            <small class="text-muted" id="tf-timestamp"></small>
+                        </div>
+                        <div class="trait-bar">
+                            <div class="trait-fill" id="tf-bar">
+                                <span class="trait-value" id="tf-value"></span>
+                            </div>
+                        </div>
+                        <div class="interpretation" id="tf-interpretation"></div>
+                    </div>
+                    
+                    <div class="trait-card">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0">Judging ↔ Perceiving</h6>
+                            <small class="text-muted" id="jp-timestamp"></small>
+                        </div>
+                        <div class="trait-bar">
+                            <div class="trait-fill" id="jp-bar">
+                                <span class="trait-value" id="jp-value"></span>
+                            </div>
+                        </div>
+                        <div class="interpretation" id="jp-interpretation"></div>
+                    </div>
+                </div>
+                
+                <!-- Big Five Personality Traits -->
+                <div class="trait-section" id="bigfive-section" style="display: none;">
+                    <h4><i class="fas fa-star me-2"></i>Big Five Personality Traits</h4>
+                    <p class="text-muted">Your scores on the five major personality dimensions:</p>
+                    
+                    <div class="trait-card">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0">Openness to Experience</h6>
+                            <small class="text-muted" id="openness-timestamp"></small>
+                        </div>
+                        <div class="trait-bar">
+                            <div class="trait-fill big-five" id="openness-bar">
+                                <span class="trait-value" id="openness-value"></span>
+                            </div>
+                        </div>
+                        <div class="interpretation" id="openness-interpretation"></div>
+                    </div>
+                    
+                    <div class="trait-card">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0">Conscientiousness</h6>
+                            <small class="text-muted" id="conscientiousness-timestamp"></small>
+                        </div>
+                        <div class="trait-bar">
+                            <div class="trait-fill big-five" id="conscientiousness-bar">
+                                <span class="trait-value" id="conscientiousness-value"></span>
+                            </div>
+                        </div>
+                        <div class="interpretation" id="conscientiousness-interpretation"></div>
+                    </div>
+                    
+                    <div class="trait-card">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0">Extraversion</h6>
+                            <small class="text-muted" id="extraversion-timestamp"></small>
+                        </div>
+                        <div class="trait-bar">
+                            <div class="trait-fill big-five" id="extraversion-bar">
+                                <span class="trait-value" id="extraversion-value"></span>
+                            </div>
+                        </div>
+                        <div class="interpretation" id="extraversion-interpretation"></div>
+                    </div>
+                    
+                    <div class="trait-card">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0">Agreeableness</h6>
+                            <small class="text-muted" id="agreeableness-timestamp"></small>
+                        </div>
+                        <div class="trait-bar">
+                            <div class="trait-fill big-five" id="agreeableness-bar">
+                                <span class="trait-value" id="agreeableness-value"></span>
+                            </div>
+                        </div>
+                        <div class="interpretation" id="agreeableness-interpretation"></div>
+                    </div>
+                    
+                    <div class="trait-card">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0">Neuroticism</h6>
+                            <small class="text-muted" id="neuroticism-timestamp"></small>
+                        </div>
+                        <div class="trait-bar">
+                            <div class="trait-fill big-five" id="neuroticism-bar">
+                                <span class="trait-value" id="neuroticism-value"></span>
+                            </div>
+                        </div>
+                        <div class="interpretation" id="neuroticism-interpretation"></div>
+                    </div>
+                </div>
+                
+                <div class="text-center mt-4" id="retake-section" style="display: none;">
+                    <a href="/psychological-assessment" class="btn retake-btn">
+                        <i class="fas fa-redo me-2"></i>Retake Assessment
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentUserId = 'eb049813-e28a-4ae6-8c7b-fa80250d0e51';
+        
+        // Jung type interpretations
+        const jungInterpretations = {
+            ei: {
+                positive: "You tend to be more extraverted - energized by social interaction and external stimulation.",
+                negative: "You tend to be more introverted - energized by solitude and internal reflection.",
+                neutral: "You show a balanced approach between extraversion and introversion."
+            },
+            sn: {
+                positive: "You prefer sensing - focusing on concrete details and practical information.",
+                negative: "You prefer intuition - focusing on patterns, possibilities, and abstract concepts.",
+                neutral: "You show a balanced approach between sensing and intuitive processing."
+            },
+            tf: {
+                positive: "You prefer thinking - making decisions based on logic and objective analysis.",
+                negative: "You prefer feeling - making decisions based on values and personal considerations.",
+                neutral: "You show a balanced approach between thinking and feeling in decision-making."
+            },
+            jp: {
+                positive: "You prefer judging - liking structure, planning, and closure.",
+                negative: "You prefer perceiving - liking flexibility, spontaneity, and keeping options open.",
+                neutral: "You show a balanced approach between structure and flexibility."
+            }
+        };
+        
+        // Big Five interpretations
+        const bigFiveInterpretations = {
+            openness: {
+                high: "High openness - You enjoy new experiences, are creative, and open to unconventional ideas.",
+                medium: "Moderate openness - You balance traditional and novel approaches.",
+                low: "Lower openness - You prefer familiar experiences and conventional approaches."
+            },
+            conscientiousness: {
+                high: "High conscientiousness - You are organized, disciplined, and goal-oriented.",
+                medium: "Moderate conscientiousness - You balance structure with flexibility.",
+                low: "Lower conscientiousness - You prefer spontaneity and are more relaxed about organization."
+            },
+            extraversion: {
+                high: "High extraversion - You are outgoing, energetic, and seek social stimulation.",
+                medium: "Moderate extraversion - You balance social and solitary activities.",
+                low: "Lower extraversion - You prefer quieter environments and smaller social groups."
+            },
+            agreeableness: {
+                high: "High agreeableness - You are cooperative, trusting, and considerate of others.",
+                medium: "Moderate agreeableness - You balance cooperation with assertiveness.",
+                low: "Lower agreeableness - You are more competitive and skeptical of others' motives."
+            },
+            neuroticism: {
+                high: "Higher neuroticism - You may experience emotions more intensely and worry more.",
+                medium: "Moderate neuroticism - You have typical emotional responses to stress.",
+                low: "Lower neuroticism - You tend to be emotionally stable and resilient."
+            }
+        };
+        
+        async function loadPsychologicalProfile() {
+            try {
+                const response = await fetch(`/api/profile/${currentUserId}`);
+                if (response.ok) {
+                    const profile = await response.json();
+                    
+                    if (profile.preferences && (profile.preferences.jung_types || profile.preferences.big_five)) {
+                        displayProfile(profile.preferences);
+                        document.getElementById('profile-subtitle').textContent = `${profile.personal_info.name}'s Personality Profile`;
+                    } else {
+                        showNoData();
+                    }
+                } else {
+                    showNoData();
+                }
+            } catch (error) {
+                console.error('Error loading profile:', error);
+                showNoData();
+            }
+        }
+        
+        function displayProfile(preferences) {
+            document.getElementById('no-data').style.display = 'none';
+            
+            const timestamp = preferences.assessment_completed_at || new Date().toISOString();
+            const formattedTime = new Date(timestamp).toLocaleString();
+            
+            // Display charts if history is available
+            if (preferences.assessment_history && preferences.assessment_history.length > 1) {
+                displayProgressCharts(preferences.assessment_history);
+                document.getElementById('charts-section').style.display = 'block';
+            }
+            
+            // Display Jung types if available
+            if (preferences.jung_types) {
+                displayJungTypes(preferences.jung_types, formattedTime);
+                document.getElementById('jung-section').style.display = 'block';
+            }
+            
+            // Display Big Five if available
+            if (preferences.big_five) {
+                displayBigFive(preferences.big_five, formattedTime);
+                document.getElementById('bigfive-section').style.display = 'block';
+            }
+            
+            document.getElementById('retake-section').style.display = 'block';
+        }
+        
+        function displayJungTypes(jungTypes, timestamp) {
+            // Extraversion-Introversion
+            displayJungDimension('ei', jungTypes.extraversion_introversion, 'Extraversion', 'Introversion', timestamp);
+            
+            // Sensing-Intuition  
+            displayJungDimension('sn', jungTypes.sensing_intuition, 'Sensing', 'Intuition', timestamp);
+            
+            // Thinking-Feeling
+            displayJungDimension('tf', jungTypes.thinking_feeling, 'Thinking', 'Feeling', timestamp);
+            
+            // Judging-Perceiving
+            displayJungDimension('jp', jungTypes.judging_perceiving, 'Judging', 'Perceiving', timestamp);
+        }
+        
+        function displayJungDimension(dimension, score, positiveLabel, negativeLabel, timestamp) {
+            const bar = document.getElementById(`${dimension}-bar`);
+            const value = document.getElementById(`${dimension}-value`);
+            const interpretation = document.getElementById(`${dimension}-interpretation`);
+            const timestampElement = document.getElementById(`${dimension}-timestamp`);
+            
+            // Convert score to percentage (score ranges from -5 to +5)
+            const percentage = ((score + 5) / 10) * 100;
+            
+            // Set bar width and color
+            bar.style.width = `${Math.abs(percentage - 50) + 50}%`;
+            bar.className = `trait-fill ${score >= 0 ? 'jung-positive' : 'jung-negative'}`;
+            
+            // Set value text
+            const label = score >= 0 ? positiveLabel : negativeLabel;
+            value.textContent = `${label} (${Math.abs(score).toFixed(1)})`;
+            
+            // Set timestamp
+            timestampElement.textContent = timestamp;
+            
+            // Set interpretation
+            let interpKey;
+            if (Math.abs(score) < 1) interpKey = 'neutral';
+            else if (score >= 0) interpKey = 'positive';
+            else interpKey = 'negative';
+            
+            interpretation.textContent = jungInterpretations[dimension][interpKey];
+        }
+        
+        function displayBigFive(bigFive, timestamp) {
+            displayBigFiveTrait('openness', bigFive.openness, timestamp);
+            displayBigFiveTrait('conscientiousness', bigFive.conscientiousness, timestamp);
+            displayBigFiveTrait('extraversion', bigFive.extraversion, timestamp);
+            displayBigFiveTrait('agreeableness', bigFive.agreeableness, timestamp);
+            displayBigFiveTrait('neuroticism', bigFive.neuroticism, timestamp);
+        }
+        
+        function displayBigFiveTrait(trait, score, timestamp) {
+            const bar = document.getElementById(`${trait}-bar`);
+            const value = document.getElementById(`${trait}-value`);
+            const interpretation = document.getElementById(`${trait}-interpretation`);
+            const timestampElement = document.getElementById(`${trait}-timestamp`);
+            
+            // Set bar width (score is 1-10)
+            const percentage = (score / 10) * 100;
+            bar.style.width = `${percentage}%`;
+            
+            // Set value text
+            value.textContent = `${score.toFixed(1)}/10`;
+            
+            // Set timestamp
+            timestampElement.textContent = timestamp;
+            
+            // Set interpretation
+            let level;
+            if (score >= 7) level = 'high';
+            else if (score >= 4) level = 'medium';
+            else level = 'low';
+            
+            interpretation.textContent = bigFiveInterpretations[trait][level];
+        }
+        
+        let jungChart = null;
+        let bigFiveChart = null;
+        
+        function displayProgressCharts(assessmentHistory) {
+            // Prepare data for charts
+            const timestamps = assessmentHistory.map(assessment => new Date(assessment.timestamp).toLocaleDateString());
+            
+            // Jung Types Chart Data
+            const jungData = {
+                labels: timestamps,
+                datasets: [
+                    {
+                        label: 'Extraversion-Introversion',
+                        data: assessmentHistory.map(a => a.jung_types.extraversion_introversion),
+                        borderColor: '#FF6384',
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Sensing-Intuition',
+                        data: assessmentHistory.map(a => a.jung_types.sensing_intuition),
+                        borderColor: '#36A2EB',
+                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Thinking-Feeling',
+                        data: assessmentHistory.map(a => a.jung_types.thinking_feeling),
+                        borderColor: '#FFCE56',
+                        backgroundColor: 'rgba(255, 206, 86, 0.1)',
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Judging-Perceiving',
+                        data: assessmentHistory.map(a => a.jung_types.judging_perceiving),
+                        borderColor: '#4BC0C0',
+                        backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                        tension: 0.4
+                    }
+                ]
+            };
+            
+            // Big Five Chart Data
+            const bigFiveData = {
+                labels: timestamps,
+                datasets: [
+                    {
+                        label: 'Openness',
+                        data: assessmentHistory.map(a => a.big_five.openness),
+                        borderColor: '#FF6384',
+                        backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Conscientiousness',
+                        data: assessmentHistory.map(a => a.big_five.conscientiousness),
+                        borderColor: '#36A2EB',
+                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Extraversion',
+                        data: assessmentHistory.map(a => a.big_five.extraversion),
+                        borderColor: '#FFCE56',
+                        backgroundColor: 'rgba(255, 206, 86, 0.1)',
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Agreeableness',
+                        data: assessmentHistory.map(a => a.big_five.agreeableness),
+                        borderColor: '#4BC0C0',
+                        backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                        tension: 0.4
+                    },
+                    {
+                        label: 'Neuroticism',
+                        data: assessmentHistory.map(a => a.big_five.neuroticism),
+                        borderColor: '#9966FF',
+                        backgroundColor: 'rgba(153, 102, 255, 0.1)',
+                        tension: 0.4
+                    }
+                ]
+            };
+            
+            // Chart configuration
+            const chartConfig = {
+                type: 'line',
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: false,
+                            grid: {
+                                color: 'rgba(0,0,0,0.1)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                color: 'rgba(0,0,0,0.1)'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                        }
+                    },
+                    interaction: {
+                        mode: 'nearest',
+                        axis: 'x',
+                        intersect: false
+                    }
+                }
+            };
+            
+            // Create Jung chart
+            const jungCtx = document.getElementById('jung-chart').getContext('2d');
+            if (jungChart) jungChart.destroy();
+            jungChart = new Chart(jungCtx, {
+                ...chartConfig,
+                data: jungData,
+                options: {
+                    ...chartConfig.options,
+                    scales: {
+                        ...chartConfig.options.scales,
+                        y: {
+                            ...chartConfig.options.scales.y,
+                            min: -5,
+                            max: 5,
+                            title: {
+                                display: true,
+                                text: 'Score (-5 to +5)'
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Create Big Five chart
+            const bigFiveCtx = document.getElementById('bigfive-chart').getContext('2d');
+            if (bigFiveChart) bigFiveChart.destroy();
+            bigFiveChart = new Chart(bigFiveCtx, {
+                ...chartConfig,
+                data: bigFiveData,
+                options: {
+                    ...chartConfig.options,
+                    scales: {
+                        ...chartConfig.options.scales,
+                        y: {
+                            ...chartConfig.options.scales.y,
+                            min: 0,
+                            max: 10,
+                            title: {
+                                display: true,
+                                text: 'Score (0 to 10)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        function showChart(chartType) {
+            // Update tab active state
+            document.querySelectorAll('.chart-tab').forEach(tab => tab.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Show/hide chart containers
+            if (chartType === 'jung') {
+                document.getElementById('jung-chart-container').style.display = 'block';
+                document.getElementById('bigfive-chart-container').style.display = 'none';
+            } else {
+                document.getElementById('jung-chart-container').style.display = 'none';
+                document.getElementById('bigfive-chart-container').style.display = 'block';
+            }
+        }
+        
+        function showNoData() {
+            document.getElementById('no-data').style.display = 'block';
+            document.getElementById('jung-section').style.display = 'none';
+            document.getElementById('bigfive-section').style.display = 'none';
+            document.getElementById('retake-section').style.display = 'none';
+            document.getElementById('charts-section').style.display = 'none';
+        }
+        
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadPsychologicalProfile();
+        });
+    </script>
+</body>
+</html>
