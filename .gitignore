@@ -1,0 +1,39 @@
+# Environment and secrets
+.env
+*.env
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# User data
+user_profiles/
+conversation_history/
+conversations/
+
+# Logs
+*.log
+
+# Test files
+test_screenshots/

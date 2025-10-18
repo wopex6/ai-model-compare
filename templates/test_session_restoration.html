@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Session Restoration Test</title>
+</head>
+<body>
+    <h1>Session Restoration Debug Tool</h1>
+    <div id="output"></div>
+    
+    <script>
+        async function testSessionRestoration() {
+            const output = document.getElementById('output');
+            
+            // Check localStorage
+            const storedSessionId = localStorage.getItem('chat_session_id');
+            output.innerHTML += `<p><strong>1. localStorage check:</strong> ${storedSessionId || 'No session ID found'}</p>`;
+            
+            // Show all localStorage items
+            output.innerHTML += `<p><strong>1b. All localStorage items:</strong></p>`;
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                const value = localStorage.getItem(key);
+                output.innerHTML += `<p>   ${key}: ${value}</p>`;
+            }
+            
+            if (!storedSessionId) {
+                output.innerHTML += `<p style="color: red;">❌ No session ID in localStorage - this is the problem!</p>`;
+                
+                // Try to set a test value
+                localStorage.setItem('test_persistence', 'test_value');
+                const testValue = localStorage.getItem('test_persistence');
+                output.innerHTML += `<p><strong>localStorage test:</strong> ${testValue ? '✅ Working' : '❌ Not working'}</p>`;
+                return;
+            }
+            
+            // Test session endpoint
+            try {
+                const response = await fetch(`/chat/session?session_id=${storedSessionId}`);
+                const data = await response.json();
+                
+                output.innerHTML += `<p><strong>2. Session check response:</strong></p>`;
+                output.innerHTML += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+                
+                if (data.exists && data.messages) {
+                    output.innerHTML += `<p style="color: green;">✅ Session exists with ${data.messages.length} messages</p>`;
+                    
+                    // Show messages
+                    output.innerHTML += `<p><strong>3. Messages in session:</strong></p>`;
+                    data.messages.forEach((msg, i) => {
+                        output.innerHTML += `<p>${i+1}. <strong>${msg.role}:</strong> ${msg.content.substring(0, 100)}...</p>`;
+                    });
+                } else {
+                    output.innerHTML += `<p style="color: red;">❌ Session doesn't exist or has no messages</p>`;
+                    output.innerHTML += `<p>Reason: ${data.error || 'Unknown'}</p>`;
+                }
+                
+            } catch (error) {
+                output.innerHTML += `<p style="color: red;">❌ Error checking session: ${error.message}</p>`;
+            }
+        }
+        
+        // Run test when page loads
+        testSessionRestoration();
+    </script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+{
+  "file_hashes": {
+    "ai_compare\\adaptive_personality.py": "3b294733e2fead11a2e1189770156190",
+    "ai_compare\\chatbot.py": "0916101fb35c6470b176fdb9bfdeddaf",
+    "ai_compare\\chatbot_personality.py": "d96102a9e085ed70854d78fba9904cce",
+    "ai_compare\\compare.py": "3c2593e73d2a307895bc1847508217b4",
+    "ai_compare\\conversation_manager.py": "f4dbc4026ad7f2def70f0c847c5e1018",
+    "ai_compare\\doc_updater.py": "2ba22c73cdfb7f0afec4f423f460e59e",
+    "ai_compare\\endpoint_registry.py": "1d40d60132c35f80090b4be7a5a3e1b1",
+    "ai_compare\\models.py": "c29dc2802e76e944e401fcc2c7adedb1",
+    "ai_compare\\model_discovery.py": "d7473a64fd54acc655f7fd7f6de78820",
+    "ai_compare\\motivational_chatbot.py": "b4093b5f86219f6350f72424c2f8da9a",
+    "ai_compare\\motivational_system.py": "4bb6ed5038ffa11462b3464e083544db",
+    "ai_compare\\personality_profiler.py": "9e6cb9dada7928e4b0696664090e68a4",
+    "ai_compare\\personality_ui.py": "a0be27b883504245fd98f66ca283bcd2",
+    "ai_compare\\simple_compare.py": "bf991eeb2e3b5812bb95efeb618fcb44",
+    "ai_compare\\simple_compare_backup.py": "f2faf7ef2b11a5b28e65ad41c63be607",
+    "ai_compare\\simple_models.py": "1e52cae7a778c0652d29d920324b643a",
+    "ai_compare\\simple_models_backup.py": "91254014c132eafeccde42f6e342cbd9",
+    "ai_compare\\token_manager.py": "16bdbc5fa0952e8045624bbd235a23e0",
+    "ai_compare\\user_profile_manager.py": "ba541700b0809395afa6046e650a7d80",
+    "ai_compare\\__init__.py": "d41d8cd98f00b204e9800998ecf8427e",
+    "app.py": "fb183cdcae4e824ff3958468c9a907ec",
+    "requirements.txt": "270faff59c8dc3f1b82faeb35ecc75ac",
+    ".env": "4763baab2aa0facba240cf856dd449c1"
+  },
+  "last_update": "2025-10-18T22:40:43.703479",
+  "update_count": 16364
+}

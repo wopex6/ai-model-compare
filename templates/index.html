@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Model Compare</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        .main-content {
+            padding: 30px;
+        }
+        
+        .models-status {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .models-status h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+        
+        .model-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .model-badge {
+            background: #28a745;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        .question-form {
+            margin-bottom: 30px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .form-group textarea {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            font-size: 1rem;
+            resize: vertical;
+            min-height: 120px;
+            transition: border-color 0.3s;
+        }
+        
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #4facfe;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #4facfe;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .results {
+            display: none;
+        }
+        
+        .response-card {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-left: 4px solid #4facfe;
+        }
+        
+        .response-header {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+        
+        .response-text {
+            line-height: 1.6;
+            color: #555;
+        }
+        
+        .error {
+            color: #dc3545;
+            font-style: italic;
+        }
+        
+        .summary-section {
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 2px solid #e9ecef;
+        }
+        
+        .summary-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+            padding: 25px;
+        }
+        
+        .summary-header {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            margin-left: 10px;
+        }
+        
+        .summary-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .summary-buttons .btn {
+            flex: 1;
+            min-width: 180px;
+        }
+        
+        .consolidated-card {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            border-radius: 10px;
+            padding: 25px;
+        }
+        
+        .summary-text {
+            line-height: 1.7;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 AI Model Compare</h1>
+            <p>Compare responses from multiple AI models simultaneously</p>
+            <div style="margin-top: 20px;">
+                <a href="/profile" class="btn" style="text-decoration: none; display: inline-block; background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.3);">
+                    👤 My Profile
+                </a>
+                <a href="/chat" class="btn" style="text-decoration: none; display: inline-block; background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.3); margin-left: 10px;">
+                    💬 Chat
+                </a>
+                <a href="/psychological-assessment" class="btn" style="text-decoration: none; display: inline-block; background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.3); margin-left: 10px;">
+                    🧠 Assessment
+                </a>
+                <a href="/psychological-profile" class="btn" style="text-decoration: none; display: inline-block; background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.3); margin-left: 10px;">
+                    📊 Psychology
+                </a>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div class="models-status">
+                <h3>Available Models</h3>
+                <div class="model-badges">
+                    {% for model in models %}
+                        <span class="model-badge">{{ model.upper() }}</span>
+                    {% endfor %}
+                    {% if not models %}
+                        <span style="color: #dc3545;">No models available. Please check your API keys.</span>
+                    {% endif %}
+                </div>
+            </div>
+            
+            {% if models %}
+            <div class="question-form">
+                <div class="form-group">
+                    <label for="question">Your Question:</label>
+                    <textarea id="question" placeholder="Enter your question here... (e.g., What is artificial intelligence?)"></textarea>
+                </div>
+                <button class="btn" onclick="askQuestion()">Ask All Models</button>
+            </div>
+            
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Getting responses from AI models...</p>
+            </div>
+            
+            <div class="results" id="results">
+                <h3>Responses:</h3>
+                <div id="responses-container"></div>
+                
+                <div class="summary-section" id="summary-section" style="display: none;">
+                    <div class="summary-buttons">
+                        <button class="btn" onclick="generateSummary('summary')">📝 Detailed Summary</button>
+                        <button class="btn" onclick="generateSummary('consolidate')">🔄 Consolidated Answer</button>
+                        <button class="btn btn-secondary" onclick="clearResults()">Clear Results</button>
+                    </div>
+                    <div id="summary-container"></div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        let currentResponses = {};
+
+        async function askQuestion() {
+            const question = document.getElementById('question').value.trim();
+            if (!question) {
+                alert('Please enter a question');
+                return;
+            }
+
+            // Show loading
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('results').style.display = 'none';
+            document.querySelector('.btn').disabled = true;
+
+            try {
+                const response = await fetch('/ask', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ question: question })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    currentResponses = data.responses;
+                    displayResponses(data.responses, data.question);
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+                document.querySelector('.btn').disabled = false;
+            }
+        }
+
+        function displayResponses(responses, question) {
+            const container = document.getElementById('responses-container');
+            container.innerHTML = '';
+
+            // Separate auto-generated summaries from model responses
+            const autoSummary = responses['_auto_summary'];
+            const autoConsolidated = responses['_auto_consolidated'];
+            const modelResponses = Object.fromEntries(
+                Object.entries(responses).filter(([key]) => !key.startsWith('_auto_'))
+            );
+
+            // Display model responses
+            Object.entries(modelResponses).forEach(([model, response]) => {
+                const card = document.createElement('div');
+                card.className = 'response-card';
+                
+                const isError = response.startsWith('Error:');
+                card.innerHTML = `
+                    <div class="response-header">${model.toUpperCase()}</div>
+                    <div class="response-text ${isError ? 'error' : ''}">${response}</div>
+                `;
+                container.appendChild(card);
+            });
+
+            // Display auto-generated summaries if available
+            const summaryContainer = document.getElementById('summary-container');
+            if (autoSummary || autoConsolidated) {
+                let summaryHTML = '';
+                
+                if (autoSummary) {
+                    summaryHTML += `
+                        <div class="summary-card" style="margin-bottom: 20px;">
+                            <div class="summary-header">📝 Auto-Generated Summary</div>
+                            <div class="summary-text">${autoSummary}</div>
+                        </div>
+                    `;
+                }
+                
+                if (autoConsolidated) {
+                    summaryHTML += `
+                        <div class="consolidated-card">
+                            <div class="summary-header">🔄 Auto-Generated Consolidated Answer</div>
+                            <div class="summary-text">${autoConsolidated}</div>
+                        </div>
+                    `;
+                }
+                
+                summaryContainer.innerHTML = summaryHTML;
+            } else {
+                summaryContainer.innerHTML = '';
+            }
+
+            document.getElementById('results').style.display = 'block';
+            
+            // Show manual summary buttons only if no auto-summaries or if user wants to regenerate
+            const hasAutoSummaries = autoSummary || autoConsolidated;
+            const summarySection = document.getElementById('summary-section');
+            summarySection.style.display = 'block';
+            
+            // Update button text if auto-summaries exist
+            if (hasAutoSummaries) {
+                const buttons = summarySection.querySelectorAll('.btn:not(.btn-secondary)');
+                buttons[0].textContent = '🔄 Regenerate Summary';
+                buttons[1].textContent = '🔄 Regenerate Consolidated';
+            }
+        }
+
+        async function generateSummary(type = 'summary') {
+            const summaryBtns = document.querySelectorAll('#summary-section .btn:not(.btn-secondary)');
+            summaryBtns.forEach(btn => {
+                btn.disabled = true;
+                btn.textContent = 'Generating...';
+            });
+
+            try {
+                const response = await fetch('/summarize', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ 
+                        responses: currentResponses,
+                        type: type
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    const summaryContainer = document.getElementById('summary-container');
+                    const isConsolidated = data.type === 'consolidate';
+                    const cardClass = isConsolidated ? 'consolidated-card' : 'summary-card';
+                    const headerIcon = isConsolidated ? '🔄' : '📝';
+                    const headerText = isConsolidated ? 'Consolidated Answer' : 'Detailed Summary';
+                    
+                    summaryContainer.innerHTML = `
+                        <div class="${cardClass}">
+                            <div class="summary-header">${headerIcon} ${headerText}</div>
+                            <div class="summary-text">${data.summary}</div>
+                        </div>
+                    `;
+                } else {
+                    alert('Error generating summary: ' + data.error);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                summaryBtns.forEach((btn, index) => {
+                    btn.disabled = false;
+                    btn.textContent = index === 0 ? '📝 Detailed Summary' : '🔄 Consolidated Answer';
+                });
+            }
+        }
+
+        function clearResults() {
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('question').value = '';
+            currentResponses = {};
+            
+            // Reset button text
+            const summarySection = document.getElementById('summary-section');
+            const buttons = summarySection.querySelectorAll('.btn:not(.btn-secondary)');
+            buttons[0].textContent = '📝 Detailed Summary';
+            buttons[1].textContent = '🔄 Consolidated Answer';
+        }
+
+        // Enter key to submit
+        document.getElementById('question').addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === 'Enter') {
+                askQuestion();
+            }
+        });
+    </script>
+</body>
+</html>

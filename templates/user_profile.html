@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Profile - Personal Information</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .profile-container {
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        
+        .profile-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        
+        .profile-header {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            padding: 60px 30px 30px;
+            text-align: center;
+            position: relative;
+        }
+        
+        .home-btn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 25px;
+            text-decoration: none;
+            font-weight: 500;
+            transition: all 0.3s ease;
+        }
+        
+        .home-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            color: white;
+            text-decoration: none;
+            transform: translateY(-2px);
+        }
+        
+        .profile-avatar {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            font-size: 40px;
+        }
+        
+        .profile-content {
+            padding: 30px;
+        }
+        
+        .section-title {
+            color: #667eea;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+        
+        .form-control:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+        }
+        
+        .btn-primary {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            border: none;
+            border-radius: 25px;
+            padding: 12px 30px;
+            font-weight: 600;
+        }
+        
+        .btn-primary:hover {
+            background: linear-gradient(45deg, #5a6fd8, #6a4190);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+        
+        .progress-bar {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+        }
+        
+        .interest-tag {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            margin: 3px;
+            display: inline-block;
+        }
+        
+        .nav-tabs .nav-link.active {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+        }
+        
+        .nav-tabs .nav-link {
+            color: #667eea;
+            border: 1px solid #667eea;
+            margin-right: 5px;
+            border-radius: 10px 10px 0 0;
+        }
+        
+        .alert-success {
+            background: linear-gradient(45deg, #28a745, #20c997);
+            color: white;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="profile-container">
+        <div class="profile-card">
+            <div class="profile-header">
+                <a href="/" class="home-btn">
+                    <i class="fas fa-home me-2"></i>Home
+                </a>
+                <a href="/psychological-assessment" class="home-btn" style="left: 160px;">
+                    <i class="fas fa-brain me-2"></i>Assessment
+                </a>
+                <a href="/psychological-profile" class="home-btn" style="right: 160px;">
+                    <i class="fas fa-chart-line me-2"></i>Psychology
+                </a>
+                <div class="profile-avatar">
+                    <i class="fas fa-user"></i>
+                </div>
+                <h2 id="profile-name">Your Profile</h2>
+                <p>Complete your profile to get personalized AI interactions</p>
+                <div class="progress mt-3">
+                    <div class="progress-bar" role="progressbar" id="completion-bar" style="width: 0%"></div>
+                </div>
+                <small id="completion-text">0% Complete</small>
+            </div>
+            
+            <div class="profile-content">
+                <div id="alert-container"></div>
+                
+                <!-- Navigation Tabs -->
+                <ul class="nav nav-tabs" id="profileTabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="personal-tab" data-bs-toggle="tab" data-bs-target="#personal" type="button">
+                            <i class="fas fa-user me-2"></i>Personal Info
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="preferences-tab" data-bs-toggle="tab" data-bs-target="#preferences" type="button">
+                            <i class="fas fa-cog me-2"></i>Preferences
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="privacy-tab" data-bs-toggle="tab" data-bs-target="#privacy" type="button">
+                            <i class="fas fa-shield-alt me-2"></i>Privacy
+                        </button>
+                    </li>
+                </ul>
+                
+                <!-- Tab Content -->
+                <div class="tab-content" id="profileTabsContent">
+                    <!-- Personal Information Tab -->
+                    <div class="tab-pane fade show active" id="personal" role="tabpanel">
+                        <form id="personal-info-form" class="mt-4">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="name" class="form-label">Full Name</label>
+                                    <input type="text" class="form-control" id="name" name="name" placeholder="Enter your full name">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="email" class="form-label">Email Address</label>
+                                    <input type="email" class="form-control" id="email" name="email" placeholder="your.email@example.com">
+                                </div>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="age" class="form-label">Age</label>
+                                    <input type="number" class="form-control" id="age" name="age" min="13" max="120" placeholder="25">
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="location" class="form-label">Location</label>
+                                    <input type="text" class="form-control" id="location" name="location" placeholder="City, Country">
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="occupation" class="form-label">Occupation</label>
+                                <input type="text" class="form-control" id="occupation" name="occupation" placeholder="Your job title or profession">
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="interests" class="form-label">Interests (comma-separated)</label>
+                                <input type="text" class="form-control" id="interests" name="interests" placeholder="Technology, Reading, Travel, Music">
+                                <div class="form-text">Enter your interests separated by commas</div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="bio" class="form-label">Bio</label>
+                                <textarea class="form-control" id="bio" name="bio" rows="3" placeholder="Tell us a bit about yourself..."></textarea>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-2"></i>Save Personal Information
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <!-- Preferences Tab -->
+                    <div class="tab-pane fade" id="preferences" role="tabpanel">
+                        <form id="preferences-form" class="mt-4">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="communication_style" class="form-label">Communication Style</label>
+                                    <select class="form-select" id="communication_style" name="communication_style">
+                                        <option value="friendly">Friendly & Casual</option>
+                                        <option value="professional">Professional</option>
+                                        <option value="formal">Formal</option>
+                                        <option value="humorous">Humorous</option>
+                                        <option value="direct">Direct & Concise</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="language_preference" class="form-label">Language Preference</label>
+                                    <select class="form-select" id="language_preference" name="language_preference">
+                                        <option value="en">English</option>
+                                        <option value="es">Spanish</option>
+                                        <option value="fr">French</option>
+                                        <option value="de">German</option>
+                                        <option value="zh">Chinese</option>
+                                        <option value="ja">Japanese</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label for="personality_type" class="form-label">Personality Type</label>
+                                    <select class="form-select" id="personality_type" name="personality_type">
+                                        <option value="">Select if known</option>
+                                        <option value="INTJ">INTJ - The Architect</option>
+                                        <option value="INTP">INTP - The Thinker</option>
+                                        <option value="ENTJ">ENTJ - The Commander</option>
+                                        <option value="ENTP">ENTP - The Debater</option>
+                                        <option value="INFJ">INFJ - The Advocate</option>
+                                        <option value="INFP">INFP - The Mediator</option>
+                                        <option value="ENFJ">ENFJ - The Protagonist</option>
+                                        <option value="ENFP">ENFP - The Campaigner</option>
+                                        <option value="ISTJ">ISTJ - The Logistician</option>
+                                        <option value="ISFJ">ISFJ - The Protector</option>
+                                        <option value="ESTJ">ESTJ - The Executive</option>
+                                        <option value="ESFJ">ESFJ - The Consul</option>
+                                        <option value="ISTP">ISTP - The Virtuoso</option>
+                                        <option value="ISFP">ISFP - The Adventurer</option>
+                                        <option value="ESTP">ESTP - The Entrepreneur</option>
+                                        <option value="ESFP">ESFP - The Entertainer</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label for="learning_style" class="form-label">Learning Style</label>
+                                    <select class="form-select" id="learning_style" name="learning_style">
+                                        <option value="visual">Visual</option>
+                                        <option value="auditory">Auditory</option>
+                                        <option value="kinesthetic">Kinesthetic</option>
+                                        <option value="reading">Reading/Writing</option>
+                                        <option value="mixed">Mixed</option>
+                                    </select>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="topics_of_interest" class="form-label">Topics of Interest</label>
+                                <input type="text" class="form-control" id="topics_of_interest" name="topics_of_interest" placeholder="AI, Science, Business, Art, Philosophy">
+                                <div class="form-text">Topics you'd like to discuss with AI (comma-separated)</div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="goals" class="form-label">Goals</label>
+                                <input type="text" class="form-control" id="goals" name="goals" placeholder="Learn new skills, Get advice, Creative projects">
+                                <div class="form-text">What do you hope to achieve with AI assistance? (comma-separated)</div>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-2"></i>Save Preferences
+                            </button>
+                        </form>
+                    </div>
+                    
+                    <!-- Privacy Tab -->
+                    <div class="tab-pane fade" id="privacy" role="tabpanel">
+                        <form id="privacy-form" class="mt-4">
+                            <h5 class="section-title">Privacy Settings</h5>
+                            
+                            <div class="mb-4">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="data_sharing" name="data_sharing">
+                                    <label class="form-check-label" for="data_sharing">
+                                        <strong>Data Sharing</strong><br>
+                                        <small class="text-muted">Allow sharing anonymized data for AI improvement</small>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-4">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="analytics" name="analytics" checked>
+                                    <label class="form-check-label" for="analytics">
+                                        <strong>Analytics</strong><br>
+                                        <small class="text-muted">Allow collection of usage analytics to improve your experience</small>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-4">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="personalization" name="personalization" checked>
+                                    <label class="form-check-label" for="personalization">
+                                        <strong>Personalization</strong><br>
+                                        <small class="text-muted">Use your data to personalize AI responses and recommendations</small>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <div class="mb-4">
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" id="marketing" name="marketing">
+                                    <label class="form-check-label" for="marketing">
+                                        <strong>Marketing Communications</strong><br>
+                                        <small class="text-muted">Receive updates about new features and improvements</small>
+                                    </label>
+                                </div>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save me-2"></i>Save Privacy Settings
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                
+                <!-- Action Buttons -->
+                <div class="mt-4 pt-4 border-top">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <button class="btn btn-outline-primary w-100" onclick="exportProfile()">
+                                <i class="fas fa-download me-2"></i>Export Profile
+                            </button>
+                        </div>
+                        <div class="col-md-6">
+                            <button class="btn btn-outline-danger w-100" onclick="deleteProfile()">
+                                <i class="fas fa-trash me-2"></i>Delete Profile
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Set Wai's user ID directly
+        let currentUserId = 'eb049813-e28a-4ae6-8c7b-fa80250d0e51';
+        localStorage.setItem('user_id', currentUserId);
+        
+        // Initialize profile on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            if (!currentUserId) {
+                createNewProfile();
+            } else {
+                loadProfile();
+            }
+        });
+        
+        async function createNewProfile() {
+            try {
+                const response = await fetch('/api/profile/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    currentUserId = data.user_id;
+                    localStorage.setItem('user_id', currentUserId);
+                    showAlert('Profile created successfully!', 'success');
+                } else {
+                    showAlert('Failed to create profile', 'danger');
+                }
+            } catch (error) {
+                console.error('Error creating profile:', error);
+                showAlert('Error creating profile', 'danger');
+            }
+        }
+        
+        async function loadProfile() {
+            try {
+                const response = await fetch(`/api/profile/${currentUserId}`);
+                
+                if (response.ok) {
+                    const profile = await response.json();
+                    populateForm(profile);
+                    updateProgress(profile.metadata.profile_completion);
+                    
+                    if (profile.personal_info.name) {
+                        document.getElementById('profile-name').textContent = profile.personal_info.name;
+                    }
+                } else {
+                    showAlert('Failed to load profile', 'warning');
+                }
+            } catch (error) {
+                console.error('Error loading profile:', error);
+                showAlert('Error loading profile', 'danger');
+            }
+        }
+        
+        function populateForm(profile) {
+            // Personal info
+            const personalInfo = profile.personal_info;
+            Object.keys(personalInfo).forEach(key => {
+                const element = document.getElementById(key);
+                if (element) {
+                    if (key === 'interests' && Array.isArray(personalInfo[key])) {
+                        element.value = personalInfo[key].join(', ');
+                    } else {
+                        element.value = personalInfo[key] || '';
+                    }
+                }
+            });
+            
+            // Preferences
+            const preferences = profile.preferences;
+            Object.keys(preferences).forEach(key => {
+                const element = document.getElementById(key);
+                if (element) {
+                    if ((key === 'topics_of_interest' || key === 'goals') && Array.isArray(preferences[key])) {
+                        element.value = preferences[key].join(', ');
+                    } else {
+                        element.value = preferences[key] || '';
+                    }
+                }
+            });
+            
+            // Privacy settings
+            const privacy = profile.privacy_settings;
+            Object.keys(privacy).forEach(key => {
+                const element = document.getElementById(key);
+                if (element && element.type === 'checkbox') {
+                    element.checked = privacy[key];
+                }
+            });
+        }
+        
+        // Form submission handlers
+        document.getElementById('personal-info-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            await savePersonalInfo();
+        });
+        
+        document.getElementById('preferences-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            await savePreferences();
+        });
+        
+        document.getElementById('privacy-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            await savePrivacySettings();
+        });
+        
+        async function savePersonalInfo() {
+            const formData = new FormData(document.getElementById('personal-info-form'));
+            const personalInfo = {};
+            
+            for (let [key, value] of formData.entries()) {
+                if (key === 'interests') {
+                    personalInfo[key] = value.split(',').map(s => s.trim()).filter(s => s);
+                } else if (key === 'age') {
+                    personalInfo[key] = value ? parseInt(value) : null;
+                } else {
+                    personalInfo[key] = value;
+                }
+            }
+            
+            await saveData('/api/profile/personal-info', personalInfo, 'Personal information saved!');
+        }
+        
+        async function savePreferences() {
+            const formData = new FormData(document.getElementById('preferences-form'));
+            const preferences = {};
+            
+            for (let [key, value] of formData.entries()) {
+                if (key === 'topics_of_interest' || key === 'goals') {
+                    preferences[key] = value.split(',').map(s => s.trim()).filter(s => s);
+                } else {
+                    preferences[key] = value;
+                }
+            }
+            
+            await saveData('/api/profile/preferences', preferences, 'Preferences saved!');
+        }
+        
+        async function savePrivacySettings() {
+            const form = document.getElementById('privacy-form');
+            const privacySettings = {};
+            
+            const checkboxes = form.querySelectorAll('input[type="checkbox"]');
+            checkboxes.forEach(checkbox => {
+                privacySettings[checkbox.name] = checkbox.checked;
+            });
+            
+            await saveData('/api/profile/privacy', privacySettings, 'Privacy settings saved!');
+        }
+        
+        async function saveData(endpoint, data, successMessage) {
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: currentUserId, ...data })
+                });
+                
+                if (response.ok) {
+                    showAlert(successMessage, 'success');
+                    // Reload profile to update completion percentage
+                    setTimeout(loadProfile, 500);
+                } else {
+                    showAlert('Failed to save data', 'danger');
+                }
+            } catch (error) {
+                console.error('Error saving data:', error);
+                showAlert('Error saving data', 'danger');
+            }
+        }
+        
+        function updateProgress(completion) {
+            const progressBar = document.getElementById('completion-bar');
+            const progressText = document.getElementById('completion-text');
+            
+            progressBar.style.width = completion + '%';
+            progressText.textContent = completion + '% Complete';
+        }
+        
+        function showAlert(message, type) {
+            const alertContainer = document.getElementById('alert-container');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type} alert-dismissible fade show`;
+            alert.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            alertContainer.appendChild(alert);
+            
+            // Auto-dismiss after 3 seconds
+            setTimeout(() => {
+                if (alert.parentNode) {
+                    alert.remove();
+                }
+            }, 3000);
+        }
+        
+        async function exportProfile() {
+            try {
+                const response = await fetch(`/api/profile/export/${currentUserId}?format=json`);
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `profile_${currentUserId}.json`;
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                } else {
+                    showAlert('Failed to export profile', 'danger');
+                }
+            } catch (error) {
+                console.error('Error exporting profile:', error);
+                showAlert('Error exporting profile', 'danger');
+            }
+        }
+        
+        async function deleteProfile() {
+            if (confirm('Are you sure you want to delete your profile? This action cannot be undone.')) {
+                try {
+                    const response = await fetch(`/api/profile/${currentUserId}`, {
+                        method: 'DELETE'
+                    });
+                    
+                    if (response.ok) {
+                        localStorage.removeItem('user_id');
+                        showAlert('Profile deleted successfully', 'success');
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 2000);
+                    } else {
+                        showAlert('Failed to delete profile', 'danger');
+                    }
+                } catch (error) {
+                    console.error('Error deleting profile:', error);
+                    showAlert('Error deleting profile', 'danger');
+                }
+            }
+        }
+    </script>
+</body>
+</html>
