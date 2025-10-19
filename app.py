@@ -1208,10 +1208,10 @@ def save_psychological_assessment():
 
 if __name__ == '__main__':
     # Enable auto-documentation on startup
-    enable_auto_docs()
+    # enable_auto_docs()  # Disabled for production - causes timeouts
     
     # Force initial documentation update
-    update_docs_now()
+    # update_docs_now()  # Disabled for production - causes timeouts
     
     # Print conversation storage info on startup
     print(f"\n=== Conversation Storage Info ===")
