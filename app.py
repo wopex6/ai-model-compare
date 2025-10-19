@@ -1211,11 +1211,14 @@ def save_psychological_assessment():
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':
-    # Enable auto-documentation on startup
-    # enable_auto_docs()  # Disabled for production - causes timeouts
+    # Enable auto-documentation only in development (not production)
+    is_production = os.environ.get('FLASK_ENV') == 'production'
     
-    # Force initial documentation update
-    # update_docs_now()  # Disabled for production - causes timeouts
+    if not is_production:
+        enable_auto_docs()
+        update_docs_now()
+    else:
+        print("📚 Auto-docs disabled in production mode")
     
     # Print conversation storage info on startup
     print(f"\n=== Conversation Storage Info ===")
