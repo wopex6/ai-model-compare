@@ -6,7 +6,7 @@ requests
 bcrypt
 pyjwt
 google-generativeai>=0.3.0
-llama-cpp-python>=0.2.0
+#llama-cpp-python>=0.2.0  # Commented out - too large for PythonAnywhere free tier
 python-dotenv>=1.0.0
 aiohttp>=3.9.0
 flask>=2.3.0

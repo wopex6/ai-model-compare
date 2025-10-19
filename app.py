@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, jsonify, session
 from flask_cors import CORS
+from dotenv import load_dotenv
 import asyncio
 import os
 import bcrypt
@@ -16,6 +17,9 @@ from auto_doc_hook import enable_auto_docs, update_docs_now
 
 # Import the integrated database system
 from integrated_database import IntegratedDatabase
+
+# Load environment variables from .env file
+load_dotenv()
 
 app = Flask(__name__)
 
