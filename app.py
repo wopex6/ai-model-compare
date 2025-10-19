@@ -21,6 +21,10 @@ from integrated_database import IntegratedDatabase
 # Load environment variables from .env file
 load_dotenv()
 
+# Disable auto-docs in production
+import os
+os.environ['DISABLE_AUTO_DOCS'] = 'true'
+
 app = Flask(__name__)
 
 # Configure Flask for better incognito browser support
