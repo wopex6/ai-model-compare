@@ -35,6 +35,9 @@ ANTHROPIC_API_KEY=your_anthropic_api_key_here
 # Generate random secrets with: python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 JWT_SECRET=your_random_jwt_secret_here
 SECRET_KEY=your_random_flask_secret_here
+
+# Production Settings - Disable auto-docs to prevent timeouts
+DISABLE_AUTO_DOCS=true
 ```
 
 Save with `Ctrl+X`, `Y`, `Enter`.
