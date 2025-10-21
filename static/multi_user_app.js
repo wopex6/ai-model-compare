@@ -1714,6 +1714,7 @@ class IntegratedAIChatbot {
             
             const timestamp = document.createElement('div');
             timestamp.className = 'message-timestamp';
+            timestamp.id = 'temp-user-timestamp';
             timestamp.textContent = new Date().toLocaleString();
             
             userMessage.appendChild(messageContent);
@@ -1754,6 +1755,15 @@ class IntegratedAIChatbot {
             if (response.ok) {
                 const result = await response.json();
                 
+                // Update user message timestamp with server time
+                if (result.timestamp) {
+                    const tempTimestamp = document.getElementById('temp-user-timestamp');
+                    if (tempTimestamp) {
+                        tempTimestamp.textContent = new Date(result.timestamp).toLocaleString();
+                        tempTimestamp.id = ''; // Remove temp ID
+                    }
+                }
+                
                 // Update usage info if provided
                 if (result.usage) {
                     this.messageUsage = result.usage;
@@ -1771,7 +1781,8 @@ class IntegratedAIChatbot {
                     
                     const aiTimestamp = document.createElement('div');
                     aiTimestamp.className = 'message-timestamp';
-                    aiTimestamp.textContent = new Date().toLocaleString();
+                    // Use server timestamp for accurate time
+                    aiTimestamp.textContent = result.timestamp ? new Date(result.timestamp).toLocaleString() : new Date().toLocaleString();
                     
                     aiMessage.appendChild(aiContent);
                     aiMessage.appendChild(aiTimestamp);
@@ -2014,11 +2025,18 @@ class IntegratedAIChatbot {
             const response = await this.apiCall('/api/auth/check-verification', 'GET');
             if (response.ok) {
                 const data = await response.json();
-                if (!data.verified) {
-                    // Show verification banner
-                    const banner = document.getElementById('email-verification-banner');
-                    if (banner) {
+                console.log('Email verification status:', data.verified);
+                
+                const banner = document.getElementById('email-verification-banner');
+                if (banner) {
+                    if (!data.verified) {
+                        // Show verification banner for unverified users
                         banner.style.display = 'block';
+                        console.log('Showing verification banner - user not verified');
+                    } else {
+                        // Hide banner for verified users
+                        banner.style.display = 'none';
+                        console.log('Hiding verification banner - user is verified');
                     }
                 }
             }
