@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, session
+from flask import Flask, render_template, request, jsonify, session, redirect
 from flask_cors import CORS
 from dotenv import load_dotenv
 import asyncio
@@ -472,10 +472,15 @@ def index():
     loop.close()
     return render_template('index.html', models=available_models)
 
-@app.route('/multi-user')
-def multi_user_interface():
+@app.route('/chatchat')
+def chatchat_interface():
     """Integrated multi-user AI chatbot interface"""
     return render_template('multi_user.html')
+
+@app.route('/multi-user')
+def multi_user_redirect():
+    """Redirect old /multi-user URL to /chatchat for backward compatibility"""
+    return redirect('/chatchat', code=301)
 
 @app.route('/login-test')
 def login_test():

@@ -104,7 +104,7 @@ def start_server():
     """Start the Flask server"""
     print("\n🚀 Starting Integrated AI Chatbot Server...")
     print("   Server will start at: http://localhost:5000")
-    print("   Multi-User Interface: http://localhost:5000/multi-user")
+    print("   ChatChat Interface: http://localhost:5000/chatchat")
     print("   Press Ctrl+C to stop the server")
     print("\n" + "="*60)
     
@@ -123,14 +123,14 @@ def start_server():
         return False
 
 def open_browser():
-    """Open browser to the multi-user interface"""
+    """Open browser to the chatchat interface"""
     try:
         time.sleep(2)  # Wait for server to start
-        webbrowser.open('http://localhost:5000/multi-user')
-        print("🌐 Opening browser to multi-user interface...")
+        webbrowser.open('http://localhost:5000/chatchat')
+        print("🌐 Opening browser to ChatChat interface...")
     except Exception as e:
         print(f"⚠️  Could not open browser automatically: {e}")
-        print("   Please manually open: http://localhost:5000/multi-user")
+        print("   Please manually open: http://localhost:5000/chatchat")
 
 def print_welcome():
     """Print welcome message"""
@@ -156,7 +156,7 @@ def print_welcome():
    Password: .//
 
 🌐 Access Points:
-   • Multi-User Interface: http://localhost:5000/multi-user
+   • ChatChat Interface: http://localhost:5000/chatchat
    • Original AI Compare: http://localhost:5000/
 """)
 
@@ -199,7 +199,7 @@ def main():
         else:
             print("\n📝 To start manually, run:")
             print("   python app.py")
-            print("\n🌐 Then visit: http://localhost:5000/multi-user")
+            print("\n🌐 Then visit: http://localhost:5000/chatchat")
     except KeyboardInterrupt:
         print("\n\n👋 Startup cancelled by user")
         return 0

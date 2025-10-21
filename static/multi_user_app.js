@@ -1340,12 +1340,19 @@ class IntegratedAIChatbot {
             return;
         }
 
-        conversationsList.innerHTML = conversations.map(conv => `
-            <div class="conversation-item" data-session-id="${conv.session_id}" onclick="app.selectConversation('${conv.session_id}')">
-                <div class="conversation-title">${conv.title}</div>
-                <div class="conversation-date">${new Date(conv.updated_at).toLocaleDateString()}</div>
-            </div>
-        `).join('');
+        conversationsList.innerHTML = conversations.map(conv => {
+            const date = new Date(conv.updated_at);
+            const formattedDate = date.toLocaleDateString();
+            const formattedTime = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            const datetime = `${formattedDate} ${formattedTime}`;
+            
+            return `
+                <div class="conversation-item" data-session-id="${conv.session_id}" onclick="app.selectConversation('${conv.session_id}')">
+                    <div class="conversation-title">${conv.title}</div>
+                    <div class="conversation-date">${datetime}</div>
+                </div>
+            `;
+        }).join('');
     }
 
     async selectConversation(sessionId) {
@@ -1665,11 +1672,32 @@ class IntegratedAIChatbot {
             chatInput.value = '';
             chatInput.disabled = true;
 
+            // Show thinking indicator
+            const thinkingMessage = document.createElement('div');
+            thinkingMessage.className = 'message thinking';
+            thinkingMessage.id = 'thinking-indicator';
+            thinkingMessage.innerHTML = `
+                AI is thinking
+                <div class="thinking-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+            `;
+            messagesContainer.appendChild(thinkingMessage);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
             // Send to API
             const response = await this.apiCall(`/api/user/conversations/${this.currentChatSession}/messages`, 'POST', {
                 senderType: 'user',
                 content: content
             });
+
+            // Remove thinking indicator
+            const thinkingIndicator = document.getElementById('thinking-indicator');
+            if (thinkingIndicator) {
+                thinkingIndicator.remove();
+            }
 
             if (response.ok) {
                 const result = await response.json();
