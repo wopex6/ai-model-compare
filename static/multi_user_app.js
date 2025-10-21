@@ -495,6 +495,23 @@ class IntegratedAIChatbot {
         // Clear all localStorage data
         this.clearAllState();
         
+        // Clear chat messages to prevent showing previous user's messages
+        const chatMessages = document.getElementById('chat-messages');
+        if (chatMessages) {
+            chatMessages.innerHTML = '';
+        }
+        
+        const conversationMessages = document.getElementById('conversation-messages');
+        if (conversationMessages) {
+            conversationMessages.innerHTML = '';
+        }
+        
+        // Clear chat sessions list
+        const chatSessionsList = document.getElementById('chat-sessions-list');
+        if (chatSessionsList) {
+            chatSessionsList.innerHTML = '';
+        }
+        
         // Reset scroll position to top
         window.scrollTo(0, 0);
         
@@ -1686,11 +1703,21 @@ class IntegratedAIChatbot {
         }
 
         try {
-            // Show user message immediately
+            // Show user message immediately with timestamp
             const messagesContainer = document.getElementById('chat-messages');
             const userMessage = document.createElement('div');
             userMessage.className = 'message user';
-            userMessage.textContent = content;
+            
+            const messageContent = document.createElement('div');
+            messageContent.className = 'message-content';
+            messageContent.textContent = content;
+            
+            const timestamp = document.createElement('div');
+            timestamp.className = 'message-timestamp';
+            timestamp.textContent = new Date().toLocaleString();
+            
+            userMessage.appendChild(messageContent);
+            userMessage.appendChild(timestamp);
             messagesContainer.appendChild(userMessage);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
@@ -1733,11 +1760,21 @@ class IntegratedAIChatbot {
                     this.updateUsageDisplay();
                 }
                 
-                // Show AI response
+                // Show AI response with timestamp
                 if (result.ai_response) {
                     const aiMessage = document.createElement('div');
                     aiMessage.className = 'message assistant';
-                    aiMessage.textContent = result.ai_response;
+                    
+                    const aiContent = document.createElement('div');
+                    aiContent.className = 'message-content';
+                    aiContent.textContent = result.ai_response;
+                    
+                    const aiTimestamp = document.createElement('div');
+                    aiTimestamp.className = 'message-timestamp';
+                    aiTimestamp.textContent = new Date().toLocaleString();
+                    
+                    aiMessage.appendChild(aiContent);
+                    aiMessage.appendChild(aiTimestamp);
                     messagesContainer.appendChild(aiMessage);
                     messagesContainer.scrollTop = messagesContainer.scrollHeight;
                 }
