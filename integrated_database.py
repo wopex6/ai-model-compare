@@ -624,7 +624,7 @@ class IntegratedDatabase:
             limit = None  # Unlimited
             remaining = None
         else:  # guest
-            limit = 2  # Testing limit
+            limit = 20  # Daily limit for guest users
             remaining = max(0, limit - current_count)
         
         return {
