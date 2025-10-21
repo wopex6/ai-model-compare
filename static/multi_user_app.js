@@ -632,6 +632,9 @@ class IntegratedAIChatbot {
         // Update username display in navbar
         this.updateNavUsername();
         
+        // Check if user is admin
+        this.checkAdminAccess();
+        
         // Check if user should see personality test banner
         if (typeof window.checkPersonalityTestStatus === 'function') {
             window.checkPersonalityTestStatus();
@@ -728,6 +731,8 @@ class IntegratedAIChatbot {
             this.loadConversations();
         } else if (tabName === 'psychology') {
             this.loadPsychologyData();
+        } else if (tabName === 'admin') {
+            this.loadAdminData();
         }
     }
 
@@ -1872,6 +1877,78 @@ class IntegratedAIChatbot {
             .replace(/ðŸŽ¯/g, '🎯');         // Fix target emoji
         
         return cleaned;
+    }
+
+    async checkAdminAccess() {
+        /**Check if user is admin and show admin tab */
+        try {
+            const response = await this.apiCall('/api/user/profile', 'GET');
+            if (response.ok) {
+                const profile = await response.json();
+                if (profile.user_role === 'administrator') {
+                    // Show admin tab
+                    const adminTabBtn = document.getElementById('admin-tab-btn');
+                    if (adminTabBtn) {
+                        adminTabBtn.style.display = 'block';
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error checking admin access:', error);
+        }
+    }
+
+    async loadAdminData() {
+        /**Load admin statistics and user data */
+        try {
+            // Load statistics
+            const statsResponse = await this.apiCall('/api/admin/statistics', 'GET');
+            if (statsResponse.ok) {
+                const stats = await statsResponse.json();
+                document.getElementById('stat-total-users').textContent = stats.total_users;
+                document.getElementById('stat-total-messages').textContent = stats.total_messages;
+                document.getElementById('stat-messages-today').textContent = stats.messages_today;
+                document.getElementById('stat-active-today').textContent = stats.active_today;
+            }
+
+            // Load users
+            const usersResponse = await this.apiCall('/api/admin/users', 'GET');
+            if (usersResponse.ok) {
+                const users = await usersResponse.json();
+                this.renderAdminUsersTable(users);
+            }
+        } catch (error) {
+            console.error('Error loading admin data:', error);
+            this.showNotification('Failed to load admin data', 'error');
+        }
+    }
+
+    renderAdminUsersTable(users) {
+        /**Render the admin users table */
+        const tbody = document.getElementById('admin-users-table');
+        
+        if (users.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No users found</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = users.map(user => {
+            const createdDate = new Date(user.created_at).toLocaleDateString();
+            const lastActive = user.last_active ? new Date(user.last_active).toLocaleDateString() : 'Never';
+            
+            return `
+                <tr>
+                    <td>${user.id}</td>
+                    <td><strong>${user.username}</strong></td>
+                    <td>${user.email}</td>
+                    <td><span class="role-badge ${user.role}">${user.role}</span></td>
+                    <td>${user.total_messages}</td>
+                    <td>${user.total_conversations}</td>
+                    <td>${lastActive}</td>
+                    <td>${createdDate}</td>
+                </tr>
+            `;
+        }).join('');
     }
 
     showNotification(message, type = 'info') {

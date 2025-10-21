@@ -168,6 +168,36 @@ def change_password():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/admin/users')
+@require_auth
+def get_all_users():
+    """Get all users with statistics (admin only)"""
+    try:
+        # Check if user is administrator
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        users = integrated_db.get_all_users_stats()
+        return jsonify(users)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/statistics')
+@require_auth
+def get_statistics():
+    """Get overall usage statistics (admin only)"""
+    try:
+        # Check if user is administrator
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        stats = integrated_db.get_usage_statistics()
+        return jsonify(stats)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/auth/user')
 @require_auth
 def get_current_user():
