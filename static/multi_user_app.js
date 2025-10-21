@@ -1413,9 +1413,14 @@ class IntegratedAIChatbot {
         messagesContainer.innerHTML = messages.map(msg => {
             // Fix encoding issues in message content
             const cleanContent = this.fixTextEncoding(msg.content);
+            
+            // Format timestamp
+            const timestamp = msg.timestamp ? new Date(msg.timestamp).toLocaleString() : '';
+            
             return `
                 <div class="message ${msg.sender_type}">
-                    ${cleanContent}
+                    <div class="message-content">${cleanContent}</div>
+                    ${timestamp ? `<div class="message-timestamp">${timestamp}</div>` : ''}
                 </div>
             `;
         }).join('');
@@ -1568,9 +1573,14 @@ class IntegratedAIChatbot {
         messagesContainer.innerHTML = messages.map(msg => {
             // Fix encoding issues in message content
             const cleanContent = this.fixTextEncoding(msg.content);
+            
+            // Format timestamp
+            const timestamp = msg.timestamp ? new Date(msg.timestamp).toLocaleString() : '';
+            
             return `
                 <div class="message ${msg.sender_type}">
-                    ${cleanContent}
+                    <div class="message-content">${cleanContent}</div>
+                    ${timestamp ? `<div class="message-timestamp">${timestamp}</div>` : ''}
                 </div>
             `;
         }).join('');

@@ -20,10 +20,10 @@
     "ai_compare\\token_manager.py": "16bdbc5fa0952e8045624bbd235a23e0",
     "ai_compare\\user_profile_manager.py": "ba541700b0809395afa6046e650a7d80",
     "ai_compare\\__init__.py": "d41d8cd98f00b204e9800998ecf8427e",
-    "app.py": "be2a16796b12cbf183133085697b3ee6",
+    "app.py": "a1b083e420ac76f5789783d07442fb54",
     "requirements.txt": "b5598c3cd800e07f93072fe13b45edab",
-    ".env": "9e90ffd9c23367a769e3731cae743665"
+    ".env": "7edfcfb2bca5b9b4918297dc1297644b"
   },
-  "last_update": "2025-10-21T20:09:49.989439",
-  "update_count": 20850
+  "last_update": "2025-10-21T20:36:48.430016",
+  "update_count": 20931
 }
