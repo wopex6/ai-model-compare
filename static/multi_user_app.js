@@ -629,9 +629,20 @@ class IntegratedAIChatbot {
         
         console.log('🔧 Dashboard Debug: showDashboard completed');
         
+        // Update username display in navbar
+        this.updateNavUsername();
+        
         // Check if user should see personality test banner
         if (typeof window.checkPersonalityTestStatus === 'function') {
             window.checkPersonalityTestStatus();
+        }
+    }
+
+    updateNavUsername() {
+        // Update the username display in the navbar
+        const usernameElement = document.getElementById('nav-username');
+        if (usernameElement && this.currentUser) {
+            usernameElement.textContent = this.currentUser.username || 'User';
         }
     }
 
