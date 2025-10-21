@@ -97,6 +97,19 @@
                 </div>
             </nav>
 
+            <!-- Email Verification Banner -->
+            <div id="email-verification-banner" class="notification-banner warning" style="display: none;">
+                <div class="banner-content">
+                    <i class="fas fa-envelope"></i>
+                    <div class="banner-text">
+                        <strong>Please verify your email address</strong>
+                        <span>Check your email for a 6-digit verification code.</span>
+                    </div>
+                    <button class="btn btn-primary" id="verify-email-btn">Enter Code</button>
+                    <button class="btn btn-secondary" id="resend-code-btn">Resend Code</button>
+                </div>
+            </div>
+
             <!-- Personality Test Prompt Banner -->
             <div id="personality-test-banner" class="notification-banner" style="display: none;">
                 <div class="banner-content">
@@ -557,6 +570,30 @@
         </div>
     </div>
 
+    <!-- Email Verification Modal -->
+    <div id="verification-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Verify Your Email</h3>
+                <button class="close-btn" id="close-verification-modal">&times;</button>
+            </div>
+            <form id="verification-form">
+                <p style="margin-bottom: 20px; color: #666;">
+                    Enter the 6-digit code sent to your email address.
+                </p>
+                <div class="form-group">
+                    <label for="verification-code">Verification Code</label>
+                    <input type="text" id="verification-code" name="code" maxlength="6" pattern="[0-9]{6}" required 
+                           style="font-size: 24px; letter-spacing: 8px; text-align: center;" placeholder="000000">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-verification">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Verify</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div id="notification" class="notification"></div>
 
     <script src="{{ url_for('static', filename='multi_user_app.js') }}?v=20251018_2127"></script>
@@ -798,6 +835,10 @@
             padding: 1rem 2rem;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
             animation: slideDown 0.3s ease-out;
+        }
+        
+        .notification-banner.warning {
+            background: linear-gradient(135deg, #ff9800 0%, #ff5722 100%);
         }
         
         @keyframes slideDown {

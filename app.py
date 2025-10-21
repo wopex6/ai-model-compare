@@ -17,6 +17,7 @@ from auto_doc_hook import enable_auto_docs, update_docs_now
 
 # Import the integrated database system
 from integrated_database import IntegratedDatabase
+from email_service import EmailService
 
 # Load environment variables from .env file
 load_dotenv()
@@ -42,6 +43,7 @@ CORS(app, supports_credentials=True)
 
 # Initialize integrated database
 integrated_db = IntegratedDatabase()
+email_service = EmailService()
 ai_compare = AICompare()
 chatbot = AIChatbot()
 motivational_bot = MotivationalChatbot()
@@ -95,6 +97,13 @@ def signup():
         if not user_id:
             return jsonify({'error': 'Username or email already exists'}), 400
         
+        # Generate and send verification code
+        verification_code = integrated_db.create_verification_code(user_id)
+        email_sent = email_service.send_verification_code(email, username, verification_code)
+        
+        if not email_sent:
+            print(f"⚠️  Warning: Could not send verification email to {email}")
+        
         # Generate JWT token
         token = jwt.encode({
             'user_id': user_id,
@@ -106,7 +115,9 @@ def signup():
             'success': True,
             'token': token,
             'user_id': user_id,
-            'username': username
+            'username': username,
+            'email_verified': False,
+            'verification_sent': email_sent
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -195,6 +206,60 @@ def get_statistics():
         
         stats = integrated_db.get_usage_statistics()
         return jsonify(stats)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/verify-email', methods=['POST'])
+@require_auth
+def verify_email():
+    """Verify email with code"""
+    try:
+        data = request.get_json()
+        code = data.get('code')
+        
+        if not code:
+            return jsonify({'error': 'Verification code is required'}), 400
+        
+        success, message = integrated_db.verify_email_code(request.current_user['user_id'], code)
+        
+        if success:
+            return jsonify({'success': True, 'message': message})
+        else:
+            return jsonify({'error': message}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/resend-verification', methods=['POST'])
+@require_auth
+def resend_verification():
+    """Resend verification code"""
+    try:
+        user = integrated_db.get_user_by_id(request.current_user['user_id'])
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Check if already verified
+        if integrated_db.is_email_verified(request.current_user['user_id']):
+            return jsonify({'error': 'Email already verified'}), 400
+        
+        # Generate and send new code
+        verification_code = integrated_db.create_verification_code(request.current_user['user_id'])
+        email_sent = email_service.send_verification_code(user['email'], user['username'], verification_code)
+        
+        if email_sent:
+            return jsonify({'success': True, 'message': 'Verification code sent'})
+        else:
+            return jsonify({'error': 'Failed to send verification email'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/auth/check-verification')
+@require_auth
+def check_verification():
+    """Check if email is verified"""
+    try:
+        is_verified = integrated_db.is_email_verified(request.current_user['user_id'])
+        return jsonify({'verified': is_verified})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

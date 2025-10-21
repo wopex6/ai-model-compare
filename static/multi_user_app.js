@@ -356,6 +356,13 @@ class IntegratedAIChatbot {
 
         // Settings
         document.getElementById('change-password-form').addEventListener('submit', (e) => this.handlePasswordChange(e));
+        
+        // Email Verification
+        document.getElementById('verify-email-btn').addEventListener('click', () => this.showVerificationModal());
+        document.getElementById('resend-code-btn').addEventListener('click', () => this.resendVerificationCode());
+        document.getElementById('verification-form').addEventListener('submit', (e) => this.handleVerificationSubmit(e));
+        document.getElementById('close-verification-modal').addEventListener('click', () => this.hideVerificationModal());
+        document.getElementById('cancel-verification').addEventListener('click', () => this.hideVerificationModal());
 
         // Modal backdrop clicks
         document.querySelectorAll('.modal').forEach(modal => {
@@ -634,6 +641,9 @@ class IntegratedAIChatbot {
         
         // Check if user is admin
         this.checkAdminAccess();
+        
+        // Check email verification status
+        this.checkEmailVerification();
         
         // Check if user should see personality test banner
         if (typeof window.checkPersonalityTestStatus === 'function') {
@@ -1949,6 +1959,82 @@ class IntegratedAIChatbot {
                 </tr>
             `;
         }).join('');
+    }
+
+    async checkEmailVerification() {
+        /**Check if email is verified and show banner if not */
+        try {
+            const response = await this.apiCall('/api/auth/check-verification', 'GET');
+            if (response.ok) {
+                const data = await response.json();
+                if (!data.verified) {
+                    // Show verification banner
+                    const banner = document.getElementById('email-verification-banner');
+                    if (banner) {
+                        banner.style.display = 'block';
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error checking email verification:', error);
+        }
+    }
+
+    showVerificationModal() {
+        const modal = document.getElementById('verification-modal');
+        if (modal) {
+            modal.classList.add('active');
+            document.getElementById('verification-code').focus();
+        }
+    }
+
+    hideVerificationModal() {
+        const modal = document.getElementById('verification-modal');
+        if (modal) {
+            modal.classList.remove('active');
+            document.getElementById('verification-form').reset();
+        }
+    }
+
+    async handleVerificationSubmit(e) {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const code = formData.get('code');
+
+        try {
+            const response = await this.apiCall('/api/auth/verify-email', 'POST', { code });
+            
+            if (response.ok) {
+                this.showNotification('Email verified successfully!', 'success');
+                this.hideVerificationModal();
+                
+                // Hide verification banner
+                const banner = document.getElementById('email-verification-banner');
+                if (banner) {
+                    banner.style.display = 'none';
+                }
+            } else {
+                const error = await response.json();
+                this.showNotification(error.error || 'Verification failed', 'error');
+            }
+        } catch (error) {
+            this.showNotification('Network error. Please try again.', 'error');
+        }
+    }
+
+    async resendVerificationCode() {
+        try {
+            const response = await this.apiCall('/api/auth/resend-verification', 'POST');
+            
+            if (response.ok) {
+                this.showNotification('Verification code sent! Check your email.', 'success');
+            } else {
+                const error = await response.json();
+                this.showNotification(error.error || 'Failed to send code', 'error');
+            }
+        } catch (error) {
+            this.showNotification('Network error. Please try again.', 'error');
+        }
     }
 
     showNotification(message, type = 'info') {
