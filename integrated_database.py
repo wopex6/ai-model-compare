@@ -16,6 +16,7 @@ class IntegratedDatabase:
         self.db_path = Path(db_path)
         self.init_database()
         self.create_default_user()
+        self.add_email_verification_columns()
     
     def get_connection(self):
         """Get database connection"""
@@ -742,3 +743,101 @@ class IntegratedDatabase:
             'active_today': active_today,
             'users_by_role': users_by_role
         }
+    
+    def add_email_verification_columns(self):
+        """Add email verification columns if they don't exist"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Check if columns exist
+            cursor.execute("PRAGMA table_info(users)")
+            columns = [row[1] for row in cursor.fetchall()]
+            
+            if 'email_verified' not in columns:
+                cursor.execute('ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0')
+            if 'verification_code' not in columns:
+                cursor.execute('ALTER TABLE users ADD COLUMN verification_code TEXT')
+            if 'verification_expires' not in columns:
+                cursor.execute('ALTER TABLE users ADD COLUMN verification_expires DATETIME')
+            
+            conn.commit()
+        except Exception as e:
+            print(f"Note: Email verification columns may already exist: {e}")
+        finally:
+            conn.close()
+    
+    def create_verification_code(self, user_id: int) -> str:
+        """Generate and store verification code for user"""
+        import random
+        verification_code = ''.join([str(random.randint(0, 9)) for _ in range(6)])
+        expires_at = datetime.now() + timedelta(hours=1)
+        
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            UPDATE users 
+            SET verification_code = ?, verification_expires = ?
+            WHERE id = ?
+        ''', (verification_code, expires_at.isoformat(), user_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return verification_code
+    
+    def verify_email_code(self, user_id: int, code: str) -> tuple[bool, str]:
+        """Verify the email verification code"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT verification_code, verification_expires 
+            FROM users WHERE id = ?
+        ''', (user_id,))
+        
+        result = cursor.fetchone()
+        
+        if not result:
+            conn.close()
+            return False, "User not found"
+        
+        stored_code, expires_at = result
+        
+        if not stored_code:
+            conn.close()
+            return False, "No verification code found"
+        
+        # Check expiration
+        if datetime.now() > datetime.fromisoformat(expires_at):
+            conn.close()
+            return False, "Verification code has expired"
+        
+        # Check code match
+        if stored_code != code:
+            conn.close()
+            return False, "Invalid verification code"
+        
+        # Mark as verified
+        cursor.execute('''
+            UPDATE users 
+            SET email_verified = 1, verification_code = NULL, verification_expires = NULL
+            WHERE id = ?
+        ''', (user_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        return True, "Email verified successfully"
+    
+    def is_email_verified(self, user_id: int) -> bool:
+        """Check if user's email is verified"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT email_verified FROM users WHERE id = ?', (user_id,))
+        result = cursor.fetchone()
+        conn.close()
+        
+        return bool(result[0]) if result else False
