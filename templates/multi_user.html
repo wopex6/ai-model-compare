@@ -90,6 +90,19 @@
                 </div>
             </nav>
 
+            <!-- Personality Test Prompt Banner -->
+            <div id="personality-test-banner" class="notification-banner" style="display: none;">
+                <div class="banner-content">
+                    <i class="fas fa-brain"></i>
+                    <div class="banner-text">
+                        <strong>Help us understand you better!</strong>
+                        <span>Take our quick personality assessment to get more personalized AI responses.</span>
+                    </div>
+                    <button class="btn btn-primary" id="take-test-banner-btn">Take Test Now</button>
+                    <button class="btn-close" id="close-banner-btn"><i class="fas fa-times"></i></button>
+                </div>
+            </div>
+
             <main class="main-content">
                 <!-- AI Chat Tab -->
                 <div id="chat-tab" class="tab-content">
@@ -310,6 +323,11 @@
                 <div id="psychology-tab" class="tab-content">
                     <div class="content-header">
                         <h2>Psychology Profile & History</h2>
+                        <div class="psychology-actions">
+                            <button class="btn btn-primary btn-large" id="take-personality-test-btn">
+                                <i class="fas fa-brain"></i> Take Personality Test
+                            </button>
+                        </div>
                         <div class="psychology-nav">
                             <button class="psychology-nav-btn active" data-section="current">Current Traits</button>
                             <button class="psychology-nav-btn" data-section="history">Assessment History</button>
@@ -325,6 +343,10 @@
                         </div>
                         <div class="psychology-info">
                             <p>Your psychology traits help the AI understand your personality and provide more personalized responses.</p>
+                            <p class="info-highlight">
+                                <i class="fas fa-lightbulb"></i>
+                                <strong>Tip:</strong> Complete the personality assessment to automatically populate your psychological profile!
+                            </p>
                         </div>
                         <div class="traits-grid" id="traits-grid">
                             <!-- Traits will be loaded here -->
@@ -696,6 +718,100 @@
             position: relative;
             top: 0;
         }
+        
+        /* Personality Test Banner Styles */
+        .notification-banner {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            animation: slideDown 0.3s ease-out;
+        }
+        
+        @keyframes slideDown {
+            from {
+                transform: translateY(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+        
+        .banner-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .banner-content i.fa-brain {
+            font-size: 2rem;
+            color: #ffd700;
+        }
+        
+        .banner-text {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+        
+        .banner-text strong {
+            font-size: 1.1rem;
+        }
+        
+        .banner-text span {
+            font-size: 0.9rem;
+            opacity: 0.95;
+        }
+        
+        .btn-close {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 0.5rem;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .btn-close:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        /* Psychology Actions Styles */
+        .psychology-actions {
+            margin: 1rem 0;
+        }
+        
+        .btn-large {
+            font-size: 1.1rem;
+            padding: 0.75rem 1.5rem;
+            font-weight: 600;
+        }
+        
+        .btn-large i {
+            margin-right: 0.5rem;
+            font-size: 1.2rem;
+        }
+        
+        .info-highlight {
+            background: #f0f8ff;
+            border-left: 4px solid #667eea;
+            padding: 1rem;
+            margin-top: 1rem;
+            border-radius: 4px;
+        }
+        
+        .info-highlight i {
+            color: #667eea;
+            margin-right: 0.5rem;
+        }
     </style>
     
     <script>
@@ -847,6 +963,75 @@
                     }
                 });
             }
+            
+            // Personality Test Banner and Button Logic
+            const personalityTestBanner = document.getElementById('personality-test-banner');
+            const takeTestBannerBtn = document.getElementById('take-test-banner-btn');
+            const closeBannerBtn = document.getElementById('close-banner-btn');
+            const takeTestBtn = document.getElementById('take-personality-test-btn');
+            
+            // Check if user has taken the personality test
+            window.checkPersonalityTestStatus = async function() {
+                try {
+                    const response = await fetch('/api/user/psychology-traits', {
+                        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+                    });
+                    
+                    if (response.ok) {
+                        const traits = await response.json();
+                        console.log('🧠 Personality Check: User has', traits ? traits.length : 0, 'traits');
+                        // If user has no traits, show the banner
+                        if (!traits || traits.length === 0) {
+                            // Check if banner was previously dismissed
+                            const dismissed = localStorage.getItem('personality-banner-dismissed');
+                            if (!dismissed) {
+                                console.log('🧠 Personality Banner: Showing after 2 seconds');
+                                setTimeout(() => {
+                                    const banner = document.getElementById('personality-test-banner');
+                                    if (banner) {
+                                        banner.style.display = 'block';
+                                        console.log('🧠 Personality Banner: Now visible');
+                                    }
+                                }, 2000); // Show after 2 seconds
+                            } else {
+                                console.log('🧠 Personality Banner: Previously dismissed, not showing');
+                            }
+                        } else {
+                            console.log('🧠 Personality Banner: User has traits, not showing');
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error checking personality test status:', error);
+                }
+            }
+            
+            // Open personality test in new tab/window
+            function openPersonalityTest() {
+                window.open('/personality-test', '_blank', 'width=1200,height=800');
+            }
+            
+            // Banner buttons
+            if (takeTestBannerBtn) {
+                takeTestBannerBtn.addEventListener('click', () => {
+                    openPersonalityTest();
+                    personalityTestBanner.style.display = 'none';
+                });
+            }
+            
+            if (closeBannerBtn) {
+                closeBannerBtn.addEventListener('click', () => {
+                    personalityTestBanner.style.display = 'none';
+                    localStorage.setItem('personality-banner-dismissed', 'true');
+                });
+            }
+            
+            // Psychology tab test button
+            if (takeTestBtn) {
+                takeTestBtn.addEventListener('click', openPersonalityTest);
+            }
+            
+            // Note: checkPersonalityTestStatus() is now called from showDashboard() in multi_user_app.js
+            // This ensures it only runs after successful login/dashboard load
             
             // Let the StateManager handle scroll restoration with proper timing
         });

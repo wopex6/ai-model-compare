@@ -628,6 +628,11 @@ class IntegratedAIChatbot {
         }
         
         console.log('🔧 Dashboard Debug: showDashboard completed');
+        
+        // Check if user should see personality test banner
+        if (typeof window.checkPersonalityTestStatus === 'function') {
+            window.checkPersonalityTestStatus();
+        }
     }
 
     async loadUserData() {
