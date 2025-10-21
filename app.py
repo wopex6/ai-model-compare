@@ -98,11 +98,21 @@ def signup():
             return jsonify({'error': 'Username or email already exists'}), 400
         
         # Generate and send verification code
-        verification_code = integrated_db.create_verification_code(user_id)
-        email_sent = email_service.send_verification_code(email, username, verification_code)
-        
-        if not email_sent:
-            print(f"⚠️  Warning: Could not send verification email to {email}")
+        print(f"📧 Attempting to send verification email to {email}")
+        try:
+            verification_code = integrated_db.create_verification_code(user_id)
+            print(f"🔐 Generated verification code: {verification_code}")
+            email_sent = email_service.send_verification_code(email, username, verification_code)
+            
+            if email_sent:
+                print(f"✅ Verification email sent successfully to {email}")
+            else:
+                print(f"⚠️  Warning: Could not send verification email to {email}")
+        except Exception as e:
+            print(f"❌ Error sending verification email: {e}")
+            import traceback
+            traceback.print_exc()
+            email_sent = False
         
         # Generate JWT token
         token = jwt.encode({
@@ -548,11 +558,16 @@ def add_conversation_message(session_id):
             # Get updated usage info
             usage = integrated_db.get_message_usage(request.current_user['user_id'])
             
+            # Get current server timestamp
+            from datetime import datetime
+            timestamp = datetime.now().isoformat()
+            
             return jsonify({
                 'success': True, 
                 'message': 'Message added successfully',
                 'ai_response': ai_response.get('response', 'Sorry, I could not generate a response.'),
-                'usage': usage
+                'usage': usage,
+                'timestamp': timestamp
             })
         
         return jsonify({'success': True, 'message': 'Message added successfully'})
