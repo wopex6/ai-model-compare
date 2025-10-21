@@ -86,6 +86,7 @@
                     <button class="nav-btn" data-tab="psychology">Psychology</button>
                     <button class="nav-btn" data-tab="conversations">Conversations</button>
                     <button class="nav-btn" data-tab="settings">Settings</button>
+                    <button class="nav-btn" id="admin-tab-btn" data-tab="admin" style="display: none;"><i class="fas fa-shield-alt"></i> Admin</button>
                 </div>
                 <div class="nav-user">
                     <div class="user-info">
@@ -438,6 +439,71 @@
                             </div>
                             <button type="submit" class="btn btn-primary">Change Password</button>
                         </form>
+                    </div>
+                </div>
+
+                <!-- Admin Tab -->
+                <div id="admin-tab" class="tab-content">
+                    <div class="content-header">
+                        <h2><i class="fas fa-shield-alt"></i> Administrator Dashboard</h2>
+                    </div>
+                    
+                    <!-- Statistics Overview -->
+                    <div class="admin-stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="fas fa-users"></i></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="stat-total-users">--</div>
+                                <div class="stat-label">Total Users</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="fas fa-comments"></i></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="stat-total-messages">--</div>
+                                <div class="stat-label">Total Messages</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="fas fa-calendar-day"></i></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="stat-messages-today">--</div>
+                                <div class="stat-label">Messages Today</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="fas fa-user-check"></i></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="stat-active-today">--</div>
+                                <div class="stat-label">Active Today</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Users Table -->
+                    <div class="admin-section">
+                        <h3>All Users</h3>
+                        <div class="table-container">
+                            <table class="admin-table">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Username</th>
+                                        <th>Email</th>
+                                        <th>Role</th>
+                                        <th>Total Messages</th>
+                                        <th>Conversations</th>
+                                        <th>Last Active</th>
+                                        <th>Joined</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="admin-users-table">
+                                    <tr>
+                                        <td colspan="8" style="text-align: center;">Loading...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </main>

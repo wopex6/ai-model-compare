@@ -668,3 +668,77 @@ class IntegratedDatabase:
         conn.commit()
         conn.close()
         return True
+    
+    def get_all_users_stats(self) -> List[Dict[str, Any]]:
+        """Get statistics for all users (admin only)"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT 
+                u.id,
+                u.username,
+                u.email,
+                u.user_role,
+                u.created_at,
+                COALESCE(SUM(mu.message_count), 0) as total_messages,
+                COUNT(DISTINCT c.id) as total_conversations,
+                MAX(mu.date) as last_active
+            FROM users u
+            LEFT JOIN message_usage mu ON u.id = mu.user_id
+            LEFT JOIN ai_conversations c ON u.id = c.user_id
+            GROUP BY u.id, u.username, u.email, u.user_role, u.created_at
+            ORDER BY u.created_at DESC
+        ''')
+        
+        users = []
+        for row in cursor.fetchall():
+            users.append({
+                'id': row[0],
+                'username': row[1],
+                'email': row[2],
+                'role': row[3],
+                'created_at': row[4],
+                'total_messages': row[5],
+                'total_conversations': row[6],
+                'last_active': row[7]
+            })
+        
+        conn.close()
+        return users
+    
+    def get_usage_statistics(self) -> Dict[str, Any]:
+        """Get overall usage statistics (admin only)"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Total users
+        cursor.execute('SELECT COUNT(*) FROM users')
+        total_users = cursor.fetchone()[0]
+        
+        # Total messages today
+        today = datetime.now().date().isoformat()
+        cursor.execute('SELECT SUM(message_count) FROM message_usage WHERE date = ?', (today,))
+        messages_today = cursor.fetchone()[0] or 0
+        
+        # Total messages all time
+        cursor.execute('SELECT SUM(message_count) FROM message_usage')
+        total_messages = cursor.fetchone()[0] or 0
+        
+        # Active users today
+        cursor.execute('SELECT COUNT(DISTINCT user_id) FROM message_usage WHERE date = ?', (today,))
+        active_today = cursor.fetchone()[0]
+        
+        # Users by role
+        cursor.execute('SELECT user_role, COUNT(*) FROM users GROUP BY user_role')
+        users_by_role = {row[0]: row[1] for row in cursor.fetchall()}
+        
+        conn.close()
+        
+        return {
+            'total_users': total_users,
+            'messages_today': messages_today,
+            'total_messages': total_messages,
+            'active_today': active_today,
+            'users_by_role': users_by_role
+        }
