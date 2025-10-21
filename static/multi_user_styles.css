@@ -164,17 +164,23 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-wrap: nowrap;
+    gap: 15px;
 }
 
 .nav-brand h2 {
     color: #333;
     font-size: 1.5rem;
+    white-space: nowrap;
 }
 
 .nav-menu {
     display: flex;
     align-items: center;
     gap: 10px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
 }
 
 .nav-btn {
@@ -186,6 +192,9 @@ body {
     font-weight: 500;
     transition: all 0.3s ease;
     color: #666;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .nav-btn:hover {
@@ -202,6 +211,8 @@ body {
     display: flex;
     align-items: center;
     gap: 15px;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
 }
 
 .user-info {
@@ -213,6 +224,7 @@ body {
     border-radius: 20px;
     font-weight: 500;
     color: #333;
+    max-width: 200px;
 }
 
 .user-info i {
@@ -222,6 +234,10 @@ body {
 
 .user-info span {
     font-size: 0.95rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
 }
 
 /* Main content */
