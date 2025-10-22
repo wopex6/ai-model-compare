@@ -184,9 +184,14 @@
                             </div>
                             <div id="message-usage-info" class="message-usage-container"></div>
                             <div id="chat-input-area" class="message-input-area">
-                                <div class="message-input">
-                                    <textarea id="chat-input" placeholder="Type your message to the AI..." rows="1" style="resize: none; overflow-y: hidden; max-height: 120px; min-height: 40px;"></textarea>
-                                    <button id="send-chat-btn" class="btn btn-primary">Send</button>
+                                <div id="chat-file-preview" style="margin-bottom: 8px; display: none;"></div>
+                                <div class="message-input" style="display: flex; gap: 8px; align-items: flex-end;">
+                                    <input type="file" id="chat-file-input" accept="*/*" style="display: none;">
+                                    <button id="chat-attach-btn" class="btn btn-secondary" style="padding: 10px 12px; border: 1px solid #ddd; background: white; color: #666; border-radius: 4px; align-self: flex-end;" title="Attach file">
+                                        <i class="fas fa-paperclip"></i>
+                                    </button>
+                                    <textarea id="chat-input" placeholder="Type your message to the AI..." rows="1" style="resize: none; overflow-y: hidden; max-height: 120px; min-height: 40px; flex: 1;"></textarea>
+                                    <button id="send-chat-btn" class="btn btn-primary" style="align-self: flex-end;">Send</button>
                                 </div>
                             </div>
                         </div>
@@ -517,7 +522,12 @@
                                     <p style="text-align: center; color: #999;">No conversation selected</p>
                                 </div>
                                 <div id="admin-chat-reply-box" style="padding: 16px; border-top: 1px solid #ddd; display: none; flex-shrink: 0;">
-                                    <div style="display: flex; gap: 8px;">
+                                    <div id="admin-reply-file-preview" style="margin-bottom: 8px; display: none;"></div>
+                                    <div style="display: flex; gap: 8px; align-items: center;">
+                                        <input type="file" id="admin-reply-file-input" accept="*/*" style="display: none;">
+                                        <button id="admin-reply-attach-btn" class="btn btn-secondary" style="padding: 12px; border: 1px solid #ddd; background: white; color: #666; border-radius: 4px;" title="Attach file">
+                                            <i class="fas fa-paperclip"></i>
+                                        </button>
                                         <input type="text" id="admin-reply-input" placeholder="Type your reply..." style="flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 4px;">
                                         <button id="send-admin-reply-btn" class="btn btn-primary">
                                             <i class="fas fa-paper-plane"></i> Send
@@ -537,6 +547,7 @@
                                     <option value="all">All Roles</option>
                                     <option value="administrator">Administrator</option>
                                     <option value="user">User</option>
+                                    <option value="paid">Paid</option>
                                     <option value="guest">Guest</option>
                                 </select>
                                 <input type="text" id="user-search-input" placeholder="Search by username or email..." style="width: 300px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px;">
@@ -595,12 +606,17 @@
                             <p style="text-align: center; color: #999;">Loading messages...</p>
                         </div>
                         
-                        <div class="message-input-container" style="display: flex; gap: 8px;">
+                        <div class="message-input-container" style="display: flex; gap: 8px; align-items: center;">
+                            <input type="file" id="admin-chat-file-input" accept="*/*" style="display: none;">
+                            <button id="admin-chat-attach-btn" class="btn btn-secondary" style="padding: 12px; border: 1px solid #ddd; background: white; color: #666; border-radius: 4px;" title="Attach file">
+                                <i class="fas fa-paperclip"></i>
+                            </button>
                             <input type="text" id="admin-chat-input" placeholder="Type your message..." style="flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 4px;">
                             <button id="send-admin-message-btn" class="btn btn-primary">
                                 <i class="fas fa-paper-plane"></i> Send
                             </button>
                         </div>
+                        <div id="admin-chat-file-preview" style="margin-top: 8px; display: none;"></div>
                     </div>
                 </div>
             </main>
@@ -680,6 +696,7 @@
 
     <div id="notification" class="notification"></div>
 
+    <script src="{{ url_for('static', filename='file_upload_handler.js') }}"></script>
     <script src="{{ url_for('static', filename='multi_user_app.js') }}?v=20251018_2127"></script>
     <style>
         /* Prevent scroll flash by setting initial scroll position */

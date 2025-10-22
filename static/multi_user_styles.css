@@ -1267,6 +1267,11 @@ body {
     color: white;
 }
 
+.role-badge.user {
+    background: #4dabf7;
+    color: white;
+}
+
 .role-badge.paid {
     background: #51cf66;
     color: white;
