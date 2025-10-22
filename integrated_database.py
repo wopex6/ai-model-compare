@@ -900,16 +900,17 @@ class IntegratedDatabase:
         return bool(result[0]) if result else False
     
     # Admin Messaging Methods
-    def send_admin_message(self, user_id: int, sender_type: str, message: str) -> bool:
-        """Send a message between user and admin"""
+    def send_admin_message(self, user_id: int, sender_type: str, message: str, 
+                          file_url: str = None, file_name: str = None, file_size: int = None) -> bool:
+        """Send a message between user and admin with optional file attachment"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
         try:
             cursor.execute('''
-                INSERT INTO admin_messages (user_id, sender_type, message)
-                VALUES (?, ?, ?)
-            ''', (user_id, sender_type, message))
+                INSERT INTO admin_messages (user_id, sender_type, message, file_url, file_name, file_size)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (user_id, sender_type, message, file_url, file_name, file_size))
             conn.commit()
             return True
         except Exception as e:
@@ -919,12 +920,12 @@ class IntegratedDatabase:
             conn.close()
     
     def get_admin_messages(self, user_id: int) -> List[Dict[str, Any]]:
-        """Get all messages between user and admin"""
+        """Get all messages between user and admin with file attachments"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT id, sender_type, message, is_read, timestamp
+            SELECT id, sender_type, message, is_read, timestamp, file_url, file_name, file_size
             FROM admin_messages
             WHERE user_id = ?
             ORDER BY timestamp ASC
@@ -937,7 +938,10 @@ class IntegratedDatabase:
                 'sender_type': row[1],
                 'message': row[2],
                 'is_read': bool(row[3]),
-                'timestamp': row[4]
+                'timestamp': row[4],
+                'file_url': row[5],
+                'file_name': row[6],
+                'file_size': row[7]
             })
         
         conn.close()

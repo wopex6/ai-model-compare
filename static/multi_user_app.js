@@ -2416,7 +2416,7 @@ class IntegratedAIChatbot {
     }
     
     renderAdminMessages(messages) {
-        /**Render admin chat messages */
+        /**Render admin chat messages with file attachments */
         const container = document.getElementById('admin-chat-messages');
         
         if (messages.length === 0) {
@@ -2428,10 +2428,16 @@ class IntegratedAIChatbot {
             const timestamp = this.formatTimestamp(msg.timestamp);
             const isUser = msg.sender_type === 'user';
             
+            // Render file attachment if present
+            const fileHtml = (msg.file_url && window.fileUploadHandler) 
+                ? window.fileUploadHandler.renderFileAttachment(msg.file_url, msg.file_name, msg.file_size)
+                : '';
+            
             return `
                 <div style="margin-bottom: 16px; display: flex; justify-content: ${isUser ? 'flex-end' : 'flex-start'};">
                     <div style="max-width: 70%; padding: 12px; border-radius: 12px; background: ${isUser ? '#667eea' : '#f1f3f4'}; color: ${isUser ? 'white' : '#333'};">
-                        <div>${msg.message}</div>
+                        ${msg.message ? `<div>${msg.message}</div>` : ''}
+                        ${fileHtml}
                         <div style="font-size: 0.75rem; opacity: 0.7; margin-top: 4px; text-align: right;">${timestamp}</div>
                     </div>
                 </div>
@@ -2622,7 +2628,7 @@ class IntegratedAIChatbot {
     }
     
     renderAdminUserMessages(messages, username) {
-        /**Render messages for admin view */
+        /**Render messages for admin view with file attachments */
         const container = document.getElementById('admin-chat-messages-view');
         
         if (messages.length === 0) {
@@ -2634,11 +2640,17 @@ class IntegratedAIChatbot {
             const timestamp = this.formatTimestamp(msg.timestamp);
             const isAdmin = msg.sender_type === 'admin';
             
+            // Render file attachment if present
+            const fileHtml = (msg.file_url && window.fileUploadHandler) 
+                ? window.fileUploadHandler.renderFileAttachment(msg.file_url, msg.file_name, msg.file_size)
+                : '';
+            
             return `
                 <div style="margin-bottom: 16px; display: flex; justify-content: ${isAdmin ? 'flex-end' : 'flex-start'};">
                     <div style="max-width: 70%; padding: 12px; border-radius: 12px; background: ${isAdmin ? '#667eea' : '#f1f3f4'}; color: ${isAdmin ? 'white' : '#333'};">
                         <div style="font-size: 0.85rem; opacity: 0.8; margin-bottom: 4px;">${isAdmin ? 'You (Admin)' : username}</div>
-                        <div>${msg.message}</div>
+                        ${msg.message ? `<div>${msg.message}</div>` : ''}
+                        ${fileHtml}
                         <div style="font-size: 0.75rem; opacity: 0.7; margin-top: 4px; text-align: right;">${timestamp}</div>
                     </div>
                 </div>
@@ -2659,23 +2671,25 @@ class IntegratedAIChatbot {
         const input = document.getElementById('admin-reply-input');
         const message = input.value.trim();
         
-        // Check if there's an attached file
-        const attachedFile = window.fileUploadHandler ? window.fileUploadHandler.getAttachedFile('admin-reply') : null;
+        // Check if there's an uploaded file
+        const uploadedFileData = window.fileUploadHandler ? window.fileUploadHandler.getUploadedFileData('admin-reply') : null;
         
-        if (!message && !attachedFile) {
+        if (!message && !uploadedFileData) {
             this.showNotification('Please type a message or attach a file', 'error');
             return;
         }
         
         try {
-            let messageText = message;
+            const payload = { message: message || '' };
             
-            // If file is attached, add file info to message
-            if (attachedFile) {
-                messageText += `\n\n📎 Attached file: ${attachedFile.name} (${window.fileUploadHandler.formatFileSize(attachedFile.size)})`;
+            // If file is uploaded, add file data
+            if (uploadedFileData) {
+                payload.file_url = uploadedFileData.file_url;
+                payload.file_name = uploadedFileData.original_filename;
+                payload.file_size = uploadedFileData.file_size;
             }
             
-            const response = await this.apiCall(`/api/admin/chats/${this.currentAdminChatUserId}/send`, 'POST', { message: messageText });
+            const response = await this.apiCall(`/api/admin/chats/${this.currentAdminChatUserId}/send`, 'POST', payload);
             
             if (response.ok) {
                 input.value = '';

@@ -206,36 +206,93 @@ class FileUploadHandler {
         return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
     }
 
-    renderFileAttachment(file) {
+    renderFileAttachment(fileUrl, fileName, fileSize) {
         /**Generate HTML for displaying an attached file in a message */
-        const fileType = file.type ? file.type.split('/')[0] : 'file';
-        const fileName = file.name || 'Attached File';
-        const fileSize = file.size ? this.formatFileSize(file.size) : '';
+        if (!fileUrl) return '';
 
-        let icon = 'fa-file';
-        let bgColor = '#e9ecef';
-        if (fileType === 'image') {
-            icon = 'fa-image';
-            bgColor = '#d3f9d8';
-        } else if (fileType === 'audio') {
-            icon = 'fa-music';
-            bgColor = '#d0ebff';
-        } else if (fileType === 'video') {
-            icon = 'fa-video';
-            bgColor = '#ffe066';
-        } else if (file.type && file.type.includes('pdf')) {
-            icon = 'fa-file-pdf';
-            bgColor = '#ffdeeb';
+        const ext = fileName ? fileName.split('.').pop().toLowerCase() : '';
+        const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'bmp'];
+        const audioExts = ['mp3', 'wav', 'ogg', 'm4a', 'aac'];
+        const videoExts = ['mp4', 'webm', 'mov', 'avi'];
+
+        const sizeStr = fileSize ? this.formatFileSize(fileSize) : '';
+
+        // Image - display inline
+        if (imageExts.includes(ext)) {
+            return `
+                <div style="margin-top: 8px;">
+                    <img src="${fileUrl}" alt="${fileName}" style="max-width: 300px; max-height: 300px; border-radius: 8px; border: 1px solid #ddd; display: block;">
+                    <div style="margin-top: 4px; display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 0.85rem; color: #666;">${fileName} ${sizeStr ? '• ' + sizeStr : ''}</span>
+                        <a href="${fileUrl}" download="${fileName}" style="color: #667eea; text-decoration: none;">
+                            <i class="fas fa-download"></i> Download
+                        </a>
+                    </div>
+                </div>
+            `;
         }
 
-        return `
-            <div style="display: inline-flex; align-items: center; gap: 10px; padding: 10px; background: ${bgColor}; border-radius: 8px; margin-top: 8px; max-width: 300px;">
-                <i class="fas ${icon}" style="font-size: 20px; color: #667eea;"></i>
-                <div style="flex: 1; min-width: 0;">
-                    <div style="font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${fileName}</div>
-                    ${fileSize ? `<div style="font-size: 0.85rem; opacity: 0.8;">${fileSize}</div>` : ''}
+        // Audio - show player
+        if (audioExts.includes(ext)) {
+            return `
+                <div style="margin-top: 8px; padding: 12px; background: #d0ebff; border-radius: 8px; max-width: 400px;">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                        <i class="fas fa-music" style="color: #667eea;"></i>
+                        <span style="font-weight: 500;">${fileName}</span>
+                        ${sizeStr ? `<span style="font-size: 0.85rem; color: #666;">• ${sizeStr}</span>` : ''}
+                    </div>
+                    <audio controls style="width: 100%; max-width: 100%;">
+                        <source src="${fileUrl}" type="audio/${ext}">
+                        Your browser does not support the audio element.
+                    </audio>
+                    <div style="margin-top: 8px;">
+                        <a href="${fileUrl}" download="${fileName}" style="color: #667eea; text-decoration: none; font-size: 0.9rem;">
+                            <i class="fas fa-download"></i> Download
+                        </a>
+                    </div>
                 </div>
-                <i class="fas fa-download" style="color: #667eea; cursor: pointer;" title="Download"></i>
+            `;
+        }
+
+        // Video - show player
+        if (videoExts.includes(ext)) {
+            return `
+                <div style="margin-top: 8px; padding: 12px; background: #ffe066; border-radius: 8px; max-width: 400px;">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                        <i class="fas fa-video" style="color: #667eea;"></i>
+                        <span style="font-weight: 500;">${fileName}</span>
+                        ${sizeStr ? `<span style="font-size: 0.85rem; color: #666;">• ${sizeStr}</span>` : ''}
+                    </div>
+                    <video controls style="width: 100%; max-width: 100%; border-radius: 4px;">
+                        <source src="${fileUrl}" type="video/${ext}">
+                        Your browser does not support the video element.
+                    </video>
+                    <div style="margin-top: 8px;">
+                        <a href="${fileUrl}" download="${fileName}" style="color: #667eea; text-decoration: none; font-size: 0.9rem;">
+                            <i class="fas fa-download"></i> Download
+                        </a>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Other files - show download link with icon
+        let icon = 'fa-file';
+        if (ext === 'pdf') icon = 'fa-file-pdf';
+        else if (['doc', 'docx'].includes(ext)) icon = 'fa-file-word';
+        else if (['xls', 'xlsx'].includes(ext)) icon = 'fa-file-excel';
+        else if (['zip', 'rar', '7z'].includes(ext)) icon = 'fa-file-archive';
+
+        return `
+            <div style="margin-top: 8px;">
+                <a href="${fileUrl}" download="${fileName}" style="display: inline-flex; align-items: center; gap: 10px; padding: 10px 14px; background: #e9ecef; border-radius: 8px; text-decoration: none; color: #333; border: 1px solid #ddd;">
+                    <i class="fas ${icon}" style="font-size: 24px; color: #667eea;"></i>
+                    <div>
+                        <div style="font-weight: 500;">${fileName}</div>
+                        ${sizeStr ? `<div style="font-size: 0.85rem; color: #666;">${sizeStr}</div>` : ''}
+                    </div>
+                    <i class="fas fa-download" style="color: #667eea; margin-left: auto;"></i>
+                </a>
             </div>
         `;
     }
