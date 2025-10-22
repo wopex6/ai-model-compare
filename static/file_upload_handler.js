@@ -162,7 +162,7 @@ class FileUploadHandler {
             const response = await fetch('/api/upload-file', {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    'Authorization': `Bearer ${localStorage.getItem('authToken')}`
                 },
                 body: formData
             });
