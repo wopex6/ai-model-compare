@@ -2035,6 +2035,12 @@ class IntegratedAIChatbot {
                     if (adminTabBtn) {
                         adminTabBtn.style.display = 'block';
                     }
+                    
+                    // Hide "Contact Admin" button for administrators
+                    const contactAdminBtn = document.getElementById('admin-chat-tab-btn');
+                    if (contactAdminBtn) {
+                        contactAdminBtn.style.display = 'none';
+                    }
                 }
             }
         } catch (error) {
@@ -2441,13 +2447,30 @@ class IntegratedAIChatbot {
         const input = document.getElementById('admin-chat-input');
         const message = input.value.trim();
         
-        if (!message) return;
+        // Check if there's an attached file
+        const attachedFile = window.fileUploadHandler ? window.fileUploadHandler.getAttachedFile('admin-chat') : null;
+        
+        if (!message && !attachedFile) {
+            this.showNotification('Please type a message or attach a file', 'error');
+            return;
+        }
         
         try {
-            const response = await this.apiCall('/api/admin-chat/send', 'POST', { message });
+            let messageText = message;
+            
+            // If file is attached, add file info to message
+            if (attachedFile) {
+                messageText += `\n\n📎 Attached file: ${attachedFile.name} (${window.fileUploadHandler.formatFileSize(attachedFile.size)})`;
+            }
+            
+            const response = await this.apiCall('/api/admin-chat/send', 'POST', { message: messageText });
             
             if (response.ok) {
                 input.value = '';
+                // Clear attached file
+                if (window.fileUploadHandler) {
+                    window.fileUploadHandler.clearAttachedFile('admin-chat');
+                }
                 // Reload messages
                 await this.loadAdminChat();
                 this.showNotification('Message sent to admin', 'success');
@@ -2633,13 +2656,30 @@ class IntegratedAIChatbot {
         const input = document.getElementById('admin-reply-input');
         const message = input.value.trim();
         
-        if (!message) return;
+        // Check if there's an attached file
+        const attachedFile = window.fileUploadHandler ? window.fileUploadHandler.getAttachedFile('admin-reply') : null;
+        
+        if (!message && !attachedFile) {
+            this.showNotification('Please type a message or attach a file', 'error');
+            return;
+        }
         
         try {
-            const response = await this.apiCall(`/api/admin/chats/${this.currentAdminChatUserId}/send`, 'POST', { message });
+            let messageText = message;
+            
+            // If file is attached, add file info to message
+            if (attachedFile) {
+                messageText += `\n\n📎 Attached file: ${attachedFile.name} (${window.fileUploadHandler.formatFileSize(attachedFile.size)})`;
+            }
+            
+            const response = await this.apiCall(`/api/admin/chats/${this.currentAdminChatUserId}/send`, 'POST', { message: messageText });
             
             if (response.ok) {
                 input.value = '';
+                // Clear attached file
+                if (window.fileUploadHandler) {
+                    window.fileUploadHandler.clearAttachedFile('admin-reply');
+                }
                 // Reload messages
                 const header = document.getElementById('admin-chat-header');
                 const username = header.querySelector('div > div').textContent;
