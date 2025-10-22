@@ -290,8 +290,11 @@ class IntegratedDatabase:
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT first_name, last_name, bio, avatar_url, birth_date, location, preferences
-            FROM user_profiles WHERE user_id = ?
+            SELECT up.first_name, up.last_name, up.bio, up.avatar_url, up.birth_date, up.location, up.preferences,
+                   u.user_role
+            FROM user_profiles up
+            JOIN users u ON up.user_id = u.id
+            WHERE up.user_id = ?
         ''', (user_id,))
         
         profile = cursor.fetchone()
@@ -305,7 +308,8 @@ class IntegratedDatabase:
                 'avatar_url': profile[3] or '',
                 'birth_date': profile[4] or '',
                 'location': profile[5] or '',
-                'preferences': json.loads(profile[6]) if profile[6] else {}
+                'preferences': json.loads(profile[6]) if profile[6] else {},
+                'user_role': profile[7] or 'guest'
             }
         return None
     
