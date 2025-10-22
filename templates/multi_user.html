@@ -530,22 +530,46 @@
 
                     <!-- Users Table -->
                     <div class="admin-section" style="margin-top: 32px; margin-bottom: 32px; position: relative; clear: both;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 12px; flex-wrap: wrap;">
                             <h3 style="margin: 0;">All Users</h3>
-                            <input type="text" id="user-search-input" placeholder="Search by username or email..." style="width: 300px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px;">
+                            <div style="display: flex; gap: 12px; align-items: center;">
+                                <select id="user-role-filter" style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; background: white; cursor: pointer;">
+                                    <option value="all">All Roles</option>
+                                    <option value="administrator">Administrator</option>
+                                    <option value="user">User</option>
+                                    <option value="guest">Guest</option>
+                                </select>
+                                <input type="text" id="user-search-input" placeholder="Search by username or email..." style="width: 300px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px;">
+                            </div>
                         </div>
-                        <div class="table-container" style="max-height: 500px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px;">
+                        <div class="table-container" style="max-height: 500px; overflow-x: auto; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px;">
                             <table class="admin-table">
-                                <thead style="position: sticky; top: 0; background: white; z-index: 10;">
+                                <thead style="position: sticky; top: 0; background: white; z-index: 20;">
                                     <tr>
-                                        <th>ID</th>
-                                        <th>Username</th>
-                                        <th>Email</th>
-                                        <th>Role</th>
-                                        <th>Total Messages</th>
-                                        <th>Conversations</th>
-                                        <th>Last Active</th>
-                                        <th>Joined</th>
+                                        <th class="sortable" data-column="id" style="cursor: pointer;">
+                                            ID <i class="fas fa-sort"></i>
+                                        </th>
+                                        <th class="sortable sticky-column" data-column="username" style="cursor: pointer; position: sticky; left: 0; background: white; z-index: 21;">
+                                            Username <i class="fas fa-sort"></i>
+                                        </th>
+                                        <th class="sortable" data-column="email" style="cursor: pointer;">
+                                            Email <i class="fas fa-sort"></i>
+                                        </th>
+                                        <th class="sortable" data-column="role" style="cursor: pointer;">
+                                            Role <i class="fas fa-sort"></i>
+                                        </th>
+                                        <th class="sortable" data-column="total_messages" style="cursor: pointer;">
+                                            Total Messages <i class="fas fa-sort"></i>
+                                        </th>
+                                        <th class="sortable" data-column="total_conversations" style="cursor: pointer;">
+                                            Conversations <i class="fas fa-sort"></i>
+                                        </th>
+                                        <th class="sortable" data-column="last_active" style="cursor: pointer;">
+                                            Last Active <i class="fas fa-sort"></i>
+                                        </th>
+                                        <th class="sortable" data-column="created_at" style="cursor: pointer;">
+                                            Joined <i class="fas fa-sort"></i>
+                                        </th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
