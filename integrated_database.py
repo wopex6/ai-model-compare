@@ -701,12 +701,13 @@ class IntegratedDatabase:
                 u.created_at,
                 COALESCE(SUM(mu.message_count), 0) as total_messages,
                 COUNT(DISTINCT c.id) as total_conversations,
-                MAX(mu.date) as last_active
+                MAX(mu.date) as last_active,
+                COALESCE(u.is_deleted, 0) as is_deleted
             FROM users u
             LEFT JOIN message_usage mu ON u.id = mu.user_id
             LEFT JOIN ai_conversations c ON u.id = c.user_id
-            GROUP BY u.id, u.username, u.email, u.user_role, u.created_at
-            ORDER BY u.created_at DESC
+            GROUP BY u.id, u.username, u.email, u.user_role, u.created_at, u.is_deleted
+            ORDER BY u.is_deleted ASC, u.created_at DESC
         ''')
         
         users = []
@@ -719,11 +720,50 @@ class IntegratedDatabase:
                 'created_at': row[4],
                 'total_messages': row[5],
                 'total_conversations': row[6],
-                'last_active': row[7]
+                'last_active': row[7],
+                'is_deleted': bool(row[8])
             })
         
         conn.close()
         return users
+    
+    def soft_delete_user(self, user_id: int) -> bool:
+        """Soft delete a user (mark as deleted without removing data)"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                UPDATE users 
+                SET is_deleted = 1 
+                WHERE id = ?
+            ''', (user_id,))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error soft deleting user: {e}")
+            return False
+        finally:
+            conn.close()
+    
+    def restore_user(self, user_id: int) -> bool:
+        """Restore a soft-deleted user"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                UPDATE users 
+                SET is_deleted = 0 
+                WHERE id = ?
+            ''', (user_id,))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error restoring user: {e}")
+            return False
+        finally:
+            conn.close()
     
     def get_usage_statistics(self) -> Dict[str, Any]:
         """Get overall usage statistics (admin only)"""
