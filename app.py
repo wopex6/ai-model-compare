@@ -204,6 +204,46 @@ def get_all_users():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/admin/users/<int:user_id>/delete', methods=['POST'])
+@require_auth
+def delete_user(user_id):
+    """Soft delete a user (admin only)"""
+    try:
+        # Check if user is administrator
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        # Don't allow deleting yourself
+        if user_id == request.current_user['user_id']:
+            return jsonify({'error': 'Cannot delete your own account'}), 400
+        
+        success = integrated_db.soft_delete_user(user_id)
+        if success:
+            return jsonify({'success': True, 'message': 'User deleted successfully'})
+        else:
+            return jsonify({'error': 'Failed to delete user'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/users/<int:user_id>/restore', methods=['POST'])
+@require_auth
+def restore_user(user_id):
+    """Restore a soft-deleted user (admin only)"""
+    try:
+        # Check if user is administrator
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        success = integrated_db.restore_user(user_id)
+        if success:
+            return jsonify({'success': True, 'message': 'User restored successfully'})
+        else:
+            return jsonify({'error': 'Failed to restore user'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/admin/statistics')
 @require_auth
 def get_statistics():

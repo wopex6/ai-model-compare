@@ -395,6 +395,12 @@ class IntegratedAIChatbot {
                 if (e.key === 'Enter') this.sendAdminReply();
             });
         }
+        
+        // User Search (for administrators)
+        const userSearchInput = document.getElementById('user-search-input');
+        if (userSearchInput) {
+            userSearchInput.addEventListener('input', () => this.searchUsers());
+        }
 
         // Settings
         document.getElementById('change-password-form').addEventListener('submit', (e) => this.handlePasswordChange(e));
@@ -2058,28 +2064,104 @@ class IntegratedAIChatbot {
         /**Render the admin users table */
         const tbody = document.getElementById('admin-users-table');
         
+        // Store all users for search functionality
+        this.allUsers = users;
+        
         if (users.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No users found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" style="text-align: center;">No users found</td></tr>';
             return;
         }
 
         tbody.innerHTML = users.map(user => {
             const createdDate = new Date(user.created_at).toLocaleDateString();
             const lastActive = user.last_active ? new Date(user.last_active).toLocaleDateString() : 'Never';
+            const isDeleted = user.is_deleted;
+            const rowStyle = isDeleted ? 'opacity: 0.5; background: #f9f9f9;' : '';
+            const deleteBtn = isDeleted 
+                ? `<button class="btn-small btn-success" onclick="app.restoreUser(${user.id})" title="Restore User">
+                       <i class="fas fa-undo"></i> Restore
+                   </button>`
+                : `<button class="btn-small btn-danger" onclick="app.deleteUser(${user.id}, '${user.username}')" title="Delete User">
+                       <i class="fas fa-trash"></i> Delete
+                   </button>`;
             
             return `
-                <tr>
+                <tr style="${rowStyle}" data-username="${user.username.toLowerCase()}" data-email="${user.email.toLowerCase()}">
                     <td>${user.id}</td>
-                    <td><strong>${user.username}</strong></td>
+                    <td><strong>${user.username}${isDeleted ? ' <span style="color: #999;">(Deleted)</span>' : ''}</strong></td>
                     <td>${user.email}</td>
                     <td><span class="role-badge ${user.role}">${user.role}</span></td>
                     <td>${user.total_messages}</td>
                     <td>${user.total_conversations}</td>
                     <td>${lastActive}</td>
                     <td>${createdDate}</td>
+                    <td>${deleteBtn}</td>
                 </tr>
             `;
         }).join('');
+    }
+    
+    searchUsers() {
+        /**Search users by username or email */
+        const searchInput = document.getElementById('user-search-input');
+        const searchTerm = searchInput.value.toLowerCase();
+        const tbody = document.getElementById('admin-users-table');
+        const rows = tbody.querySelectorAll('tr');
+        
+        rows.forEach(row => {
+            const username = row.getAttribute('data-username');
+            const email = row.getAttribute('data-email');
+            
+            if (username && email) {
+                if (username.includes(searchTerm) || email.includes(searchTerm)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            }
+        });
+    }
+    
+    async deleteUser(userId, username) {
+        /**Soft delete a user (logical delete) */
+        if (!confirm(`Are you sure you want to delete user "${username}"?\n\nThis will mark the user as deleted but preserve their data.`)) {
+            return;
+        }
+        
+        try {
+            const response = await this.apiCall(`/api/admin/users/${userId}/delete`, 'POST');
+            
+            if (response.ok) {
+                this.showNotification(`User "${username}" has been deleted`, 'success');
+                // Reload users table
+                await this.loadAdminData();
+            } else {
+                const error = await response.json();
+                this.showNotification(error.error || 'Failed to delete user', 'error');
+            }
+        } catch (error) {
+            console.error('Error deleting user:', error);
+            this.showNotification('Network error. Please try again.', 'error');
+        }
+    }
+    
+    async restoreUser(userId) {
+        /**Restore a soft-deleted user */
+        try {
+            const response = await this.apiCall(`/api/admin/users/${userId}/restore`, 'POST');
+            
+            if (response.ok) {
+                this.showNotification('User has been restored', 'success');
+                // Reload users table
+                await this.loadAdminData();
+            } else {
+                const error = await response.json();
+                this.showNotification(error.error || 'Failed to restore user', 'error');
+            }
+        } catch (error) {
+            console.error('Error restoring user:', error);
+            this.showNotification('Network error. Please try again.', 'error');
+        }
     }
 
     async checkEmailVerification() {
