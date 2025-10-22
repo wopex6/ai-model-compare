@@ -80,7 +80,7 @@ class FileUploadHandler {
                     <div style="font-weight: 500; color: #333;">${fileName}</div>
                     <div style="font-size: 0.85rem; color: #666;">${fileSize}</div>
                 </div>
-                <button onclick="fileUploadHandler.removeFile('${context}', '${previewId}')" style="background: none; border: none; color: #ff4757; cursor: pointer; padding: 8px;">
+                <button onclick="window.fileUploadHandler.removeFile('${context}', '${previewId}')" style="background: none; border: none; color: #ff4757; cursor: pointer; padding: 8px;">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
@@ -168,7 +168,6 @@ class FileUploadHandler {
 }
 
 // Initialize global file upload handler
-let fileUploadHandler;
 document.addEventListener('DOMContentLoaded', () => {
-    fileUploadHandler = new FileUploadHandler();
+    window.fileUploadHandler = new FileUploadHandler();
 });
