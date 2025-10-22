@@ -2449,6 +2449,7 @@ class IntegratedAIChatbot {
         
         // Check if there's an attached file
         const attachedFile = window.fileUploadHandler ? window.fileUploadHandler.getAttachedFile('admin-chat') : null;
+        console.log('Sending admin message - message:', message, 'attachedFile:', attachedFile);
         
         if (!message && !attachedFile) {
             this.showNotification('Please type a message or attach a file', 'error');

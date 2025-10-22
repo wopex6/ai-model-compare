@@ -44,6 +44,8 @@ class FileUploadHandler {
         const file = event.target.files[0];
         if (!file) return;
 
+        console.log('File selected:', file.name, 'Context:', context);
+
         // Check file size
         if (file.size > this.maxFileSize) {
             alert(`File is too large. Maximum size is ${this.maxFileSize / 1024 / 1024}MB`);
@@ -53,6 +55,7 @@ class FileUploadHandler {
 
         // Store file reference
         this.attachedFiles[context] = file;
+        console.log('File stored in attachedFiles:', this.attachedFiles);
 
         // Show preview
         this.showFilePreview(file, previewId, context);
