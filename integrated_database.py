@@ -112,6 +112,19 @@ class IntegratedDatabase:
             )
         ''')
         
+        # Admin messages table for user-admin communication
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS admin_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                sender_type TEXT NOT NULL CHECK (sender_type IN ('user', 'admin')),
+                message TEXT NOT NULL,
+                is_read INTEGER DEFAULT 0,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        ''')
+        
         conn.commit()
         conn.close()
     
@@ -841,3 +854,110 @@ class IntegratedDatabase:
         conn.close()
         
         return bool(result[0]) if result else False
+    
+    # Admin Messaging Methods
+    def send_admin_message(self, user_id: int, sender_type: str, message: str) -> bool:
+        """Send a message between user and admin"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                INSERT INTO admin_messages (user_id, sender_type, message)
+                VALUES (?, ?, ?)
+            ''', (user_id, sender_type, message))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error sending admin message: {e}")
+            return False
+        finally:
+            conn.close()
+    
+    def get_admin_messages(self, user_id: int) -> List[Dict[str, Any]]:
+        """Get all messages between user and admin"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT id, sender_type, message, is_read, timestamp
+            FROM admin_messages
+            WHERE user_id = ?
+            ORDER BY timestamp ASC
+        ''', (user_id,))
+        
+        messages = []
+        for row in cursor.fetchall():
+            messages.append({
+                'id': row[0],
+                'sender_type': row[1],
+                'message': row[2],
+                'is_read': bool(row[3]),
+                'timestamp': row[4]
+            })
+        
+        conn.close()
+        return messages
+    
+    def mark_admin_messages_read(self, user_id: int, sender_type: str) -> bool:
+        """Mark messages as read"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                UPDATE admin_messages
+                SET is_read = 1
+                WHERE user_id = ? AND sender_type = ? AND is_read = 0
+            ''', (user_id, sender_type))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error marking messages as read: {e}")
+            return False
+        finally:
+            conn.close()
+    
+    def get_unread_admin_message_count(self, user_id: int, sender_type: str) -> int:
+        """Get count of unread messages"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT COUNT(*)
+            FROM admin_messages
+            WHERE user_id = ? AND sender_type = ? AND is_read = 0
+        ''', (user_id, sender_type))
+        
+        result = cursor.fetchone()
+        conn.close()
+        
+        return result[0] if result else 0
+    
+    def get_all_user_admin_chats(self) -> List[Dict[str, Any]]:
+        """Get all users who have admin messages (admin view)"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT DISTINCT u.id, u.username, u.email,
+                   (SELECT COUNT(*) FROM admin_messages 
+                    WHERE user_id = u.id AND sender_type = 'user' AND is_read = 0) as unread_count,
+                   (SELECT MAX(timestamp) FROM admin_messages WHERE user_id = u.id) as last_message
+            FROM users u
+            INNER JOIN admin_messages am ON u.id = am.user_id
+            ORDER BY last_message DESC
+        ''')
+        
+        chats = []
+        for row in cursor.fetchall():
+            chats.append({
+                'user_id': row[0],
+                'username': row[1],
+                'email': row[2],
+                'unread_count': row[3],
+                'last_message': row[4]
+            })
+        
+        conn.close()
+        return chats

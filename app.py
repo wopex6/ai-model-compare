@@ -273,6 +273,108 @@ def check_verification():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# Admin Messaging Endpoints
+@app.route('/api/admin-chat/messages', methods=['GET'])
+@require_auth
+def get_admin_chat_messages():
+    """Get all messages between user and admin"""
+    try:
+        messages = integrated_db.get_admin_messages(request.current_user['user_id'])
+        # Mark admin messages as read
+        integrated_db.mark_admin_messages_read(request.current_user['user_id'], 'admin')
+        return jsonify(messages)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin-chat/send', methods=['POST'])
+@require_auth
+def send_admin_chat_message():
+    """Send a message to admin"""
+    try:
+        data = request.get_json()
+        message = data.get('message')
+        
+        if not message:
+            return jsonify({'error': 'Message is required'}), 400
+        
+        success = integrated_db.send_admin_message(
+            request.current_user['user_id'],
+            'user',
+            message
+        )
+        
+        if success:
+            return jsonify({'success': True, 'message': 'Message sent'})
+        else:
+            return jsonify({'error': 'Failed to send message'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin-chat/unread-count', methods=['GET'])
+@require_auth
+def get_unread_admin_messages():
+    """Get count of unread messages from admin"""
+    try:
+        count = integrated_db.get_unread_admin_message_count(request.current_user['user_id'], 'admin')
+        return jsonify({'count': count})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Admin-only endpoints
+@app.route('/api/admin/chats', methods=['GET'])
+@require_auth
+def get_all_admin_chats():
+    """Get all user-admin chats (admin only)"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        chats = integrated_db.get_all_user_admin_chats()
+        return jsonify(chats)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/chats/<int:user_id>/messages', methods=['GET'])
+@require_auth
+def get_user_admin_messages(user_id):
+    """Get messages for a specific user (admin only)"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        messages = integrated_db.get_admin_messages(user_id)
+        # Mark user messages as read by admin
+        integrated_db.mark_admin_messages_read(user_id, 'user')
+        return jsonify(messages)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/chats/<int:user_id>/send', methods=['POST'])
+@require_auth
+def send_admin_reply(user_id):
+    """Send a message to user (admin only)"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        data = request.get_json()
+        message = data.get('message')
+        
+        if not message:
+            return jsonify({'error': 'Message is required'}), 400
+        
+        success = integrated_db.send_admin_message(user_id, 'admin', message)
+        
+        if success:
+            return jsonify({'success': True, 'message': 'Message sent'})
+        else:
+            return jsonify({'error': 'Failed to send message'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/auth/user')
 @require_auth
 def get_current_user():

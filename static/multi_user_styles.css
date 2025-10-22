@@ -1255,3 +1255,17 @@ body {
     background: #e9ecef;
     color: #666;
 }
+
+/* Badge for unread count */
+.badge {
+    background: #ff4757;
+    color: white;
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    margin-left: 6px;
+    display: inline-block;
+    min-width: 20px;
+    text-align: center;
+}
