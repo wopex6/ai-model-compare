@@ -266,6 +266,23 @@ class IntegratedAIChatbot {
             this.showScreen('login-screen');
         }
     }
+    
+    formatTimestamp(timestamp) {
+        /**Format timestamp to local time with AM/PM */
+        if (!timestamp) return '';
+        
+        const date = new Date(timestamp);
+        const options = {
+            month: 'numeric',
+            day: 'numeric',
+            year: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true
+        };
+        
+        return date.toLocaleString('en-US', options);
+    }
 
     init() {
         this.setupEventListeners();
@@ -776,6 +793,14 @@ class IntegratedAIChatbot {
         // Save state using general state manager
         this.stateManager.saveState('currentTab', tabName);
         console.log('🔧 Tab Debug: Tab state saved:', tabName);
+
+        // Stop auto-refresh intervals when leaving chat tabs
+        if (tabName !== 'admin-chat') {
+            this.stopAdminChatAutoRefresh();
+        }
+        if (tabName !== 'admin') {
+            this.stopAdminUserChatAutoRefresh();
+        }
 
         // Load data for specific tabs
         if (tabName === 'chat') {
@@ -1460,7 +1485,7 @@ class IntegratedAIChatbot {
             const cleanContent = this.fixTextEncoding(msg.content);
             
             // Format timestamp
-            const timestamp = msg.timestamp ? new Date(msg.timestamp).toLocaleString() : '';
+            const timestamp = this.formatTimestamp(msg.timestamp);
             
             return `
                 <div class="message ${msg.sender_type}">
@@ -1620,7 +1645,7 @@ class IntegratedAIChatbot {
             const cleanContent = this.fixTextEncoding(msg.content);
             
             // Format timestamp
-            const timestamp = msg.timestamp ? new Date(msg.timestamp).toLocaleString() : '';
+            const timestamp = this.formatTimestamp(msg.timestamp);
             
             return `
                 <div class="message ${msg.sender_type}">
@@ -1743,7 +1768,7 @@ class IntegratedAIChatbot {
             const timestamp = document.createElement('div');
             timestamp.className = 'message-timestamp';
             timestamp.id = 'temp-user-timestamp';
-            timestamp.textContent = new Date().toLocaleString();
+            timestamp.textContent = this.formatTimestamp(new Date());
             
             userMessage.appendChild(messageContent);
             userMessage.appendChild(timestamp);
@@ -1787,7 +1812,7 @@ class IntegratedAIChatbot {
                 if (result.timestamp) {
                     const tempTimestamp = document.getElementById('temp-user-timestamp');
                     if (tempTimestamp) {
-                        tempTimestamp.textContent = new Date(result.timestamp).toLocaleString();
+                        tempTimestamp.textContent = this.formatTimestamp(result.timestamp);
                         tempTimestamp.id = ''; // Remove temp ID
                     }
                 }
@@ -1809,8 +1834,8 @@ class IntegratedAIChatbot {
                     
                     const aiTimestamp = document.createElement('div');
                     aiTimestamp.className = 'message-timestamp';
-                    // Use server timestamp for accurate time
-                    aiTimestamp.textContent = result.timestamp ? new Date(result.timestamp).toLocaleString() : new Date().toLocaleString();
+                    // Use client timestamp for local time
+                    aiTimestamp.textContent = this.formatTimestamp(result.timestamp || new Date());
                     
                     aiMessage.appendChild(aiContent);
                     aiMessage.appendChild(aiTimestamp);
@@ -2145,8 +2170,41 @@ class IntegratedAIChatbot {
             
             // Check for unread messages
             this.checkUnreadAdminMessages();
+            
+            // Start auto-refresh for this chat
+            this.startAdminChatAutoRefresh();
         } catch (error) {
             console.error('Error loading admin chat:', error);
+        }
+    }
+    
+    startAdminChatAutoRefresh() {
+        /**Start auto-refreshing admin chat messages */
+        // Clear any existing interval
+        if (this.adminChatRefreshInterval) {
+            clearInterval(this.adminChatRefreshInterval);
+        }
+        
+        // Refresh every 5 seconds
+        this.adminChatRefreshInterval = setInterval(async () => {
+            try {
+                const response = await this.apiCall('/api/admin-chat/messages', 'GET');
+                if (response.ok) {
+                    const messages = await response.json();
+                    this.renderAdminMessages(messages);
+                }
+                this.checkUnreadAdminMessages();
+            } catch (error) {
+                console.error('Error auto-refreshing admin chat:', error);
+            }
+        }, 5000);
+    }
+    
+    stopAdminChatAutoRefresh() {
+        /**Stop auto-refreshing admin chat messages */
+        if (this.adminChatRefreshInterval) {
+            clearInterval(this.adminChatRefreshInterval);
+            this.adminChatRefreshInterval = null;
         }
     }
     
@@ -2160,7 +2218,7 @@ class IntegratedAIChatbot {
         }
         
         container.innerHTML = messages.map(msg => {
-            const timestamp = msg.timestamp ? new Date(msg.timestamp).toLocaleString() : '';
+            const timestamp = this.formatTimestamp(msg.timestamp);
             const isUser = msg.sender_type === 'user';
             
             return `
@@ -2246,7 +2304,7 @@ class IntegratedAIChatbot {
         }
         
         container.innerHTML = chats.map(chat => {
-            const lastMessage = chat.last_message ? new Date(chat.last_message).toLocaleString() : 'No messages';
+            const lastMessage = chat.last_message ? this.formatTimestamp(chat.last_message) : 'No messages';
             const unreadBadge = chat.unread_count > 0 ? `<span class="badge">${chat.unread_count}</span>` : '';
             
             return `
@@ -2296,10 +2354,43 @@ class IntegratedAIChatbot {
                 
                 // Reload chats list to update unread counts
                 await this.loadAdminChatsList();
+                
+                // Start auto-refresh for this conversation
+                this.startAdminUserChatAutoRefresh(userId, username);
             }
         } catch (error) {
             console.error('Error loading user messages:', error);
             this.showNotification('Failed to load messages', 'error');
+        }
+    }
+    
+    startAdminUserChatAutoRefresh(userId, username) {
+        /**Start auto-refreshing admin view of user chat */
+        // Clear any existing interval
+        if (this.adminUserChatRefreshInterval) {
+            clearInterval(this.adminUserChatRefreshInterval);
+        }
+        
+        // Refresh every 3 seconds
+        this.adminUserChatRefreshInterval = setInterval(async () => {
+            try {
+                const response = await this.apiCall(`/api/admin/chats/${userId}/messages`, 'GET');
+                if (response.ok) {
+                    const messages = await response.json();
+                    this.renderAdminUserMessages(messages, username);
+                }
+                await this.loadAdminChatsList();
+            } catch (error) {
+                console.error('Error auto-refreshing admin user chat:', error);
+            }
+        }, 3000);
+    }
+    
+    stopAdminUserChatAutoRefresh() {
+        /**Stop auto-refreshing admin user chat */
+        if (this.adminUserChatRefreshInterval) {
+            clearInterval(this.adminUserChatRefreshInterval);
+            this.adminUserChatRefreshInterval = null;
         }
     }
     
@@ -2313,7 +2404,7 @@ class IntegratedAIChatbot {
         }
         
         container.innerHTML = messages.map(msg => {
-            const timestamp = msg.timestamp ? new Date(msg.timestamp).toLocaleString() : '';
+            const timestamp = this.formatTimestamp(msg.timestamp);
             const isAdmin = msg.sender_type === 'admin';
             
             return `
