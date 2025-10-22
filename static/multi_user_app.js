@@ -359,6 +359,18 @@ class IntegratedAIChatbot {
         document.getElementById('admin-chat-input').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.sendAdminMessage();
         });
+        
+        // Admin Reply (for administrators)
+        const adminReplyBtn = document.getElementById('send-admin-reply-btn');
+        if (adminReplyBtn) {
+            adminReplyBtn.addEventListener('click', () => this.sendAdminReply());
+        }
+        const adminReplyInput = document.getElementById('admin-reply-input');
+        if (adminReplyInput) {
+            adminReplyInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') this.sendAdminReply();
+            });
+        }
 
         // Settings
         document.getElementById('change-password-form').addEventListener('submit', (e) => this.handlePasswordChange(e));
@@ -2001,6 +2013,9 @@ class IntegratedAIChatbot {
                 const users = await usersResponse.json();
                 this.renderAdminUsersTable(users);
             }
+            
+            // Load user chats
+            await this.loadAdminChatsList();
         } catch (error) {
             console.error('Error loading admin data:', error);
             this.showNotification('Failed to load admin data', 'error');
@@ -2204,6 +2219,146 @@ class IntegratedAIChatbot {
             }
         } catch (error) {
             console.error('Error checking unread messages:', error);
+        }
+    }
+    
+    // Admin Chat Management Methods
+    async loadAdminChatsList() {
+        /**Load list of users with admin messages (admin view) */
+        try {
+            const response = await this.apiCall('/api/admin/chats', 'GET');
+            if (response.ok) {
+                const chats = await response.json();
+                this.renderAdminChatsList(chats);
+            }
+        } catch (error) {
+            console.error('Error loading admin chats:', error);
+        }
+    }
+    
+    renderAdminChatsList(chats) {
+        /**Render list of users with messages */
+        const container = document.getElementById('admin-chat-users-list');
+        
+        if (chats.length === 0) {
+            container.innerHTML = '<p style="text-align: center; color: #999; padding: 16px;">No user messages yet</p>';
+            return;
+        }
+        
+        container.innerHTML = chats.map(chat => {
+            const lastMessage = chat.last_message ? new Date(chat.last_message).toLocaleString() : 'No messages';
+            const unreadBadge = chat.unread_count > 0 ? `<span class="badge">${chat.unread_count}</span>` : '';
+            
+            return `
+                <div class="admin-chat-user-item" data-user-id="${chat.user_id}" style="padding: 12px; border-bottom: 1px solid #eee; cursor: pointer; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="flex: 1;">
+                        <div style="font-weight: 600; margin-bottom: 4px;">${chat.username}</div>
+                        <div style="font-size: 0.85rem; color: #666;">${lastMessage}</div>
+                    </div>
+                    ${unreadBadge}
+                </div>
+            `;
+        }).join('');
+        
+        // Add click handlers
+        container.querySelectorAll('.admin-chat-user-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const userId = parseInt(item.dataset.userId);
+                const username = item.querySelector('div').textContent;
+                this.viewAdminUserChat(userId, username);
+            });
+        });
+    }
+    
+    async viewAdminUserChat(userId, username) {
+        /**View messages for a specific user */
+        this.currentAdminChatUserId = userId;
+        
+        try {
+            const response = await this.apiCall(`/api/admin/chats/${userId}/messages`, 'GET');
+            if (response.ok) {
+                const messages = await response.json();
+                this.renderAdminUserMessages(messages, username);
+                
+                // Show reply box
+                document.getElementById('admin-chat-reply-box').style.display = 'block';
+                
+                // Update header
+                document.getElementById('admin-chat-header').innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <i class="fas fa-user-circle" style="font-size: 24px;"></i>
+                        <div>
+                            <div style="font-weight: 600;">${username}</div>
+                            <div style="font-size: 0.85rem; color: #666;">User ID: ${userId}</div>
+                        </div>
+                    </div>
+                `;
+                
+                // Reload chats list to update unread counts
+                await this.loadAdminChatsList();
+            }
+        } catch (error) {
+            console.error('Error loading user messages:', error);
+            this.showNotification('Failed to load messages', 'error');
+        }
+    }
+    
+    renderAdminUserMessages(messages, username) {
+        /**Render messages for admin view */
+        const container = document.getElementById('admin-chat-messages-view');
+        
+        if (messages.length === 0) {
+            container.innerHTML = '<p style="text-align: center; color: #999;">No messages yet</p>';
+            return;
+        }
+        
+        container.innerHTML = messages.map(msg => {
+            const timestamp = msg.timestamp ? new Date(msg.timestamp).toLocaleString() : '';
+            const isAdmin = msg.sender_type === 'admin';
+            
+            return `
+                <div style="margin-bottom: 16px; display: flex; justify-content: ${isAdmin ? 'flex-end' : 'flex-start'};">
+                    <div style="max-width: 70%; padding: 12px; border-radius: 12px; background: ${isAdmin ? '#667eea' : '#f1f3f4'}; color: ${isAdmin ? 'white' : '#333'};">
+                        <div style="font-size: 0.85rem; opacity: 0.8; margin-bottom: 4px;">${isAdmin ? 'You (Admin)' : username}</div>
+                        <div>${msg.message}</div>
+                        <div style="font-size: 0.75rem; opacity: 0.7; margin-top: 4px; text-align: right;">${timestamp}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        // Scroll to bottom
+        container.scrollTop = container.scrollHeight;
+    }
+    
+    async sendAdminReply() {
+        /**Send a reply to user as admin */
+        if (!this.currentAdminChatUserId) {
+            this.showNotification('Please select a user first', 'error');
+            return;
+        }
+        
+        const input = document.getElementById('admin-reply-input');
+        const message = input.value.trim();
+        
+        if (!message) return;
+        
+        try {
+            const response = await this.apiCall(`/api/admin/chats/${this.currentAdminChatUserId}/send`, 'POST', { message });
+            
+            if (response.ok) {
+                input.value = '';
+                // Reload messages
+                const header = document.getElementById('admin-chat-header');
+                const username = header.querySelector('div > div').textContent;
+                await this.viewAdminUserChat(this.currentAdminChatUserId, username);
+                this.showNotification('Reply sent', 'success');
+            } else {
+                const error = await response.json();
+                this.showNotification(error.error || 'Failed to send reply', 'error');
+            }
+        } catch (error) {
+            this.showNotification('Network error. Please try again.', 'error');
         }
     }
 

@@ -522,6 +522,37 @@
                             </table>
                         </div>
                     </div>
+
+                    <!-- User Messages Section -->
+                    <div class="admin-section" style="margin-top: 32px;">
+                        <h3><i class="fas fa-comments"></i> User Messages</h3>
+                        <div style="display: grid; grid-template-columns: 300px 1fr; gap: 16px; height: 500px;">
+                            <!-- User List -->
+                            <div style="border: 1px solid #ddd; border-radius: 8px; overflow-y: auto; background: white;">
+                                <div id="admin-chat-users-list" style="padding: 8px;">
+                                    <p style="text-align: center; color: #999; padding: 16px;">Loading users...</p>
+                                </div>
+                            </div>
+                            
+                            <!-- Chat View -->
+                            <div style="border: 1px solid #ddd; border-radius: 8px; background: white; display: flex; flex-direction: column;">
+                                <div id="admin-chat-header" style="padding: 16px; border-bottom: 1px solid #ddd; background: #f8f9fa;">
+                                    <p style="color: #999; margin: 0;">Select a user to view messages</p>
+                                </div>
+                                <div id="admin-chat-messages-view" style="flex: 1; overflow-y: auto; padding: 16px; background: #f9f9f9;">
+                                    <p style="text-align: center; color: #999;">No conversation selected</p>
+                                </div>
+                                <div id="admin-chat-reply-box" style="padding: 16px; border-top: 1px solid #ddd; display: none;">
+                                    <div style="display: flex; gap: 8px;">
+                                        <input type="text" id="admin-reply-input" placeholder="Type your reply..." style="flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 4px;">
+                                        <button id="send-admin-reply-btn" class="btn btn-primary">
+                                            <i class="fas fa-paper-plane"></i> Send
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Admin Chat Tab -->
