@@ -401,6 +401,16 @@ class IntegratedAIChatbot {
         if (userSearchInput) {
             userSearchInput.addEventListener('input', () => this.searchUsers());
         }
+        
+        // Role Filter (for administrators)
+        const userRoleFilter = document.getElementById('user-role-filter');
+        if (userRoleFilter) {
+            userRoleFilter.addEventListener('change', () => this.filterUsersByRole());
+        }
+        
+        // Sortable Table Headers (for administrators)
+        // These will be attached after the table is rendered
+        this.attachSortHandlers();
 
         // Settings
         document.getElementById('change-password-form').addEventListener('submit', (e) => this.handlePasswordChange(e));
@@ -2064,8 +2074,10 @@ class IntegratedAIChatbot {
         /**Render the admin users table */
         const tbody = document.getElementById('admin-users-table');
         
-        // Store all users for search functionality
+        // Store all users for search and sort functionality
         this.allUsers = users;
+        this.currentSortColumn = 'created_at';
+        this.currentSortDirection = 'desc';
         
         if (users.length === 0) {
             tbody.innerHTML = '<tr><td colspan="9" style="text-align: center;">No users found</td></tr>';
@@ -2086,9 +2098,19 @@ class IntegratedAIChatbot {
                    </button>`;
             
             return `
-                <tr style="${rowStyle}" data-username="${user.username.toLowerCase()}" data-email="${user.email.toLowerCase()}">
+                <tr style="${rowStyle}" 
+                    data-username="${user.username.toLowerCase()}" 
+                    data-email="${user.email.toLowerCase()}"
+                    data-role="${user.role}"
+                    data-id="${user.id}"
+                    data-total-messages="${user.total_messages}"
+                    data-total-conversations="${user.total_conversations}"
+                    data-last-active="${user.last_active || ''}"
+                    data-created-at="${user.created_at}">
                     <td>${user.id}</td>
-                    <td><strong>${user.username}${isDeleted ? ' <span style="color: #999;">(Deleted)</span>' : ''}</strong></td>
+                    <td class="sticky-column" style="position: sticky; left: 0; background: ${isDeleted ? '#f9f9f9' : 'white'}; z-index: 1;">
+                        <strong>${user.username}${isDeleted ? ' <span style="color: #999;">(Deleted)</span>' : ''}</strong>
+                    </td>
                     <td>${user.email}</td>
                     <td><span class="role-badge ${user.role}">${user.role}</span></td>
                     <td>${user.total_messages}</td>
@@ -2099,27 +2121,117 @@ class IntegratedAIChatbot {
                 </tr>
             `;
         }).join('');
+        
+        // Attach sort handlers after rendering
+        this.attachSortHandlers();
     }
     
     searchUsers() {
         /**Search users by username or email */
         const searchInput = document.getElementById('user-search-input');
         const searchTerm = searchInput.value.toLowerCase();
+        this.applyFilters();
+    }
+    
+    filterUsersByRole() {
+        /**Filter users by selected role */
+        this.applyFilters();
+    }
+    
+    applyFilters() {
+        /**Apply both search and role filters */
+        const searchInput = document.getElementById('user-search-input');
+        const roleFilter = document.getElementById('user-role-filter');
+        const searchTerm = searchInput.value.toLowerCase();
+        const selectedRole = roleFilter.value;
         const tbody = document.getElementById('admin-users-table');
         const rows = tbody.querySelectorAll('tr');
         
         rows.forEach(row => {
             const username = row.getAttribute('data-username');
             const email = row.getAttribute('data-email');
+            const role = row.getAttribute('data-role');
             
-            if (username && email) {
-                if (username.includes(searchTerm) || email.includes(searchTerm)) {
+            if (username && email && role) {
+                // Check search filter
+                const matchesSearch = searchTerm === '' || 
+                                    username.includes(searchTerm) || 
+                                    email.includes(searchTerm);
+                
+                // Check role filter
+                const matchesRole = selectedRole === 'all' || role === selectedRole;
+                
+                // Show row only if it matches both filters
+                if (matchesSearch && matchesRole) {
                     row.style.display = '';
                 } else {
                     row.style.display = 'none';
                 }
             }
         });
+    }
+    
+    sortUsersTable(column) {
+        /**Sort the users table by specified column */
+        const tbody = document.getElementById('admin-users-table');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        
+        // Toggle sort direction if same column
+        if (this.currentSortColumn === column) {
+            this.currentSortDirection = this.currentSortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            this.currentSortColumn = column;
+            this.currentSortDirection = 'asc';
+        }
+        
+        // Sort rows
+        rows.sort((a, b) => {
+            let aVal = a.getAttribute(`data-${column.replace('_', '-')}`) || '';
+            let bVal = b.getAttribute(`data-${column.replace('_', '-')}`) || '';
+            
+            // Convert to numbers for numeric columns
+            if (['id', 'total_messages', 'total_conversations'].includes(column)) {
+                aVal = parseInt(aVal) || 0;
+                bVal = parseInt(bVal) || 0;
+            }
+            
+            // Handle dates
+            if (['created_at', 'last_active'].includes(column)) {
+                aVal = aVal ? new Date(aVal).getTime() : 0;
+                bVal = bVal ? new Date(bVal).getTime() : 0;
+            }
+            
+            if (aVal < bVal) return this.currentSortDirection === 'asc' ? -1 : 1;
+            if (aVal > bVal) return this.currentSortDirection === 'asc' ? 1 : -1;
+            return 0;
+        });
+        
+        // Re-append sorted rows
+        rows.forEach(row => tbody.appendChild(row));
+        
+        // Update sort icons
+        document.querySelectorAll('.sortable i').forEach(icon => {
+            icon.className = 'fas fa-sort';
+        });
+        const currentHeader = document.querySelector(`.sortable[data-column="${column}"] i`);
+        if (currentHeader) {
+            currentHeader.className = this.currentSortDirection === 'asc' ? 'fas fa-sort-up' : 'fas fa-sort-down';
+        }
+    }
+    
+    attachSortHandlers() {
+        /**Attach click handlers to sortable table headers */
+        // Use setTimeout to ensure headers exist after DOM render
+        setTimeout(() => {
+            document.querySelectorAll('.sortable').forEach(header => {
+                header.addEventListener('click', (e) => {
+                    const column = header.getAttribute('data-column');
+                    if (column) {
+                        this.sortUsersTable(column);
+                    }
+                });
+            });
+        }, 100);
     }
     
     async deleteUser(userId, username) {

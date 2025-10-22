@@ -1225,6 +1225,27 @@ body {
     text-transform: uppercase;
 }
 
+.admin-table th.sortable {
+    user-select: none;
+    transition: background 0.2s;
+}
+
+.admin-table th.sortable:hover {
+    background: #e9ecef;
+}
+
+.admin-table th.sortable i {
+    margin-left: 4px;
+    font-size: 0.75rem;
+    opacity: 0.5;
+}
+
+.admin-table th.sticky-column,
+.admin-table td.sticky-column {
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+    border-right: 1px solid #ddd;
+}
+
 .admin-table td {
     color: #333;
 }
