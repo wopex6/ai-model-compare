@@ -271,7 +271,14 @@ class IntegratedAIChatbot {
         /**Format timestamp to local time with AM/PM */
         if (!timestamp) return '';
         
-        const date = new Date(timestamp);
+        // SQLite returns timestamps in UTC without 'Z' suffix
+        // Add 'Z' to indicate UTC if not already present
+        let utcTimestamp = timestamp;
+        if (typeof timestamp === 'string' && !timestamp.endsWith('Z') && !timestamp.includes('+')) {
+            utcTimestamp = timestamp.replace(' ', 'T') + 'Z';
+        }
+        
+        const date = new Date(utcTimestamp);
         const options = {
             month: 'numeric',
             day: 'numeric',
