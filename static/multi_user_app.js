@@ -354,6 +354,12 @@ class IntegratedAIChatbot {
             if (e.key === 'Enter') this.sendChatMessage();
         });
 
+        // Admin Chat
+        document.getElementById('send-admin-message-btn').addEventListener('click', () => this.sendAdminMessage());
+        document.getElementById('admin-chat-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.sendAdminMessage();
+        });
+
         // Settings
         document.getElementById('change-password-form').addEventListener('submit', (e) => this.handlePasswordChange(e));
         
@@ -554,14 +560,19 @@ class IntegratedAIChatbot {
                 }
             }
             
-            // Setup password toggle functionality
+            // Setup password toggle functionality and clear password
             const passwordInput = document.getElementById('login-password');
             const passwordToggle = document.getElementById('password-toggle');
             const toggleText = passwordToggle?.querySelector('.toggle-text');
             
-            if (passwordInput && passwordToggle && toggleText) {
+            if (passwordInput) {
+                // Clear password field for security
+                passwordInput.value = '';
                 // Reset password field to hidden
                 passwordInput.type = 'password';
+            }
+            
+            if (passwordToggle && toggleText) {
                 toggleText.textContent = 'Show';
                 
                 // Remove any existing listeners and add new one
@@ -662,6 +673,9 @@ class IntegratedAIChatbot {
         // Check email verification status
         this.checkEmailVerification();
         
+        // Check for unread admin messages
+        this.checkUnreadAdminMessages();
+        
         // Check if user should see personality test banner
         if (typeof window.checkPersonalityTestStatus === 'function') {
             window.checkPersonalityTestStatus();
@@ -758,6 +772,8 @@ class IntegratedAIChatbot {
             this.loadConversations();
         } else if (tabName === 'psychology') {
             this.loadPsychologyData();
+        } else if (tabName === 'admin-chat') {
+            this.loadAdminChat();
         } else if (tabName === 'admin') {
             this.loadAdminData();
         }
@@ -2099,6 +2115,95 @@ class IntegratedAIChatbot {
             }
         } catch (error) {
             this.showNotification('Network error. Please try again.', 'error');
+        }
+    }
+
+    async loadAdminChat() {
+        /**Load admin chat messages */
+        try {
+            // Load messages
+            const response = await this.apiCall('/api/admin-chat/messages', 'GET');
+            if (response.ok) {
+                const messages = await response.json();
+                this.renderAdminMessages(messages);
+            }
+            
+            // Check for unread messages
+            this.checkUnreadAdminMessages();
+        } catch (error) {
+            console.error('Error loading admin chat:', error);
+        }
+    }
+    
+    renderAdminMessages(messages) {
+        /**Render admin chat messages */
+        const container = document.getElementById('admin-chat-messages');
+        
+        if (messages.length === 0) {
+            container.innerHTML = '<p style="text-align: center; color: #999;">No messages yet. Start a conversation with the admin!</p>';
+            return;
+        }
+        
+        container.innerHTML = messages.map(msg => {
+            const timestamp = msg.timestamp ? new Date(msg.timestamp).toLocaleString() : '';
+            const isUser = msg.sender_type === 'user';
+            
+            return `
+                <div style="margin-bottom: 16px; display: flex; justify-content: ${isUser ? 'flex-end' : 'flex-start'};">
+                    <div style="max-width: 70%; padding: 12px; border-radius: 12px; background: ${isUser ? '#667eea' : '#f1f3f4'}; color: ${isUser ? 'white' : '#333'};">
+                        <div>${msg.message}</div>
+                        <div style="font-size: 0.75rem; opacity: 0.7; margin-top: 4px; text-align: right;">${timestamp}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        // Scroll to bottom
+        container.scrollTop = container.scrollHeight;
+    }
+    
+    async sendAdminMessage() {
+        /**Send a message to admin */
+        const input = document.getElementById('admin-chat-input');
+        const message = input.value.trim();
+        
+        if (!message) return;
+        
+        try {
+            const response = await this.apiCall('/api/admin-chat/send', 'POST', { message });
+            
+            if (response.ok) {
+                input.value = '';
+                // Reload messages
+                await this.loadAdminChat();
+                this.showNotification('Message sent to admin', 'success');
+            } else {
+                const error = await response.json();
+                this.showNotification(error.error || 'Failed to send message', 'error');
+            }
+        } catch (error) {
+            this.showNotification('Network error. Please try again.', 'error');
+        }
+    }
+    
+    async checkUnreadAdminMessages() {
+        /**Check for unread messages from admin */
+        try {
+            const response = await this.apiCall('/api/admin-chat/unread-count', 'GET');
+            if (response.ok) {
+                const data = await response.json();
+                const badge = document.getElementById('admin-chat-badge');
+                if (badge) {
+                    if (data.count > 0) {
+                        badge.textContent = data.count;
+                        badge.style.display = 'inline-block';
+                    } else {
+                        badge.style.display = 'none';
+                    }
+                }
+            }
+        } catch (error) {
+            console.error('Error checking unread messages:', error);
         }
     }
 
