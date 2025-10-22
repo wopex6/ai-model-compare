@@ -2447,24 +2447,26 @@ class IntegratedAIChatbot {
         const input = document.getElementById('admin-chat-input');
         const message = input.value.trim();
         
-        // Check if there's an attached file
-        const attachedFile = window.fileUploadHandler ? window.fileUploadHandler.getAttachedFile('admin-chat') : null;
-        console.log('Sending admin message - message:', message, 'attachedFile:', attachedFile);
+        // Check if there's an uploaded file
+        const uploadedFileData = window.fileUploadHandler ? window.fileUploadHandler.getUploadedFileData('admin-chat') : null;
+        console.log('Sending admin message - message:', message, 'uploadedFileData:', uploadedFileData);
         
-        if (!message && !attachedFile) {
+        if (!message && !uploadedFileData) {
             this.showNotification('Please type a message or attach a file', 'error');
             return;
         }
         
         try {
-            let messageText = message;
+            const payload = { message: message || '' };
             
-            // If file is attached, add file info to message
-            if (attachedFile) {
-                messageText += `\n\n📎 Attached file: ${attachedFile.name} (${window.fileUploadHandler.formatFileSize(attachedFile.size)})`;
+            // If file is uploaded, add file data
+            if (uploadedFileData) {
+                payload.file_url = uploadedFileData.file_url;
+                payload.file_name = uploadedFileData.original_filename;
+                payload.file_size = uploadedFileData.file_size;
             }
             
-            const response = await this.apiCall('/api/admin-chat/send', 'POST', { message: messageText });
+            const response = await this.apiCall('/api/admin-chat/send', 'POST', payload);
             
             if (response.ok) {
                 input.value = '';
