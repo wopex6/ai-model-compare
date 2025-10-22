@@ -10,6 +10,11 @@ class FileUploadHandler {
             'chat': null,
             'admin-reply': null
         };
+        this.uploadedFileData = {
+            'admin-chat': null,
+            'chat': null,
+            'admin-reply': null
+        };
         this.maxFileSize = 10 * 1024 * 1024; // 10MB limit
         this.init();
     }
@@ -40,7 +45,7 @@ class FileUploadHandler {
         }
     }
 
-    handleFileSelect(event, previewId, context) {
+    async handleFileSelect(event, previewId, context) {
         const file = event.target.files[0];
         if (!file) return;
 
@@ -57,17 +62,48 @@ class FileUploadHandler {
         this.attachedFiles[context] = file;
         console.log('File stored in attachedFiles:', this.attachedFiles);
 
-        // Show preview
-        this.showFilePreview(file, previewId, context);
+        // Show uploading preview
+        this.showUploadingPreview(file, previewId, context);
+
+        // Upload file to server
+        const uploadedData = await this.uploadFileToServer(file, context);
+        
+        if (uploadedData) {
+            // Show final preview with uploaded file
+            this.showFilePreview(file, previewId, context, uploadedData);
+        } else {
+            // Upload failed, clear the file
+            this.removeFile(context, previewId);
+        }
     }
 
-    showFilePreview(file, previewId, context) {
+    showUploadingPreview(file, previewId, context) {
+        /**Show uploading state */
+        const preview = document.getElementById(previewId);
+        if (!preview) return;
+
+        const fileName = file.name;
+        const fileSize = this.formatFileSize(file.size);
+
+        preview.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 12px; padding: 12px; background: #f0f0f0; border-radius: 8px; border: 1px solid #ddd;">
+                <i class="fas fa-spinner fa-spin" style="font-size: 24px; color: #667eea;"></i>
+                <div style="flex: 1;">
+                    <div style="font-weight: 500; color: #333;">Uploading ${fileName}...</div>
+                    <div style="font-size: 0.85rem; color: #666;">${fileSize}</div>
+                </div>
+            </div>
+        `;
+        preview.style.display = 'block';
+    }
+
+    showFilePreview(file, previewId, context, uploadedData = null) {
         const preview = document.getElementById(previewId);
         if (!preview) return;
 
         const fileType = file.type.split('/')[0]; // audio, video, image, etc.
-        const fileName = file.name;
-        const fileSize = this.formatFileSize(file.size);
+        const fileName = uploadedData ? uploadedData.original_filename : file.name;
+        const fileSize = this.formatFileSize(uploadedData ? uploadedData.file_size : file.size);
 
         let icon = 'fa-file';
         if (fileType === 'image') icon = 'fa-image';
@@ -77,11 +113,11 @@ class FileUploadHandler {
         else if (file.type.includes('word')) icon = 'fa-file-word';
 
         preview.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 12px; padding: 12px; background: #f0f0f0; border-radius: 8px; border: 1px solid #ddd;">
+            <div style="display: flex; align-items: center; gap: 12px; padding: 12px; background: #d4edda; border-radius: 8px; border: 1px solid #c3e6cb;">
                 <i class="fas ${icon}" style="font-size: 24px; color: #667eea;"></i>
                 <div style="flex: 1;">
                     <div style="font-weight: 500; color: #333;">${fileName}</div>
-                    <div style="font-size: 0.85rem; color: #666;">${fileSize}</div>
+                    <div style="font-size: 0.85rem; color: #666;">${fileSize} <i class="fas fa-check-circle" style="color: #28a745;"></i> Ready</div>
                 </div>
                 <button onclick="window.fileUploadHandler.removeFile('${context}', '${previewId}')" style="background: none; border: none; color: #ff4757; cursor: pointer; padding: 8px;">
                     <i class="fas fa-times"></i>
@@ -113,8 +149,43 @@ class FileUploadHandler {
         return this.attachedFiles[context];
     }
 
+    getUploadedFileData(context) {
+        return this.uploadedFileData[context];
+    }
+
+    async uploadFileToServer(file, context) {
+        /**Upload file to server and store the response */
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const response = await fetch('/api/upload-file', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                body: formData
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                this.uploadedFileData[context] = data;
+                console.log('File uploaded successfully:', data);
+                return data;
+            } else {
+                const error = await response.json();
+                throw new Error(error.error || 'Upload failed');
+            }
+        } catch (error) {
+            console.error('Error uploading file:', error);
+            alert('Failed to upload file: ' + error.message);
+            return null;
+        }
+    }
+
     clearAttachedFile(context) {
         this.attachedFiles[context] = null;
+        this.uploadedFileData[context] = null;
         const previewMap = {
             'admin-chat': 'admin-chat-file-preview',
             'chat': 'chat-file-preview',
