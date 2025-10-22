@@ -392,18 +392,25 @@ def get_admin_chat_messages():
 @app.route('/api/admin-chat/send', methods=['POST'])
 @require_auth
 def send_admin_chat_message():
-    """Send a message to admin"""
+    """Send a message to admin with optional file attachment"""
     try:
         data = request.get_json()
-        message = data.get('message')
+        message = data.get('message', '')
+        file_url = data.get('file_url')
+        file_name = data.get('file_name')
+        file_size = data.get('file_size')
         
-        if not message:
-            return jsonify({'error': 'Message is required'}), 400
+        # Must have either message or file
+        if not message and not file_url:
+            return jsonify({'error': 'Message or file is required'}), 400
         
         success = integrated_db.send_admin_message(
             request.current_user['user_id'],
             'user',
-            message
+            message,
+            file_url,
+            file_name,
+            file_size
         )
         
         if success:
@@ -457,19 +464,23 @@ def get_user_admin_messages(user_id):
 @app.route('/api/admin/chats/<int:user_id>/send', methods=['POST'])
 @require_auth
 def send_admin_reply(user_id):
-    """Send a message to user (admin only)"""
+    """Send a message to user (admin only) with optional file attachment"""
     try:
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
         if user_role != 'administrator':
             return jsonify({'error': 'Admin access required'}), 403
         
         data = request.get_json()
-        message = data.get('message')
+        message = data.get('message', '')
+        file_url = data.get('file_url')
+        file_name = data.get('file_name')
+        file_size = data.get('file_size')
         
-        if not message:
-            return jsonify({'error': 'Message is required'}), 400
+        # Must have either message or file
+        if not message and not file_url:
+            return jsonify({'error': 'Message or file is required'}), 400
         
-        success = integrated_db.send_admin_message(user_id, 'admin', message)
+        success = integrated_db.send_admin_message(user_id, 'admin', message, file_url, file_name, file_size)
         
         if success:
             return jsonify({'success': True, 'message': 'Message sent'})
