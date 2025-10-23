@@ -2435,10 +2435,17 @@ class IntegratedAIChatbot {
             
             return `
                 <div style="margin-bottom: 16px; display: flex; justify-content: ${isUser ? 'flex-end' : 'flex-start'};">
-                    <div style="max-width: 70%; padding: 12px; border-radius: 12px; background: ${isUser ? '#667eea' : '#f1f3f4'}; color: ${isUser ? 'white' : '#333'};">
+                    <div style="max-width: 70%; padding: 12px; border-radius: 12px; background: ${isUser ? '#667eea' : '#f1f3f4'}; color: ${isUser ? 'white' : '#333'}; position: relative; padding-right: 45px;">
                         ${msg.message ? `<div>${msg.message}</div>` : ''}
                         ${fileHtml}
                         <div style="font-size: 0.75rem; opacity: 0.7; margin-top: 4px; text-align: right;">${timestamp}</div>
+                        <button onclick="app.deleteAdminMessage(${msg.id})" 
+                                style="position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: ${isUser ? 'white' : '#666'}; transition: background 0.2s;"
+                                onmouseover="this.style.background='rgba(255,71,87,0.8)'; this.style.color='white';"
+                                onmouseout="this.style.background='rgba(255,255,255,0.2)'; this.style.color='${isUser ? 'white' : '#666'}';"
+                                title="Delete message">
+                            <i class="fas fa-trash" style="font-size: 10px;"></i>
+                        </button>
                     </div>
                 </div>
             `;
@@ -2647,11 +2654,18 @@ class IntegratedAIChatbot {
             
             return `
                 <div style="margin-bottom: 16px; display: flex; justify-content: ${isAdmin ? 'flex-end' : 'flex-start'};">
-                    <div style="max-width: 70%; padding: 12px; border-radius: 12px; background: ${isAdmin ? '#667eea' : '#f1f3f4'}; color: ${isAdmin ? 'white' : '#333'};">
+                    <div style="max-width: 70%; padding: 12px; border-radius: 12px; background: ${isAdmin ? '#667eea' : '#f1f3f4'}; color: ${isAdmin ? 'white' : '#333'}; position: relative; padding-right: 45px;">
                         <div style="font-size: 0.85rem; opacity: 0.8; margin-bottom: 4px;">${isAdmin ? 'You (Admin)' : username}</div>
                         ${msg.message ? `<div>${msg.message}</div>` : ''}
                         ${fileHtml}
                         <div style="font-size: 0.75rem; opacity: 0.7; margin-top: 4px; text-align: right;">${timestamp}</div>
+                        <button onclick="app.deleteAdminMessage(${msg.id})" 
+                                style="position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: ${isAdmin ? 'white' : '#666'}; transition: background 0.2s;"
+                                onmouseover="this.style.background='rgba(255,71,87,0.8)'; this.style.color='white';"
+                                onmouseout="this.style.background='rgba(255,255,255,0.2)'; this.style.color='${isAdmin ? 'white' : '#666'}';"
+                                title="Delete message">
+                            <i class="fas fa-trash" style="font-size: 10px;"></i>
+                        </button>
                     </div>
                 </div>
             `;
@@ -2707,6 +2721,37 @@ class IntegratedAIChatbot {
                 this.showNotification(error.error || 'Failed to send reply', 'error');
             }
         } catch (error) {
+            this.showNotification('Network error. Please try again.', 'error');
+        }
+    }
+
+    async deleteAdminMessage(messageId) {
+        /**Delete an admin chat message */
+        if (!confirm('Are you sure you want to delete this message?')) {
+            return;
+        }
+        
+        try {
+            const response = await this.apiCall(`/api/admin-chat/message/${messageId}`, 'DELETE');
+            
+            if (response.ok) {
+                this.showNotification('Message deleted', 'success');
+                // Reload messages based on current context
+                if (this.currentAdminChatUserId) {
+                    // Admin viewing user chat
+                    const header = document.getElementById('admin-chat-header');
+                    const username = header.querySelector('div > div').textContent;
+                    await this.viewAdminUserChat(this.currentAdminChatUserId, username);
+                } else {
+                    // User viewing admin chat
+                    await this.loadAdminChat();
+                }
+            } else {
+                const error = await response.json();
+                this.showNotification(error.error || 'Failed to delete message', 'error');
+            }
+        } catch (error) {
+            console.error('Error deleting message:', error);
             this.showNotification('Network error. Please try again.', 'error');
         }
     }

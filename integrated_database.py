@@ -901,16 +901,16 @@ class IntegratedDatabase:
     
     # Admin Messaging Methods
     def send_admin_message(self, user_id: int, sender_type: str, message: str, 
-                          file_url: str = None, file_name: str = None, file_size: int = None) -> bool:
-        """Send a message between user and admin with optional file attachment"""
+                          file_url: str = None, file_name: str = None, file_size: int = None, reply_to: int = None) -> bool:
+        """Send a message between user and admin with optional file attachment and reply"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
         try:
             cursor.execute('''
-                INSERT INTO admin_messages (user_id, sender_type, message, file_url, file_name, file_size)
-                VALUES (?, ?, ?, ?, ?, ?)
-            ''', (user_id, sender_type, message, file_url, file_name, file_size))
+                INSERT INTO admin_messages (user_id, sender_type, message, file_url, file_name, file_size, reply_to)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (user_id, sender_type, message, file_url, file_name, file_size, reply_to))
             conn.commit()
             return True
         except Exception as e:
@@ -920,15 +920,18 @@ class IntegratedDatabase:
             conn.close()
     
     def get_admin_messages(self, user_id: int) -> List[Dict[str, Any]]:
-        """Get all messages between user and admin with file attachments"""
+        """Get all messages between user and admin with file attachments and replies"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT id, sender_type, message, is_read, timestamp, file_url, file_name, file_size
-            FROM admin_messages
-            WHERE user_id = ?
-            ORDER BY timestamp ASC
+            SELECT am.id, am.sender_type, am.message, am.is_read, am.timestamp, 
+                   am.file_url, am.file_name, am.file_size, am.reply_to,
+                   rm.message as reply_to_message, rm.sender_type as reply_to_sender
+            FROM admin_messages am
+            LEFT JOIN admin_messages rm ON am.reply_to = rm.id
+            WHERE am.user_id = ?
+            ORDER BY am.timestamp ASC
         ''', (user_id,))
         
         messages = []
@@ -941,7 +944,10 @@ class IntegratedDatabase:
                 'timestamp': row[4],
                 'file_url': row[5],
                 'file_name': row[6],
-                'file_size': row[7]
+                'file_size': row[7],
+                'reply_to': row[8],
+                'reply_to_message': row[9],
+                'reply_to_sender': row[10]
             })
         
         conn.close()
@@ -1009,3 +1015,22 @@ class IntegratedDatabase:
         
         conn.close()
         return chats
+    
+    def delete_admin_message(self, message_id: int, user_id: int) -> bool:
+        """Delete an admin message by ID (soft delete or hard delete)"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Verify the message belongs to this user before deleting
+            cursor.execute('''
+                DELETE FROM admin_messages
+                WHERE id = ? AND user_id = ?
+            ''', (message_id, user_id))
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception as e:
+            print(f"Error deleting admin message: {e}")
+            return False
+        finally:
+            conn.close()
