@@ -255,6 +255,11 @@ class IntegratedAIChatbot {
         this.replyingTo = null;
         this.replyingToContext = null;
         
+        // Message notification tracking
+        this.lastAdminMessageCount = 0;
+        this.lastUserMessageCount = 0;
+        this.notificationTimeout = null;
+        
         // Initialize general state manager
         this.stateManager = new StateManager();
         this.init();
@@ -2407,6 +2412,20 @@ class IntegratedAIChatbot {
                 const response = await this.apiCall('/api/admin-chat/messages', 'GET');
                 if (response.ok) {
                     const messages = await response.json();
+                    
+                    // Check for new messages from admin
+                    if (messages.length > this.lastAdminMessageCount) {
+                        const newMessages = messages.slice(this.lastAdminMessageCount);
+                        const adminMessages = newMessages.filter(msg => msg.sender_type === 'admin');
+                        
+                        if (adminMessages.length > 0) {
+                            // Show notification for the most recent admin message
+                            const lastAdminMsg = adminMessages[adminMessages.length - 1];
+                            this.showMessageNotification('admin', lastAdminMsg.message);
+                        }
+                    }
+                    
+                    this.lastAdminMessageCount = messages.length;
                     this.renderAdminMessages(messages);
                 }
                 this.checkUnreadAdminMessages();
@@ -2442,12 +2461,28 @@ class IntegratedAIChatbot {
                 ? window.fileUploadHandler.renderFileAttachment(msg.file_url, msg.file_name, msg.file_size)
                 : '';
             
+            // Render reply context if this is a reply
+            const replyHtml = msg.reply_to ? `
+                <div style="background: rgba(0,0,0,0.1); padding: 6px 8px; border-radius: 4px; margin-bottom: 8px; font-size: 0.85rem; border-left: 3px solid ${isUser ? 'rgba(255,255,255,0.5)' : '#667eea'};">
+                    <i class="fas fa-reply" style="font-size: 10px; margin-right: 4px;"></i>
+                    <strong>${msg.reply_to_sender === 'user' ? 'You' : 'Admin'}:</strong> ${(msg.reply_to_message || '').substring(0, 50)}${msg.reply_to_message && msg.reply_to_message.length > 50 ? '...' : ''}
+                </div>
+            ` : '';
+            
             return `
                 <div style="margin-bottom: 16px; display: flex; justify-content: ${isUser ? 'flex-end' : 'flex-start'};">
-                    <div style="max-width: 70%; padding: 12px; border-radius: 12px; background: ${isUser ? '#667eea' : '#f1f3f4'}; color: ${isUser ? 'white' : '#333'}; position: relative; padding-right: 45px;">
+                    <div style="max-width: 70%; padding: 12px; border-radius: 12px; background: ${isUser ? '#667eea' : '#f1f3f4'}; color: ${isUser ? 'white' : '#333'}; position: relative; padding-right: 75px;">
+                        ${replyHtml}
                         ${msg.message ? `<div>${msg.message}</div>` : ''}
                         ${fileHtml}
                         <div style="font-size: 0.75rem; opacity: 0.7; margin-top: 4px; text-align: right;">${timestamp}</div>
+                        <button onclick="app.setReplyTo(${msg.id}, '${(msg.message || 'File attachment').replace(/'/g, "\\'")}', '${msg.sender_type}')" 
+                                style="position: absolute; top: 8px; right: 36px; background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: ${isUser ? 'white' : '#666'}; transition: background 0.2s;"
+                                onmouseover="this.style.background='rgba(103,126,234,0.8)'; this.style.color='white';"
+                                onmouseout="this.style.background='rgba(255,255,255,0.2)'; this.style.color='${isUser ? 'white' : '#666'}';"
+                                title="Reply to this message">
+                            <i class="fas fa-reply" style="font-size: 10px;"></i>
+                        </button>
                         <button onclick="app.deleteAdminMessage(${msg.id})" 
                                 style="position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: ${isUser ? 'white' : '#666'}; transition: background 0.2s;"
                                 onmouseover="this.style.background='rgba(255,71,87,0.8)'; this.style.color='white';"
@@ -2488,6 +2523,11 @@ class IntegratedAIChatbot {
                 payload.file_size = uploadedFileData.file_size;
             }
             
+            // If replying to a message, add reply_to
+            if (this.replyingTo) {
+                payload.reply_to = this.replyingTo;
+            }
+            
             const response = await this.apiCall('/api/admin-chat/send', 'POST', payload);
             
             if (response.ok) {
@@ -2496,6 +2536,8 @@ class IntegratedAIChatbot {
                 if (window.fileUploadHandler) {
                     window.fileUploadHandler.clearAttachedFile('admin-chat');
                 }
+                // Clear reply
+                this.cancelReply();
                 // Reload messages
                 await this.loadAdminChat();
                 this.showNotification('Message sent to admin', 'success');
@@ -2626,6 +2668,20 @@ class IntegratedAIChatbot {
                 const response = await this.apiCall(`/api/admin/chats/${userId}/messages`, 'GET');
                 if (response.ok) {
                     const messages = await response.json();
+                    
+                    // Check for new messages from user (admin view)
+                    if (messages.length > this.lastUserMessageCount) {
+                        const newMessages = messages.slice(this.lastUserMessageCount);
+                        const userMessages = newMessages.filter(msg => msg.sender_type === 'user');
+                        
+                        if (userMessages.length > 0) {
+                            // Show notification for the most recent user message
+                            const lastUserMsg = userMessages[userMessages.length - 1];
+                            this.showMessageNotification('user', lastUserMsg.message, username);
+                        }
+                    }
+                    
+                    this.lastUserMessageCount = messages.length;
                     this.renderAdminUserMessages(messages, username);
                 }
                 await this.loadAdminChatsList();
@@ -2661,13 +2717,29 @@ class IntegratedAIChatbot {
                 ? window.fileUploadHandler.renderFileAttachment(msg.file_url, msg.file_name, msg.file_size)
                 : '';
             
+            // Render reply context if this is a reply
+            const replyHtml = msg.reply_to ? `
+                <div style="background: rgba(0,0,0,0.1); padding: 6px 8px; border-radius: 4px; margin-bottom: 8px; font-size: 0.85rem; border-left: 3px solid ${isAdmin ? 'rgba(255,255,255,0.5)' : '#667eea'};">
+                    <i class="fas fa-reply" style="font-size: 10px; margin-right: 4px;"></i>
+                    <strong>${msg.reply_to_sender === 'admin' ? 'Admin' : username}:</strong> ${(msg.reply_to_message || '').substring(0, 50)}${msg.reply_to_message && msg.reply_to_message.length > 50 ? '...' : ''}
+                </div>
+            ` : '';
+            
             return `
                 <div style="margin-bottom: 16px; display: flex; justify-content: ${isAdmin ? 'flex-end' : 'flex-start'};">
-                    <div style="max-width: 70%; padding: 12px; border-radius: 12px; background: ${isAdmin ? '#667eea' : '#f1f3f4'}; color: ${isAdmin ? 'white' : '#333'}; position: relative; padding-right: 45px;">
+                    <div style="max-width: 70%; padding: 12px; border-radius: 12px; background: ${isAdmin ? '#667eea' : '#f1f3f4'}; color: ${isAdmin ? 'white' : '#333'}; position: relative; padding-right: 75px;">
                         <div style="font-size: 0.85rem; opacity: 0.8; margin-bottom: 4px;">${isAdmin ? 'You (Admin)' : username}</div>
+                        ${replyHtml}
                         ${msg.message ? `<div>${msg.message}</div>` : ''}
                         ${fileHtml}
                         <div style="font-size: 0.75rem; opacity: 0.7; margin-top: 4px; text-align: right;">${timestamp}</div>
+                        <button onclick="app.setReplyTo(${msg.id}, '${(msg.message || 'File attachment').replace(/'/g, "\\'")}', '${msg.sender_type}')" 
+                                style="position: absolute; top: 8px; right: 36px; background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: ${isAdmin ? 'white' : '#666'}; transition: background 0.2s;"
+                                onmouseover="this.style.background='rgba(103,126,234,0.8)'; this.style.color='white';"
+                                onmouseout="this.style.background='rgba(255,255,255,0.2)'; this.style.color='${isAdmin ? 'white' : '#666'}';"
+                                title="Reply to this message">
+                            <i class="fas fa-reply" style="font-size: 10px;"></i>
+                        </button>
                         <button onclick="app.deleteAdminMessage(${msg.id})" 
                                 style="position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: ${isAdmin ? 'white' : '#666'}; transition: background 0.2s;"
                                 onmouseover="this.style.background='rgba(255,71,87,0.8)'; this.style.color='white';"
@@ -2712,6 +2784,11 @@ class IntegratedAIChatbot {
                 payload.file_size = uploadedFileData.file_size;
             }
             
+            // If replying to a message, add reply_to
+            if (this.replyingTo) {
+                payload.reply_to = this.replyingTo;
+            }
+            
             const response = await this.apiCall(`/api/admin/chats/${this.currentAdminChatUserId}/send`, 'POST', payload);
             
             if (response.ok) {
@@ -2720,6 +2797,8 @@ class IntegratedAIChatbot {
                 if (window.fileUploadHandler) {
                     window.fileUploadHandler.clearAttachedFile('admin-reply');
                 }
+                // Clear reply
+                this.cancelReply();
                 // Reload messages
                 const header = document.getElementById('admin-chat-header');
                 const username = header.querySelector('div > div').textContent;
@@ -2765,6 +2844,38 @@ class IntegratedAIChatbot {
         }
     }
 
+    setReplyTo(messageId, messageText, senderType) {
+        /**Set a message to reply to */
+        this.replyingTo = messageId;
+        this.replyingToContext = {
+            message: messageText,
+            sender: senderType
+        };
+        
+        // Show reply indicator
+        const indicator = document.getElementById('admin-reply-indicator') || document.getElementById('admin-chat-reply-indicator');
+        if (indicator) {
+            const preview = indicator.querySelector('.reply-preview');
+            const senderName = senderType === 'admin' ? 'Admin' : 'User';
+            if (preview) {
+                preview.textContent = `${senderName}: ${messageText.substring(0, 60)}${messageText.length > 60 ? '...' : ''}`;
+            }
+            indicator.style.display = 'flex';
+        }
+    }
+
+    cancelReply() {
+        /**Cancel replying to a message */
+        this.replyingTo = null;
+        this.replyingToContext = null;
+        
+        // Hide reply indicators
+        const indicators = document.querySelectorAll('[id$="-reply-indicator"]');
+        indicators.forEach(indicator => {
+            indicator.style.display = 'none';
+        });
+    }
+
     showNotification(message, type = 'info') {
         const notification = document.getElementById('notification');
         notification.textContent = message;
@@ -2774,6 +2885,54 @@ class IntegratedAIChatbot {
         setTimeout(() => {
             notification.classList.remove('show');
         }, 4000);
+    }
+
+    showMessageNotification(senderType, message, username = null) {
+        /**Show a notification for new message in top-right corner */
+        const notification = document.getElementById('message-notification');
+        const senderEl = notification.querySelector('.notification-sender');
+        const messageEl = notification.querySelector('.notification-message');
+        
+        // Set sender name
+        if (senderType === 'admin') {
+            senderEl.textContent = 'New message from Admin';
+            notification.className = 'message-notification admin-msg';
+        } else {
+            senderEl.textContent = username ? `New message from ${username}` : 'New message from User';
+            notification.className = 'message-notification user-msg';
+        }
+        
+        // Set message preview (max 100 chars)
+        messageEl.textContent = message ? message.substring(0, 100) + (message.length > 100 ? '...' : '') : 'File attachment';
+        
+        // Show notification
+        notification.style.display = 'block';
+        
+        // Clear any existing timeout
+        if (this.notificationTimeout) {
+            clearTimeout(this.notificationTimeout);
+        }
+        
+        // Auto-dismiss after 10 seconds
+        this.notificationTimeout = setTimeout(() => {
+            this.closeMessageNotification();
+        }, 10000);
+    }
+
+    closeMessageNotification() {
+        /**Close the message notification */
+        const notification = document.getElementById('message-notification');
+        notification.classList.add('closing');
+        
+        setTimeout(() => {
+            notification.style.display = 'none';
+            notification.classList.remove('closing');
+        }, 300); // Match animation duration
+        
+        if (this.notificationTimeout) {
+            clearTimeout(this.notificationTimeout);
+            this.notificationTimeout = null;
+        }
     }
 }
 
