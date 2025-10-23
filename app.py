@@ -40,7 +40,7 @@ app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour
 # File Upload Configuration
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'mp3', 'wav', 'mp4', 'avi', 'mov', 'doc', 'docx', 'xls', 'xlsx', 'zip', 'rar', 'svg', 'webp', 'ogg', 'm4a', 'webm'}
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
@@ -372,8 +372,16 @@ def upload_file():
 def download_file(filename):
     """Download or view a file"""
     try:
-        return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+        # Get original filename from query parameter if provided
+        original_filename = request.args.get('original_name', filename)
+        return send_from_directory(
+            app.config['UPLOAD_FOLDER'], 
+            filename,
+            as_attachment=False,  # Allow inline viewing for images/videos
+            download_name=original_filename  # Use original filename for download
+        )
     except Exception as e:
+        print(f"Error serving file {filename}: {e}")
         return jsonify({'error': 'File not found'}), 404
 
 # Admin Messaging Endpoints
