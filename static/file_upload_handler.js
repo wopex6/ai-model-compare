@@ -7,24 +7,19 @@ class FileUploadHandler {
     constructor() {
         this.attachedFiles = {
             'admin-chat': null,
-            'chat': null,
             'admin-reply': null
         };
         this.uploadedFileData = {
             'admin-chat': null,
-            'chat': null,
             'admin-reply': null
         };
-        this.maxFileSize = 10 * 1024 * 1024; // 10MB limit
+        this.maxFileSize = 25 * 1024 * 1024; // 25MB limit
         this.init();
     }
 
     init() {
         // Admin Chat File Upload
         this.setupFileInput('admin-chat-attach-btn', 'admin-chat-file-input', 'admin-chat-file-preview', 'admin-chat');
-        
-        // AI Chat File Upload
-        this.setupFileInput('chat-attach-btn', 'chat-file-input', 'chat-file-preview', 'chat');
         
         // Admin Reply File Upload
         this.setupFileInput('admin-reply-attach-btn', 'admin-reply-file-input', 'admin-reply-file-preview', 'admin-reply');
@@ -138,7 +133,6 @@ class FileUploadHandler {
         // Clear file input
         const inputMap = {
             'admin-chat': 'admin-chat-file-input',
-            'chat': 'chat-file-input',
             'admin-reply': 'admin-reply-file-input'
         };
         const input = document.getElementById(inputMap[context]);
@@ -188,7 +182,6 @@ class FileUploadHandler {
         this.uploadedFileData[context] = null;
         const previewMap = {
             'admin-chat': 'admin-chat-file-preview',
-            'chat': 'chat-file-preview',
             'admin-reply': 'admin-reply-file-preview'
         };
         const preview = document.getElementById(previewMap[context]);
@@ -216,6 +209,9 @@ class FileUploadHandler {
         const videoExts = ['mp4', 'webm', 'mov', 'avi'];
 
         const sizeStr = fileSize ? this.formatFileSize(fileSize) : '';
+        
+        // Add original filename to download URL
+        const downloadUrl = fileName ? `${fileUrl}?original_name=${encodeURIComponent(fileName)}` : fileUrl;
 
         // Image - display inline
         if (imageExts.includes(ext)) {
@@ -224,7 +220,7 @@ class FileUploadHandler {
                     <img src="${fileUrl}" alt="${fileName}" style="max-width: 300px; max-height: 300px; border-radius: 8px; border: 1px solid #ddd; display: block;">
                     <div style="margin-top: 4px; display: flex; align-items: center; gap: 8px;">
                         <span style="font-size: 0.85rem; color: #666;">${fileName} ${sizeStr ? '• ' + sizeStr : ''}</span>
-                        <a href="${fileUrl}" download="${fileName}" style="color: #667eea; text-decoration: none;">
+                        <a href="${downloadUrl}" download="${fileName}" style="color: #667eea; text-decoration: none;">
                             <i class="fas fa-download"></i> Download
                         </a>
                     </div>
@@ -241,12 +237,12 @@ class FileUploadHandler {
                         <span style="font-weight: 500;">${fileName}</span>
                         ${sizeStr ? `<span style="font-size: 0.85rem; color: #666;">• ${sizeStr}</span>` : ''}
                     </div>
-                    <audio controls style="width: 100%; max-width: 100%;">
+                    <audio controls preload="metadata" style="width: 100%; max-width: 100%;">
                         <source src="${fileUrl}" type="audio/${ext}">
                         Your browser does not support the audio element.
                     </audio>
                     <div style="margin-top: 8px;">
-                        <a href="${fileUrl}" download="${fileName}" style="color: #667eea; text-decoration: none; font-size: 0.9rem;">
+                        <a href="${downloadUrl}" download="${fileName}" style="color: #667eea; text-decoration: none; font-size: 0.9rem;" target="_blank">
                             <i class="fas fa-download"></i> Download
                         </a>
                     </div>
@@ -263,12 +259,12 @@ class FileUploadHandler {
                         <span style="font-weight: 500;">${fileName}</span>
                         ${sizeStr ? `<span style="font-size: 0.85rem; color: #666;">• ${sizeStr}</span>` : ''}
                     </div>
-                    <video controls style="width: 100%; max-width: 100%; border-radius: 4px;">
+                    <video controls preload="metadata" style="width: 100%; max-width: 100%; border-radius: 4px;">
                         <source src="${fileUrl}" type="video/${ext}">
                         Your browser does not support the video element.
                     </video>
                     <div style="margin-top: 8px;">
-                        <a href="${fileUrl}" download="${fileName}" style="color: #667eea; text-decoration: none; font-size: 0.9rem;">
+                        <a href="${downloadUrl}" download="${fileName}" style="color: #667eea; text-decoration: none; font-size: 0.9rem;" target="_blank">
                             <i class="fas fa-download"></i> Download
                         </a>
                     </div>
@@ -285,7 +281,7 @@ class FileUploadHandler {
 
         return `
             <div style="margin-top: 8px;">
-                <a href="${fileUrl}" download="${fileName}" style="display: inline-flex; align-items: center; gap: 10px; padding: 10px 14px; background: #e9ecef; border-radius: 8px; text-decoration: none; color: #333; border: 1px solid #ddd;">
+                <a href="${downloadUrl}" download="${fileName}" style="display: inline-flex; align-items: center; gap: 10px; padding: 10px 14px; background: #e9ecef; border-radius: 8px; text-decoration: none; color: #333; border: 1px solid #ddd;">
                     <i class="fas ${icon}" style="font-size: 24px; color: #667eea;"></i>
                     <div>
                         <div style="font-weight: 500;">${fileName}</div>
