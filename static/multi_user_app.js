@@ -260,6 +260,10 @@ class IntegratedAIChatbot {
         this.lastUserMessageCount = 0;
         this.notificationTimeout = null;
         
+        // Message content tracking to prevent unnecessary re-renders
+        this.lastAdminMessagesHash = null;
+        this.lastUserMessagesHash = null;
+        
         // Initialize general state manager
         this.stateManager = new StateManager();
         this.init();
@@ -2452,6 +2456,15 @@ class IntegratedAIChatbot {
             return;
         }
         
+        // Create hash of messages to detect actual changes
+        const messagesHash = JSON.stringify(messages.map(m => ({ id: m.id, message: m.message, timestamp: m.timestamp })));
+        
+        // Skip re-render if content hasn't changed (prevents video interruption)
+        if (messagesHash === this.lastAdminMessagesHash && !scrollToBottom) {
+            return; // Content unchanged, skip re-render
+        }
+        this.lastAdminMessagesHash = messagesHash;
+        
         // Save current scroll position
         const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
         const savedScrollPos = container.scrollTop;
@@ -2717,6 +2730,15 @@ class IntegratedAIChatbot {
             container.innerHTML = '<p style="text-align: center; color: #999;">No messages yet</p>';
             return;
         }
+        
+        // Create hash of messages to detect actual changes
+        const messagesHash = JSON.stringify(messages.map(m => ({ id: m.id, message: m.message, timestamp: m.timestamp })));
+        
+        // Skip re-render if content hasn't changed (prevents video interruption)
+        if (messagesHash === this.lastUserMessagesHash && !scrollToBottom) {
+            return; // Content unchanged, skip re-render
+        }
+        this.lastUserMessagesHash = messagesHash;
         
         // Save current scroll position
         const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
