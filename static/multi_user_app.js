@@ -2379,14 +2379,14 @@ class IntegratedAIChatbot {
         }
     }
 
-    async loadAdminChat() {
+    async loadAdminChat(scrollToBottom = true) {
         /**Load admin chat messages */
         try {
             // Load messages
             const response = await this.apiCall('/api/admin-chat/messages', 'GET');
             if (response.ok) {
                 const messages = await response.json();
-                this.renderAdminMessages(messages);
+                this.renderAdminMessages(messages, scrollToBottom);
             }
             
             // Check for unread messages
@@ -2443,7 +2443,7 @@ class IntegratedAIChatbot {
         }
     }
     
-    renderAdminMessages(messages) {
+    renderAdminMessages(messages, scrollToBottom = false) {
         /**Render admin chat messages with file attachments */
         const container = document.getElementById('admin-chat-messages');
         
@@ -2451,6 +2451,10 @@ class IntegratedAIChatbot {
             container.innerHTML = '<p style="text-align: center; color: #999;">No messages yet. Start a conversation with the admin!</p>';
             return;
         }
+        
+        // Save current scroll position
+        const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
+        const savedScrollPos = container.scrollTop;
         
         container.innerHTML = messages.map(msg => {
             const timestamp = this.formatTimestamp(msg.timestamp);
@@ -2495,8 +2499,14 @@ class IntegratedAIChatbot {
             `;
         }).join('');
         
-        // Scroll to bottom
-        container.scrollTop = container.scrollHeight;
+        // Restore scroll position or scroll to bottom
+        if (scrollToBottom || wasAtBottom) {
+            // If explicitly requested or user was at bottom, scroll to bottom
+            container.scrollTop = container.scrollHeight;
+        } else {
+            // Preserve scroll position during auto-refresh
+            container.scrollTop = savedScrollPos;
+        }
     }
     
     async sendAdminMessage() {
@@ -2627,7 +2637,7 @@ class IntegratedAIChatbot {
             const response = await this.apiCall(`/api/admin/chats/${userId}/messages`, 'GET');
             if (response.ok) {
                 const messages = await response.json();
-                this.renderAdminUserMessages(messages, username);
+                this.renderAdminUserMessages(messages, username, true);
                 
                 // Show reply box
                 document.getElementById('admin-chat-reply-box').style.display = 'block';
@@ -2699,7 +2709,7 @@ class IntegratedAIChatbot {
         }
     }
     
-    renderAdminUserMessages(messages, username) {
+    renderAdminUserMessages(messages, username, scrollToBottom = false) {
         /**Render messages for admin view with file attachments */
         const container = document.getElementById('admin-chat-messages-view');
         
@@ -2707,6 +2717,10 @@ class IntegratedAIChatbot {
             container.innerHTML = '<p style="text-align: center; color: #999;">No messages yet</p>';
             return;
         }
+        
+        // Save current scroll position
+        const wasAtBottom = container.scrollHeight - container.scrollTop <= container.clientHeight + 50;
+        const savedScrollPos = container.scrollTop;
         
         container.innerHTML = messages.map(msg => {
             const timestamp = this.formatTimestamp(msg.timestamp);
@@ -2752,8 +2766,14 @@ class IntegratedAIChatbot {
             `;
         }).join('');
         
-        // Scroll to bottom
-        container.scrollTop = container.scrollHeight;
+        // Restore scroll position or scroll to bottom
+        if (scrollToBottom || wasAtBottom) {
+            // If explicitly requested or user was at bottom, scroll to bottom
+            container.scrollTop = container.scrollHeight;
+        } else {
+            // Preserve scroll position during auto-refresh
+            container.scrollTop = savedScrollPos;
+        }
     }
     
     async sendAdminReply() {
