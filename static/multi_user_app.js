@@ -246,6 +246,15 @@ class IntegratedAIChatbot {
         this.isCreatingChat = false;
         this.isSubmittingConversation = false;
         
+        // Admin chat specific properties
+        this.adminChatRefreshInterval = null;
+        this.adminUserChatRefreshInterval = null;
+        this.currentAdminChatUserId = null;
+        
+        // Reply functionality
+        this.replyingTo = null;
+        this.replyingToContext = null;
+        
         // Initialize general state manager
         this.stateManager = new StateManager();
         this.init();
