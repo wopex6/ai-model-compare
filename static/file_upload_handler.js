@@ -13,7 +13,7 @@ class FileUploadHandler {
             'admin-chat': null,
             'admin-reply': null
         };
-        this.maxFileSize = 25 * 1024 * 1024; // 25MB limit
+        this.maxFileSize = 50 * 1024 * 1024; // 50MB limit
         this.init();
     }
 
@@ -259,7 +259,7 @@ class FileUploadHandler {
                         <span style="font-weight: 500;">${fileName}</span>
                         ${sizeStr ? `<span style="font-size: 0.85rem; color: #666;">• ${sizeStr}</span>` : ''}
                     </div>
-                    <video controls preload="metadata" style="width: 100%; max-width: 100%; border-radius: 4px;">
+                    <video controls preload="none" style="width: 100%; max-width: 100%; border-radius: 4px;">
                         <source src="${fileUrl}" type="video/${ext}">
                         Your browser does not support the video element.
                     </video>

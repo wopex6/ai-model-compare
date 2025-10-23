@@ -40,7 +40,7 @@ app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour
 # File Upload Configuration
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'mp3', 'wav', 'mp4', 'avi', 'mov', 'doc', 'docx', 'xls', 'xlsx', 'zip', 'rar', 'svg', 'webp', 'ogg', 'm4a', 'webm'}
-MAX_FILE_SIZE = 25 * 1024 * 1024  # 25MB
+MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
@@ -400,13 +400,14 @@ def get_admin_chat_messages():
 @app.route('/api/admin-chat/send', methods=['POST'])
 @require_auth
 def send_admin_chat_message():
-    """Send a message to admin with optional file attachment"""
+    """Send a message to admin with optional file attachment and reply"""
     try:
         data = request.get_json()
         message = data.get('message', '')
         file_url = data.get('file_url')
         file_name = data.get('file_name')
         file_size = data.get('file_size')
+        reply_to = data.get('reply_to')
         
         # Must have either message or file
         if not message and not file_url:
@@ -418,7 +419,8 @@ def send_admin_chat_message():
             message,
             file_url,
             file_name,
-            file_size
+            file_size,
+            reply_to
         )
         
         if success:
@@ -472,7 +474,7 @@ def get_user_admin_messages(user_id):
 @app.route('/api/admin/chats/<int:user_id>/send', methods=['POST'])
 @require_auth
 def send_admin_reply(user_id):
-    """Send a message to user (admin only) with optional file attachment"""
+    """Send a message to user (admin only) with optional file attachment and reply"""
     try:
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
         if user_role != 'administrator':
@@ -483,17 +485,33 @@ def send_admin_reply(user_id):
         file_url = data.get('file_url')
         file_name = data.get('file_name')
         file_size = data.get('file_size')
+        reply_to = data.get('reply_to')
         
         # Must have either message or file
         if not message and not file_url:
             return jsonify({'error': 'Message or file is required'}), 400
         
-        success = integrated_db.send_admin_message(user_id, 'admin', message, file_url, file_name, file_size)
+        success = integrated_db.send_admin_message(user_id, 'admin', message, file_url, file_name, file_size, reply_to)
         
         if success:
             return jsonify({'success': True, 'message': 'Message sent'})
         else:
             return jsonify({'error': 'Failed to send message'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin-chat/message/<int:message_id>', methods=['DELETE'])
+@require_auth
+def delete_admin_message(message_id):
+    """Delete an admin chat message"""
+    try:
+        user_id = request.current_user['user_id']
+        success = integrated_db.delete_admin_message(message_id, user_id)
+        
+        if success:
+            return jsonify({'success': True, 'message': 'Message deleted'})
+        else:
+            return jsonify({'error': 'Message not found or already deleted'}), 404
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
