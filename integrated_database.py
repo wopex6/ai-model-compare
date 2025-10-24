@@ -1016,17 +1016,43 @@ class IntegratedDatabase:
         conn.close()
         return chats
     
-    def delete_admin_message(self, message_id: int, user_id: int) -> bool:
-        """Delete an admin message by ID (soft delete or hard delete)"""
+    def delete_admin_message(self, message_id: int, deleting_user_id: int) -> bool:
+        """Delete an admin message by ID"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
         try:
-            # Verify the message belongs to this user before deleting
-            cursor.execute('''
-                DELETE FROM admin_messages
-                WHERE id = ? AND user_id = ?
-            ''', (message_id, user_id))
+            # Check if deleting user is admin
+            role = self.get_user_role(deleting_user_id)
+            
+            if role == 'administrator':
+                # Admin can delete any message
+                cursor.execute('''
+                    DELETE FROM admin_messages
+                    WHERE id = ?
+                ''', (message_id,))
+            else:
+                # Regular user can only delete their own messages
+                # Get the message to check user_id
+                cursor.execute('''
+                    SELECT user_id FROM admin_messages WHERE id = ?
+                ''', (message_id,))
+                result = cursor.fetchone()
+                
+                if not result:
+                    return False
+                
+                message_user_id = result[0]
+                
+                # Only allow deletion if message belongs to this user
+                if message_user_id != deleting_user_id:
+                    return False
+                
+                cursor.execute('''
+                    DELETE FROM admin_messages
+                    WHERE id = ?
+                ''', (message_id,))
+            
             conn.commit()
             return cursor.rowcount > 0
         except Exception as e:
