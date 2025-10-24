@@ -2390,6 +2390,10 @@ class IntegratedAIChatbot {
             const response = await this.apiCall('/api/admin-chat/messages', 'GET');
             if (response.ok) {
                 const messages = await response.json();
+                
+                // Set initial count to prevent notification on page load
+                this.lastAdminMessageCount = messages.length;
+                
                 this.renderAdminMessages(messages, scrollToBottom);
             }
             
@@ -2650,6 +2654,10 @@ class IntegratedAIChatbot {
             const response = await this.apiCall(`/api/admin/chats/${userId}/messages`, 'GET');
             if (response.ok) {
                 const messages = await response.json();
+                
+                // Set initial count to prevent notification on page load
+                this.lastUserMessageCount = messages.length;
+                
                 this.renderAdminUserMessages(messages, username, true);
                 
                 // Show reply box

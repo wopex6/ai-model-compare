@@ -1277,8 +1277,8 @@
             console.log('🔧 Flash Debug: Document ready state:', document.readyState);
             console.log('🔧 Flash Debug: Page dimensions at init - body height:', document.body.scrollHeight, 'window height:', window.innerHeight);
             
-            const app = new IntegratedAIChatbot();
-            window.integratedAIChatbot = app; // Make globally accessible
+            window.app = new IntegratedAIChatbot(); // Make globally accessible
+            window.integratedAIChatbot = window.app; // Backward compatibility
             
             // Personality Controls
             document.querySelectorAll('.personality-preset').forEach(preset => {
