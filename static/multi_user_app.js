@@ -2047,6 +2047,19 @@ class IntegratedAIChatbot {
             const response = await this.apiCall('/api/user/profile', 'GET');
             if (response.ok) {
                 const profile = await response.json();
+                
+                // Update dashboard title based on role
+                const dashboardTitle = document.getElementById('admin-dashboard-title');
+                if (dashboardTitle) {
+                    if (profile.user_role === 'administrator') {
+                        dashboardTitle.textContent = 'Administrator Dashboard';
+                    } else if (profile.user_role === 'paid') {
+                        dashboardTitle.textContent = 'User Dashboard';
+                    } else {
+                        dashboardTitle.textContent = 'User Dashboard';
+                    }
+                }
+                
                 if (profile.user_role === 'administrator') {
                     // Show admin tab
                     const adminTabBtn = document.getElementById('admin-tab-btn');
@@ -2490,20 +2503,25 @@ class IntegratedAIChatbot {
                 </div>
             ` : '';
             
+            // Only show reply button for messages from other party (not self)
+            const replyButton = !isUser ? `
+                <button onclick="app.setReplyTo(${msg.id}, '${(msg.message || 'File attachment').replace(/'/g, "\\'")}', '${msg.sender_type}')" 
+                        style="position: absolute; top: 8px; right: 36px; background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: ${isUser ? 'white' : '#666'}; transition: background 0.2s;"
+                        onmouseover="this.style.background='rgba(103,126,234,0.8)'; this.style.color='white';"
+                        onmouseout="this.style.background='rgba(255,255,255,0.2)'; this.style.color='${isUser ? 'white' : '#666'}';"
+                        title="Reply to this message">
+                    <i class="fas fa-reply" style="font-size: 10px;"></i>
+                </button>
+            ` : '';
+            
             return `
                 <div style="margin-bottom: 16px; display: flex; justify-content: ${isUser ? 'flex-end' : 'flex-start'};">
-                    <div style="max-width: 70%; padding: 12px; border-radius: 12px; background: ${isUser ? '#667eea' : '#f1f3f4'}; color: ${isUser ? 'white' : '#333'}; position: relative; padding-right: 75px;">
+                    <div style="max-width: 70%; padding: 12px; border-radius: 12px; background: ${isUser ? '#667eea' : '#f1f3f4'}; color: ${isUser ? 'white' : '#333'}; position: relative; padding-right: ${replyButton ? '75px' : '40px'};">
                         ${replyHtml}
                         ${msg.message ? `<div>${msg.message}</div>` : ''}
                         ${fileHtml}
                         <div style="font-size: 0.75rem; opacity: 0.7; margin-top: 4px; text-align: right;">${timestamp}</div>
-                        <button onclick="app.setReplyTo(${msg.id}, '${(msg.message || 'File attachment').replace(/'/g, "\\'")}', '${msg.sender_type}')" 
-                                style="position: absolute; top: 8px; right: 36px; background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: ${isUser ? 'white' : '#666'}; transition: background 0.2s;"
-                                onmouseover="this.style.background='rgba(103,126,234,0.8)'; this.style.color='white';"
-                                onmouseout="this.style.background='rgba(255,255,255,0.2)'; this.style.color='${isUser ? 'white' : '#666'}';"
-                                title="Reply to this message">
-                            <i class="fas fa-reply" style="font-size: 10px;"></i>
-                        </button>
+                        ${replyButton}
                         <button onclick="app.deleteAdminMessage(${msg.id})" 
                                 style="position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: ${isUser ? 'white' : '#666'}; transition: background 0.2s;"
                                 onmouseover="this.style.background='rgba(255,71,87,0.8)'; this.style.color='white';"
@@ -2769,21 +2787,26 @@ class IntegratedAIChatbot {
                 </div>
             ` : '';
             
+            // Only show reply button for messages from other party (not self)
+            const replyButton = !isAdmin ? `
+                <button onclick="app.setReplyTo(${msg.id}, '${(msg.message || 'File attachment').replace(/'/g, "\\'")}', '${msg.sender_type}')" 
+                        style="position: absolute; top: 8px; right: 36px; background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: ${isAdmin ? 'white' : '#666'}; transition: background 0.2s;"
+                        onmouseover="this.style.background='rgba(103,126,234,0.8)'; this.style.color='white';"
+                        onmouseout="this.style.background='rgba(255,255,255,0.2)'; this.style.color='${isAdmin ? 'white' : '#666'}';"
+                        title="Reply to this message">
+                    <i class="fas fa-reply" style="font-size: 10px;"></i>
+                </button>
+            ` : '';
+            
             return `
                 <div style="margin-bottom: 16px; display: flex; justify-content: ${isAdmin ? 'flex-end' : 'flex-start'};">
-                    <div style="max-width: 70%; padding: 12px; border-radius: 12px; background: ${isAdmin ? '#667eea' : '#f1f3f4'}; color: ${isAdmin ? 'white' : '#333'}; position: relative; padding-right: 75px;">
+                    <div style="max-width: 70%; padding: 12px; border-radius: 12px; background: ${isAdmin ? '#667eea' : '#f1f3f4'}; color: ${isAdmin ? 'white' : '#333'}; position: relative; padding-right: ${replyButton ? '75px' : '40px'};">
                         <div style="font-size: 0.85rem; opacity: 0.8; margin-bottom: 4px;">${isAdmin ? 'You (Admin)' : username}</div>
                         ${replyHtml}
                         ${msg.message ? `<div>${msg.message}</div>` : ''}
                         ${fileHtml}
                         <div style="font-size: 0.75rem; opacity: 0.7; margin-top: 4px; text-align: right;">${timestamp}</div>
-                        <button onclick="app.setReplyTo(${msg.id}, '${(msg.message || 'File attachment').replace(/'/g, "\\'")}', '${msg.sender_type}')" 
-                                style="position: absolute; top: 8px; right: 36px; background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: ${isAdmin ? 'white' : '#666'}; transition: background 0.2s;"
-                                onmouseover="this.style.background='rgba(103,126,234,0.8)'; this.style.color='white';"
-                                onmouseout="this.style.background='rgba(255,255,255,0.2)'; this.style.color='${isAdmin ? 'white' : '#666'}';"
-                                title="Reply to this message">
-                            <i class="fas fa-reply" style="font-size: 10px;"></i>
-                        </button>
+                        ${replyButton}
                         <button onclick="app.deleteAdminMessage(${msg.id})" 
                                 style="position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,0.2); border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: ${isAdmin ? 'white' : '#666'}; transition: background 0.2s;"
                                 onmouseover="this.style.background='rgba(255,71,87,0.8)'; this.style.color='white';"
