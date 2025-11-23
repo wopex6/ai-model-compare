@@ -1002,11 +1002,8 @@ def add_conversation_message(session_id):
 
 @app.route('/')
 def index():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    available_models = loop.run_until_complete(ai_compare.get_available_models())
-    loop.close()
-    return render_template('index.html', models=available_models)
+    """Redirect home to chatchat interface"""
+    return redirect('/chatchat', code=302)
 
 @app.route('/chatchat')
 def chatchat_interface():
