@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dr. Nova - Scientific Exploration</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: #0a0e27;
+            color: #e0e0e0;
+            font-family: 'Courier New', monospace;
+            min-height: 100vh;
+            position: relative;
+            overflow-x: hidden;
+        }
+        
+        /* Particle background */
+        .stars {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        
+        .star {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: white;
+            border-radius: 50%;
+            animation: twinkle 3s infinite;
+        }
+        
+        @keyframes twinkle {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 1; }
+        }
+        
+        .lab-container {
+            position: relative;
+            z-index: 1;
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .lab-header {
+            background: linear-gradient(135deg, #00695C, #26A69A);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 0 40px rgba(38, 166, 154, 0.3);
+            border: 1px solid #26A69A;
+        }
+        
+        .header-grid {
+            display: flex;
+            align-items: center;
+            gap: 25px;
+        }
+        
+        .scientist-avatar {
+            width: 90px;
+            height: 90px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 3px solid #26A69A;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 45px;
+            animation: rotate 20s linear infinite;
+        }
+        
+        @keyframes rotate {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        .header-info h1 {
+            color: white;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 2.2rem;
+            font-weight: 700;
+            margin: 0 0 8px 0;
+        }
+        
+        .header-info p {
+            color: rgba(255, 255, 255, 0.9);
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 1.1rem;
+            margin: 0;
+        }
+        
+        .main-lab-grid {
+            display: grid;
+            grid-template-columns: 320px 1fr 350px;
+            gap: 20px;
+        }
+        
+        .lab-panel {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid #26A69A;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 0 30px rgba(38, 166, 154, 0.2);
+            backdrop-filter: blur(10px);
+        }
+        
+        .panel-header {
+            color: #26A69A;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 1.2rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #26A69A;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        /* Hypothesis Tracker */
+        .hypothesis-item {
+            background: rgba(38, 166, 154, 0.1);
+            border-left: 4px solid #26A69A;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .hypothesis-item:hover {
+            background: rgba(38, 166, 154, 0.2);
+            transform: translateX(5px);
+        }
+        
+        .hypothesis-title {
+            color: #4DB6AC;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+        
+        .hypothesis-desc {
+            font-size: 0.85rem;
+            color: #b0bec5;
+        }
+        
+        /* Scientific Method Steps */
+        .method-step {
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        
+        .step-number {
+            width: 30px;
+            height: 30px;
+            background: #26A69A;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: white;
+            flex-shrink: 0;
+        }
+        
+        .step-text {
+            color: #e0e0e0;
+            font-size: 0.9rem;
+        }
+        
+        /* Curiosity Meter */
+        .curiosity-meter {
+            text-align: center;
+            padding: 25px;
+            background: rgba(38, 166, 154, 0.1);
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+        
+        .meter-circle {
+            width: 150px;
+            height: 150px;
+            margin: 0 auto 15px;
+            border-radius: 50%;
+            border: 8px solid #26A69A;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            background: rgba(0, 0, 0, 0.3);
+        }
+        
+        .meter-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #26A69A;
+        }
+        
+        .meter-label {
+            color: #b0bec5;
+            font-size: 0.9rem;
+        }
+        
+        /* Chat Area */
+        .chat-section {
+            display: flex;
+            flex-direction: column;
+            height: 750px;
+        }
+        
+        .fact-of-day {
+            padding: 20px;
+            background: linear-gradient(135deg, rgba(38, 166, 154, 0.2), rgba(0, 105, 92, 0.2));
+            border-radius: 10px;
+            border: 1px solid #26A69A;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+        
+        .fact-title {
+            color: #26A69A;
+            font-weight: 700;
+            margin-bottom: 8px;
+            font-family: 'Segoe UI', sans-serif;
+        }
+        
+        .fact-text {
+            color: #e0e0e0;
+            font-family: 'Segoe UI', sans-serif;
+            line-height: 1.6;
+        }
+        
+        .chat-messages-sci {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            margin-bottom: 15px;
+            border: 1px solid rgba(38, 166, 154, 0.3);
+        }
+        
+        .message-sci {
+            margin-bottom: 15px;
+            animation: fadeInSci 0.4s ease;
+        }
+        
+        @keyframes fadeInSci {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .message-sci.user {
+            text-align: right;
+        }
+        
+        .message-bubble-sci {
+            display: inline-block;
+            padding: 15px 20px;
+            border-radius: 15px;
+            max-width: 75%;
+            font-family: 'Segoe UI', sans-serif;
+        }
+        
+        .message-sci.user .message-bubble-sci {
+            background: linear-gradient(135deg, #00695C, #26A69A);
+            color: white;
+            box-shadow: 0 4px 15px rgba(38, 166, 154, 0.3);
+        }
+        
+        .message-sci.bot .message-bubble-sci {
+            background: rgba(38, 166, 154, 0.15);
+            color: #e0e0e0;
+            border: 1px solid #26A69A;
+        }
+        
+        .chat-input-sci {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .input-sci {
+            flex: 1;
+            padding: 15px 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid #26A69A;
+            border-radius: 8px;
+            color: white;
+            font-family: 'Segoe UI', sans-serif;
+            font-size: 1rem;
+        }
+        
+        .input-sci:focus {
+            outline: none;
+            background: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 0 20px rgba(38, 166, 154, 0.3);
+        }
+        
+        .input-sci::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
+        
+        .send-btn-sci {
+            background: linear-gradient(135deg, #00695C, #26A69A);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 700;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(38, 166, 154, 0.3);
+        }
+        
+        .send-btn-sci:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(38, 166, 154, 0.5);
+        }
+        
+        /* Discovery Log */
+        .discovery-item {
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 3px solid #4DB6AC;
+        }
+        
+        .discovery-time {
+            font-size: 0.75rem;
+            color: #4DB6AC;
+            margin-bottom: 5px;
+        }
+        
+        .discovery-text {
+            color: #e0e0e0;
+            font-size: 0.9rem;
+        }
+        
+        .back-button {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: linear-gradient(135deg, #00695C, #26A69A);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 700;
+            box-shadow: 0 4px 15px rgba(38, 166, 154, 0.4);
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+        
+        .back-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(38, 166, 154, 0.6);
+        }
+        
+        @media (max-width: 1400px) {
+            .main-lab-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Stars background -->
+    <div class="stars" id="starsContainer"></div>
+
+    <a href="/chatchat" class="back-button">
+        <i class="fas fa-arrow-left"></i> Dashboard
+    </a>
+
+    <div class="lab-container">
+        <!-- Header -->
+        <div class="lab-header">
+            <div class="header-grid">
+                <div class="scientist-avatar">
+                    <i class="fas fa-atom"></i>
+                </div>
+                <div class="header-info">
+                    <h1>Dr. Nova - Scientific Research Lab</h1>
+                    <p>Exploring the Universe Through Evidence, Logic & Curiosity</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Grid -->
+        <div class="main-lab-grid">
+            <!-- Left Panel - Scientific Method -->
+            <div class="lab-panel">
+                <h3 class="panel-header">
+                    <i class="fas fa-flask"></i>
+                    Scientific Method
+                </h3>
+                
+                <div class="method-step">
+                    <div class="step-number">1</div>
+                    <div class="step-text">Ask a Question</div>
+                </div>
+                <div class="method-step">
+                    <div class="step-number">2</div>
+                    <div class="step-text">Research & Observe</div>
+                </div>
+                <div class="method-step">
+                    <div class="step-number">3</div>
+                    <div class="step-text">Form Hypothesis</div>
+                </div>
+                <div class="method-step">
+                    <div class="step-number">4</div>
+                    <div class="step-text">Test & Experiment</div>
+                </div>
+                <div class="method-step">
+                    <div class="step-number">5</div>
+                    <div class="step-text">Analyze Data</div>
+                </div>
+                <div class="method-step">
+                    <div class="step-number">6</div>
+                    <div class="step-text">Draw Conclusions</div>
+                </div>
+                
+                <div class="curiosity-meter">
+                    <div class="meter-circle">
+                        <div class="meter-value" id="curiosityValue">100%</div>
+                    </div>
+                    <div class="meter-label">CURIOSITY LEVEL</div>
+                    <p style="margin-top: 10px; color: #4DB6AC; font-size: 0.85rem;">
+                        Stay curious. Question everything!
+                    </p>
+                </div>
+            </div>
+
+            <!-- Center - Chat Area -->
+            <div class="lab-panel">
+                <h3 class="panel-header">
+                    <i class="fas fa-microscope"></i>
+                    Research Console
+                </h3>
+                
+                <div class="fact-of-day">
+                    <div class="fact-title">🔬 SCIENTIFIC INSIGHT OF THE DAY</div>
+                    <div class="fact-text" id="dailyFact">
+                        Loading scientific insight...
+                    </div>
+                </div>
+                
+                <div class="chat-section">
+                    <div class="chat-messages-sci" id="chatMessages">
+                        <div class="message-sci bot">
+                            <div class="message-bubble-sci">
+                                <strong>Dr. Nova:</strong> Greetings, fellow scientist! Ready to explore the wonders of our universe? What question shall we investigate today?
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="chat-input-sci">
+                        <input 
+                            type="text" 
+                            class="input-sci" 
+                            id="userInput" 
+                            placeholder="Ask your scientific question..."
+                            onkeypress="handleKeyPress(event)"
+                        >
+                        <button class="send-btn-sci" onclick="sendMessage()">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel - Hypotheses & Discoveries -->
+            <div class="lab-panel">
+                <h3 class="panel-header">
+                    <i class="fas fa-lightbulb"></i>
+                    Active Hypotheses
+                </h3>
+                
+                <div class="hypothesis-item" onclick="sendQuickMessage('Explain the scientific method')">
+                    <div class="hypothesis-title">🔍 Scientific Method</div>
+                    <div class="hypothesis-desc">How does science work?</div>
+                </div>
+                
+                <div class="hypothesis-item" onclick="sendQuickMessage('Tell me about the cosmos')">
+                    <div class="hypothesis-title">🌌 The Cosmos</div>
+                    <div class="hypothesis-desc">Universe and beyond</div>
+                </div>
+                
+                <div class="hypothesis-item" onclick="sendQuickMessage('How does critical thinking work?')">
+                    <div class="hypothesis-title">🧠 Critical Thinking</div>
+                    <div class="hypothesis-desc">Logic and reasoning</div>
+                </div>
+                
+                <div class="hypothesis-item" onclick="sendQuickMessage('What is the evidence for evolution?')">
+                    <div class="hypothesis-title">🧬 Evolution</div>
+                    <div class="hypothesis-desc">Life's amazing journey</div>
+                </div>
+                
+                <h3 class="panel-header" style="margin-top: 25px;">
+                    <i class="fas fa-book"></i>
+                    Discovery Log
+                </h3>
+                
+                <div class="discovery-item">
+                    <div class="discovery-time">Session Start</div>
+                    <div class="discovery-text">Lab initialized. Ready for discovery!</div>
+                </div>
+                
+                <div style="text-align: center; margin-top: 20px; padding: 20px; background: rgba(38, 166, 154, 0.1); border-radius: 10px;">
+                    <div style="font-size: 2.5rem; font-weight: 700; color: #26A69A;" id="queryCount">0</div>
+                    <div style="color: #b0bec5; font-size: 0.9rem; margin-top: 5px;">QUERIES PROCESSED</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Create stars
+        const starsContainer = document.getElementById('starsContainer');
+        for (let i = 0; i < 100; i++) {
+            const star = document.createElement('div');
+            star.className = 'star';
+            star.style.left = Math.random() * 100 + '%';
+            star.style.top = Math.random() * 100 + '%';
+            star.style.animationDelay = Math.random() * 3 + 's';
+            starsContainer.appendChild(star);
+        }
+
+        let queryCount = 0;
+
+        window.addEventListener('load', async () => {
+            try {
+                const response = await fetch('/scientist/daily-insight');
+                const data = await response.json();
+                document.getElementById('dailyFact').textContent = data.insight || data;
+            } catch (error) {
+                console.error('Error loading fact:', error);
+            }
+        });
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        function sendQuickMessage(message) {
+            document.getElementById('userInput').value = message;
+            sendMessage();
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            addMessage(message, 'user');
+            input.value = '';
+            
+            queryCount++;
+            document.getElementById('queryCount').textContent = queryCount;
+            
+            // Add to discovery log
+            const discoveryLog = document.querySelector('.discovery-item').parentElement;
+            const newDiscovery = document.createElement('div');
+            newDiscovery.className = 'discovery-item';
+            newDiscovery.innerHTML = `
+                <div class="discovery-time">Query ${queryCount}</div>
+                <div class="discovery-text">${message.substring(0, 50)}...</div>
+            `;
+            discoveryLog.insertBefore(newDiscovery, discoveryLog.children[1]);
+            
+            try {
+                const response = await fetch('/scientist/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: message })
+                });
+                
+                const data = await response.json();
+                if (data.response) {
+                    addMessage(data.response, 'bot');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                addMessage('Error in data transmission. Recalibrating...', 'bot');
+            }
+        }
+
+        function addMessage(text, sender) {
+            const messagesDiv = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message-sci ${sender}`;
+            
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble-sci';
+            bubble.innerHTML = sender === 'bot' 
+                ? `<strong>Dr. Nova:</strong> ${text}`
+                : `<strong>You:</strong> ${text}`;
+            
+            messageDiv.appendChild(bubble);
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+    </script>
+</body>
+</html>

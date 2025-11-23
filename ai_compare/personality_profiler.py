@@ -87,8 +87,11 @@ class PersonalityProfiler:
     def __init__(self, profiles_dir: str = "personality_profiles"):
         self.profiles_dir = Path(profiles_dir)
         self.profiles_dir.mkdir(exist_ok=True)
+        self.sessions_dir = self.profiles_dir / "sessions"
+        self.sessions_dir.mkdir(exist_ok=True)
         self.questions = self._initialize_questions()
         self.assessment_sessions = {}  # Track ongoing assessments
+        self._load_active_sessions()  # Load any paused sessions from disk
         
     def _initialize_questions(self) -> List[PersonalityQuestion]:
         """Initialize psychology-based assessment questions"""
@@ -210,6 +213,492 @@ class PersonalityProfiler:
                     ("Building stable, reliable solutions", 0.75),  # SECURITY
                     ("Creating something unique and innovative", 1.0)  # CREATIVITY
                 ]
+            ),
+            
+            # Additional Extraversion questions
+            PersonalityQuestion(
+                "ext_3",
+                "After a long day, what helps you recharge?",
+                PersonalityDimension.EXTRAVERSION,
+                [
+                    ("Socializing with friends or colleagues", 0.9),
+                    ("Quiet time alone with a book or hobby", 0.1),
+                    ("Light socializing in small groups", 0.6),
+                    ("A mix of social and alone time", 0.5)
+                ]
+            ),
+            
+            # Additional Agreeableness questions
+            PersonalityQuestion(
+                "agr_2",
+                "When making team decisions, what's your priority?",
+                PersonalityDimension.AGREEABLENESS,
+                [
+                    ("Everyone feels heard and valued", 0.9),
+                    ("The best logical outcome", 0.2),
+                    ("Quick consensus to move forward", 0.6),
+                    ("The option that benefits most people", 0.8)
+                ]
+            ),
+            
+            # Additional Conscientiousness questions
+            PersonalityQuestion(
+                "con_2",
+                "How do you handle deadlines?",
+                PersonalityDimension.CONSCIENTIOUSNESS,
+                [
+                    ("Plan ahead and finish early", 0.9),
+                    ("Work steadily to meet the deadline", 0.7),
+                    ("Do my best work under pressure", 0.3),
+                    ("Flexible - depends on the task", 0.5)
+                ]
+            ),
+            
+            # Additional Neuroticism questions
+            PersonalityQuestion(
+                "neu_2",
+                "How often do you worry about future events?",
+                PersonalityDimension.NEUROTICISM,
+                [
+                    ("Frequently - I plan for many scenarios", 0.9),
+                    ("Sometimes - mainly for important events", 0.6),
+                    ("Rarely - I deal with things as they come", 0.2),
+                    ("Almost never - I'm very optimistic", 0.0)
+                ]
+            ),
+            
+            # Additional Openness questions
+            PersonalityQuestion(
+                "ope_2",
+                "When learning something new, you prefer:",
+                PersonalityDimension.OPENNESS,
+                [
+                    ("Exploring creative and unconventional methods", 0.9),
+                    ("Following proven, traditional approaches", 0.2),
+                    ("Mixing traditional and innovative methods", 0.6),
+                    ("Experimenting with various approaches", 0.8)
+                ]
+            ),
+            
+            # Additional Communication questions
+            PersonalityQuestion(
+                "com_2",
+                "When giving feedback, you tend to:",
+                PersonalityDimension.COMMUNICATION_STYLE,
+                [
+                    ("Be direct and straightforward", 0.0),
+                    ("Sandwich criticism with positives", 0.5),
+                    ("Use data and specific examples", 0.3),
+                    ("Focus on encouragement and growth", 1.0)
+                ]
+            ),
+            
+            # Additional Learning questions
+            PersonalityQuestion(
+                "lea_2",
+                "You retain information best through:",
+                PersonalityDimension.LEARNING_PREFERENCE,
+                [
+                    ("Seeing demonstrations and visuals", 0.0),
+                    ("Listening to explanations", 0.2),
+                    ("Trying it yourself", 0.4),
+                    ("Writing notes and summaries", 0.6)
+                ]
+            ),
+            
+            # Additional Goal Orientation questions
+            PersonalityQuestion(
+                "goa_2",
+                "What gives you the most satisfaction?",
+                PersonalityDimension.GOAL_ORIENTATION,
+                [
+                    ("Completing challenging tasks successfully", 0.0),
+                    ("Learning and discovering new things", 0.25),
+                    ("Helping others achieve their goals", 0.5),
+                    ("Building something lasting and reliable", 0.75)
+                ]
+            ),
+            
+            # More Extraversion questions
+            PersonalityQuestion(
+                "ext_4",
+                "In a meeting, you typically:",
+                PersonalityDimension.EXTRAVERSION,
+                [
+                    ("Actively participate and share ideas", 0.9),
+                    ("Listen mostly, speak when necessary", 0.2),
+                    ("Contribute when asked or when I have expertise", 0.5),
+                    ("Prefer to discuss ideas with individuals after", 0.1)
+                ]
+            ),
+            PersonalityQuestion(
+                "ext_5",
+                "How do you prefer to celebrate achievements?",
+                PersonalityDimension.EXTRAVERSION,
+                [
+                    ("With a big group celebration", 0.9),
+                    ("Quiet personal acknowledgment", 0.1),
+                    ("Small gathering with close friends", 0.6),
+                    ("Don't need much celebration", 0.3)
+                ]
+            ),
+            
+            # More Agreeableness questions
+            PersonalityQuestion(
+                "agr_3",
+                "When conflicts arise, your approach is:",
+                PersonalityDimension.AGREEABLENESS,
+                [
+                    ("Seek compromise and mutual understanding", 0.9),
+                    ("Stand firm on principles", 0.2),
+                    ("Avoid confrontation if possible", 0.6),
+                    ("Analyze the situation logically", 0.4)
+                ]
+            ),
+            PersonalityQuestion(
+                "agr_4",
+                "How important is it for you to maintain harmony?",
+                PersonalityDimension.AGREEABLENESS,
+                [
+                    ("Very important - I work hard to keep peace", 0.9),
+                    ("Somewhat important - but truth matters more", 0.4),
+                    ("Not a priority - results matter most", 0.1),
+                    ("Important in personal, less in professional", 0.6)
+                ]
+            ),
+            
+            # More Conscientiousness questions
+            PersonalityQuestion(
+                "con_3",
+                "Your workspace is typically:",
+                PersonalityDimension.CONSCIENTIOUSNESS,
+                [
+                    ("Very organized and systematic", 0.9),
+                    ("Organized enough to find things", 0.6),
+                    ("Creative chaos - I know where things are", 0.3),
+                    ("Depends on current workload", 0.5)
+                ]
+            ),
+            PersonalityQuestion(
+                "con_4",
+                "When planning a project, you:",
+                PersonalityDimension.CONSCIENTIOUSNESS,
+                [
+                    ("Create detailed timelines and checklists", 0.9),
+                    ("Have general goals and adapt as you go", 0.3),
+                    ("Plan key milestones, flexible on details", 0.6),
+                    ("Prefer to start and figure out as you go", 0.1)
+                ]
+            ),
+            
+            # More Neuroticism questions
+            PersonalityQuestion(
+                "neu_3",
+                "When facing criticism, you:",
+                PersonalityDimension.NEUROTICISM,
+                [
+                    ("Take it very personally and worry", 0.9),
+                    ("Feel briefly upset but recover quickly", 0.5),
+                    ("See it as opportunity for growth", 0.1),
+                    ("Analyze it objectively", 0.2)
+                ]
+            ),
+            PersonalityQuestion(
+                "neu_4",
+                "How do you handle uncertainty?",
+                PersonalityDimension.NEUROTICISM,
+                [
+                    ("Find it stressful and anxiety-inducing", 0.9),
+                    ("Manage it with careful planning", 0.6),
+                    ("Accept it as part of life", 0.2),
+                    ("Find it exciting and full of possibilities", 0.0)
+                ]
+            ),
+            
+            # More Openness questions
+            PersonalityQuestion(
+                "ope_3",
+                "Your ideal weekend activity:",
+                PersonalityDimension.OPENNESS,
+                [
+                    ("Trying something new and adventurous", 0.9),
+                    ("Familiar activities you enjoy", 0.2),
+                    ("Mix of new and familiar", 0.6),
+                    ("Whatever feels right in the moment", 0.7)
+                ]
+            ),
+            PersonalityQuestion(
+                "ope_4",
+                "When reading or learning, you prefer:",
+                PersonalityDimension.OPENNESS,
+                [
+                    ("Philosophy, art, abstract concepts", 0.9),
+                    ("Practical how-to guides", 0.2),
+                    ("Historical facts and biographies", 0.4),
+                    ("Science and technical topics", 0.6)
+                ]
+            ),
+            
+            # More Communication questions
+            PersonalityQuestion(
+                "com_3",
+                "When explaining complex ideas, you:",
+                PersonalityDimension.COMMUNICATION_STYLE,
+                [
+                    ("Get straight to the key points", 0.0),
+                    ("Build context gradually", 0.25),
+                    ("Use logical step-by-step breakdown", 0.5),
+                    ("Use metaphors and analogies", 0.75),
+                    ("Check understanding and adjust approach", 1.0)
+                ]
+            ),
+            PersonalityQuestion(
+                "com_4",
+                "Your preferred writing style is:",
+                PersonalityDimension.COMMUNICATION_STYLE,
+                [
+                    ("Brief and efficient", 0.0),
+                    ("Thoughtful and considerate", 0.5),
+                    ("Precise with technical detail", 0.3),
+                    ("Engaging with storytelling", 0.8)
+                ]
+            ),
+            
+            # More Learning questions
+            PersonalityQuestion(
+                "lea_3",
+                "In a training session, you learn best by:",
+                PersonalityDimension.LEARNING_PREFERENCE,
+                [
+                    ("Watching demonstrations", 0.0),
+                    ("Listening to expert lectures", 0.2),
+                    ("Hands-on practice immediately", 0.4),
+                    ("Reading materials first", 0.6),
+                    ("Discussion with peers", 0.8),
+                    ("Self-paced independent study", 1.0)
+                ]
+            ),
+            PersonalityQuestion(
+                "lea_4",
+                "When troubleshooting a problem, you:",
+                PersonalityDimension.LEARNING_PREFERENCE,
+                [
+                    ("Look for visual diagrams or screenshots", 0.0),
+                    ("Ask someone to explain it", 0.2),
+                    ("Experiment until you figure it out", 0.4),
+                    ("Read documentation thoroughly", 0.6)
+                ]
+            ),
+            
+            # More Goal Orientation questions
+            PersonalityQuestion(
+                "goa_3",
+                "Success means:",
+                PersonalityDimension.GOAL_ORIENTATION,
+                [
+                    ("Reaching concrete measurable goals", 0.0),
+                    ("Continuously learning and growing", 0.25),
+                    ("Positive impact on others", 0.5),
+                    ("Long-term stability and security", 0.75),
+                    ("Creating unique and original work", 1.0)
+                ]
+            ),
+            PersonalityQuestion(
+                "goa_4",
+                "When choosing projects, priority goes to:",
+                PersonalityDimension.GOAL_ORIENTATION,
+                [
+                    ("Clear objectives with measurable outcomes", 0.0),
+                    ("Opportunities to learn new things", 0.25),
+                    ("Helping or collaborating with others", 0.5),
+                    ("Building something sustainable", 0.75)
+                ]
+            ),
+            
+            # Additional diverse questions for better profiling
+            PersonalityQuestion(
+                "ext_6",
+                "Your energy level is highest:",
+                PersonalityDimension.EXTRAVERSION,
+                [
+                    ("When surrounded by people and activity", 0.9),
+                    ("In quiet, peaceful environments", 0.1),
+                    ("Varies based on the situation", 0.5),
+                    ("When focused on interesting work", 0.4)
+                ]
+            ),
+            PersonalityQuestion(
+                "agr_5",
+                "When someone makes a mistake, you:",
+                PersonalityDimension.AGREEABLENESS,
+                [
+                    ("Focus on understanding and helping them improve", 0.9),
+                    ("Point out the error and correct approach", 0.2),
+                    ("Mention it gently with encouragement", 0.7),
+                    ("Fix it yourself without mentioning", 0.5)
+                ]
+            ),
+            PersonalityQuestion(
+                "con_5",
+                "You view rules and procedures as:",
+                PersonalityDimension.CONSCIENTIOUSNESS,
+                [
+                    ("Important guidelines to follow carefully", 0.9),
+                    ("Suggestions that can be adapted", 0.3),
+                    ("Necessary but sometimes constraining", 0.5),
+                    ("Starting points for improvement", 0.4)
+                ]
+            ),
+            PersonalityQuestion(
+                "neu_5",
+                "Your stress management approach:",
+                PersonalityDimension.NEUROTICISM,
+                [
+                    ("I get stressed easily and need support", 0.9),
+                    ("I manage stress with specific techniques", 0.4),
+                    ("Stress doesn't affect me much", 0.1),
+                    ("I thrive under moderate pressure", 0.2)
+                ]
+            ),
+            PersonalityQuestion(
+                "ope_5",
+                "When presented with a new idea, you:",
+                PersonalityDimension.OPENNESS,
+                [
+                    ("Embrace it enthusiastically", 0.9),
+                    ("Evaluate it carefully first", 0.3),
+                    ("Consider both pros and cons", 0.6),
+                    ("Prefer proven approaches", 0.1)
+                ]
+            ),
+            PersonalityQuestion(
+                "com_5",
+                "In conversations, you prioritize:",
+                PersonalityDimension.COMMUNICATION_STYLE,
+                [
+                    ("Efficiency and clarity", 0.0),
+                    ("Maintaining positive relationships", 0.8),
+                    ("Accuracy and completeness", 0.3),
+                    ("Creativity and engagement", 0.7)
+                ]
+            ),
+            PersonalityQuestion(
+                "lea_5",
+                "Your ideal learning environment:",
+                PersonalityDimension.LEARNING_PREFERENCE,
+                [
+                    ("Visual presentations and demos", 0.0),
+                    ("Interactive discussions", 0.2),
+                    ("Hands-on lab or workshop", 0.4),
+                    ("Library or quiet study space", 0.6),
+                    ("Collaborative group setting", 0.8),
+                    ("Self-directed online learning", 1.0)
+                ]
+            ),
+            PersonalityQuestion(
+                "goa_5",
+                "You feel most accomplished when:",
+                PersonalityDimension.GOAL_ORIENTATION,
+                [
+                    ("You exceed performance targets", 0.0),
+                    ("You discover something new", 0.25),
+                    ("You help someone succeed", 0.5),
+                    ("You build something reliable", 0.75),
+                    ("You create something innovative", 1.0)
+                ]
+            ),
+            
+            # Final round of questions for comprehensive assessment
+            PersonalityQuestion(
+                "ext_7",
+                "Networking events make you feel:",
+                PersonalityDimension.EXTRAVERSION,
+                [
+                    ("Energized and excited", 0.9),
+                    ("Drained but manageable", 0.3),
+                    ("Uncomfortable and exhausting", 0.1),
+                    ("Depends on the people and topic", 0.6)
+                ]
+            ),
+            PersonalityQuestion(
+                "agr_6",
+                "When giving advice, you're typically:",
+                PersonalityDimension.AGREEABLENESS,
+                [
+                    ("Empathetic and supportive", 0.9),
+                    ("Direct and honest", 0.2),
+                    ("Balanced and diplomatic", 0.7),
+                    ("Analytical and objective", 0.4)
+                ]
+            ),
+            PersonalityQuestion(
+                "con_6",
+                "For long-term goals, you:",
+                PersonalityDimension.CONSCIENTIOUSNESS,
+                [
+                    ("Create detailed multi-year plans", 0.9),
+                    ("Have general direction, plan quarterly", 0.6),
+                    ("Adapt goals based on opportunities", 0.3),
+                    ("Focus on present, future unfolds naturally", 0.1)
+                ]
+            ),
+            PersonalityQuestion(
+                "neu_6",
+                "When things don't go as planned:",
+                PersonalityDimension.NEUROTICISM,
+                [
+                    ("I feel anxious and overthink it", 0.9),
+                    ("I feel disappointed but move on", 0.4),
+                    ("I quickly pivot to plan B", 0.1),
+                    ("I see it as a learning opportunity", 0.2)
+                ]
+            ),
+            PersonalityQuestion(
+                "ope_6",
+                "Your approach to traditions:",
+                PersonalityDimension.OPENNESS,
+                [
+                    ("Value and respect tradition", 0.2),
+                    ("Question and often change traditions", 0.9),
+                    ("Appreciate some, question others", 0.6),
+                    ("Create new traditions", 0.8)
+                ]
+            ),
+            PersonalityQuestion(
+                "com_6",
+                "When someone is upset, you:",
+                PersonalityDimension.COMMUNICATION_STYLE,
+                [
+                    ("Offer direct solutions", 0.0),
+                    ("Listen empathetically and comfort", 1.0),
+                    ("Ask questions to understand the problem", 0.5),
+                    ("Give space until they're ready", 0.3)
+                ]
+            ),
+            PersonalityQuestion(
+                "lea_6",
+                "To master a skill, you prefer:",
+                PersonalityDimension.LEARNING_PREFERENCE,
+                [
+                    ("Watch experts perform it", 0.0),
+                    ("Have someone guide you through it", 0.2),
+                    ("Practice repeatedly on your own", 0.4),
+                    ("Study the theory then apply", 0.6),
+                    ("Learn with a study group", 0.8),
+                    ("Figure it out through trial and error", 1.0)
+                ]
+            ),
+            PersonalityQuestion(
+                "goa_6",
+                "Your work motivation comes from:",
+                PersonalityDimension.GOAL_ORIENTATION,
+                [
+                    ("Competition and achievement", 0.0),
+                    ("Curiosity and discovery", 0.25),
+                    ("Making a difference for others", 0.5),
+                    ("Building lasting value", 0.75),
+                    ("Self-expression and innovation", 1.0)
+                ]
             )
         ]
         
@@ -220,17 +709,17 @@ class PersonalityProfiler:
         if user_id in self.assessment_sessions:
             return self.assessment_sessions[user_id]
         
-        # Select initial questions (start with 3-4 key questions)
-        initial_questions = random.sample(self.questions[:6], 3)
+        # Use ALL questions, shuffled once at the start
+        all_questions = random.sample(self.questions, len(self.questions))
         
         session = {
             "user_id": user_id,
-            "questions": initial_questions,
+            "questions": all_questions,
             "current_question": 0,
             "responses": {},
-            "estimated_time": "3-5 minutes",
+            "estimated_time": "10-15 minutes",
             "can_pause": True,
-            "stage": "initial"
+            "stage": "full"
         }
         
         self.assessment_sessions[user_id] = session
@@ -248,13 +737,19 @@ class PersonalityProfiler:
         
         question = session["questions"][session["current_question"]]
         
+        # Check if this question was already answered (e.g., when going back)
+        selected_option = None
+        if question.question_id in session["responses"]:
+            selected_option = session["responses"][question.question_id]["option_id"]
+        
         return {
             "question_id": question.question_id,
             "text": question.text,
             "options": [{"id": i, "text": opt[0]} for i, opt in enumerate(question.options)],
             "progress": f"{session['current_question'] + 1}/{len(session['questions'])}",
-            "can_skip": True,
-            "can_pause": True
+            "can_skip": False,
+            "can_pause": True,
+            "selected_option": selected_option  # Include previously selected answer
         }
     
     def record_response(self, user_id: str, question_id: str, option_id: int) -> bool:
@@ -280,6 +775,32 @@ class PersonalityProfiler:
         }
         
         session["current_question"] += 1
+        
+        # Auto-save progress after each response
+        self._save_session(user_id)
+        
+        return True
+    
+    def go_back(self, user_id: str) -> bool:
+        """Go back to previous question"""
+        if user_id not in self.assessment_sessions:
+            return False
+        
+        session = self.assessment_sessions[user_id]
+        
+        # Can't go back from first question
+        if session["current_question"] <= 0:
+            return False
+        
+        # Go back one question
+        session["current_question"] -= 1
+        
+        # Keep the previous response so it can be shown as selected
+        # User can change it by selecting a different option
+        
+        # Save the updated session
+        self._save_session(user_id)
+        
         return True
     
     def analyze_responses(self, user_id: str) -> PersonalityProfile:
@@ -367,19 +888,88 @@ class PersonalityProfiler:
         total_questions = len(self.questions)
         profile.confidence_level = min(response_count / total_questions, 1.0)
         
-        if response_count >= 3:
-            profile.assessment_stage = "partial"
-        if response_count >= 6:
+        # Determine assessment stage
+        if response_count >= total_questions:
             profile.assessment_stage = "complete"
+        elif response_count >= total_questions * 0.5:
+            profile.assessment_stage = "partial"
+        else:
+            profile.assessment_stage = "initial"
         
         return profile
     
     def save_profile(self, profile: PersonalityProfile):
-        """Save personality profile to file"""
+        """Save personality profile to file and database with history"""
         profile_file = self.profiles_dir / f"{profile.user_id}_profile.json"
         
+        # Convert profile to dict and handle enum serialization
+        profile_dict = asdict(profile)
+        
+        # Convert enums to their string values (handle both enum objects and strings)
+        for enum_field in ['communication_style', 'learning_preference', 'goal_orientation']:
+            value = profile_dict.get(enum_field)
+            if hasattr(value, 'value'):
+                # It's an enum object - get the string value
+                profile_dict[enum_field] = value.value
+            elif isinstance(value, str):
+                # Already a string - keep it
+                pass
+            else:
+                # Unknown type - try to convert to string
+                profile_dict[enum_field] = str(value)
+        
         with open(profile_file, 'w') as f:
-            json.dump(asdict(profile), f, indent=2)
+            json.dump(profile_dict, f, indent=2)
+        
+        # Also save to database if we have a user_profile_manager
+        try:
+            from integrated_database import IntegratedDatabase
+            db = IntegratedDatabase()
+            
+            # Get existing profile to maintain history
+            existing_profile = db.get_user_profile_by_username(profile.user_id)
+            if existing_profile:
+                user_id = existing_profile['id']
+                current_prefs = existing_profile.get('preferences', {})
+                assessment_history = current_prefs.get('assessment_history', [])
+                
+                # Create new assessment entry with timestamp
+                new_assessment = {
+                    'timestamp': profile.updated_at,
+                    'jung_types': {
+                        'extraversion_introversion': (profile.extraversion - 0.5) * 20,  # Convert 0-1 to -10 to +10
+                        'sensing_intuition': (profile.openness - 0.5) * 20,
+                        'thinking_feeling': (profile.agreeableness - 0.5) * 20,
+                        'judging_perceiving': (profile.conscientiousness - 0.5) * 20
+                    },
+                    'big_five': {
+                        'openness': int(profile.openness * 10),
+                        'conscientiousness': int(profile.conscientiousness * 10),
+                        'extraversion': int(profile.extraversion * 10),
+                        'agreeableness': int(profile.agreeableness * 10),
+                        'neuroticism': int(profile.neuroticism * 10)
+                    }
+                }
+                
+                # Add to history
+                assessment_history.append(new_assessment)
+                
+                # Keep only last 10 assessments
+                if len(assessment_history) > 10:
+                    assessment_history = assessment_history[-10:]
+                
+                # Update preferences with current traits and history
+                psychological_attributes = {
+                    'jung_types': new_assessment['jung_types'],
+                    'big_five': new_assessment['big_five'],
+                    'assessment_completed_at': profile.updated_at,
+                    'assessment_history': assessment_history
+                }
+                
+                db.update_user_preferences(user_id, psychological_attributes)
+        except Exception as e:
+            print(f"Warning: Could not save to database: {e}")
+            # Continue even if database save fails
     
     def load_profile(self, user_id: str) -> Optional[PersonalityProfile]:
         """Load existing personality profile"""
@@ -474,3 +1064,75 @@ class PersonalityProfiler:
             settings["suggest_alternatives"] = True
         
         return settings
+    
+    def _save_session(self, user_id: str):
+        """Save assessment session to disk"""
+        if user_id not in self.assessment_sessions:
+            return
+        
+        session = self.assessment_sessions[user_id].copy()
+        
+        # Convert PersonalityQuestion objects to serializable format
+        serializable_questions = []
+        for q in session["questions"]:
+            serializable_questions.append({
+                "question_id": q.question_id,
+                "text": q.text,
+                "dimension": q.dimension.value,
+                "options": q.options,
+                "weight": q.weight
+            })
+        
+        session["questions"] = serializable_questions
+        
+        # Save to file
+        session_file = self.sessions_dir / f"{user_id}_session.json"
+        with open(session_file, 'w') as f:
+            json.dump(session, f, indent=2)
+    
+    def _load_active_sessions(self):
+        """Load all paused sessions from disk"""
+        if not self.sessions_dir.exists():
+            return
+        
+        for session_file in self.sessions_dir.glob("*_session.json"):
+            try:
+                with open(session_file, 'r') as f:
+                    session_data = json.load(f)
+                
+                # Reconstruct PersonalityQuestion objects
+                questions = []
+                for q_data in session_data["questions"]:
+                    dimension = PersonalityDimension(q_data["dimension"])
+                    questions.append(PersonalityQuestion(
+                        q_data["question_id"],
+                        q_data["text"],
+                        dimension,
+                        q_data["options"],
+                        q_data.get("weight", 1.0)
+                    ))
+                
+                session_data["questions"] = questions
+                user_id = session_data["user_id"]
+                self.assessment_sessions[user_id] = session_data
+                
+            except Exception as e:
+                print(f"Error loading session {session_file}: {e}")
+    
+    def pause_session(self, user_id: str) -> bool:
+        """Pause and save assessment session"""
+        if user_id in self.assessment_sessions:
+            self._save_session(user_id)
+            return True
+        return False
+    
+    def clear_session(self, user_id: str):
+        """Clear session from memory and disk"""
+        # Remove from memory
+        if user_id in self.assessment_sessions:
+            del self.assessment_sessions[user_id]
+        
+        # Remove from disk
+        session_file = self.sessions_dir / f"{user_id}_session.json"
+        if session_file.exists():
+            session_file.unlink()

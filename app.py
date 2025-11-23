@@ -11,11 +11,19 @@ from datetime import datetime, timedelta
 from ai_compare.compare import AICompare
 from ai_compare.chatbot import AIChatbot
 from ai_compare.motivational_chatbot import MotivationalChatbot
+from ai_compare.wisdom_chatbot import WisdomChatbot
+from ai_compare.stoic_chatbot import StoicChatbot
+from ai_compare.psychologist_chatbot import PsychologistChatbot
 from ai_compare.conversation_manager import ConversationManager
 from ai_compare.personality_profiler import PersonalityProfiler
 from ai_compare.personality_ui import PersonalityFeedbackWindow, PersonalityAssessmentUI
 from ai_compare.user_profile_manager import UserProfileManager
 from auto_doc_hook import enable_auto_docs, update_docs_now
+
+# New character system
+from ai_compare.character_factory import CharacterFactory
+from ai_compare.character_routes import register_character_routes
+from ai_compare.character_configs import CHARACTER_CONFIGS
 
 # Import the integrated database system
 from integrated_database import IntegratedDatabase
@@ -59,7 +67,35 @@ integrated_db = IntegratedDatabase()
 email_service = EmailService()
 ai_compare = AICompare()
 chatbot = AIChatbot()
-motivational_bot = MotivationalChatbot()
+
+# Initialize ALL characters through factory (unified system)
+print("\n=== Initializing All Characters ===")
+all_characters = {}
+character_ids = [
+    "super_motivational_coach",  # Max
+    "wisdom_sage",                # Sage Wei
+    "stoic_philosopher",          # Marcus
+    "psychologist",               # Dr. Elena
+    "zen_master",                 # Master Kai
+    "business_coach",             # Coach Ryan
+    "life_coach",                 # Coach Jordan
+    "scientist"                   # Dr. Nova
+]
+
+for char_id in character_ids:
+    try:
+        all_characters[char_id] = CharacterFactory.create_character(char_id)
+        config = CHARACTER_CONFIGS.get(char_id, {})
+        display_name = config.get("display_name", char_id)
+        print(f"✓ {display_name} ({char_id}) initialized")
+    except Exception as e:
+        print(f"✗ Error initializing {char_id}: {e}")
+
+# Keep legacy references for backward compatibility in existing routes
+motivational_bot = all_characters.get("super_motivational_coach")
+wisdom_bot = all_characters.get("wisdom_sage")
+stoic_bot = all_characters.get("stoic_philosopher")
+psychologist_bot = all_characters.get("psychologist")
 
 # Initialize personality system
 personality_profiler = PersonalityProfiler()
@@ -92,6 +128,12 @@ def require_auth(f):
         return f(*args, **kwargs)
     decorated_function.__name__ = f.__name__
     return decorated_function
+
+# Favicon route to prevent 404 errors
+@app.route('/favicon.ico')
+def favicon():
+    """Serve favicon or return 204 No Content"""
+    return '', 204
 
 # Authentication routes
 @app.route('/api/auth/signup', methods=['POST'])
@@ -202,6 +244,45 @@ def change_password():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/auth/change-email', methods=['POST'])
+@require_auth
+def change_email():
+    """Change user email"""
+    try:
+        data = request.get_json()
+        new_email = data.get('newEmail')
+        password = data.get('password')
+        
+        if not new_email or not password:
+            return jsonify({'error': 'New email and password are required'}), 400
+        
+        # Verify password
+        user = integrated_db.authenticate_user(request.current_user['username'], password)
+        if not user:
+            return jsonify({'error': 'Password is incorrect'}), 401
+        
+        # Check if email is already in use
+        existing_user = integrated_db.get_user_by_email(new_email)
+        if existing_user and existing_user['id'] != request.current_user['user_id']:
+            return jsonify({'error': 'Email address is already in use'}), 400
+        
+        # Update email
+        success = integrated_db.update_user_email(request.current_user['user_id'], new_email)
+        if success:
+            # Send verification email
+            verification_code = integrated_db.create_verification_code(request.current_user['user_id'])
+            email_sent = email_service.send_verification_code(new_email, request.current_user['username'], verification_code)
+            
+            return jsonify({
+                'success': True, 
+                'message': 'Email updated successfully. Please verify your new email address.',
+                'email_sent': email_sent
+            })
+        else:
+            return jsonify({'error': 'Failed to update email'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/admin/users')
 @require_auth
 def get_all_users():
@@ -254,6 +335,77 @@ def restore_user(user_id):
             return jsonify({'success': True, 'message': 'User restored successfully'})
         else:
             return jsonify({'error': 'Failed to restore user'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/users/<int:user_id>/role', methods=['POST'])
+@require_auth
+def change_user_role(user_id):
+    """Change a user's role (admin only)"""
+    try:
+        # Check if user is administrator
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        data = request.get_json()
+        new_role = data.get('role')
+        
+        # Validate role
+        valid_roles = ['guest', 'user', 'paid', 'administrator']
+        if new_role not in valid_roles:
+            return jsonify({'error': 'Invalid role'}), 400
+        
+        # Don't allow changing own role
+        if user_id == request.current_user['user_id']:
+            return jsonify({'error': 'Cannot change your own role'}), 400
+        
+        success = integrated_db.update_user_role(user_id, new_role)
+        if success:
+            return jsonify({'success': True, 'message': f'User role changed to {new_role}'})
+        else:
+            return jsonify({'error': 'Failed to change user role'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/users/<int:user_id>/permanent-delete', methods=['POST'])
+@require_auth
+def permanent_delete_user(user_id):
+    """Permanently delete a user and all their data (admin only)"""
+    try:
+        # Check if user is administrator
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        # Don't allow deleting yourself
+        if user_id == request.current_user['user_id']:
+            return jsonify({'error': 'Cannot delete your own account'}), 400
+        
+        success = integrated_db.permanent_delete_user(user_id)
+        if success:
+            return jsonify({'success': True, 'message': 'User permanently deleted'})
+        else:
+            return jsonify({'error': 'Failed to permanently delete user'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/users/bulk-delete-deleted', methods=['POST'])
+@require_auth
+def bulk_delete_deleted_users():
+    """Permanently delete all logically deleted users (admin only)"""
+    try:
+        # Check if user is administrator
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        deleted_count = integrated_db.bulk_delete_deleted_users()
+        return jsonify({
+            'success': True, 
+            'message': f'Permanently deleted {deleted_count} users',
+            'deleted_count': deleted_count
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -624,7 +776,39 @@ def update_comprehensive_privacy():
 def get_psychology_traits():
     """Get user's psychology traits"""
     try:
+        # First check psychology_traits table
         traits = integrated_db.get_psychology_traits(request.current_user['user_id'])
+        
+        # If empty, check user_profiles.preferences for assessment data
+        if not traits:
+            profile = integrated_db.get_user_profile(request.current_user['user_id'])
+            if profile and profile.get('preferences'):
+                prefs = profile['preferences']
+                
+                # Convert Big Five from preferences to traits format
+                if 'big_five' in prefs:
+                    big_five = prefs['big_five']
+                    for trait_name, trait_value in big_five.items():
+                        traits.append({
+                            'trait_name': trait_name,
+                            'trait_value': trait_value / 10.0,  # Convert from 0-10 to 0-1
+                            'trait_description': f'{trait_name.capitalize()} trait',
+                            'created_at': prefs.get('assessment_completed_at', ''),
+                            'updated_at': prefs.get('assessment_completed_at', '')
+                        })
+                
+                # Convert Jung Types from preferences
+                if 'jung_types' in prefs:
+                    jung = prefs['jung_types']
+                    for trait_name, trait_value in jung.items():
+                        traits.append({
+                            'trait_name': f'jung_{trait_name}',
+                            'trait_value': (trait_value + 10) / 20.0,  # Convert from -10 to +10 to 0-1
+                            'trait_description': f'Jung {trait_name.replace("_", " ").title()}',
+                            'created_at': prefs.get('assessment_completed_at', ''),
+                            'updated_at': prefs.get('assessment_completed_at', '')
+                        })
+        
         return jsonify(traits)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -827,7 +1011,12 @@ def index():
 @app.route('/chatchat')
 def chatchat_interface():
     """Integrated multi-user AI chatbot interface"""
-    return render_template('multi_user.html')
+    return render_template('chatchat.html')
+
+@app.route('/user_logon')
+def user_logon_interface():
+    """User login interface - same as chatchat but without signup option"""
+    return render_template('user_logon.html')
 
 @app.route('/multi-user')
 def multi_user_redirect():
@@ -1155,6 +1344,100 @@ def toggle_reminders():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# Wisdom Sage routes
+@app.route('/sage')
+def wisdom_sage():
+    """Wisdom Sage - Taoist philosophy chatbot"""
+    return render_template('wisdom_sage.html')
+
+@app.route('/sage/chat', methods=['POST'])
+def sage_chat():
+    try:
+        data = request.get_json()
+        message = data.get('message', '')
+        include_context = data.get('include_context', True)
+        
+        if not message.strip():
+            return jsonify({'error': 'Message cannot be empty'}), 400
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        response = loop.run_until_complete(wisdom_bot.chat(message, include_context))
+        loop.close()
+        
+        return jsonify(response)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/sage/daily-wisdom')
+def sage_daily_wisdom():
+    """Get daily wisdom from Sage Wei"""
+    try:
+        wisdom = wisdom_bot.get_daily_wisdom()
+        return jsonify(wisdom)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/sage/stats')
+def sage_stats():
+    """Get wisdom chatbot statistics"""
+    try:
+        stats = wisdom_bot.get_wisdom_stats()
+        return jsonify(stats)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Stoic Philosophy routes
+@app.route('/marcus')
+def stoic_philosopher():
+    """Marcus - Stoic philosophy chatbot"""
+    return render_template('stoic_marcus.html')
+
+@app.route('/marcus/chat', methods=['POST'])
+def marcus_chat():
+    try:
+        data = request.get_json()
+        message = data.get('message', '')
+        include_context = data.get('include_context', True)
+        
+        if not message.strip():
+            return jsonify({'error': 'Message cannot be empty'}), 400
+        
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        response = loop.run_until_complete(stoic_bot.chat(message, include_context))
+        loop.close()
+        
+        return jsonify(response)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/marcus/daily-reflection')
+def marcus_daily_reflection():
+    """Get daily Stoic reflection from Marcus"""
+    try:
+        reflection = stoic_bot.get_daily_reflection()
+        return jsonify(reflection)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/marcus/stats')
+def marcus_stats():
+    """Get Stoic chatbot statistics"""
+    try:
+        stats = {
+            "session_id": stoic_bot.session_id,
+            "character": stoic_bot.personality.traits.character,
+            "conversation_count": len(stoic_bot.conversation_history),
+            "principles_count": len(stoic_bot.stoic_principles),
+            "exercises_count": len(stoic_bot.stoic_exercises)
+        }
+        return jsonify(stats)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Note: Psychologist routes now handled by dynamic character system
+
 # Personality Assessment routes
 @app.route('/personality/feedback/<session_id>')
 def get_personality_feedback(session_id):
@@ -1213,6 +1496,19 @@ def pause_assessment(user_id):
     try:
         result = personality_assessment_ui.pause_assessment(user_id)
         return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/personality/assessment/back/<user_id>', methods=['POST'])
+def go_back_assessment(user_id):
+    """Go back to previous question in assessment"""
+    try:
+        success = personality_profiler.go_back(user_id)
+        if success:
+            question_ui = personality_assessment_ui.get_current_question_ui(user_id)
+            return jsonify(question_ui)
+        else:
+            return jsonify({'error': 'Cannot go back'}), 400
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1566,6 +1862,11 @@ def save_psychological_assessment():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# Register dynamic character routes for ALL characters
+print("\n=== Registering Character Routes ===")
+register_character_routes(app, all_characters)
+print("✓ Dynamic routes registered for all 8 characters")
 
 if __name__ == '__main__':
     # Enable auto-documentation only in development (not production)

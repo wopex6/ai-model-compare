@@ -1,0 +1,19 @@
+{
+  "name": "ai-model-compare-tests",
+  "version": "1.0.0",
+  "description": "Playwright tests for AI Model Compare application",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:debug": "playwright test --debug",
+    "test:assessment": "playwright test test_assessment.spec.js",
+    "install:playwright": "playwright install"
+  },
+  "keywords": ["test", "playwright", "e2e"],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
+  }
+}

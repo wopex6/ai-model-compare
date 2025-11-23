@@ -16,6 +16,27 @@ class EmailService:
         self.sender_password = os.getenv('EMAIL_PASSWORD')
         self.smtp_server = os.getenv('SMTP_SERVER', 'smtp.gmail.com')
         self.smtp_port = int(os.getenv('SMTP_PORT', '587'))
+    
+    def _mask_email(self, email: str) -> str:
+        """Mask email showing only first 2 and last 2 chars of username
+        
+        Example:
+        - johndoe@example.com -> jo****oe@example.com
+        - ab@test.com -> ab@test.com (short emails stay visible)
+        - a@test.com -> a****@test.com
+        """
+        if '@' not in email:
+            return email
+        
+        username, domain = email.split('@', 1)
+        
+        # If username is 4 chars or less, show it all
+        if len(username) <= 4:
+            return email
+        
+        # Show first 2 and last 2 chars, mask the middle
+        masked_username = username[:2] + '****' + username[-2:]
+        return f"{masked_username}@{domain}"
         
     def send_verification_code(self, recipient_email: str, username: str, verification_code: str) -> bool:
         """Send verification code email"""
@@ -25,6 +46,9 @@ class EmailService:
             return False
         
         try:
+            # Mask email for privacy (show first 2 and last 2 chars of username)
+            masked_email = self._mask_email(recipient_email)
+            
             # Create message
             message = MIMEMultipart("alternative")
             message["Subject"] = "Email Verification - AI ChatChat"
@@ -45,7 +69,7 @@ class EmailService:
                     <p>Thank you for signing up. Please verify your email address to start chatting with our AI.</p>
                     
                     <div style="background: white; padding: 20px; margin: 20px 0; border-radius: 8px; text-align: center;">
-                      <p style="margin: 0 0 10px 0; color: #666;">Your verification code is:</p>
+                      <p style="margin: 0 0 10px 0; color: #666;">Verification code for <strong>{masked_email}</strong>:</p>
                       <h1 style="font-size: 36px; letter-spacing: 8px; color: #667eea; margin: 10px 0;">{verification_code}</h1>
                       <p style="margin: 10px 0 0 0; color: #999; font-size: 14px;">This code will expire in 1 hour</p>
                     </div>
@@ -69,7 +93,7 @@ class EmailService:
             
             Thank you for signing up. Please verify your email address to start chatting with our AI.
             
-            Your verification code is: {verification_code}
+            Verification code for {masked_email}: {verification_code}
             
             This code will expire in 1 hour.
             

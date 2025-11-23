@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Chatbot - Multi-User Environment</title>
+    <title>AI Chatbot - User Login</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='multi_user_styles.css') }}">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
@@ -52,43 +52,10 @@
                         </div>
                         <button type="submit" class="btn btn-primary">Login</button>
                     </form>
-                    <div class="auth-links">
-                        <p>Don't have an account? <a href="#" id="show-signup">Sign up here</a></p>
-                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Signup Screen -->
-        <div id="signup-screen" class="screen">
-            <div class="container">
-                <div class="auth-card">
-                    <h1>Create Account</h1>
-                    <form id="signup-form">
-                        <div class="form-group">
-                            <label for="signup-username">Username</label>
-                            <input type="text" id="signup-username" name="username" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="signup-email">Email</label>
-                            <input type="email" id="signup-email" name="email" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="signup-password">Password</label>
-                            <input type="password" id="signup-password" name="password" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="signup-confirm-password">Confirm Password</label>
-                            <input type="password" id="signup-confirm-password" name="confirmPassword" required>
-                        </div>
-                        <button type="submit" class="btn btn-primary">Sign Up</button>
-                    </form>
-                    <div class="auth-links">
-                        <p>Already have an account? <a href="#" id="show-login">Login here</a></p>
-                    </div>
-                </div>
-            </div>
-        </div>
 
         <!-- Main Dashboard -->
         <div id="dashboard-screen" class="screen">
@@ -97,10 +64,9 @@
                     <h2>AI Chatbot</h2>
                 </div>
                 <div class="nav-menu">
-                    <button class="nav-btn active" data-tab="chat">AI Chat</button>
+                    <button class="nav-btn active" data-tab="chat">Conversations</button>
                     <button class="nav-btn" data-tab="profile">Profile</button>
                     <button class="nav-btn" data-tab="psychology">Psychology</button>
-                    <button class="nav-btn" data-tab="conversations">Conversations</button>
                     <button class="nav-btn" data-tab="settings">Settings</button>
                     <button class="nav-btn" data-tab="admin-chat" id="admin-chat-tab-btn">
                         <i class="fas fa-comment-dots"></i> Contact Admin
@@ -123,7 +89,7 @@
                     <i class="fas fa-envelope"></i>
                     <div class="banner-text">
                         <strong>Please verify your email address</strong>
-                        <span>Check your email for a 6-digit verification code.</span>
+                        <span id="verification-banner-email">Check your email for a 6-digit verification code.</span>
                     </div>
                     <button class="btn btn-primary" id="verify-email-btn">Enter Code</button>
                     <button class="btn btn-secondary" id="resend-code-btn">Resend Code</button>
@@ -144,11 +110,11 @@
             </div>
 
             <main class="main-content">
-                <!-- AI Chat Tab -->
+                <!-- Conversations Tab (Combined AI Chat) -->
                 <div id="chat-tab" class="tab-content">
                     <div class="content-header">
-                        <h2>AI Chat</h2>
-                        <button class="btn btn-primary" id="new-chat-btn">New Chat</button>
+                        <h2>Conversations</h2>
+                        <button class="btn btn-primary" id="new-chat-btn">New Conversation</button>
                     </div>
                     <div class="chat-layout">
                         <div class="chat-sidebar">
@@ -180,9 +146,14 @@
                                         <span id="botName">Alex</span> • 
                                         <small id="botMood">Helpful</small>
                                     </div>
-                                    <button class="btn btn-outline-info btn-sm" id="showSummaryBtn" style="flex-shrink: 0;">
-                                        <i class="fas fa-chart-line"></i> Summary
-                                    </button>
+                                    <div style="display: flex; gap: 8px; flex-shrink: 0;">
+                                        <button class="btn btn-outline-secondary btn-sm" id="toggle-sound-quick" title="Toggle notification sound" style="flex-shrink: 0;">
+                                            <i class="fas fa-volume-mute" id="sound-icon"></i>
+                                        </button>
+                                        <button class="btn btn-outline-info btn-sm" id="showSummaryBtn" style="flex-shrink: 0;">
+                                            <i class="fas fa-chart-line"></i> Summary
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                             
@@ -473,6 +444,23 @@
                             <button type="submit" class="btn btn-primary">Change Password</button>
                         </form>
                     </div>
+                    
+                    <div class="settings-section" style="margin-top: 30px;">
+                        <h3><i class="fas fa-bell"></i> Notification Settings</h3>
+                        <div class="form-group">
+                            <label style="display: flex; align-items: center; cursor: pointer; user-select: none;">
+                                <input type="checkbox" id="sound-notification-toggle" style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
+                                <span>
+                                    <strong>Sound Notification</strong>
+                                    <br>
+                                    <small style="color: #666;">Play a sound when AI response is ready (helpful for long responses)</small>
+                                </span>
+                            </label>
+                        </div>
+                        <button type="button" class="btn btn-secondary btn-sm" id="test-sound-btn">
+                            <i class="fas fa-volume-up"></i> Test Sound
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Admin Tab -->
@@ -562,21 +550,46 @@
 
                     <!-- Users Table -->
                     <div class="admin-section" style="margin-top: 32px; margin-bottom: 32px; position: relative; clear: both;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 12px; flex-wrap: wrap;">
-                            <h3 style="margin: 0;">All Users</h3>
-                            <div style="display: flex; gap: 12px; align-items: center;">
-                                <select id="user-role-filter" style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; background: white; cursor: pointer;">
-                                    <option value="all">All Roles</option>
-                                    <option value="administrator">Administrator</option>
-                                    <option value="user">User</option>
-                                    <option value="paid">Paid</option>
-                                    <option value="guest">Guest</option>
-                                </select>
-                                <input type="text" id="user-search-input" placeholder="Search by username or email..." style="width: 300px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px;">
+                        <div style="margin-bottom: 16px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                <h3 style="margin: 0;">All Users</h3>
+                                <div style="display: flex; gap: 12px; align-items: center;">
+                                    <select id="user-role-filter" style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; background: white; cursor: pointer;">
+                                        <option value="all">All Roles</option>
+                                        <option value="administrator">Administrator</option>
+                                        <option value="user">User</option>
+                                        <option value="paid">Paid</option>
+                                        <option value="guest">Guest</option>
+                                    </select>
+                                    <input type="text" id="user-search-input" placeholder="Search by username or email..." style="width: 300px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px;">
+                                </div>
+                            </div>
+                            <!-- Bulk Delete Section - Prominent & Collapsible -->
+                            <div id="bulk-delete-section" style="background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center;">
+                                <div style="display: flex; align-items: center; gap: 12px;">
+                                    <i class="fas fa-exclamation-triangle" style="color: #ff6b6b; font-size: 20px;"></i>
+                                    <div>
+                                        <strong style="color: #856404;">Danger Zone:</strong>
+                                        <span style="color: #856404; margin-left: 8px;">Permanently delete all logically deleted users</span>
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <button class="btn btn-danger" id="bulk-delete-users-btn" onclick="app.bulkDeleteAllDeletedUsers()" title="Permanently delete ALL logically deleted users" style="font-weight: 600;">
+                                        <i class="fas fa-trash-alt"></i> Bulk Delete All Deleted Users
+                                    </button>
+                                    <button onclick="document.getElementById('bulk-delete-section').style.display='none'; document.getElementById('bulk-delete-section-toggle').style.display='block';" style="background: none; border: none; cursor: pointer; padding: 4px 8px; color: #856404; font-size: 20px;" title="Hide this panel">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="bulk-delete-section-toggle" style="margin-top: 8px; display: none;">
+                                <button onclick="document.getElementById('bulk-delete-section').style.display='flex'; document.getElementById('bulk-delete-section-toggle').style.display='none';" style="background: #fff3cd; border: 1px solid #ffc107; padding: 6px 12px; border-radius: 4px; cursor: pointer; color: #856404; font-size: 12px;">
+                                    <i class="fas fa-exclamation-triangle"></i> Show Danger Zone
+                                </button>
                             </div>
                         </div>
                         <div class="table-container" style="max-height: 500px; overflow-x: auto; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px;">
-                            <table class="admin-table">
+                            <table class="admin-table" style="min-width: 1200px; width: 100%;">
                                 <thead style="position: sticky; top: 0; background: white; z-index: 20;">
                                     <tr>
                                         <th class="sortable" data-column="id" style="cursor: pointer; user-select: none;" title="Click to sort by ID">
@@ -603,7 +616,7 @@
                                         <th class="sortable" data-column="created_at" style="cursor: pointer; user-select: none;" title="Click to sort by Joined Date">
                                             Joined <i class="fas fa-sort" style="margin-left: 4px; color: #667eea;"></i>
                                         </th>
-                                        <th>Actions</th>
+                                        <th style="min-width: 80px; width: 80px; text-align: center;">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="admin-users-table">
@@ -729,7 +742,7 @@
     <div id="notification" class="notification"></div>
 
     <script src="{{ url_for('static', filename='file_upload_handler.js') }}"></script>
-    <script src="{{ url_for('static', filename='multi_user_app.js') }}?v=20251018_2127"></script>
+    <script src="{{ url_for('static', filename='multi_user_app.js') }}?v=20251105_1542"></script>
     <style>
         /* Prevent scroll flash by setting initial scroll position */
         html {
@@ -1397,6 +1410,7 @@
                 closeBannerBtn.addEventListener('click', () => {
                     personalityTestBanner.style.display = 'none';
                     localStorage.setItem('personality-banner-dismissed', 'true');
+                    // Stay on current tab - don't navigate away
                 });
             }
             

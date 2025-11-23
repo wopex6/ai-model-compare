@@ -200,6 +200,83 @@ PERSONALITY_PRESETS = {
         creativity_level=0.9,
         empathy_level=0.9,
         humor_level=0.8
+    ),
+    
+    "wisdom_sage": PersonalityTraits(
+        character="Sage Wei",
+        mood=Mood.CALM,
+        goal=Goal.EDUCATE,
+        context_awareness=0.98,
+        formality_level=0.6,
+        creativity_level=0.95,
+        empathy_level=0.95,
+        humor_level=0.4
+    ),
+    
+    "stoic_philosopher": PersonalityTraits(
+        character="Marcus",
+        mood=Mood.CALM,
+        goal=Goal.EDUCATE,
+        context_awareness=0.97,
+        formality_level=0.7,
+        creativity_level=0.85,
+        empathy_level=0.90,
+        humor_level=0.3
+    ),
+    
+    "psychologist": PersonalityTraits(
+        character="Dr. Elena",
+        mood=Mood.EMPATHETIC,
+        goal=Goal.ASSIST,
+        context_awareness=0.98,
+        formality_level=0.5,
+        creativity_level=0.75,
+        empathy_level=0.99,
+        humor_level=0.5
+    ),
+    
+    "zen_master": PersonalityTraits(
+        character="Master Kai",
+        mood=Mood.CALM,
+        goal=Goal.EDUCATE,
+        context_awareness=0.99,
+        formality_level=0.6,
+        creativity_level=0.90,
+        empathy_level=0.95,
+        humor_level=0.4
+    ),
+    
+    "business_coach": PersonalityTraits(
+        character="Coach Ryan",
+        mood=Mood.FOCUSED,
+        goal=Goal.ASSIST,
+        context_awareness=0.95,
+        formality_level=0.5,
+        creativity_level=0.85,
+        empathy_level=0.75,
+        humor_level=0.6
+    ),
+    
+    "life_coach": PersonalityTraits(
+        character="Coach Jordan",
+        mood=Mood.ENTHUSIASTIC,
+        goal=Goal.INSPIRE,
+        context_awareness=0.96,
+        formality_level=0.3,
+        creativity_level=0.88,
+        empathy_level=0.92,
+        humor_level=0.7
+    ),
+    
+    "scientist": PersonalityTraits(
+        character="Dr. Nova",
+        mood=Mood.CURIOUS,
+        goal=Goal.EDUCATE,
+        context_awareness=0.97,
+        formality_level=0.6,
+        creativity_level=0.92,
+        empathy_level=0.70,
+        humor_level=0.5
     )
 }
 

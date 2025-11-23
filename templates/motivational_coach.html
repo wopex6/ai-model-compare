@@ -296,9 +296,51 @@
                 grid-template-columns: repeat(2, 1fr);
             }
         }
+        
+        .typing-indicator.active {
+            display: block;
+        }
+        
+        .back-button {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            border: 2px solid #ff6b6b;
+            color: #ff6b6b;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+        
+        .back-button:hover {
+            background: #ff6b6b;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
+        }
+        
+        .back-button i {
+            font-size: 1.2rem;
+        }
     </style>
 </head>
 <body>
+    <!-- Back to Dashboard Button -->
+    <a href="/" class="back-button">
+        <i class="fas fa-arrow-left"></i>
+        <span>Back to Dashboard</span>
+    </a>
+    
     <div class="coach-container">
         <!-- Header -->
         <div class="coach-header">
@@ -354,20 +396,20 @@
                     </div>
                     
                     <div class="quick-actions">
-                        <button class="quick-action-btn" onclick="sendQuickMessage('add goal \"Learn something new\" \"Master a new skill in 30 days\"')">
+                        <button class="quick-action-btn" onclick='sendQuickMessage("add goal")'>
                             🎯 Add Goal
                         </button>
-                        <button class="quick-action-btn" onclick="sendQuickMessage('schedule activity \"Workout session\"')">
+                        <button class="quick-action-btn" onclick='sendQuickMessage("schedule activity")'>
                             ⏰ Schedule Activity
                         </button>
-                        <button class="quick-action-btn" onclick="sendQuickMessage('show progress')">
+                        <button class="quick-action-btn" onclick='sendQuickMessage("show progress")'>
                             📊 Show Progress
                         </button>
-                        <button class="quick-action-btn" onclick="sendQuickMessage('motivate me')">
+                        <button class="quick-action-btn" onclick='sendQuickMessage("motivate me")'>
                             🚀 Motivate Me!
                         </button>
-                        <button class="quick-action-btn" onclick="sendQuickMessage('upcoming activities')">
-                            📅 What\'s Next
+                        <button class="quick-action-btn" onclick='sendQuickMessage("upcoming activities")'>
+                            📅 What's Next
                         </button>
                     </div>
 

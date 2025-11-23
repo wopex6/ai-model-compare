@@ -394,3 +394,17 @@ class MotivationalChatbot(AIChatbot):
             "total_goals": len(self.motivational_system.goals),
             "total_activities": len(self.motivational_system.activities)
         }
+    
+    def get_daily_insight(self) -> str:
+        """Get daily motivational insight - for unified character system"""
+        from .character_configs import CHARACTER_CONFIGS
+        insights = CHARACTER_CONFIGS.get("super_motivational_coach", {}).get("daily_insights", [
+            "The only way to do great work is to love what you do! 🔥",
+            "Your potential is LIMITLESS! Go get it! 💪"
+        ])
+        import random
+        return random.choice(insights)
+    
+    def get_character_stats(self) -> Dict:
+        """Get character stats - for unified character system"""
+        return self.get_motivational_stats()

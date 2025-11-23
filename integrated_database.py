@@ -267,6 +267,24 @@ class IntegratedDatabase:
             }
         return None
     
+    def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
+        """Get user by username"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT id, username, email, created_at FROM users WHERE username = ?', (username,))
+        user = cursor.fetchone()
+        conn.close()
+        
+        if user:
+            return {
+                'id': user[0],
+                'username': user[1],
+                'email': user[2],
+                'created_at': user[3]
+            }
+        return None
+    
     def update_user_password(self, user_id: int, new_password: str) -> bool:
         """Update user password"""
         conn = self.get_connection()
@@ -283,6 +301,44 @@ class IntegratedDatabase:
         conn.close()
         return success
     
+    def get_user_by_email(self, email: str) -> Optional[Dict[str, Any]]:
+        """Get user by email"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT id, username, email, created_at FROM users WHERE email = ?', (email,))
+        user = cursor.fetchone()
+        conn.close()
+        
+        if user:
+            return {
+                'id': user[0],
+                'username': user[1],
+                'email': user[2],
+                'created_at': user[3]
+            }
+        return None
+    
+    def update_user_email(self, user_id: int, new_email: str) -> bool:
+        """Update user email"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                UPDATE users SET email = ?, updated_at = CURRENT_TIMESTAMP, email_verified = 0
+                WHERE id = ?
+            ''', (new_email, user_id))
+            
+            success = cursor.rowcount > 0
+            conn.commit()
+            return success
+        except sqlite3.IntegrityError:
+            # Email already in use
+            return False
+        finally:
+            conn.close()
+    
     # Profile methods
     def get_user_profile(self, user_id: int) -> Optional[Dict[str, Any]]:
         """Get user profile"""
@@ -291,7 +347,7 @@ class IntegratedDatabase:
         
         cursor.execute('''
             SELECT up.first_name, up.last_name, up.bio, up.avatar_url, up.birth_date, up.location, up.preferences,
-                   u.user_role
+                   u.user_role, u.email, u.username
             FROM user_profiles up
             JOIN users u ON up.user_id = u.id
             WHERE up.user_id = ?
@@ -309,7 +365,42 @@ class IntegratedDatabase:
                 'birth_date': profile[4] or '',
                 'location': profile[5] or '',
                 'preferences': json.loads(profile[6]) if profile[6] else {},
-                'user_role': profile[7] or 'guest'
+                'user_role': profile[7] or 'guest',
+                'email': profile[8] or '',
+                'username': profile[9] or ''
+            }
+        return None
+    
+    def get_user_profile_by_username(self, username: str) -> Optional[Dict[str, Any]]:
+        """Get user profile by username"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT up.user_id, up.first_name, up.last_name, up.bio, up.avatar_url, up.birth_date, up.location, up.preferences,
+                   u.user_role, u.email, u.username, u.id
+            FROM user_profiles up
+            JOIN users u ON up.user_id = u.id
+            WHERE u.username = ?
+        ''', (username,))
+        
+        profile = cursor.fetchone()
+        conn.close()
+        
+        if profile:
+            return {
+                'id': profile[11],  # user.id
+                'user_id': profile[0],
+                'first_name': profile[1] or '',
+                'last_name': profile[2] or '',
+                'bio': profile[3] or '',
+                'avatar_url': profile[4] or '',
+                'birth_date': profile[5] or '',
+                'location': profile[6] or '',
+                'preferences': json.loads(profile[7]) if profile[7] else {},
+                'user_role': profile[8] or 'guest',
+                'email': profile[9] or '',
+                'username': profile[10] or ''
             }
         return None
     
@@ -337,6 +428,33 @@ class IntegratedDatabase:
         conn.commit()
         conn.close()
         return success
+    
+    def update_user_preferences(self, user_id: int, preferences: Dict[str, Any]) -> bool:
+        """Update or merge user preferences"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Get existing preferences
+        cursor.execute('SELECT preferences FROM user_profiles WHERE user_id = ?', (user_id,))
+        row = cursor.fetchone()
+        
+        if row:
+            existing_prefs = json.loads(row[0]) if row[0] else {}
+            # Merge new preferences with existing ones
+            existing_prefs.update(preferences)
+            
+            cursor.execute('''
+                UPDATE user_profiles SET preferences = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = ?
+            ''', (json.dumps(existing_prefs), user_id))
+            
+            success = cursor.rowcount > 0
+            conn.commit()
+            conn.close()
+            return success
+        
+        conn.close()
+        return False
     
     # Psychology traits methods
     def get_psychology_traits(self, user_id: int) -> List[Dict[str, Any]]:
@@ -762,6 +880,116 @@ class IntegratedDatabase:
         except Exception as e:
             print(f"Error restoring user: {e}")
             return False
+        finally:
+            conn.close()
+    
+    def update_user_role(self, user_id: int, new_role: str) -> bool:
+        """Update a user's role"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                UPDATE users 
+                SET user_role = ? 
+                WHERE id = ?
+            ''', (new_role, user_id))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"Error updating user role: {e}")
+            return False
+        finally:
+            conn.close()
+    
+    def permanent_delete_user(self, user_id: int) -> bool:
+        """Permanently delete a user and all their data"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Delete in order to respect foreign key constraints
+            # 1. Delete messages (they reference conversations)
+            cursor.execute('''
+                DELETE FROM messages 
+                WHERE conversation_id IN (
+                    SELECT id FROM ai_conversations WHERE user_id = ?
+                )
+            ''', (user_id,))
+            
+            # 2. Delete message usage
+            cursor.execute('DELETE FROM message_usage WHERE user_id = ?', (user_id,))
+            
+            # 3. Delete user interactions
+            cursor.execute('DELETE FROM user_interactions WHERE user_id = ?', (user_id,))
+            
+            # 4. Delete AI conversations
+            cursor.execute('DELETE FROM ai_conversations WHERE user_id = ?', (user_id,))
+            
+            # 5. Delete admin messages
+            cursor.execute('DELETE FROM admin_messages WHERE user_id = ?', (user_id,))
+            
+            # 6. Delete psychology traits
+            cursor.execute('DELETE FROM psychology_traits WHERE user_id = ?', (user_id,))
+            
+            # 7. Delete user profiles
+            cursor.execute('DELETE FROM user_profiles WHERE user_id = ?', (user_id,))
+            
+            # 8. Finally delete the user
+            cursor.execute('DELETE FROM users WHERE id = ?', (user_id,))
+            
+            conn.commit()
+            print(f"Permanently deleted user {user_id} and all related data")
+            return True
+        except Exception as e:
+            conn.rollback()
+            print(f"Error permanently deleting user: {e}")
+            return False
+        finally:
+            conn.close()
+    
+    def bulk_delete_deleted_users(self) -> int:
+        """Permanently delete all logically deleted users and their data"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Get all deleted user IDs
+            cursor.execute('SELECT id FROM users WHERE is_deleted = 1')
+            deleted_user_ids = [row[0] for row in cursor.fetchall()]
+            
+            if not deleted_user_ids:
+                return 0
+            
+            # Delete all data for these users
+            for user_id in deleted_user_ids:
+                # Delete in order to respect foreign key constraints
+                # 1. Delete messages first (they reference conversations)
+                cursor.execute('''
+                    DELETE FROM messages 
+                    WHERE conversation_id IN (
+                        SELECT id FROM ai_conversations WHERE user_id = ?
+                    )
+                ''', (user_id,))
+                
+                # 2. Delete other related data
+                cursor.execute('DELETE FROM message_usage WHERE user_id = ?', (user_id,))
+                cursor.execute('DELETE FROM user_interactions WHERE user_id = ?', (user_id,))
+                cursor.execute('DELETE FROM ai_conversations WHERE user_id = ?', (user_id,))
+                cursor.execute('DELETE FROM admin_messages WHERE user_id = ?', (user_id,))
+                cursor.execute('DELETE FROM psychology_traits WHERE user_id = ?', (user_id,))
+                cursor.execute('DELETE FROM user_profiles WHERE user_id = ?', (user_id,))
+                
+                # 3. Finally delete the user
+                cursor.execute('DELETE FROM users WHERE id = ?', (user_id,))
+            
+            conn.commit()
+            print(f"Bulk deleted {len(deleted_user_ids)} users and all their data")
+            return len(deleted_user_ids)
+        except Exception as e:
+            conn.rollback()
+            print(f"Error bulk deleting users: {e}")
+            return 0
         finally:
             conn.close()
     

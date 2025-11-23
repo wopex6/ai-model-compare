@@ -1,4 +1,4 @@
-flask
+flask>=2.3.0
 flask-cors
 openai
 anthropic
@@ -6,7 +6,13 @@ requests
 bcrypt
 pyjwt
 google-generativeai>=0.3.0
-#llama-cpp-python>=0.2.0  # Commented out - too large for PythonAnywhere free tier
 python-dotenv>=1.0.0
 aiohttp>=3.9.0
-flask>=2.3.0
+
+# Knowledge System Dependencies
+chromadb>=0.4.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# Optional - Uncomment if needed
+#llama-cpp-python>=0.2.0  # Commented out - too large for PythonAnywhere free tier
