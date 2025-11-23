@@ -5,6 +5,7 @@ from typing_extensions import override
 import aiohttp
 from typing import Optional
 from dotenv import load_dotenv
+from .model_config import get_fallback_models, get_primary_model
 
 # Load environment variables once at module import
 load_dotenv(override=True)
@@ -28,18 +29,30 @@ class ChatGPTModel(AIModel):
         
         from openai import OpenAI
         self.client = OpenAI(api_key=api_key)
+        self.models = get_fallback_models('openai')
 
     
     async def get_response(self, prompt: str) -> str:
-        # Direct copy of gpt.py approach
-        response = self.client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
-                {"role": "user", "content": prompt}
-            ]
-        )
-        return response.choices[0].message.content
+        """Try models in order until one works"""
+        last_error = None
+        
+        for model in self.models:
+            try:
+                response = self.client.chat.completions.create(
+                    model=model,
+                    messages=[
+                        {"role": "system", "content": "You are a helpful assistant."},
+                        {"role": "user", "content": prompt}
+                    ]
+                )
+                return response.choices[0].message.content
+            except Exception as e:
+                last_error = e
+                # Try next model if this one fails
+                continue
+        
+        # If all models failed, raise the last error
+        raise last_error if last_error else Exception("All OpenAI models failed")
 
 class ClaudeModel(AIModel):
     def __init__(self):
@@ -48,14 +61,25 @@ class ClaudeModel(AIModel):
             raise ValueError("Anthropic API key not found")
         import anthropic
         self.client = anthropic.AsyncAnthropic(api_key=api_key)
+        self.models = get_fallback_models('anthropic')
     
     async def get_response(self, prompt: str) -> str:
-        response = await self.client.messages.create(
-            model="claude-3-haiku-20240307",
-            max_tokens=1000,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return response.content[0].text
+        """Try models in order until one works"""
+        last_error = None
+        
+        for model in self.models:
+            try:
+                response = await self.client.messages.create(
+                    model=model,
+                    max_tokens=1000,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+                return response.content[0].text
+            except Exception as e:
+                last_error = e
+                continue
+        
+        raise last_error if last_error else Exception("All Anthropic models failed")
 
 class GeminiModel(AIModel):
     def __init__(self):
@@ -64,11 +88,45 @@ class GeminiModel(AIModel):
             raise ValueError("Google API key not found")
         import google.generativeai as genai
         genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-1.5-flash')
+        self.genai = genai
+        self.api_key = api_key
+        self.models = get_fallback_models('google')
     
     async def get_response(self, prompt: str) -> str:
-        response = self.model.generate_content(prompt)
-        return response.text
+        """Try models in order until one works, auto-discover if all fail"""
+        last_error = None
+        
+        # Try all configured fallback models
+        for model_name in self.models:
+            try:
+                model = self.genai.GenerativeModel(model_name)
+                response = model.generate_content(prompt)
+                return response.text
+            except Exception as e:
+                last_error = e
+                continue
+        
+        # All fallbacks failed - trigger auto-discovery
+        try:
+            from .model_discovery import get_discovery
+            discovery = get_discovery()
+            
+            # Discover and update config with new models
+            new_models, working_model = await discovery.discover_and_use_new_models(
+                'google', self.api_key, self.models
+            )
+            
+            if working_model:
+                # Try the newly discovered model
+                model = self.genai.GenerativeModel(working_model)
+                response = model.generate_content(prompt)
+                # Update local models list
+                self.models = new_models
+                return response.text
+        except Exception as discovery_error:
+            last_error = discovery_error
+        
+        raise last_error if last_error else Exception("All Google models failed, including auto-discovery")
 
 class MetaModel(AIModel):
     def __init__(self):
@@ -77,26 +135,39 @@ class MetaModel(AIModel):
             raise ValueError("Meta API key not found")
         self.api_key = api_key
         self.api_url = "https://api.together.xyz/v1/chat/completions"
+        self.models = get_fallback_models('meta')
     
     async def get_response(self, prompt: str) -> str:
-        headers = {"Authorization": f"Bearer {self.api_key}"}
-        payload = {
-            "model": "meta-llama/Llama-2-7b-chat-hf",
-            "messages": [{"role": "user", "content": prompt}]
-        }
-        async with aiohttp.ClientSession() as session:
-            async with session.post(self.api_url, json=payload, headers=headers) as response:
-                data = await response.json()
-                
-                # Handle different response formats
-                if "choices" in data and len(data["choices"]) > 0:
-                    return data["choices"][0]["message"]["content"]
-                elif "response" in data:
-                    return data["response"]
-                elif "error" in data:
-                    raise Exception(f"Meta API error: {data['error']}")
-                else:
-                    raise Exception(f"Unexpected Meta response format: {data}")
+        """Try models in order until one works"""
+        last_error = None
+        
+        for model_name in self.models:
+            try:
+                headers = {"Authorization": f"Bearer {self.api_key}"}
+                payload = {
+                    "model": model_name,
+                    "messages": [{"role": "user", "content": prompt}]
+                }
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(self.api_url, json=payload, headers=headers) as response:
+                        data = await response.json()
+                        
+                        # Handle different response formats
+                        if "choices" in data and len(data["choices"]) > 0:
+                            return data["choices"][0]["message"]["content"]
+                        elif "response" in data:
+                            return data["response"]
+                        elif "error" in data:
+                            last_error = Exception(f"Meta API error: {data['error']}")
+                            continue
+                        else:
+                            last_error = Exception(f"Unexpected Meta response format: {data}")
+                            continue
+            except Exception as e:
+                last_error = e
+                continue
+        
+        raise last_error if last_error else Exception("All Meta models failed")
 
 class GrokModel(AIModel):
     def __init__(self):
