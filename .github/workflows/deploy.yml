@@ -1,0 +1,26 @@
+name: Deploy to PythonAnywhere
+
+on:
+  push:
+    branches:
+      - main  # Triggers on push to main branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Deploy to PythonAnywhere
+        uses: appleboy/ssh-action@master
+        with:
+          host: ssh.pythonanywhere.com
+          username: ${{ secrets.PYTHONANYWHERE_USERNAME }}
+          password: ${{ secrets.PYTHONANYWHERE_PASSWORD }}
+          script: |
+            cd ~/ai-model-compare
+            git pull origin main
+            source venv/bin/activate
+            pip install -r requirements.txt
+            # Reload web app
+            touch /var/www/${{ secrets.PYTHONANYWHERE_USERNAME }}_pythonanywhere_com_wsgi.py
+            echo "✅ Deployment complete!"
