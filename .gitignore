@@ -37,3 +37,10 @@ conversations/
 
 # Test files
 test_screenshots/
+
+# Files with potential API keys (security)
+test_gpt_direct.py
+gpt.py
+test_env.py
+test_gpt_direct.py 
+gpt.py 

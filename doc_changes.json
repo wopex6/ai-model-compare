@@ -1,6 +1,7 @@
 {
   "file_hashes": {
     "ai_compare\\adaptive_personality.py": "3b294733e2fead11a2e1189770156190",
+    "ai_compare\\admin_logger.py": "bc84a8a3407fd69c6b6eea16e89ae757",
     "ai_compare\\base_chatbot.py": "e8cd64b5d66275737413cf1a4de1ff61",
     "ai_compare\\base_enhanced_chatbot.py": "df33785c737e9761525d3086847c4bd5",
     "ai_compare\\character_configs.py": "378d1d49f96d5c92f6b727947924378e",
@@ -19,7 +20,8 @@
     "ai_compare\\knowledge_tracker.py": "f94636b48d6fffff12b9f006abb5efd9",
     "ai_compare\\knowledge_vector_store.py": "86c32ac7bc562af8b68bbc1f579e232f",
     "ai_compare\\models.py": "c29dc2802e76e944e401fcc2c7adedb1",
-    "ai_compare\\model_discovery.py": "d7473a64fd54acc655f7fd7f6de78820",
+    "ai_compare\\model_config.py": "a3c4d6c60607f666a17ece6fe196c614",
+    "ai_compare\\model_discovery.py": "90886b4584710f5d97407fa9f634a80b",
     "ai_compare\\motivational_chatbot.py": "5e521f38d12203e05dffee95000003e0",
     "ai_compare\\motivational_system.py": "4bb6ed5038ffa11462b3464e083544db",
     "ai_compare\\personality_profiler.py": "d05ba1a5dff7aeb8960b4c0a9fc3220b",
@@ -27,7 +29,7 @@
     "ai_compare\\psychologist_chatbot.py": "773eecf352e2523bc413732fd192ec87",
     "ai_compare\\simple_compare.py": "bf991eeb2e3b5812bb95efeb618fcb44",
     "ai_compare\\simple_compare_backup.py": "f2faf7ef2b11a5b28e65ad41c63be607",
-    "ai_compare\\simple_models.py": "1e52cae7a778c0652d29d920324b643a",
+    "ai_compare\\simple_models.py": "519fe5be9f5b8d0300e24d678e62b4cb",
     "ai_compare\\simple_models_backup.py": "91254014c132eafeccde42f6e342cbd9",
     "ai_compare\\stoic_chatbot.py": "d0162780cbf006f4a264bc7b3a913125",
     "ai_compare\\token_manager.py": "16bdbc5fa0952e8045624bbd235a23e0",
@@ -35,10 +37,10 @@
     "ai_compare\\user_profile_manager.py": "ba541700b0809395afa6046e650a7d80",
     "ai_compare\\wisdom_chatbot.py": "72978aa47f4bf569ead543d4cc90d2f0",
     "ai_compare\\__init__.py": "d41d8cd98f00b204e9800998ecf8427e",
-    "app.py": "3ea9d0a1f318db7d16c776006729923c",
+    "app.py": "0091aa1d83f7fcdc36dcb4c052772486",
     "requirements.txt": "de460fa54f13540cf9e6a298228a6241",
-    ".env": "7edfcfb2bca5b9b4918297dc1297644b"
+    ".env": "598ed9df8f31de62af8949518c2e77af"
   },
-  "last_update": "2025-11-23T14:54:13.553072",
-  "update_count": 268
+  "last_update": "2025-11-24T09:04:32.751443",
+  "update_count": 3008
 }
