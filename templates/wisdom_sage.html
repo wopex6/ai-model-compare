@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sage Wei - Ancient Wisdom Guide</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #f5e6d3 0%, #d4a574 50%, #8b7355 100%);
+            min-height: 100vh;
+            font-family: 'Georgia', 'Times New Roman', serif;
+            animation: gentleFlow 20s ease infinite;
+        }
+        
+        @keyframes gentleFlow {
+            0%, 100% { background: linear-gradient(135deg, #f5e6d3 0%, #d4a574 50%, #8b7355 100%); }
+            50% { background: linear-gradient(135deg, #8b7355 0%, #d4a574 50%, #f5e6d3 100%); }
+        }
+        
+        .sage-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .sage-header {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+            text-align: center;
+            border: 3px solid #8b7355;
+        }
+        
+        .sage-avatar {
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #8b7355, #d4a574);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 36px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            animation: breathe 4s ease-in-out infinite;
+            box-shadow: 0 4px 15px rgba(139, 115, 85, 0.4);
+        }
+        
+        @keyframes breathe {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.03); opacity: 0.95; }
+        }
+        
+        .daily-wisdom-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            border-left: 5px solid #8b7355;
+            font-style: italic;
+        }
+        
+        .daily-wisdom-card .wisdom-text {
+            font-size: 1.1rem;
+            color: #5a4a3a;
+            line-height: 1.8;
+        }
+        
+        .daily-wisdom-card .wisdom-source {
+            text-align: right;
+            margin-top: 15px;
+            color: #8b7355;
+            font-size: 0.9rem;
+        }
+        
+        .chat-section {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            gap: 20px;
+        }
+        
+        .main-chat {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+            border: 3px solid #d4a574;
+        }
+        
+        .chat-messages {
+            height: 550px;
+            overflow-y: auto;
+            padding: 25px;
+            background: linear-gradient(to bottom, #faf8f5, #ffffff);
+        }
+        
+        .message {
+            margin-bottom: 25px;
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+        }
+        
+        .message.user {
+            flex-direction: row-reverse;
+        }
+        
+        .message-avatar {
+            width: 45px;
+            height: 45px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            flex-shrink: 0;
+            font-family: 'Georgia', serif;
+        }
+        
+        .message.user .message-avatar {
+            background: linear-gradient(45deg, #5a7d9a, #7ba3c0);
+        }
+        
+        .message.sage .message-avatar {
+            background: linear-gradient(45deg, #8b7355, #d4a574);
+            animation: gentleGlow 3s ease-in-out infinite alternate;
+        }
+        
+        @keyframes gentleGlow {
+            from { box-shadow: 0 0 5px rgba(139, 115, 85, 0.3); }
+            to { box-shadow: 0 0 15px rgba(212, 165, 116, 0.6); }
+        }
+        
+        .message-content {
+            max-width: 75%;
+            padding: 18px 22px;
+            border-radius: 20px;
+            position: relative;
+            line-height: 1.7;
+        }
+        
+        .message.user .message-content {
+            background: linear-gradient(135deg, #5a7d9a, #7ba3c0);
+            color: white;
+            border-bottom-right-radius: 5px;
+        }
+        
+        .message.sage .message-content {
+            background: linear-gradient(135deg, #faf8f5 0%, #f5f0ea 100%);
+            border: 2px solid #d4a574;
+            border-bottom-left-radius: 5px;
+            color: #4a3a2a;
+        }
+        
+        .message-meta {
+            font-size: 11px;
+            color: #8b7355;
+            margin-top: 10px;
+            font-style: italic;
+        }
+        
+        .chat-input-section {
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            border-top: 3px solid #d4a574;
+        }
+        
+        .wisdom-actions {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .wisdom-action-btn {
+            background: linear-gradient(45deg, #8b7355, #d4a574);
+            border: none;
+            color: white;
+            padding: 10px 18px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            transition: all 0.3s ease;
+            font-family: 'Georgia', serif;
+        }
+        
+        .wisdom-action-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(139, 115, 85, 0.3);
+        }
+        
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        .sidebar-card {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            border: 2px solid #d4a574;
+        }
+        
+        .sidebar-card h6 {
+            color: #8b7355;
+            font-weight: bold;
+            margin-bottom: 15px;
+            font-family: 'Georgia', serif;
+        }
+        
+        .yin-yang-symbol {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 15px;
+            position: relative;
+            border-radius: 50%;
+            background: linear-gradient(to bottom, #2c2c2c 50%, #f5f5f5 50%);
+            animation: rotateYinYang 20s linear infinite;
+        }
+        
+        @keyframes rotateYinYang {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        .yin-yang-symbol::before,
+        .yin-yang-symbol::after {
+            content: '';
+            position: absolute;
+            width: 40px;
+            height: 80px;
+            border-radius: 50%;
+        }
+        
+        .yin-yang-symbol::before {
+            top: 0;
+            left: 0;
+            background: #2c2c2c;
+        }
+        
+        .yin-yang-symbol::after {
+            top: 0;
+            right: 0;
+            background: #f5f5f5;
+        }
+        
+        .wisdom-topic {
+            background: linear-gradient(135deg, #faf8f5, #f5f0ea);
+            padding: 12px 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            border-left: 4px solid #8b7355;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .wisdom-topic:hover {
+            transform: translateX(5px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .typing-indicator {
+            display: none;
+            padding: 15px;
+            font-style: italic;
+            color: #8b7355;
+            background: rgba(212, 165, 116, 0.1);
+            border-radius: 10px;
+            margin: 10px 0;
+        }
+        
+        .reflection-prompt {
+            background: linear-gradient(135deg, #fff8f0, #ffefd5);
+            border: 2px dashed #d4a574;
+            border-radius: 12px;
+            padding: 15px;
+            margin-top: 15px;
+            font-style: italic;
+            color: #5a4a3a;
+        }
+        
+        .bamboo-divider {
+            height: 3px;
+            background: linear-gradient(to right, transparent, #8b7355, transparent);
+            margin: 20px 0;
+        }
+        
+        @media (max-width: 768px) {
+            .chat-section {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        .back-button {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(255, 255, 255, 0.97);
+            border: 2px solid #8b7355;
+            color: #8b7355;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+        
+        .back-button:hover {
+            background: #8b7355;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(139, 115, 85, 0.4);
+        }
+        
+        .back-button i {
+            font-size: 1.2rem;
+        }
+    </style>
+</head>
+<body>
+    <!-- Back to Dashboard Button -->
+    <a href="/" class="back-button">
+        <i class="fas fa-arrow-left"></i>
+        <span>Back to Dashboard</span>
+    </a>
+    
+    <div class="sage-container">
+        <!-- Header -->
+        <div class="sage-header">
+            <div class="sage-avatar" id="sageAvatar">🍃</div>
+            <h1 class="mb-2" style="color: #5a4a3a;">Sage Wei - Ancient Wisdom Guide</h1>
+            <p class="lead mb-0" style="color: #8b7355;">
+                Welcome, seeker of wisdom. Let us explore the eternal truths together, 
+                one step at a time on the path of understanding.
+            </p>
+        </div>
+
+        <!-- Daily Wisdom -->
+        <div class="daily-wisdom-card" id="dailyWisdomCard">
+            <div class="wisdom-text" id="dailyWisdomText">Loading daily wisdom...</div>
+            <div class="wisdom-source" id="dailyWisdomSource">~ Contemplation</div>
+        </div>
+
+        <!-- Main Chat Section -->
+        <div class="chat-section">
+            <div class="main-chat">
+                <div class="chat-messages" id="chatMessages">
+                    <div class="message sage">
+                        <div class="message-avatar">🍃</div>
+                        <div class="message-content">
+                            <div>
+                                Greetings, dear friend. I am Sage Wei, a humble guide on the path of ancient wisdom. 🌿
+                                <br><br>
+                                Like water that flows naturally to its destination, I am here to offer contemplation 
+                                and perspective drawn from the wellspring of Taoist philosophy. 
+                                <br><br>
+                                <strong>You may explore with me:</strong><br>
+                                • Share a parable or story of wisdom<br>
+                                • Discuss principles like Wu Wei (effortless action) or Yin Yang<br>
+                                • Seek wisdom on balance, simplicity, patience, or acceptance<br>
+                                • Ask any question that dwells in your heart<br>
+                                <br>
+                                The path of a thousand miles begins beneath your feet. 
+                                What wisdom do you seek today?
+                            </div>
+                            <div class="message-meta">Just now • Powered by Claude Sonnet 4.5 • In stillness, truth emerges</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chat-input-section">
+                    <div class="typing-indicator" id="typingIndicator">
+                        <i class="fas fa-leaf"></i> Sage Wei contemplates your inquiry<span class="typing-dots">...</span>
+                    </div>
+                    
+                    <div class="wisdom-actions">
+                        <button class="wisdom-action-btn" onclick="sendQuickMessage('Share a parable about perspective')">
+                            📖 Parable
+                        </button>
+                        <button class="wisdom-action-btn" onclick="sendQuickMessage('Tell me about wu wei')">
+                            ☯️ Wu Wei
+                        </button>
+                        <button class="wisdom-action-btn" onclick="sendQuickMessage('I seek wisdom on balance')">
+                            ⚖️ Balance
+                        </button>
+                        <button class="wisdom-action-btn" onclick="sendQuickMessage('Wisdom on patience')">
+                            🌱 Patience
+                        </button>
+                        <button class="wisdom-action-btn" onclick="sendQuickMessage('I feel stuck and confused')">
+                            🌊 Guidance
+                        </button>
+                    </div>
+
+                    <div class="input-group input-group-lg">
+                        <input type="text" class="form-control" id="messageInput" 
+                               placeholder="Share what dwells in your heart..." 
+                               style="border-radius: 25px 0 0 25px; border: 2px solid #d4a574; font-family: 'Georgia', serif;">
+                        <button class="btn btn-primary btn-lg" id="sendBtn" 
+                                style="border-radius: 0 25px 25px 0; background: linear-gradient(45deg, #8b7355, #d4a574); border: 2px solid #d4a574;">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <!-- Yin Yang Symbol -->
+                <div class="sidebar-card text-center">
+                    <h6>☯️ Balance & Harmony</h6>
+                    <div class="yin-yang-symbol"></div>
+                    <small class="text-muted" style="font-style: italic;">
+                        In the dance of opposites,<br>harmony is found
+                    </small>
+                </div>
+
+                <!-- Wisdom Topics -->
+                <div class="sidebar-card">
+                    <h6>🌿 Wisdom Topics</h6>
+                    <div class="wisdom-topic" onclick="sendQuickMessage('Tell me about balance')">
+                        <strong>Balance</strong><br>
+                        <small>The harmony of opposites</small>
+                    </div>
+                    <div class="wisdom-topic" onclick="sendQuickMessage('Tell me about simplicity')">
+                        <strong>Simplicity</strong><br>
+                        <small>Returning to the essential</small>
+                    </div>
+                    <div class="wisdom-topic" onclick="sendQuickMessage('Tell me about patience')">
+                        <strong>Patience</strong><br>
+                        <small>The river carves the stone</small>
+                    </div>
+                    <div class="wisdom-topic" onclick="sendQuickMessage('Tell me about acceptance')">
+                        <strong>Acceptance</strong><br>
+                        <small>Flowing like water</small>
+                    </div>
+                </div>
+
+                <!-- Session Stats -->
+                <div class="sidebar-card">
+                    <h6>📊 Your Journey</h6>
+                    <div class="text-center">
+                        <div class="mb-3">
+                            <strong id="conversationDepth">0</strong><br>
+                            <small>Exchanges</small>
+                        </div>
+                        <div class="bamboo-divider"></div>
+                        <div>
+                            <strong id="wisdomTopics">0</strong><br>
+                            <small>Topics Explored</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tao Principles -->
+                <div class="sidebar-card">
+                    <h6>🎋 Core Principles</h6>
+                    <div style="font-size: 0.85rem; line-height: 1.6;">
+                        <div class="mb-2">
+                            <strong>Wu Wei</strong> - Effortless action
+                        </div>
+                        <div class="mb-2">
+                            <strong>Yin Yang</strong> - Harmony in duality
+                        </div>
+                        <div class="mb-2">
+                            <strong>Ziran</strong> - Natural spontaneity
+                        </div>
+                        <div>
+                            <strong>Pu</strong> - The uncarved block
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quote of Reflection -->
+                <div class="sidebar-card" style="background: linear-gradient(135deg, #fff8f0, #ffefd5);">
+                    <p style="font-style: italic; margin: 0; color: #5a4a3a; font-size: 0.9rem;">
+                        "The journey of a thousand miles begins beneath your feet."
+                    </p>
+                    <small style="color: #8b7355; text-align: right; display: block; margin-top: 10px;">
+                        ~ Ancient Wisdom
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        class WisdomSage {
+            constructor() {
+                this.messageInput = document.getElementById('messageInput');
+                this.sendBtn = document.getElementById('sendBtn');
+                this.chatMessages = document.getElementById('chatMessages');
+                this.typingIndicator = document.getElementById('typingIndicator');
+                this.conversationCount = 0;
+                
+                this.initializeEventListeners();
+                this.loadDailyWisdom();
+                this.loadStats();
+            }
+            
+            initializeEventListeners() {
+                this.sendBtn.addEventListener('click', () => this.sendMessage());
+                this.messageInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') this.sendMessage();
+                });
+            }
+            
+            async loadDailyWisdom() {
+                try {
+                    const response = await fetch('/sage/daily-wisdom');
+                    const data = await response.json();
+                    
+                    document.getElementById('dailyWisdomText').textContent = data.daily_wisdom;
+                    document.getElementById('dailyWisdomSource').textContent = `~ ${data.source}`;
+                } catch (error) {
+                    console.error('Error loading daily wisdom:', error);
+                }
+            }
+            
+            async loadStats() {
+                try {
+                    const response = await fetch('/sage/stats');
+                    const stats = await response.json();
+                    
+                    document.getElementById('conversationDepth').textContent = stats.conversation_depth || 0;
+                    document.getElementById('wisdomTopics').textContent = stats.wisdom_topics?.length || 7;
+                } catch (error) {
+                    console.error('Error loading stats:', error);
+                }
+            }
+            
+            async sendMessage(message = null) {
+                const messageText = message || this.messageInput.value.trim();
+                if (!messageText) return;
+                
+                // Add user message
+                this.addMessage(messageText, 'user');
+                if (!message) this.messageInput.value = '';
+                
+                // Show typing indicator
+                this.showTyping();
+                
+                try {
+                    const response = await fetch('/sage/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            message: messageText,
+                            include_context: true
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.error) {
+                        this.addMessage(`✨ ${data.error}`, 'sage', true);
+                    } else {
+                        this.addMessage(data.response, 'sage', false, data);
+                        this.conversationCount++;
+                        
+                        // Add reflection prompt if provided
+                        if (data.reflection_prompt) {
+                            setTimeout(() => {
+                                this.addReflectionPrompt(data.reflection_prompt);
+                            }, 1000);
+                        }
+                        
+                        // Update stats
+                        setTimeout(() => this.loadStats(), 500);
+                    }
+                } catch (error) {
+                    this.addMessage(`🍃 The connection wavers, yet wisdom remains. Please try again when the moment is right.`, 'sage', true);
+                } finally {
+                    this.hideTyping();
+                }
+            }
+            
+            addMessage(content, sender, isError = false, metadata = null) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${sender}`;
+                
+                const avatar = sender === 'user' ? '👤' : '🍃';
+                const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                
+                let metaInfo = time;
+                if (metadata && metadata.response_metadata) {
+                    metaInfo += ` • Powered by Claude`;
+                }
+                if (metadata && metadata.wisdom_type) {
+                    metaInfo += ` • ${metadata.wisdom_type.replace('_', ' ')}`;
+                }
+                
+                messageDiv.innerHTML = `
+                    <div class="message-avatar">${avatar}</div>
+                    <div class="message-content ${isError ? 'text-danger' : ''}">
+                        <div>${content}</div>
+                        <div class="message-meta">${metaInfo}</div>
+                    </div>
+                `;
+                
+                this.chatMessages.appendChild(messageDiv);
+                this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+            }
+            
+            addReflectionPrompt(prompt) {
+                const promptDiv = document.createElement('div');
+                promptDiv.className = 'reflection-prompt';
+                promptDiv.innerHTML = `
+                    <strong>💭 Reflection:</strong><br>
+                    ${prompt}
+                `;
+                
+                this.chatMessages.appendChild(promptDiv);
+                this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+            }
+            
+            showTyping() {
+                this.typingIndicator.style.display = 'block';
+                this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+            }
+            
+            hideTyping() {
+                this.typingIndicator.style.display = 'none';
+            }
+        }
+        
+        // Global function for quick action buttons
+        function sendQuickMessage(message) {
+            if (window.sage) {
+                window.sage.sendMessage(message);
+            }
+        }
+        
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            window.sage = new WisdomSage();
+        });
+        
+        // Gentle breathing animation for avatar
+        setInterval(() => {
+            const avatar = document.getElementById('sageAvatar');
+            if (avatar) {
+                avatar.style.transition = 'transform 1s ease';
+            }
+        }, 4000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,140 @@
+"""
+Character Routes - Dynamic route generator for all characters
+Eliminates need to manually create routes for each character
+"""
+from flask import render_template, request, jsonify
+import asyncio
+from .character_factory import CharacterFactory
+
+
+def register_character_routes(app, characters_dict):
+    """
+    Dynamically register routes for all characters
+    
+    Args:
+        app: Flask app instance
+        characters_dict: Dict mapping character_id to chatbot instance
+    """
+    
+    # Get all character IDs
+    character_ids = CharacterFactory.get_all_character_ids()
+    
+    # Register routes for each character
+    for char_id in character_ids:
+        # Skip psychologist if using old implementation
+        if char_id == "psychologist" and char_id not in characters_dict:
+            continue
+            
+        # Create route functions with proper closures
+        _register_character_page(app, char_id)
+        _register_chat_endpoint(app, char_id, characters_dict)
+        _register_insight_endpoint(app, char_id, characters_dict)
+        _register_stats_endpoint(app, char_id, characters_dict)
+
+
+def _register_character_page(app, character_id):
+    """Register main character page route"""
+    
+    def character_page():
+        from .character_configs import CHARACTER_CONFIGS
+        character_info = CharacterFactory.get_character_info(character_id)
+        
+        # Check if character has custom template, otherwise use universal
+        config = CHARACTER_CONFIGS.get(character_id, {})
+        template = config.get('custom_template', 'character_universal.html')
+        
+        return render_template(
+            template,
+            character=character_info,
+            character_id=character_id
+        )
+    
+    # Set proper endpoint name  and register
+    app.add_url_rule(
+        f'/{character_id}',
+        endpoint=f'{character_id}_page',
+        view_func=character_page
+    )
+
+
+def _register_chat_endpoint(app, character_id, characters_dict):
+    """Register chat endpoint for character"""
+    
+    def character_chat():
+        try:
+            data = request.get_json()
+            message = data.get('message', '')
+            include_context = data.get('include_context', True)
+            
+            if not message.strip():
+                return jsonify({'error': 'Message cannot be empty'}), 400
+            
+            # Get character instance
+            bot = characters_dict.get(character_id)
+            if not bot:
+                return jsonify({'error': f'Character {character_id} not initialized'}), 500
+            
+            # Run async chat
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            response = loop.run_until_complete(bot.chat(message, include_context))
+            loop.close()
+            
+            return jsonify(response)
+        except Exception as e:
+            print(f"Error in {character_id} chat: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    # Register route
+    app.add_url_rule(
+        f'/{character_id}/chat',
+        endpoint=f'{character_id}_chat',
+        view_func=character_chat,
+        methods=['POST']
+    )
+
+
+def _register_insight_endpoint(app, character_id, characters_dict):
+    """Register daily insight endpoint"""
+    
+    def character_insight():
+        try:
+            bot = characters_dict.get(character_id)
+            if not bot:
+                return jsonify({'error': f'Character {character_id} not initialized'}), 500
+            
+            insight = bot.get_daily_insight()
+            return jsonify({"insight": insight})
+        except Exception as e:
+            print(f"Error in {character_id} insight: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    # Register route
+    app.add_url_rule(
+        f'/{character_id}/daily-insight',
+        endpoint=f'{character_id}_insight',
+        view_func=character_insight
+    )
+
+
+def _register_stats_endpoint(app, character_id, characters_dict):
+    """Register stats endpoint"""
+    
+    def character_stats():
+        try:
+            bot = characters_dict.get(character_id)
+            if not bot:
+                return jsonify({'error': f'Character {character_id} not initialized'}), 500
+            
+            stats = bot.get_character_stats()
+            return jsonify(stats)
+        except Exception as e:
+            print(f"Error in {character_id} stats: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    # Register route
+    app.add_url_rule(
+        f'/{character_id}/stats',
+        endpoint=f'{character_id}_stats',
+        view_func=character_stats
+    )

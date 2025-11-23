@@ -12,6 +12,7 @@ from .chatbot_personality import ChatbotPersonality, PERSONALITY_PRESETS, USER_T
 from .conversation_manager import ConversationManager
 from .personality_profiler import PersonalityProfiler
 from .adaptive_personality import AdaptivePersonality
+from .tools import AITools, FunctionCallingParser
 
 class AIChatbot:
     """Main chatbot class that combines personality with model comparison"""
@@ -29,6 +30,10 @@ class AIChatbot:
         
         self.ai_compare = AICompare()
         self.conversation_manager = ConversationManager()
+        
+        # Initialize tools for real-time data access
+        self.tools = AITools()
+        self.function_parser = FunctionCallingParser()
         
         # Initialize personality profiling system
         self.personality_profiler = PersonalityProfiler()
@@ -60,8 +65,11 @@ class AIChatbot:
         # Adapt personality based on user message
         self.personality.adapt_to_user_message(user_message)
         
+        # Check if we need to use tools for real-time data
+        enhanced_message, tool_results = self.function_parser.enhance_prompt_with_tools(user_message, self.tools)
+        
         # Build context-aware prompt
-        enhanced_prompt = self._build_enhanced_prompt(user_message, include_context)
+        enhanced_prompt = self._build_enhanced_prompt(enhanced_message, include_context)
         
         # Get response from model comparison system
         model_responses = await self.ai_compare.ask_all(enhanced_prompt)
@@ -122,7 +130,9 @@ class AIChatbot:
                 "models_used": len([r for r in model_responses.values() if not r.startswith('Error:')]),
                 "response_length": len(final_response),
                 "personality_adapted": True,
-                "adaptive_personality_applied": True
+                "adaptive_personality_applied": True,
+                "tools_used": tool_results is not None,
+                "real_time_data": tool_results if tool_results else None
             },
             "personality_feedback": self.adaptive_personality.get_personality_feedback(),
             "raw_model_responses": model_responses if include_context else None

@@ -221,7 +221,22 @@ class PersonalityAssessmentUI:
         question_data = self.profiler.get_next_question(user_id)
         
         if not question_data:
-            return self._get_assessment_complete_ui(user_id)
+            # Check if user has an active session (means assessment is complete in this session)
+            # vs no session at all (means they haven't started or need to check saved profile)
+            if user_id in self.profiler.assessment_sessions:
+                session = self.profiler.assessment_sessions[user_id]
+                # If current_question >= total questions, assessment is complete
+                if session["current_question"] >= len(session["questions"]):
+                    return self._get_assessment_complete_ui(user_id)
+            
+            # No active session - check if user has a saved completed profile
+            saved_profile = self.profiler.load_profile(user_id)
+            if saved_profile and saved_profile.assessment_stage == "complete":
+                # User has completed assessment previously
+                return self._get_assessment_complete_ui(user_id)
+            
+            # No session and no completed profile - return None so frontend shows welcome screen
+            return None
         
         return {
             "ui_type": "assessment_question",
@@ -231,9 +246,9 @@ class PersonalityAssessmentUI:
             "question_id": question_data["question_id"],
             "can_skip": question_data["can_skip"],
             "can_pause": question_data["can_pause"],
+            "selected_option": question_data.get("selected_option"),  # Pass through selected option for highlight
             "buttons": [
-                {"id": "pause_assessment", "label": "Pause", "style": "secondary"},
-                {"id": "skip_question", "label": "Skip Question", "style": "default"}
+                {"id": "pause_assessment", "label": "Pause", "style": "secondary"}
             ]
         }
     
@@ -284,12 +299,15 @@ class PersonalityAssessmentUI:
     
     def pause_assessment(self, user_id: str) -> Dict:
         """Pause current assessment"""
-        if user_id in self.current_sessions:
+        # Save session to disk
+        saved = self.profiler.pause_session(user_id)
+        
+        if saved and user_id in self.current_sessions:
             session = self.current_sessions[user_id]
             return {
                 "ui_type": "assessment_paused",
                 "title": "Assessment Paused",
-                "message": f"You can resume anytime. Progress: {session['current_question']}/{len(session['questions'])}",
+                "message": f"Progress saved! You can resume anytime. Progress: {session['current_question']}/{len(session['questions'])}",
                 "buttons": [
                     {"id": "resume_assessment", "label": "Resume", "style": "primary"},
                     {"id": "close", "label": "Close", "style": "default"}

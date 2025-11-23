@@ -1,0 +1,14 @@
+# Dynamic Knowledge Expansion System Dependencies
+
+# Core vector database
+chromadb>=0.4.0
+
+# Web scraping and HTTP
+aiohttp>=3.9.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# Optional: Enhanced features
+# pypdf2>=3.0.0  # For PDF parsing
+# langchain>=0.1.0  # For advanced RAG
+# sentence-transformers>=2.2.0  # For custom embeddings

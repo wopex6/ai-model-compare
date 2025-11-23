@@ -1,0 +1,1754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Chatbot - Multi-User Environment</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='multi_user_styles.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div id="app">
+        <!-- Message Notification (Top Right) -->
+        <div id="message-notification" class="message-notification" style="display: none;">
+            <div class="notification-content">
+                <div class="notification-icon">
+                    <i class="fas fa-envelope"></i>
+                </div>
+                <div class="notification-text">
+                    <div class="notification-sender"></div>
+                    <div class="notification-message"></div>
+                </div>
+            </div>
+            <button class="notification-close" onclick="app.closeMessageNotification()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        
+        <!-- Login Screen -->
+        <div id="login-screen" class="screen">
+            <div class="container">
+                <div class="auth-card">
+                    <h1>AI Chatbot Login</h1>
+                    <form id="login-form">
+                        <div class="form-group">
+                            <label for="login-username">Username</label>
+                            <input type="text" id="login-username" name="username" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="login-password">Password</label>
+                            <div class="password-input-container">
+                                <input type="password" id="login-password" name="password" required>
+                                <button type="button" class="password-toggle" id="password-toggle">
+                                    <span class="toggle-text">Show</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="checkbox-label">
+                                <input type="checkbox" id="remember-username" name="rememberUsername">
+                                Remember Username
+                            </label>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Login</button>
+                    </form>
+                    <div class="auth-links">
+                        <p>Don't have an account? <a href="#" id="show-signup">Sign up here</a></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Signup Screen -->
+        <div id="signup-screen" class="screen">
+            <div class="container">
+                <div class="auth-card">
+                    <h1>Create Account</h1>
+                    <form id="signup-form">
+                        <div class="form-group">
+                            <label for="signup-username">Username</label>
+                            <input type="text" id="signup-username" name="username" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="signup-email">Email</label>
+                            <input type="email" id="signup-email" name="email" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="signup-password">Password</label>
+                            <input type="password" id="signup-password" name="password" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="signup-confirm-password">Confirm Password</label>
+                            <input type="password" id="signup-confirm-password" name="confirmPassword" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Sign Up</button>
+                    </form>
+                    <div class="auth-links">
+                        <p>Already have an account? <a href="#" id="show-login">Login here</a></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Dashboard -->
+        <div id="dashboard-screen" class="screen">
+            <nav class="navbar">
+                <div class="nav-brand">
+                    <h2>AI Chatbot</h2>
+                </div>
+                <div class="nav-menu">
+                    <button class="nav-btn active" data-tab="chat">Conversations</button>
+                    <button class="nav-btn" data-tab="ai-characters"><i class="fas fa-robot"></i> AI Characters</button>
+                    <button class="nav-btn" data-tab="profile">Profile</button>
+                    <button class="nav-btn" data-tab="psychology">Psychology</button>
+                    <button class="nav-btn" data-tab="settings">Settings</button>
+                    <button class="nav-btn" data-tab="admin-chat" id="admin-chat-tab-btn">
+                        <i class="fas fa-comment-dots"></i> Contact Admin
+                        <span id="admin-chat-badge" class="badge" style="display: none;">0</span>
+                    </button>
+                    <button class="nav-btn" id="admin-tab-btn" data-tab="admin" style="display: none;"><i class="fas fa-shield-alt"></i> Admin</button>
+                </div>
+                <div class="nav-user">
+                    <div class="user-info">
+                        <i class="fas fa-user-circle"></i>
+                        <span id="nav-username">Loading...</span>
+                    </div>
+                    <button class="btn btn-secondary" id="logout-btn">Logout</button>
+                </div>
+            </nav>
+
+            <!-- Email Verification Banner -->
+            <div id="email-verification-banner" class="notification-banner warning" style="display: none;">
+                <div class="banner-content">
+                    <i class="fas fa-envelope"></i>
+                    <div class="banner-text">
+                        <strong>Please verify your email address</strong>
+                        <span id="verification-banner-email">Check your email for a 6-digit verification code.</span>
+                    </div>
+                    <button class="btn btn-primary" id="verify-email-btn">Enter Code</button>
+                    <button class="btn btn-secondary" id="resend-code-btn">Resend Code</button>
+                </div>
+            </div>
+
+            <!-- Personality Test Prompt Banner -->
+            <div id="personality-test-banner" class="notification-banner" style="display: none;">
+                <div class="banner-content">
+                    <i class="fas fa-brain"></i>
+                    <div class="banner-text">
+                        <strong>Help us understand you better!</strong>
+                        <span>Take our quick personality assessment to get more personalized AI responses.</span>
+                    </div>
+                    <button class="btn btn-primary" id="take-test-banner-btn">Take Test Now</button>
+                    <button class="btn-close" id="close-banner-btn"><i class="fas fa-times"></i></button>
+                </div>
+            </div>
+
+            <main class="main-content">
+                <!-- Conversations Tab (Combined AI Chat) -->
+                <div id="chat-tab" class="tab-content">
+                    <div class="content-header">
+                        <h2>Conversations</h2>
+                        <button class="btn btn-primary" id="new-chat-btn">New Conversation</button>
+                    </div>
+                    <div class="chat-layout">
+                        <div class="chat-sidebar">
+                            <div id="chat-sessions-list">
+                                <!-- Chat sessions will be loaded here -->
+                            </div>
+                        </div>
+                        <div class="chat-main">
+                            <!-- Personality Controls -->
+                            <div class="personality-controls">
+                                <h6><i class="fas fa-user-cog"></i> Personality Settings</h6>
+                                <div style="display: flex; gap: 8px; overflow-x: auto; overflow-y: hidden; padding: 8px 0; white-space: nowrap; margin-bottom: 12px;">
+                                    <span class="personality-preset active" data-preset="helpful_assistant" style="flex-shrink: 0;">
+                                        <i class="fas fa-hands-helping"></i> Helpful
+                                    </span>
+                                    <span class="personality-preset" data-preset="creative_mentor" style="flex-shrink: 0;">
+                                        <i class="fas fa-lightbulb"></i> Creative
+                                    </span>
+                                    <span class="personality-preset" data-preset="technical_expert" style="flex-shrink: 0;">
+                                        <i class="fas fa-code"></i> Technical
+                                    </span>
+                                    <span class="personality-preset" data-preset="curious_explorer" style="flex-shrink: 0;">
+                                        <i class="fas fa-compass"></i> Explorer
+                                    </span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: nowrap; gap: 12px;">
+                                    <div class="bot-info" style="flex-shrink: 1; min-width: 0;">
+                                        <span class="bot-avatar" id="botAvatar">A</span>
+                                        <span id="botName">Alex</span> • 
+                                        <small id="botMood">Helpful</small>
+                                    </div>
+                                    <div style="display: flex; gap: 8px; flex-shrink: 0;">
+                                        <button class="btn btn-outline-secondary btn-sm" id="toggle-sound-quick" title="Toggle notification sound" style="flex-shrink: 0;">
+                                            <i class="fas fa-volume-mute" id="sound-icon"></i>
+                                        </button>
+                                        <button class="btn btn-outline-info btn-sm" id="showSummaryBtn" style="flex-shrink: 0;">
+                                            <i class="fas fa-chart-line"></i> Summary
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div id="chat-messages" class="messages-container">
+                                <div class="welcome-message">
+                                    <h3>Welcome to AI Chatbot!</h3>
+                                    <p>Start a conversation or select an existing chat from the sidebar.</p>
+                                    <p>Your conversations are personalized based on your profile and psychology traits.</p>
+                                </div>
+                                
+                                <!-- Typing Indicator -->
+                                <div class="typing-indicator" id="typingIndicator" style="display: none;">
+                                    <i class="fas fa-robot"></i> <span class="typing-dots">Thinking</span>
+                                </div>
+                            </div>
+                            <div id="message-usage-info" class="message-usage-container"></div>
+                            <div id="chat-input-area" class="message-input-area">
+                                <div class="message-input" style="display: flex; gap: 8px; align-items: flex-end;">
+                                    <textarea id="chat-input" placeholder="Type your message to the AI..." rows="1" style="resize: none; overflow-y: hidden; max-height: 120px; min-height: 40px; flex: 1;"></textarea>
+                                    <button id="send-chat-btn" class="btn btn-primary" style="align-self: flex-end;">Send</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI Characters Tab -->
+                <div id="ai-characters-tab" class="tab-content">
+                    <div class="content-header">
+                        <h2><i class="fas fa-robot"></i> AI Characters</h2>
+                        <p>Choose an AI character to chat with. Each has a unique personality and purpose.</p>
+                    </div>
+                    
+                    <div class="characters-grid">
+                        <!-- Standard Chat -->
+                        <div class="character-card">
+                            <div class="character-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                                <i class="fas fa-comments"></i>
+                            </div>
+                            <h3>Standard AI Chat</h3>
+                            <p class="character-description">Versatile AI assistant with multiple personality styles. Perfect for general conversations, questions, and tasks.</p>
+                            <div class="character-features">
+                                <span class="feature-tag"><i class="fas fa-check"></i> Multi-personality</span>
+                                <span class="feature-tag"><i class="fas fa-check"></i> Adaptive</span>
+                                <span class="feature-tag"><i class="fas fa-check"></i> General purpose</span>
+                            </div>
+                            <button class="btn btn-primary btn-block" onclick="window.app.switchTab('chat')">
+                                <i class="fas fa-arrow-right"></i> Go to Conversations
+                            </button>
+                        </div>
+
+                        <!-- Max - Motivational Coach -->
+                        <div class="character-card">
+                            <div class="character-icon" style="background: linear-gradient(45deg, #ff6b6b, #4ecdc4);">
+                                <i class="fas fa-rocket"></i>
+                            </div>
+                            <h3>Max - Motivational Coach</h3>
+                            <p class="character-description">Your super energetic motivational coach! Track goals, build streaks, and stay fired up with Max's unstoppable energy.</p>
+                            <div class="character-features">
+                                <span class="feature-tag"><i class="fas fa-fire"></i> Goal tracking</span>
+                                <span class="feature-tag"><i class="fas fa-chart-line"></i> Progress monitoring</span>
+                                <span class="feature-tag"><i class="fas fa-bolt"></i> High energy</span>
+                            </div>
+                            <button class="btn btn-primary btn-block" onclick="window.location.href='/coach'">
+                                <i class="fas fa-rocket"></i> Chat with Max
+                            </button>
+                        </div>
+
+                        <!-- Sage Wei - Wisdom Guide -->
+                        <div class="character-card">
+                            <div class="character-icon" style="background: linear-gradient(45deg, #8b7355, #d4a574);">
+                                <i class="fas fa-leaf"></i>
+                            </div>
+                            <h3>Sage Wei - Wisdom Guide</h3>
+                            <p class="character-description">Ancient wisdom meets modern AI. Explore Taoist philosophy, find balance, and gain contemplative insights with Sage Wei.</p>
+                            <div class="character-features">
+                                <span class="feature-tag"><i class="fas fa-yin-yang"></i> Taoist wisdom</span>
+                                <span class="feature-tag"><i class="fas fa-book"></i> Parables</span>
+                                <span class="feature-tag"><i class="fas fa-spa"></i> Contemplative</span>
+                            </div>
+                            <button class="btn btn-primary btn-block" onclick="window.location.href='/sage'">
+                                <i class="fas fa-leaf"></i> Chat with Sage Wei
+                            </button>
+                        </div>
+
+                        <!-- Marcus - Stoic Philosopher -->
+                        <div class="character-card">
+                            <div class="character-icon" style="background: linear-gradient(45deg, #4a5568, #718096);">
+                                <i class="fas fa-columns"></i>
+                            </div>
+                            <h3>Marcus - Stoic Philosopher</h3>
+                            <p class="character-description">Rational wisdom for modern challenges. Learn Stoic principles, build resilience, and find tranquility through virtue with Marcus.</p>
+                            <div class="character-features">
+                                <span class="feature-tag"><i class="fas fa-balance-scale"></i> Stoic wisdom</span>
+                                <span class="feature-tag"><i class="fas fa-shield-alt"></i> Resilience</span>
+                                <span class="feature-tag"><i class="fas fa-brain"></i> Rational thinking</span>
+                            </div>
+                            <button class="btn btn-primary btn-block" onclick="window.location.href='/marcus'">
+                                <i class="fas fa-columns"></i> Chat with Marcus
+                            </button>
+                        </div>
+
+                        <!-- Dr. Elena - Psychologist -->
+                        <div class="character-card">
+                            <div class="character-icon" style="background: linear-gradient(45deg, #66bb6a, #81c784);">
+                                <i class="fas fa-brain"></i>
+                            </div>
+                            <h3>Dr. Elena - Psychologist</h3>
+                            <p class="character-description">Evidence-based psychological insights and compassionate support. Explore CBT, mindfulness, and personal growth with Dr. Elena.</p>
+                            <div class="character-features">
+                                <span class="feature-tag"><i class="fas fa-heart"></i> Empathetic</span>
+                                <span class="feature-tag"><i class="fas fa-book-medical"></i> Evidence-based</span>
+                                <span class="feature-tag"><i class="fas fa-user-friends"></i> Therapeutic</span>
+                            </div>
+                            <button class="btn btn-primary btn-block" onclick="window.location.href='/psychologist'">
+                                <i class="fas fa-brain"></i> Chat with Dr. Elena
+                            </button>
+                        </div>
+
+                        <!-- Master Kai - Zen Master -->
+                        <div class="character-card">
+                            <div class="character-icon" style="background: linear-gradient(45deg, #8E24AA, #BA68C8);">
+                                <i class="fas fa-yin-yang"></i>
+                            </div>
+                            <h3>Master Kai - Zen Master</h3>
+                            <p class="character-description">Mindfulness and present moment awareness. Learn meditation, overcome overthinking, and find inner peace with Master Kai.</p>
+                            <div class="character-features">
+                                <span class="feature-tag"><i class="fas fa-om"></i> Mindful</span>
+                                <span class="feature-tag"><i class="fas fa-leaf"></i> Peaceful</span>
+                                <span class="feature-tag"><i class="fas fa-spa"></i> Zen</span>
+                            </div>
+                            <button class="btn btn-primary btn-block" onclick="window.location.href='/zen_master'">
+                                <i class="fas fa-yin-yang"></i> Chat with Master Kai
+                            </button>
+                        </div>
+
+                        <!-- Coach Ryan - Business Coach -->
+                        <div class="character-card">
+                            <div class="character-icon" style="background: linear-gradient(45deg, #1976D2, #42A5F5);">
+                                <i class="fas fa-briefcase"></i>
+                            </div>
+                            <h3>Coach Ryan - Business Coach</h3>
+                            <p class="character-description">Strategic business and leadership excellence. Build your business, improve productivity, and master leadership with Coach Ryan.</p>
+                            <div class="character-features">
+                                <span class="feature-tag"><i class="fas fa-chart-line"></i> Strategic</span>
+                                <span class="feature-tag"><i class="fas fa-lightbulb"></i> Innovative</span>
+                                <span class="feature-tag"><i class="fas fa-users"></i> Leadership</span>
+                            </div>
+                            <button class="btn btn-primary btn-block" onclick="window.location.href='/business_coach'">
+                                <i class="fas fa-briefcase"></i> Chat with Coach Ryan
+                            </button>
+                        </div>
+
+                        <!-- Coach Jordan - Life Coach -->
+                        <div class="character-card">
+                            <div class="character-icon" style="background: linear-gradient(45deg, #FF6F00, #FFA726);">
+                                <i class="fas fa-compass"></i>
+                            </div>
+                            <h3>Coach Jordan - Life Coach</h3>
+                            <p class="character-description">Personal development and life balance. Set meaningful goals, find your purpose, and live authentically with Coach Jordan.</p>
+                            <div class="character-features">
+                                <span class="feature-tag"><i class="fas fa-bullseye"></i> Goal-Oriented</span>
+                                <span class="feature-tag"><i class="fas fa-balance-scale"></i> Balanced</span>
+                                <span class="feature-tag"><i class="fas fa-star"></i> Inspiring</span>
+                            </div>
+                            <button class="btn btn-primary btn-block" onclick="window.location.href='/life_coach'">
+                                <i class="fas fa-compass"></i> Chat with Coach Jordan
+                            </button>
+                        </div>
+
+                        <!-- Dr. Nova - Scientist -->
+                        <div class="character-card">
+                            <div class="character-icon" style="background: linear-gradient(45deg, #00695C, #26A69A);">
+                                <i class="fas fa-atom"></i>
+                            </div>
+                            <h3>Dr. Nova - Scientist</h3>
+                            <p class="character-description">Science, curiosity, and critical thinking. Explore the cosmos, understand evidence, and think scientifically with Dr. Nova.</p>
+                            <div class="character-features">
+                                <span class="feature-tag"><i class="fas fa-flask"></i> Scientific</span>
+                                <span class="feature-tag"><i class="fas fa-rocket"></i> Curious</span>
+                                <span class="feature-tag"><i class="fas fa-brain"></i> Analytical</span>
+                            </div>
+                            <button class="btn btn-primary btn-block" onclick="window.location.href='/scientist'">
+                                <i class="fas fa-atom"></i> Chat with Dr. Nova
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Profile Tab -->
+                <div id="profile-tab" class="tab-content">
+                    <div class="content-header">
+                        <h2>Comprehensive Profile</h2>
+                        <div class="profile-completion">
+                            <span id="profile-completion-text">Profile: 0% Complete</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Profile Navigation -->
+                    <div class="profile-nav">
+                        <button class="profile-nav-btn active" data-page="personal">Personal Info</button>
+                        <button class="profile-nav-btn" data-page="preferences">Preferences</button>
+                        <button class="profile-nav-btn" data-page="privacy">Privacy Settings</button>
+                    </div>
+                    
+                    <!-- Page 1: Personal Information -->
+                    <div id="profile-page-personal" class="profile-page active">
+                        <h3>Personal Information</h3>
+                        <form id="personal-info-form">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="personal-name">Full Name</label>
+                                    <input type="text" id="personal-name" name="name" placeholder="Enter your full name">
+                                </div>
+                                <div class="form-group">
+                                    <label for="personal-education">Education Level</label>
+                                    <select id="personal-education" name="education">
+                                        <option value="">Select education level</option>
+                                        <option value="high-school">High School</option>
+                                        <option value="associate">Associate Degree</option>
+                                        <option value="bachelor">Bachelor's Degree</option>
+                                        <option value="master">Master's Degree</option>
+                                        <option value="doctorate">Doctorate/PhD</option>
+                                        <option value="professional">Professional Degree</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="personal-age">Age</label>
+                                    <input type="number" id="personal-age" name="age" placeholder="Enter your age">
+                                </div>
+                                <div class="form-group">
+                                    <label for="personal-location">Location</label>
+                                    <input type="text" id="personal-location" name="location" placeholder="Enter your location">
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="personal-occupation">Occupation</label>
+                                <input type="text" id="personal-occupation" name="occupation" placeholder="Enter your occupation">
+                            </div>
+                            <div class="form-group">
+                                <label for="personal-interests">Interests</label>
+                                <textarea id="personal-interests" name="interests" placeholder="Enter your interests (comma-separated)"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="personal-bio">Bio</label>
+                                <textarea id="personal-bio" name="bio" rows="4" placeholder="Tell us about yourself"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Update Personal Info</button>
+                        </form>
+                    </div>
+                    
+                    <!-- Page 2: Preferences -->
+                    <div id="profile-page-preferences" class="profile-page">
+                        <h3>Preferences & Personality</h3>
+                        <form id="preferences-form">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="pref-communication-style">Communication Style</label>
+                                    <select id="pref-communication-style" name="communication_style">
+                                        <option value="friendly">Friendly</option>
+                                        <option value="professional">Professional</option>
+                                        <option value="casual">Casual</option>
+                                        <option value="formal">Formal</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="pref-language">Language Preference</label>
+                                    <select id="pref-language" name="language_preference">
+                                        <option value="en">English</option>
+                                        <option value="es">Spanish</option>
+                                        <option value="fr">French</option>
+                                        <option value="de">German</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="pref-personality-type">Personality Type</label>
+                                    <input type="text" id="pref-personality-type" name="personality_type" placeholder="e.g., INTJ, ENFP">
+                                </div>
+                                <div class="form-group">
+                                    <label for="pref-learning-style">Learning Style</label>
+                                    <select id="pref-learning-style" name="learning_style">
+                                        <option value="visual">Visual</option>
+                                        <option value="auditory">Auditory</option>
+                                        <option value="kinesthetic">Kinesthetic</option>
+                                        <option value="mixed">Mixed</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="pref-topics">Topics of Interest</label>
+                                <textarea id="pref-topics" name="topics_of_interest" placeholder="Enter topics you're interested in (comma-separated)"></textarea>
+                            </div>
+                            <div class="form-group">
+                                <label for="pref-goals">Goals</label>
+                                <textarea id="pref-goals" name="goals" placeholder="Enter your goals (comma-separated)"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Update Preferences</button>
+                        </form>
+                    </div>
+                    
+                    <!-- Page 3: Privacy Settings -->
+                    <div id="profile-page-privacy" class="profile-page">
+                        <h3>Privacy & Data Settings</h3>
+                        <form id="privacy-form">
+                            <div class="privacy-section">
+                                <div class="privacy-item">
+                                    <label class="privacy-label">
+                                        <input type="checkbox" id="privacy-data-sharing" name="data_sharing">
+                                        <span class="checkmark"></span>
+                                        Allow data sharing for research purposes
+                                    </label>
+                                    <p class="privacy-description">Help improve AI systems by sharing anonymized interaction data</p>
+                                </div>
+                                <div class="privacy-item">
+                                    <label class="privacy-label">
+                                        <input type="checkbox" id="privacy-analytics" name="analytics">
+                                        <span class="checkmark"></span>
+                                        Enable analytics and usage tracking
+                                    </label>
+                                    <p class="privacy-description">Allow collection of usage statistics to improve your experience</p>
+                                </div>
+                                <div class="privacy-item">
+                                    <label class="privacy-label">
+                                        <input type="checkbox" id="privacy-personalization" name="personalization">
+                                        <span class="checkmark"></span>
+                                        Enable personalized AI responses
+                                    </label>
+                                    <p class="privacy-description">Use your profile data to customize AI interactions</p>
+                                </div>
+                                <div class="privacy-item">
+                                    <label class="privacy-label">
+                                        <input type="checkbox" id="privacy-marketing" name="marketing">
+                                        <span class="checkmark"></span>
+                                        Receive marketing communications
+                                    </label>
+                                    <p class="privacy-description">Get updates about new features and improvements</p>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Update Privacy Settings</button>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- Psychology Tab -->
+                <div id="psychology-tab" class="tab-content">
+                    <div class="content-header">
+                        <h2>Psychology Profile & History</h2>
+                        <div class="psychology-actions">
+                            <button class="btn btn-primary btn-large" id="take-personality-test-btn">
+                                <i class="fas fa-brain"></i> Take Personality Test
+                            </button>
+                        </div>
+                        <div class="psychology-nav">
+                            <button class="psychology-nav-btn active" data-section="current">Current Traits</button>
+                            <button class="psychology-nav-btn" data-section="history">Assessment History</button>
+                            <button class="psychology-nav-btn" data-section="chart">Progress Chart</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Current Traits Section -->
+                    <div id="psychology-current" class="psychology-section active">
+                        <div class="section-header">
+                            <h3>Current Psychology Traits</h3>
+                        </div>
+                        <div class="psychology-info">
+                            <p>Your psychology traits help the AI understand your personality and provide more personalized responses.</p>
+                            <p class="info-highlight" id="assessment-tip" style="display: none;">
+                                <i class="fas fa-lightbulb"></i>
+                                <strong>Tip:</strong> Complete the personality assessment to automatically populate your psychological profile!
+                            </p>
+                        </div>
+                        <div class="traits-grid" id="traits-grid">
+                            <!-- Traits will be loaded here -->
+                        </div>
+                    </div>
+                    
+                    <!-- Assessment History Section -->
+                    <div id="psychology-history" class="psychology-section">
+                        <div class="section-header">
+                            <h3>Assessment History</h3>
+                            <p>Track how your psychological profile has evolved over time</p>
+                        </div>
+                        <div id="assessment-history-container">
+                            <!-- Assessment history will be loaded here -->
+                        </div>
+                    </div>
+                    
+                    <!-- Progress Chart Section -->
+                    <div id="psychology-chart" class="psychology-section">
+                        <div class="section-header">
+                            <h3>Psychology Progress Chart</h3>
+                            <p>Visual representation of your psychological trait changes over time</p>
+                        </div>
+                        <div class="chart-controls">
+                            <label>
+                                <input type="radio" name="chart-type" value="jung" checked> Carl Jung Types
+                            </label>
+                            <label>
+                                <input type="radio" name="chart-type" value="bigfive"> Big Five Traits
+                            </label>
+                        </div>
+                        <div id="psychology-chart-container">
+                            <canvas id="psychology-chart-canvas" width="800" height="400"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Removed duplicate Conversations tab - merged with main chat above -->
+
+                <!-- Settings Tab -->
+                <div id="settings-tab" class="tab-content">
+                    <div class="content-header">
+                        <h2>Settings</h2>
+                    </div>
+                    <div class="settings-section">
+                        <h3>Change Password</h3>
+                        <form id="change-password-form">
+                            <div class="form-group">
+                                <label for="current-password">Current Password</label>
+                                <input type="password" id="current-password" name="currentPassword" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="new-password">New Password</label>
+                                <input type="password" id="new-password" name="newPassword" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="confirm-new-password">Confirm New Password</label>
+                                <input type="password" id="confirm-new-password" name="confirmNewPassword" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Change Password</button>
+                        </form>
+                    </div>
+                    
+                    <div class="settings-section" style="margin-top: 30px;">
+                        <h3><i class="fas fa-envelope"></i> Change Email Address</h3>
+                        <form id="change-email-form">
+                            <div class="form-group">
+                                <label for="current-email">Current Email</label>
+                                <input type="email" id="current-email" name="currentEmail" readonly style="background: #f5f5f5; cursor: not-allowed;">
+                            </div>
+                            <div class="form-group">
+                                <label for="new-email">New Email Address</label>
+                                <input type="email" id="new-email" name="newEmail" required placeholder="Enter new email address">
+                            </div>
+                            <div class="form-group">
+                                <label for="email-password">Password (for confirmation)</label>
+                                <input type="password" id="email-password" name="password" required placeholder="Enter your password">
+                            </div>
+                            <button type="submit" class="btn btn-primary">Update Email</button>
+                            <p style="margin-top: 10px; font-size: 0.9rem; color: #666;">
+                                <i class="fas fa-info-circle"></i> You will need to verify your new email address after updating.
+                            </p>
+                        </form>
+                    </div>
+                    
+                    <div class="settings-section" style="margin-top: 30px;">
+                        <h3><i class="fas fa-bell"></i> Notification Settings</h3>
+                        <div class="form-group">
+                            <label style="display: flex; align-items: center; cursor: pointer; user-select: none;">
+                                <input type="checkbox" id="sound-notification-toggle" style="margin-right: 10px; width: 18px; height: 18px; cursor: pointer;">
+                                <span>
+                                    <strong>Sound Notification</strong>
+                                    <br>
+                                    <small style="color: #666;">Play a sound when AI response is ready (helpful for long responses)</small>
+                                </span>
+                            </label>
+                        </div>
+                        <button type="button" class="btn btn-secondary btn-sm" id="test-sound-btn">
+                            <i class="fas fa-volume-up"></i> Test Sound
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Admin Tab -->
+                <div id="admin-tab" class="tab-content">
+                    <div class="content-header">
+                        <h2><i class="fas fa-shield-alt"></i> <span id="admin-dashboard-title">Dashboard</span></h2>
+                    </div>
+                    
+                    <!-- Statistics Overview -->
+                    <div class="admin-stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="fas fa-users"></i></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="stat-total-users">--</div>
+                                <div class="stat-label">Total Users</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="fas fa-comments"></i></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="stat-total-messages">--</div>
+                                <div class="stat-label">Total Messages</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="fas fa-calendar-day"></i></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="stat-messages-today">--</div>
+                                <div class="stat-label">Messages Today</div>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon"><i class="fas fa-user-check"></i></div>
+                            <div class="stat-info">
+                                <div class="stat-value" id="stat-active-today">--</div>
+                                <div class="stat-label">Active Today</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- User Messages Section -->
+                    <div class="admin-section" style="margin-top: 32px; margin-bottom: 32px; position: relative;">
+                        <h3><i class="fas fa-comments"></i> User Messages</h3>
+                        <div style="display: grid; grid-template-columns: 300px 1fr; gap: 16px; height: 500px; min-height: 500px;">
+                            <!-- User List -->
+                            <div style="border: 1px solid #ddd; border-radius: 8px; overflow-y: auto; background: white; height: 500px;">
+                                <div id="admin-chat-users-list" style="padding: 8px;">
+                                    <p style="text-align: center; color: #999; padding: 16px;">Loading users...</p>
+                                </div>
+                            </div>
+                            
+                            <!-- Chat View -->
+                            <div style="border: 1px solid #ddd; border-radius: 8px; background: white; display: flex; flex-direction: column; height: 500px;">
+                                <div id="admin-chat-header" style="padding: 16px; border-bottom: 1px solid #ddd; background: #f8f9fa; flex-shrink: 0;">
+                                    <p style="color: #999; margin: 0;">Select a user to view messages</p>
+                                </div>
+                                <div id="admin-chat-messages-view" style="flex: 1; overflow-y: auto; padding: 16px; background: #f9f9f9; min-height: 0;">
+                                    <p style="text-align: center; color: #999;">No conversation selected</p>
+                                </div>
+                                <div id="admin-chat-reply-box" style="padding: 16px; border-top: 1px solid #ddd; display: none; flex-shrink: 0;">
+                                    <div id="admin-reply-file-preview" style="margin-bottom: 8px; display: none;"></div>
+                                    
+                                    <div id="admin-reply-indicator" style="display: none; background: #e3f2fd; padding: 8px 12px; border-left: 3px solid #667eea; margin-bottom: 8px; border-radius: 4px; align-items: center; gap: 8px;">
+                                        <i class="fas fa-reply" style="color: #667eea;"></i>
+                                        <span style="flex: 1; font-size: 0.9rem; color: #333;">
+                                            Replying to: <span class="reply-preview" style="font-weight: 500;"></span>
+                                        </span>
+                                        <button onclick="app.cancelReply()" style="background: none; border: none; cursor: pointer; padding: 4px 8px; color: #666;" title="Cancel reply">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                    
+                                    <div style="display: flex; gap: 8px; align-items: center;">
+                                        <input type="file" id="admin-reply-file-input" accept="*/*" style="display: none;">
+                                        <button id="admin-reply-attach-btn" class="btn btn-secondary" style="padding: 12px; border: 1px solid #ddd; background: white; color: #666; border-radius: 4px;" title="Attach file">
+                                            <i class="fas fa-paperclip"></i>
+                                        </button>
+                                        <input type="text" id="admin-reply-input" placeholder="Type your reply..." style="flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 4px;">
+                                        <button id="send-admin-reply-btn" class="btn btn-primary">
+                                            <i class="fas fa-paper-plane"></i> Send
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Users Table -->
+                    <div class="admin-section" style="margin-top: 32px; margin-bottom: 32px; position: relative; clear: both;">
+                        <div style="margin-bottom: 16px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                                <h3 style="margin: 0;">All Users</h3>
+                                <div style="display: flex; gap: 12px; align-items: center;">
+                                    <select id="user-role-filter" style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px; background: white; cursor: pointer;">
+                                        <option value="all">All Roles</option>
+                                        <option value="administrator">Administrator</option>
+                                        <option value="user">User</option>
+                                        <option value="paid">Paid</option>
+                                        <option value="guest">Guest</option>
+                                    </select>
+                                    <input type="text" id="user-search-input" placeholder="Search by username or email..." style="width: 300px; padding: 8px 12px; border: 1px solid #ddd; border-radius: 4px;">
+                                </div>
+                            </div>
+                            <!-- Bulk Delete Section - Prominent & Collapsible -->
+                            <div id="bulk-delete-section" style="background: #fff3cd; border: 2px solid #ffc107; border-radius: 8px; padding: 12px 16px; display: flex; justify-content: space-between; align-items: center;">
+                                <div style="display: flex; align-items: center; gap: 12px;">
+                                    <i class="fas fa-exclamation-triangle" style="color: #ff6b6b; font-size: 20px;"></i>
+                                    <div>
+                                        <strong style="color: #856404;">Danger Zone:</strong>
+                                        <span style="color: #856404; margin-left: 8px;">Permanently delete all logically deleted users</span>
+                                    </div>
+                                </div>
+                                <div style="display: flex; gap: 8px; align-items: center;">
+                                    <button class="btn btn-danger" id="bulk-delete-users-btn" onclick="app.bulkDeleteAllDeletedUsers()" title="Permanently delete ALL logically deleted users" style="font-weight: 600;">
+                                        <i class="fas fa-trash-alt"></i> Bulk Delete All Deleted Users
+                                    </button>
+                                    <button onclick="document.getElementById('bulk-delete-section').style.display='none'; document.getElementById('bulk-delete-section-toggle').style.display='block';" style="background: none; border: none; cursor: pointer; padding: 4px 8px; color: #856404; font-size: 20px;" title="Hide this panel">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="bulk-delete-section-toggle" style="margin-top: 8px; display: none;">
+                                <button onclick="document.getElementById('bulk-delete-section').style.display='flex'; document.getElementById('bulk-delete-section-toggle').style.display='none';" style="background: #fff3cd; border: 1px solid #ffc107; padding: 6px 12px; border-radius: 4px; cursor: pointer; color: #856404; font-size: 12px;">
+                                    <i class="fas fa-exclamation-triangle"></i> Show Danger Zone
+                                </button>
+                            </div>
+                        </div>
+                        <div class="table-container" style="max-height: 500px; overflow-x: auto; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px;">
+                            <table class="admin-table" style="min-width: 1200px; width: 100%;">
+                                <thead style="position: sticky; top: 0; background: white; z-index: 20;">
+                                    <tr>
+                                        <th class="sortable" data-column="id" style="cursor: pointer; user-select: none;" title="Click to sort by ID">
+                                            ID <i class="fas fa-sort" style="margin-left: 4px; color: #667eea;"></i>
+                                        </th>
+                                        <th class="sortable sticky-column" data-column="username" style="cursor: pointer; user-select: none; position: sticky; left: 0; background: white; z-index: 21;" title="Click to sort by Username">
+                                            Username <i class="fas fa-sort" style="margin-left: 4px; color: #667eea;"></i>
+                                        </th>
+                                        <th class="sortable" data-column="email" style="cursor: pointer; user-select: none;" title="Click to sort by Email">
+                                            Email <i class="fas fa-sort" style="margin-left: 4px; color: #667eea;"></i>
+                                        </th>
+                                        <th class="sortable" data-column="role" style="cursor: pointer; user-select: none;" title="Click to sort by Role">
+                                            Role <i class="fas fa-sort" style="margin-left: 4px; color: #667eea;"></i>
+                                        </th>
+                                        <th class="sortable" data-column="total_messages" style="cursor: pointer; user-select: none;" title="Click to sort by Total Messages">
+                                            Total Messages <i class="fas fa-sort" style="margin-left: 4px; color: #667eea;"></i>
+                                        </th>
+                                        <th class="sortable" data-column="total_conversations" style="cursor: pointer; user-select: none;" title="Click to sort by Conversations">
+                                            Conversations <i class="fas fa-sort" style="margin-left: 4px; color: #667eea;"></i>
+                                        </th>
+                                        <th class="sortable" data-column="last_active" style="cursor: pointer; user-select: none;" title="Click to sort by Last Active">
+                                            Last Active <i class="fas fa-sort" style="margin-left: 4px; color: #667eea;"></i>
+                                        </th>
+                                        <th class="sortable" data-column="created_at" style="cursor: pointer; user-select: none;" title="Click to sort by Joined Date">
+                                            Joined <i class="fas fa-sort" style="margin-left: 4px; color: #667eea;"></i>
+                                        </th>
+                                        <th style="min-width: 80px; width: 80px; text-align: center;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="admin-users-table">
+                                    <tr>
+                                        <td colspan="9" style="text-align: center;">Loading...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Admin Chat Tab -->
+                <div id="admin-chat-tab" class="tab-content">
+                    <div class="content-header">
+                        <h2><i class="fas fa-comment-dots"></i> Contact Admin</h2>
+                        <p style="color: #666; margin-top: 8px;">Send a message to the administrator</p>
+                    </div>
+                    
+                    <div class="chat-container" style="max-width: 800px; margin: 0 auto;">
+                        <div class="messages-box" id="admin-chat-messages" style="height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; padding: 16px; background: #f9f9f9; margin-bottom: 16px;">
+                            <p style="text-align: center; color: #999;">Loading messages...</p>
+                        </div>
+                        
+                        <div id="admin-chat-reply-indicator" style="display: none; background: #e3f2fd; padding: 8px 12px; border-left: 3px solid #667eea; margin-bottom: 8px; border-radius: 4px; align-items: center; gap: 8px;">
+                            <i class="fas fa-reply" style="color: #667eea;"></i>
+                            <span style="flex: 1; font-size: 0.9rem; color: #333;">
+                                Replying to: <span class="reply-preview" style="font-weight: 500;"></span>
+                            </span>
+                            <button onclick="app.cancelReply()" style="background: none; border: none; cursor: pointer; padding: 4px 8px; color: #666;" title="Cancel reply">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        
+                        <div class="message-input-container" style="display: flex; gap: 8px; align-items: center;">
+                            <input type="file" id="admin-chat-file-input" accept="*/*" style="display: none;">
+                            <button id="admin-chat-attach-btn" class="btn btn-secondary" style="padding: 12px; border: 1px solid #ddd; background: white; color: #666; border-radius: 4px;" title="Attach file">
+                                <i class="fas fa-paperclip"></i>
+                            </button>
+                            <input type="text" id="admin-chat-input" placeholder="Type your message..." style="flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 4px;">
+                            <button id="send-admin-message-btn" class="btn btn-primary">
+                                <i class="fas fa-paper-plane"></i> Send
+                            </button>
+                        </div>
+                        <div id="admin-chat-file-preview" style="margin-top: 8px; display: none;"></div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="trait-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="trait-modal-title">Add Psychology Trait</h3>
+                <button class="close-btn" id="close-trait-modal">&times;</button>
+            </div>
+            <form id="trait-form">
+                <div class="form-group">
+                    <label for="trait-name">Trait Name</label>
+                    <input type="text" id="trait-name" name="traitName" required>
+                </div>
+                <div class="form-group">
+                    <label for="trait-value">Trait Value (0-1)</label>
+                    <input type="number" id="trait-value" name="traitValue" min="0" max="1" step="0.1" required>
+                </div>
+                <div class="form-group">
+                    <label for="trait-description">Description</label>
+                    <textarea id="trait-description" name="description" rows="3"></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-trait">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Trait</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="conversation-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>New Conversation</h3>
+                <button class="close-btn" id="close-conversation-modal">&times;</button>
+            </div>
+            <form id="conversation-form">
+                <div class="form-group">
+                    <label for="conversation-title">Conversation Title</label>
+                    <input type="text" id="conversation-title" name="title" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-conversation">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Conversation</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Email Verification Modal -->
+    <div id="verification-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Verify Your Email</h3>
+                <button class="close-btn" id="close-verification-modal">&times;</button>
+            </div>
+            <form id="verification-form">
+                <p style="margin-bottom: 20px; color: #666;">
+                    Enter the 6-digit code sent to your email address.
+                </p>
+                <div class="form-group">
+                    <label for="verification-code">Verification Code</label>
+                    <input type="text" id="verification-code" name="code" maxlength="6" pattern="[0-9]{6}" required 
+                           style="font-size: 24px; letter-spacing: 8px; text-align: center;" placeholder="000000">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" id="cancel-verification">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Verify</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="notification" class="notification"></div>
+
+    <script src="{{ url_for('static', filename='file_upload_handler.js') }}"></script>
+    <script src="{{ url_for('static', filename='multi_user_app.js') }}?v=20251120_2240"></script>
+    <style>
+        /* Prevent scroll flash by setting initial scroll position */
+        html {
+            scroll-behavior: auto !important;
+        }
+        
+        /* Aggressive flash prevention */
+        body {
+            opacity: 0;
+            transition: opacity 0.1s ease-in;
+        }
+        
+        body.loaded {
+            opacity: 1;
+        }
+        
+        /* Prevent scroll interference during restoration */
+        html.scroll-locked {
+            scroll-behavior: auto !important;
+        }
+        
+        /* Ensure screens are hidden by default */
+        .screen {
+            display: none;
+        }
+        
+        .screen.active {
+            display: block;
+        }
+        
+        /* Sortable column headers - make them more obvious */
+        .sortable:hover {
+            background-color: #f0f0ff !important;
+            transition: background-color 0.2s;
+        }
+        
+        .sortable:hover i {
+            color: #4451d8 !important;
+            transform: scale(1.2);
+            transition: all 0.2s;
+        }
+        
+        .sortable:active {
+            background-color: #e0e0ff !important;
+        }
+        
+        /* Message Notification Styles */
+        .message-notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+            padding: 16px;
+            min-width: 320px;
+            max-width: 400px;
+            z-index: 100000;
+            animation: slideInRight 0.3s ease-out;
+            border-left: 4px solid #667eea;
+        }
+        
+        @keyframes slideInRight {
+            from {
+                transform: translateX(450px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes slideOutRight {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(450px);
+                opacity: 0;
+            }
+        }
+        
+        .message-notification.closing {
+            animation: slideOutRight 0.3s ease-in;
+        }
+        
+        .message-notification.admin-msg {
+            border-left-color: #667eea;
+        }
+        
+        .message-notification.user-msg {
+            border-left-color: #10b981;
+        }
+        
+        .notification-content {
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+        }
+        
+        .notification-icon {
+            flex-shrink: 0;
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 18px;
+        }
+        
+        .user-msg .notification-icon {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+        
+        .notification-text {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .notification-sender {
+            font-weight: 600;
+            font-size: 14px;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        
+        .notification-message {
+            font-size: 13px;
+            color: #666;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            line-clamp: 2;
+            -webkit-box-orient: vertical;
+        }
+        
+        .notification-close {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 4px 8px;
+            color: #999;
+            font-size: 16px;
+            transition: color 0.2s;
+        }
+        
+        .notification-close:hover {
+            color: #333;
+        }
+        
+        /* Prevent scrolling on auth screens */
+        #login-screen,
+        #signup-screen {
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        
+        /* Ensure body doesn't have extra height on auth screens */
+        #login-screen.active ~ #dashboard-screen,
+        #signup-screen.active ~ #dashboard-screen {
+            display: none !important;
+        }
+        
+        
+        /* Password toggle styling */
+        .password-input-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        
+        .password-input-container input {
+            flex: 1;
+            padding-right: 60px;
+        }
+        
+        .password-toggle {
+            position: absolute;
+            right: 8px;
+            background: none;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            padding: 4px 8px;
+            font-size: 12px;
+            border-radius: 3px;
+        }
+        
+        .password-toggle:hover {
+            background-color: #f0f0f0;
+            color: #333;
+        }
+        
+        /* Message usage display */
+        .message-usage-container {
+            padding: 8px 15px;
+            background: #f8f9fa;
+            border-top: 1px solid #dee2e6;
+            text-align: center;
+            font-size: 14px;
+        }
+        
+        .role-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 15px;
+            font-weight: 500;
+        }
+        
+        .role-badge.admin {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .role-badge.paid {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+        }
+        
+        .role-badge.guest {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        /* Chat session item with delete button */
+        .chat-session-item {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .chat-session-item .session-content {
+            flex: 1;
+            cursor: pointer;
+        }
+        
+        .delete-chat-btn {
+            background: transparent;
+            border: none;
+            color: #dc3545;
+            font-size: 24px;
+            line-height: 1;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            opacity: 0;
+            transition: opacity 0.2s, background 0.2s;
+        }
+        
+        .chat-session-item:hover .delete-chat-btn {
+            opacity: 1;
+        }
+        
+        .delete-chat-btn:hover {
+            background: #ffe5e5;
+            color: #c82333;
+        }
+        
+        /* Personality Controls Styling */
+        .personality-controls {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .personality-preset {
+            cursor: pointer;
+            padding: 6px 12px;
+            border-radius: 15px;
+            margin: 3px;
+            background: #ffffff;
+            border: 1px solid #dee2e6;
+            transition: all 0.3s ease;
+            font-size: 0.85rem;
+            display: inline-block;
+        }
+        
+        .personality-preset:hover {
+            background: #e9ecef;
+            transform: translateY(-1px);
+        }
+        
+        .personality-preset.active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        
+        .bot-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+        
+        .bot-avatar {
+            width: 25px;
+            height: 25px;
+            border-radius: 50%;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        /* Typing Indicator */
+        .typing-indicator {
+            padding: 10px 15px;
+            font-style: italic;
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+        
+        .typing-dots::after {
+            content: '';
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+        
+        @keyframes dots {
+            0%, 20% { content: ''; }
+            40% { content: '.'; }
+            60% { content: '..'; }
+            80%, 100% { content: '...'; }
+        }
+        
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 8px 0;
+            line-height: 1.4;
+        }
+        
+        .checkbox-label input[type="checkbox"] {
+            margin: 0;
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+            position: relative;
+            top: 0;
+        }
+        
+        /* Personality Test Banner Styles */
+        .notification-banner {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            animation: slideDown 0.3s ease-out;
+        }
+        
+        .notification-banner.warning {
+            background: linear-gradient(135deg, #ff9800 0%, #ff5722 100%);
+        }
+        
+        @keyframes slideDown {
+            from {
+                transform: translateY(-100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+        
+        .banner-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        
+        .banner-content i.fa-brain {
+            font-size: 2rem;
+            color: #ffd700;
+        }
+        
+        .banner-text {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+        
+        .banner-text strong {
+            font-size: 1.1rem;
+        }
+        
+        .banner-text span {
+            font-size: 0.9rem;
+            opacity: 0.95;
+        }
+        
+        .btn-close {
+            background: rgba(255,255,255,0.2);
+            border: none;
+            color: white;
+            padding: 0.5rem;
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        
+        .btn-close:hover {
+            background: rgba(255,255,255,0.3);
+        }
+        
+        /* Psychology Actions Styles */
+        .psychology-actions {
+            margin: 1rem 0;
+        }
+        
+        .btn-large {
+            font-size: 1.1rem;
+            padding: 0.75rem 1.5rem;
+            font-weight: 600;
+        }
+        
+        .btn-large i {
+            margin-right: 0.5rem;
+            font-size: 1.2rem;
+        }
+        
+        .info-highlight {
+            background: #f0f8ff;
+            border-left: 4px solid #667eea;
+            padding: 1rem;
+            margin-top: 1rem;
+            border-radius: 4px;
+        }
+        
+        .info-highlight i {
+            color: #667eea;
+            margin-right: 0.5rem;
+        }
+        
+        .psychology-actions .btn-large i {
+            color: #667eea;
+            margin-right: 0.5rem;
+        }
+        
+        /* AI Characters Grid Styles */
+        .characters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+            max-width: 1200px;
+        }
+        
+        .character-card {
+            background: white;
+            border-radius: 16px;
+            padding: 2rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        
+        .character-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+        }
+        
+        .character-icon {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            color: white;
+            margin: 0 auto 1rem;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        
+        .character-card h3 {
+            text-align: center;
+            color: #333;
+            margin: 0 0 0.5rem 0;
+            font-size: 1.5rem;
+        }
+        
+        .character-description {
+            color: #666;
+            text-align: center;
+            line-height: 1.6;
+            flex-grow: 1;
+            margin: 0;
+        }
+        
+        .character-features {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            justify-content: center;
+            margin: 1rem 0;
+        }
+        
+        .feature-tag {
+            background: #f0f0f0;
+            color: #555;
+            padding: 0.4rem 0.8rem;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+        
+        .feature-tag i {
+            font-size: 0.9rem;
+        }
+        
+        .btn-block {
+            width: 100%;
+            margin-top: auto;
+        }
+        
+        @media (max-width: 768px) {
+            .characters-grid {
+                grid-template-columns: 1fr;
+                gap: 1.5rem;
+            }
+        }
+    </style>
+    
+    <script>
+        // DEBUG: Flash prevention debugging
+        console.log('🔧 Flash Debug: Script starting at', performance.now(), 'ms');
+        
+        // Store scroll position for restoration
+        (function() {
+            const savedScrollTop = parseInt(localStorage.getItem('mainScroll_top')) || 0;
+            const savedScrollLeft = parseInt(localStorage.getItem('mainScroll_left')) || 0;
+            window.targetScrollTop = savedScrollTop;
+            window.targetScrollLeft = savedScrollLeft;
+            console.log('🔧 Flash Debug: Stored scroll position for restoration:', savedScrollTop, savedScrollLeft);
+        })();
+        
+        // Prevent flash by checking auth status and scroll position before showing content
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🔧 Flash Debug: DOM ready at', performance.now(), 'ms');
+            
+            const authToken = localStorage.getItem('authToken');
+            const currentUser = localStorage.getItem('currentUser');
+            
+            if (authToken && currentUser) {
+                console.log('🔧 Flash Debug: DOM ready - user logged in');
+                
+                // Only do screen switching if not already done
+                if (!window.flashPreventionDone) {
+                    const loginScreen = document.getElementById('login-screen');
+                    const dashboard = document.getElementById('dashboard-screen');
+                    if (loginScreen) {
+                        loginScreen.style.display = 'none';
+                        console.log('🔧 Flash Debug: Login screen hidden in DOM ready');
+                    }
+                    if (dashboard) {
+                        dashboard.style.display = 'block';
+                        console.log('🔧 Flash Debug: Dashboard shown in DOM ready');
+                    }
+                    window.flashPreventionDone = true;
+                }
+                
+                // Always add ready class
+                const dashboard = document.getElementById('dashboard-screen');
+                if (dashboard) {
+                    setTimeout(() => {
+                        dashboard.classList.add('ready');
+                        console.log('🔧 Flash Debug: Dashboard ready class added');
+                    }, 50);
+                }
+            } else {
+                console.log('🔧 Flash Debug: DOM ready - user not logged in');
+                // User not logged in, setup remember username functionality
+                const savedUsername = localStorage.getItem('rememberedUsername');
+                const rememberCheckbox = document.getElementById('remember-username');
+                const usernameInput = document.getElementById('login-username');
+                
+                if (savedUsername && usernameInput) {
+                    usernameInput.value = savedUsername;
+                    if (rememberCheckbox) {
+                        rememberCheckbox.checked = true;
+                    }
+                }
+                
+                // Setup password toggle functionality
+                const passwordInput = document.getElementById('login-password');
+                const passwordToggle = document.getElementById('password-toggle');
+                const toggleText = passwordToggle.querySelector('.toggle-text');
+                
+                passwordToggle.addEventListener('click', function() {
+                    if (passwordInput.type === 'password') {
+                        passwordInput.type = 'text';
+                        toggleText.textContent = 'Hide';
+                    } else {
+                        passwordInput.type = 'password';
+                        toggleText.textContent = 'Show';
+                    }
+                });
+            }
+            
+            // Make body visible to prevent flash
+            document.body.classList.add('loaded');
+            console.log('🔧 Flash Debug: Body loaded class added at', performance.now(), 'ms');
+            
+            // Debug button removed - was blocking navigation buttons
+            // (Character encoding fixes are now handled automatically)
+            
+            // Initialize the app
+            console.log('🔧 Flash Debug: Initializing app at', performance.now(), 'ms');
+            console.log('🔧 Flash Debug: Document ready state:', document.readyState);
+            console.log('🔧 Flash Debug: Page dimensions at init - body height:', document.body.scrollHeight, 'window height:', window.innerHeight);
+            
+            window.app = new IntegratedAIChatbot(); // Make globally accessible
+            window.integratedAIChatbot = window.app; // Backward compatibility
+            
+            // Personality Controls
+            document.querySelectorAll('.personality-preset').forEach(preset => {
+                preset.addEventListener('click', function() {
+                    // Update active state
+                    document.querySelectorAll('.personality-preset').forEach(p => p.classList.remove('active'));
+                    this.classList.add('active');
+                    
+                    // Update bot info
+                    const presetName = this.dataset.preset;
+                    const displayName = this.textContent.trim();
+                    document.getElementById('botName').textContent = displayName;
+                    document.getElementById('botAvatar').textContent = displayName[0];
+                    document.getElementById('botMood').textContent = displayName;
+                    
+                    console.log('Personality changed to:', presetName);
+                    // TODO: Send personality change to backend
+                });
+            });
+            
+            // Summary button
+            document.getElementById('showSummaryBtn').addEventListener('click', function() {
+                alert('Conversation Summary feature - TODO: Implement modal with session stats');
+                // TODO: Implement summary modal
+            });
+            
+            // Auto-expanding textarea for chat input
+            const chatInput = document.getElementById('chat-input');
+            if (chatInput) {
+                chatInput.addEventListener('input', function() {
+                    // Reset height to calculate new height
+                    this.style.height = 'auto';
+                    
+                    // If content fits within 5 lines, expand the textarea
+                    if (this.scrollHeight <= 120) {
+                        this.style.height = this.scrollHeight + 'px';
+                        this.style.overflowY = 'hidden';
+                    } else {
+                        // If content exceeds 5 lines, fix height and show scrollbar
+                        this.style.height = '120px';
+                        this.style.overflowY = 'auto';
+                    }
+                });
+                
+                // Handle Enter key (Enter to send, Shift+Enter for new line)
+                chatInput.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        if (e.shiftKey) {
+                            // Shift+Enter: Allow new line (don't prevent default)
+                            return;
+                        } else {
+                            // Enter alone: Send message
+                            e.preventDefault();
+                            const sendBtn = document.getElementById('send-chat-btn');
+                            if (sendBtn) sendBtn.click();
+                        }
+                    }
+                });
+            }
+            
+            // Personality Test Banner and Button Logic
+            const personalityTestBanner = document.getElementById('personality-test-banner');
+            const takeTestBannerBtn = document.getElementById('take-test-banner-btn');
+            const closeBannerBtn = document.getElementById('close-banner-btn');
+            const takeTestBtn = document.getElementById('take-personality-test-btn');
+            
+            // Check if user has taken the personality test
+            window.checkPersonalityTestStatus = async function() {
+                try {
+                    const response = await fetch('/api/user/psychology-traits', {
+                        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+                    });
+                    
+                    if (response.ok) {
+                        const traits = await response.json();
+                        console.log('🧠 Personality Check: User has', traits ? traits.length : 0, 'traits');
+                        // If user has no traits, show the banner
+                        if (!traits || traits.length === 0) {
+                            // Check if banner was previously dismissed
+                            const dismissed = localStorage.getItem('personality-banner-dismissed');
+                            if (!dismissed) {
+                                console.log('🧠 Personality Banner: Showing after 2 seconds');
+                                setTimeout(() => {
+                                    const banner = document.getElementById('personality-test-banner');
+                                    if (banner) {
+                                        banner.style.display = 'block';
+                                        console.log('🧠 Personality Banner: Now visible');
+                                    }
+                                }, 2000); // Show after 2 seconds
+                            } else {
+                                console.log('🧠 Personality Banner: Previously dismissed, not showing');
+                            }
+                        } else {
+                            console.log('🧠 Personality Banner: User has traits, not showing');
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error checking personality test status:', error);
+                }
+            }
+            
+            // Open personality test in new tab/window
+            function openPersonalityTest() {
+                const currentUser = window.app?.currentUser;
+                const username = currentUser?.username || 'unknown';
+                window.open(`/personality-test?username=${encodeURIComponent(username)}`, '_blank', 'width=1200,height=800');
+            }
+            
+            // Banner buttons
+            if (takeTestBannerBtn) {
+                takeTestBannerBtn.addEventListener('click', () => {
+                    openPersonalityTest();
+                    personalityTestBanner.style.display = 'none';
+                });
+            }
+            
+            if (closeBannerBtn) {
+                closeBannerBtn.addEventListener('click', () => {
+                    personalityTestBanner.style.display = 'none';
+                    localStorage.setItem('personality-banner-dismissed', 'true');
+                });
+            }
+            
+            // Psychology tab test button
+            if (takeTestBtn) {
+                takeTestBtn.addEventListener('click', openPersonalityTest);
+            }
+            
+            // Note: checkPersonalityTestStatus() is now called from showDashboard() in multi_user_app.js
+            // This ensures it only runs after successful login/dashboard load
+            
+            // Listen for messages from personality test popup
+            window.addEventListener('message', (event) => {
+                if (event.data && event.data.type === 'assessment_completed') {
+                    console.log('✅ Assessment completed notification received');
+                    
+                    // Reload psychology data after a short delay
+                    setTimeout(() => {
+                        if (window.app) {
+                            console.log('🔄 Reloading psychology data...');
+                            
+                            // Clear cached psychology profile to force fresh load
+                            window.app.psychologyProfile = null;
+                            
+                            window.app.loadPsychologyData();
+                            window.app.loadPsychologyTraits();
+                            
+                            // Also hide the personality test tip banner
+                            const assessmentTip = document.getElementById('assessment-tip');
+                            if (assessmentTip) {
+                                assessmentTip.style.display = 'none';
+                            }
+                            
+                            window.app.showNotification('✅ Personality assessment saved! Your traits have been updated.', 'success');
+                        }
+                    }, 500);
+                }
+            });
+            
+            // Let the StateManager handle scroll restoration with proper timing
+        });
+    </script>
+</body>
+</html>

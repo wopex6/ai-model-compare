@@ -1,0 +1,1586 @@
+{
+  "user_id": "wk5",
+  "questions": [
+    {
+      "question_id": "goa_6",
+      "text": "Your work motivation comes from:",
+      "dimension": "goal_orientation",
+      "options": [
+        [
+          "Competition and achievement",
+          0.0
+        ],
+        [
+          "Curiosity and discovery",
+          0.25
+        ],
+        [
+          "Making a difference for others",
+          0.5
+        ],
+        [
+          "Building lasting value",
+          0.75
+        ],
+        [
+          "Self-expression and innovation",
+          1.0
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "com_3",
+      "text": "When explaining complex ideas, you:",
+      "dimension": "communication_style",
+      "options": [
+        [
+          "Get straight to the key points",
+          0.0
+        ],
+        [
+          "Build context gradually",
+          0.25
+        ],
+        [
+          "Use logical step-by-step breakdown",
+          0.5
+        ],
+        [
+          "Use metaphors and analogies",
+          0.75
+        ],
+        [
+          "Check understanding and adjust approach",
+          1.0
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "con_4",
+      "text": "When planning a project, you:",
+      "dimension": "conscientiousness",
+      "options": [
+        [
+          "Create detailed timelines and checklists",
+          0.9
+        ],
+        [
+          "Have general goals and adapt as you go",
+          0.3
+        ],
+        [
+          "Plan key milestones, flexible on details",
+          0.6
+        ],
+        [
+          "Prefer to start and figure out as you go",
+          0.1
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "agr_5",
+      "text": "When someone makes a mistake, you:",
+      "dimension": "agreeableness",
+      "options": [
+        [
+          "Focus on understanding and helping them improve",
+          0.9
+        ],
+        [
+          "Point out the error and correct approach",
+          0.2
+        ],
+        [
+          "Mention it gently with encouragement",
+          0.7
+        ],
+        [
+          "Fix it yourself without mentioning",
+          0.5
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "con_6",
+      "text": "For long-term goals, you:",
+      "dimension": "conscientiousness",
+      "options": [
+        [
+          "Create detailed multi-year plans",
+          0.9
+        ],
+        [
+          "Have general direction, plan quarterly",
+          0.6
+        ],
+        [
+          "Adapt goals based on opportunities",
+          0.3
+        ],
+        [
+          "Focus on present, future unfolds naturally",
+          0.1
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "ope_1",
+      "text": "What type of conversations do you find most engaging?",
+      "dimension": "openness",
+      "options": [
+        [
+          "Abstract concepts and theoretical discussions",
+          0.9
+        ],
+        [
+          "Practical problem-solving discussions",
+          0.3
+        ],
+        [
+          "Personal experiences and stories",
+          0.6
+        ],
+        [
+          "Current events and factual information",
+          0.4
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "neu_6",
+      "text": "When things don't go as planned:",
+      "dimension": "neuroticism",
+      "options": [
+        [
+          "I feel anxious and overthink it",
+          0.9
+        ],
+        [
+          "I feel disappointed but move on",
+          0.4
+        ],
+        [
+          "I quickly pivot to plan B",
+          0.1
+        ],
+        [
+          "I see it as a learning opportunity",
+          0.2
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "ext_6",
+      "text": "Your energy level is highest:",
+      "dimension": "extraversion",
+      "options": [
+        [
+          "When surrounded by people and activity",
+          0.9
+        ],
+        [
+          "In quiet, peaceful environments",
+          0.1
+        ],
+        [
+          "Varies based on the situation",
+          0.5
+        ],
+        [
+          "When focused on interesting work",
+          0.4
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "lea_4",
+      "text": "When troubleshooting a problem, you:",
+      "dimension": "learning_preference",
+      "options": [
+        [
+          "Look for visual diagrams or screenshots",
+          0.0
+        ],
+        [
+          "Ask someone to explain it",
+          0.2
+        ],
+        [
+          "Experiment until you figure it out",
+          0.4
+        ],
+        [
+          "Read documentation thoroughly",
+          0.6
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "goa_2",
+      "text": "What gives you the most satisfaction?",
+      "dimension": "goal_orientation",
+      "options": [
+        [
+          "Completing challenging tasks successfully",
+          0.0
+        ],
+        [
+          "Learning and discovering new things",
+          0.25
+        ],
+        [
+          "Helping others achieve their goals",
+          0.5
+        ],
+        [
+          "Building something lasting and reliable",
+          0.75
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "agr_2",
+      "text": "When making team decisions, what's your priority?",
+      "dimension": "agreeableness",
+      "options": [
+        [
+          "Everyone feels heard and valued",
+          0.9
+        ],
+        [
+          "The best logical outcome",
+          0.2
+        ],
+        [
+          "Quick consensus to move forward",
+          0.6
+        ],
+        [
+          "The option that benefits most people",
+          0.8
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "ext_3",
+      "text": "After a long day, what helps you recharge?",
+      "dimension": "extraversion",
+      "options": [
+        [
+          "Socializing with friends or colleagues",
+          0.9
+        ],
+        [
+          "Quiet time alone with a book or hobby",
+          0.1
+        ],
+        [
+          "Light socializing in small groups",
+          0.6
+        ],
+        [
+          "A mix of social and alone time",
+          0.5
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "com_5",
+      "text": "In conversations, you prioritize:",
+      "dimension": "communication_style",
+      "options": [
+        [
+          "Efficiency and clarity",
+          0.0
+        ],
+        [
+          "Maintaining positive relationships",
+          0.8
+        ],
+        [
+          "Accuracy and completeness",
+          0.3
+        ],
+        [
+          "Creativity and engagement",
+          0.7
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "ext_7",
+      "text": "Networking events make you feel:",
+      "dimension": "extraversion",
+      "options": [
+        [
+          "Energized and excited",
+          0.9
+        ],
+        [
+          "Drained but manageable",
+          0.3
+        ],
+        [
+          "Uncomfortable and exhausting",
+          0.1
+        ],
+        [
+          "Depends on the people and topic",
+          0.6
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "ext_5",
+      "text": "How do you prefer to celebrate achievements?",
+      "dimension": "extraversion",
+      "options": [
+        [
+          "With a big group celebration",
+          0.9
+        ],
+        [
+          "Quiet personal acknowledgment",
+          0.1
+        ],
+        [
+          "Small gathering with close friends",
+          0.6
+        ],
+        [
+          "Don't need much celebration",
+          0.3
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "ope_2",
+      "text": "When learning something new, you prefer:",
+      "dimension": "openness",
+      "options": [
+        [
+          "Exploring creative and unconventional methods",
+          0.9
+        ],
+        [
+          "Following proven, traditional approaches",
+          0.2
+        ],
+        [
+          "Mixing traditional and innovative methods",
+          0.6
+        ],
+        [
+          "Experimenting with various approaches",
+          0.8
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "neu_3",
+      "text": "When facing criticism, you:",
+      "dimension": "neuroticism",
+      "options": [
+        [
+          "Take it very personally and worry",
+          0.9
+        ],
+        [
+          "Feel briefly upset but recover quickly",
+          0.5
+        ],
+        [
+          "See it as opportunity for growth",
+          0.1
+        ],
+        [
+          "Analyze it objectively",
+          0.2
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "agr_3",
+      "text": "When conflicts arise, your approach is:",
+      "dimension": "agreeableness",
+      "options": [
+        [
+          "Seek compromise and mutual understanding",
+          0.9
+        ],
+        [
+          "Stand firm on principles",
+          0.2
+        ],
+        [
+          "Avoid confrontation if possible",
+          0.6
+        ],
+        [
+          "Analyze the situation logically",
+          0.4
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "goa_3",
+      "text": "Success means:",
+      "dimension": "goal_orientation",
+      "options": [
+        [
+          "Reaching concrete measurable goals",
+          0.0
+        ],
+        [
+          "Continuously learning and growing",
+          0.25
+        ],
+        [
+          "Positive impact on others",
+          0.5
+        ],
+        [
+          "Long-term stability and security",
+          0.75
+        ],
+        [
+          "Creating unique and original work",
+          1.0
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "neu_4",
+      "text": "How do you handle uncertainty?",
+      "dimension": "neuroticism",
+      "options": [
+        [
+          "Find it stressful and anxiety-inducing",
+          0.9
+        ],
+        [
+          "Manage it with careful planning",
+          0.6
+        ],
+        [
+          "Accept it as part of life",
+          0.2
+        ],
+        [
+          "Find it exciting and full of possibilities",
+          0.0
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "con_1",
+      "text": "How do you approach learning something new?",
+      "dimension": "conscientiousness",
+      "options": [
+        [
+          "Create a structured plan and follow it step by step",
+          0.9
+        ],
+        [
+          "Jump in and learn as I go",
+          0.2
+        ],
+        [
+          "Research thoroughly before starting",
+          0.8
+        ],
+        [
+          "Find examples and try to replicate them",
+          0.5
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "lea_2",
+      "text": "You retain information best through:",
+      "dimension": "learning_preference",
+      "options": [
+        [
+          "Seeing demonstrations and visuals",
+          0.0
+        ],
+        [
+          "Listening to explanations",
+          0.2
+        ],
+        [
+          "Trying it yourself",
+          0.4
+        ],
+        [
+          "Writing notes and summaries",
+          0.6
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "con_5",
+      "text": "You view rules and procedures as:",
+      "dimension": "conscientiousness",
+      "options": [
+        [
+          "Important guidelines to follow carefully",
+          0.9
+        ],
+        [
+          "Suggestions that can be adapted",
+          0.3
+        ],
+        [
+          "Necessary but sometimes constraining",
+          0.5
+        ],
+        [
+          "Starting points for improvement",
+          0.4
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "lea_5",
+      "text": "Your ideal learning environment:",
+      "dimension": "learning_preference",
+      "options": [
+        [
+          "Visual presentations and demos",
+          0.0
+        ],
+        [
+          "Interactive discussions",
+          0.2
+        ],
+        [
+          "Hands-on lab or workshop",
+          0.4
+        ],
+        [
+          "Library or quiet study space",
+          0.6
+        ],
+        [
+          "Collaborative group setting",
+          0.8
+        ],
+        [
+          "Self-directed online learning",
+          1.0
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "neu_1",
+      "text": "When you encounter unexpected setbacks, how do you typically feel?",
+      "dimension": "neuroticism",
+      "options": [
+        [
+          "Stressed and worried about the implications",
+          0.8
+        ],
+        [
+          "Frustrated but ready to find solutions",
+          0.4
+        ],
+        [
+          "Calm and focused on next steps",
+          0.1
+        ],
+        [
+          "Excited by the new challenge",
+          0.0
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "goa_5",
+      "text": "You feel most accomplished when:",
+      "dimension": "goal_orientation",
+      "options": [
+        [
+          "You exceed performance targets",
+          0.0
+        ],
+        [
+          "You discover something new",
+          0.25
+        ],
+        [
+          "You help someone succeed",
+          0.5
+        ],
+        [
+          "You build something reliable",
+          0.75
+        ],
+        [
+          "You create something innovative",
+          1.0
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "com_4",
+      "text": "Your preferred writing style is:",
+      "dimension": "communication_style",
+      "options": [
+        [
+          "Brief and efficient",
+          0.0
+        ],
+        [
+          "Thoughtful and considerate",
+          0.5
+        ],
+        [
+          "Precise with technical detail",
+          0.3
+        ],
+        [
+          "Engaging with storytelling",
+          0.8
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "neu_2",
+      "text": "How often do you worry about future events?",
+      "dimension": "neuroticism",
+      "options": [
+        [
+          "Frequently - I plan for many scenarios",
+          0.9
+        ],
+        [
+          "Sometimes - mainly for important events",
+          0.6
+        ],
+        [
+          "Rarely - I deal with things as they come",
+          0.2
+        ],
+        [
+          "Almost never - I'm very optimistic",
+          0.0
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "ope_3",
+      "text": "Your ideal weekend activity:",
+      "dimension": "openness",
+      "options": [
+        [
+          "Trying something new and adventurous",
+          0.9
+        ],
+        [
+          "Familiar activities you enjoy",
+          0.2
+        ],
+        [
+          "Mix of new and familiar",
+          0.6
+        ],
+        [
+          "Whatever feels right in the moment",
+          0.7
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "ext_2",
+      "text": "How do you prefer to receive feedback?",
+      "dimension": "extraversion",
+      "options": [
+        [
+          "In a group discussion with multiple viewpoints",
+          0.9
+        ],
+        [
+          "One-on-one private conversation",
+          0.3
+        ],
+        [
+          "Written feedback I can review at my own pace",
+          0.1
+        ],
+        [
+          "Quick, direct verbal feedback",
+          0.6
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "ope_5",
+      "text": "When presented with a new idea, you:",
+      "dimension": "openness",
+      "options": [
+        [
+          "Embrace it enthusiastically",
+          0.9
+        ],
+        [
+          "Evaluate it carefully first",
+          0.3
+        ],
+        [
+          "Consider both pros and cons",
+          0.6
+        ],
+        [
+          "Prefer proven approaches",
+          0.1
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "goa_1",
+      "text": "What motivates you most when working on a project?",
+      "dimension": "goal_orientation",
+      "options": [
+        [
+          "Achieving specific measurable results",
+          0.0
+        ],
+        [
+          "Discovering new possibilities and ideas",
+          0.25
+        ],
+        [
+          "Helping others and making connections",
+          0.5
+        ],
+        [
+          "Building stable, reliable solutions",
+          0.75
+        ],
+        [
+          "Creating something unique and innovative",
+          1.0
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "ope_4",
+      "text": "When reading or learning, you prefer:",
+      "dimension": "openness",
+      "options": [
+        [
+          "Philosophy, art, abstract concepts",
+          0.9
+        ],
+        [
+          "Practical how-to guides",
+          0.2
+        ],
+        [
+          "Historical facts and biographies",
+          0.4
+        ],
+        [
+          "Science and technical topics",
+          0.6
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "lea_6",
+      "text": "To master a skill, you prefer:",
+      "dimension": "learning_preference",
+      "options": [
+        [
+          "Watch experts perform it",
+          0.0
+        ],
+        [
+          "Have someone guide you through it",
+          0.2
+        ],
+        [
+          "Practice repeatedly on your own",
+          0.4
+        ],
+        [
+          "Study the theory then apply",
+          0.6
+        ],
+        [
+          "Learn with a study group",
+          0.8
+        ],
+        [
+          "Figure it out through trial and error",
+          1.0
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "ope_6",
+      "text": "Your approach to traditions:",
+      "dimension": "openness",
+      "options": [
+        [
+          "Value and respect tradition",
+          0.2
+        ],
+        [
+          "Question and often change traditions",
+          0.9
+        ],
+        [
+          "Appreciate some, question others",
+          0.6
+        ],
+        [
+          "Create new traditions",
+          0.8
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "com_2",
+      "text": "When giving feedback, you tend to:",
+      "dimension": "communication_style",
+      "options": [
+        [
+          "Be direct and straightforward",
+          0.0
+        ],
+        [
+          "Sandwich criticism with positives",
+          0.5
+        ],
+        [
+          "Use data and specific examples",
+          0.3
+        ],
+        [
+          "Focus on encouragement and growth",
+          1.0
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "lea_1",
+      "text": "What helps you understand complex topics best?",
+      "dimension": "learning_preference",
+      "options": [
+        [
+          "Visual diagrams and charts",
+          0.0
+        ],
+        [
+          "Verbal explanations and discussions",
+          0.2
+        ],
+        [
+          "Hands-on practice and experimentation",
+          0.4
+        ],
+        [
+          "Reading detailed documentation",
+          0.6
+        ],
+        [
+          "Group learning and collaboration",
+          0.8
+        ],
+        [
+          "Independent study and reflection",
+          1.0
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "lea_3",
+      "text": "In a training session, you learn best by:",
+      "dimension": "learning_preference",
+      "options": [
+        [
+          "Watching demonstrations",
+          0.0
+        ],
+        [
+          "Listening to expert lectures",
+          0.2
+        ],
+        [
+          "Hands-on practice immediately",
+          0.4
+        ],
+        [
+          "Reading materials first",
+          0.6
+        ],
+        [
+          "Discussion with peers",
+          0.8
+        ],
+        [
+          "Self-paced independent study",
+          1.0
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "ext_1",
+      "text": "When facing a challenging problem, what's your first instinct?",
+      "dimension": "extraversion",
+      "options": [
+        [
+          "Discuss it with others to get different perspectives",
+          0.8
+        ],
+        [
+          "Think it through on my own first",
+          0.2
+        ],
+        [
+          "Look for similar problems others have solved",
+          0.5
+        ],
+        [
+          "Break it down into smaller parts immediately",
+          0.4
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "agr_4",
+      "text": "How important is it for you to maintain harmony?",
+      "dimension": "agreeableness",
+      "options": [
+        [
+          "Very important - I work hard to keep peace",
+          0.9
+        ],
+        [
+          "Somewhat important - but truth matters more",
+          0.4
+        ],
+        [
+          "Not a priority - results matter most",
+          0.1
+        ],
+        [
+          "Important in personal, less in professional",
+          0.6
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "ext_4",
+      "text": "In a meeting, you typically:",
+      "dimension": "extraversion",
+      "options": [
+        [
+          "Actively participate and share ideas",
+          0.9
+        ],
+        [
+          "Listen mostly, speak when necessary",
+          0.2
+        ],
+        [
+          "Contribute when asked or when I have expertise",
+          0.5
+        ],
+        [
+          "Prefer to discuss ideas with individuals after",
+          0.1
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "com_1",
+      "text": "How do you prefer explanations to be structured?",
+      "dimension": "communication_style",
+      "options": [
+        [
+          "Direct and to the point",
+          0.0
+        ],
+        [
+          "Gentle with context and reasoning",
+          0.25
+        ],
+        [
+          "Detailed with data and examples",
+          0.5
+        ],
+        [
+          "Creative with analogies and stories",
+          0.75
+        ],
+        [
+          "Encouraging with positive reinforcement",
+          1.0
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "neu_5",
+      "text": "Your stress management approach:",
+      "dimension": "neuroticism",
+      "options": [
+        [
+          "I get stressed easily and need support",
+          0.9
+        ],
+        [
+          "I manage stress with specific techniques",
+          0.4
+        ],
+        [
+          "Stress doesn't affect me much",
+          0.1
+        ],
+        [
+          "I thrive under moderate pressure",
+          0.2
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "com_6",
+      "text": "When someone is upset, you:",
+      "dimension": "communication_style",
+      "options": [
+        [
+          "Offer direct solutions",
+          0.0
+        ],
+        [
+          "Listen empathetically and comfort",
+          1.0
+        ],
+        [
+          "Ask questions to understand the problem",
+          0.5
+        ],
+        [
+          "Give space until they're ready",
+          0.3
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "con_2",
+      "text": "How do you handle deadlines?",
+      "dimension": "conscientiousness",
+      "options": [
+        [
+          "Plan ahead and finish early",
+          0.9
+        ],
+        [
+          "Work steadily to meet the deadline",
+          0.7
+        ],
+        [
+          "Do my best work under pressure",
+          0.3
+        ],
+        [
+          "Flexible - depends on the task",
+          0.5
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "con_3",
+      "text": "Your workspace is typically:",
+      "dimension": "conscientiousness",
+      "options": [
+        [
+          "Very organized and systematic",
+          0.9
+        ],
+        [
+          "Organized enough to find things",
+          0.6
+        ],
+        [
+          "Creative chaos - I know where things are",
+          0.3
+        ],
+        [
+          "Depends on current workload",
+          0.5
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "goa_4",
+      "text": "When choosing projects, priority goes to:",
+      "dimension": "goal_orientation",
+      "options": [
+        [
+          "Clear objectives with measurable outcomes",
+          0.0
+        ],
+        [
+          "Opportunities to learn new things",
+          0.25
+        ],
+        [
+          "Helping or collaborating with others",
+          0.5
+        ],
+        [
+          "Building something sustainable",
+          0.75
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "agr_6",
+      "text": "When giving advice, you're typically:",
+      "dimension": "agreeableness",
+      "options": [
+        [
+          "Empathetic and supportive",
+          0.9
+        ],
+        [
+          "Direct and honest",
+          0.2
+        ],
+        [
+          "Balanced and diplomatic",
+          0.7
+        ],
+        [
+          "Analytical and objective",
+          0.4
+        ]
+      ],
+      "weight": 1.0
+    },
+    {
+      "question_id": "agr_1",
+      "text": "When someone disagrees with your idea, how do you typically respond?",
+      "dimension": "agreeableness",
+      "options": [
+        [
+          "Try to understand their perspective and find common ground",
+          0.9
+        ],
+        [
+          "Present more evidence to support my position",
+          0.3
+        ],
+        [
+          "Ask questions to better understand their concerns",
+          0.8
+        ],
+        [
+          "Stick to my position if I believe it's correct",
+          0.2
+        ]
+      ],
+      "weight": 1.0
+    }
+  ],
+  "current_question": 49,
+  "responses": {
+    "goa_6": {
+      "option_id": 0,
+      "option_text": "Competition and achievement",
+      "score_impact": 0.0,
+      "dimension": "goal_orientation",
+      "timestamp": "2025-11-01T18:34:49.585848"
+    },
+    "com_3": {
+      "option_id": 0,
+      "option_text": "Get straight to the key points",
+      "score_impact": 0.0,
+      "dimension": "communication_style",
+      "timestamp": "2025-11-01T18:34:50.328583"
+    },
+    "con_4": {
+      "option_id": 0,
+      "option_text": "Create detailed timelines and checklists",
+      "score_impact": 0.9,
+      "dimension": "conscientiousness",
+      "timestamp": "2025-11-01T18:34:50.764698"
+    },
+    "agr_5": {
+      "option_id": 0,
+      "option_text": "Focus on understanding and helping them improve",
+      "score_impact": 0.9,
+      "dimension": "agreeableness",
+      "timestamp": "2025-11-01T18:34:51.565487"
+    },
+    "con_6": {
+      "option_id": 0,
+      "option_text": "Create detailed multi-year plans",
+      "score_impact": 0.9,
+      "dimension": "conscientiousness",
+      "timestamp": "2025-11-01T18:34:51.970074"
+    },
+    "ope_1": {
+      "option_id": 0,
+      "option_text": "Abstract concepts and theoretical discussions",
+      "score_impact": 0.9,
+      "dimension": "openness",
+      "timestamp": "2025-11-01T18:34:52.780623"
+    },
+    "neu_6": {
+      "option_id": 0,
+      "option_text": "I feel anxious and overthink it",
+      "score_impact": 0.9,
+      "dimension": "neuroticism",
+      "timestamp": "2025-11-01T18:34:53.206471"
+    },
+    "ext_6": {
+      "option_id": 0,
+      "option_text": "When surrounded by people and activity",
+      "score_impact": 0.9,
+      "dimension": "extraversion",
+      "timestamp": "2025-11-01T18:34:54.048866"
+    },
+    "lea_4": {
+      "option_id": 0,
+      "option_text": "Look for visual diagrams or screenshots",
+      "score_impact": 0.0,
+      "dimension": "learning_preference",
+      "timestamp": "2025-11-01T18:34:54.444112"
+    },
+    "goa_2": {
+      "option_id": 0,
+      "option_text": "Completing challenging tasks successfully",
+      "score_impact": 0.0,
+      "dimension": "goal_orientation",
+      "timestamp": "2025-11-01T18:34:55.248815"
+    },
+    "agr_2": {
+      "option_id": 0,
+      "option_text": "Everyone feels heard and valued",
+      "score_impact": 0.9,
+      "dimension": "agreeableness",
+      "timestamp": "2025-11-01T18:34:55.661363"
+    },
+    "ext_3": {
+      "option_id": 0,
+      "option_text": "Socializing with friends or colleagues",
+      "score_impact": 0.9,
+      "dimension": "extraversion",
+      "timestamp": "2025-11-01T18:34:56.470529"
+    },
+    "com_5": {
+      "option_id": 0,
+      "option_text": "Efficiency and clarity",
+      "score_impact": 0.0,
+      "dimension": "communication_style",
+      "timestamp": "2025-11-01T18:34:56.953315"
+    },
+    "ext_7": {
+      "option_id": 0,
+      "option_text": "Energized and excited",
+      "score_impact": 0.9,
+      "dimension": "extraversion",
+      "timestamp": "2025-11-01T18:34:57.761628"
+    },
+    "ext_5": {
+      "option_id": 0,
+      "option_text": "With a big group celebration",
+      "score_impact": 0.9,
+      "dimension": "extraversion",
+      "timestamp": "2025-11-01T18:34:58.392112"
+    },
+    "ope_2": {
+      "option_id": 0,
+      "option_text": "Exploring creative and unconventional methods",
+      "score_impact": 0.9,
+      "dimension": "openness",
+      "timestamp": "2025-11-01T18:34:58.852374"
+    },
+    "neu_3": {
+      "option_id": 0,
+      "option_text": "Take it very personally and worry",
+      "score_impact": 0.9,
+      "dimension": "neuroticism",
+      "timestamp": "2025-11-01T18:34:59.744201"
+    },
+    "agr_3": {
+      "option_id": 0,
+      "option_text": "Seek compromise and mutual understanding",
+      "score_impact": 0.9,
+      "dimension": "agreeableness",
+      "timestamp": "2025-11-01T18:35:00.181289"
+    },
+    "goa_3": {
+      "option_id": 0,
+      "option_text": "Reaching concrete measurable goals",
+      "score_impact": 0.0,
+      "dimension": "goal_orientation",
+      "timestamp": "2025-11-01T18:35:01.066318"
+    },
+    "neu_4": {
+      "option_id": 0,
+      "option_text": "Find it stressful and anxiety-inducing",
+      "score_impact": 0.9,
+      "dimension": "neuroticism",
+      "timestamp": "2025-11-01T18:35:01.441451"
+    },
+    "con_1": {
+      "option_id": 0,
+      "option_text": "Create a structured plan and follow it step by step",
+      "score_impact": 0.9,
+      "dimension": "conscientiousness",
+      "timestamp": "2025-11-01T18:35:02.419662"
+    },
+    "lea_2": {
+      "option_id": 0,
+      "option_text": "Seeing demonstrations and visuals",
+      "score_impact": 0.0,
+      "dimension": "learning_preference",
+      "timestamp": "2025-11-01T18:35:02.892591"
+    },
+    "con_5": {
+      "option_id": 0,
+      "option_text": "Important guidelines to follow carefully",
+      "score_impact": 0.9,
+      "dimension": "conscientiousness",
+      "timestamp": "2025-11-01T18:35:03.752772"
+    },
+    "lea_5": {
+      "option_id": 0,
+      "option_text": "Visual presentations and demos",
+      "score_impact": 0.0,
+      "dimension": "learning_preference",
+      "timestamp": "2025-11-01T18:35:04.174974"
+    },
+    "neu_1": {
+      "option_id": 0,
+      "option_text": "Stressed and worried about the implications",
+      "score_impact": 0.8,
+      "dimension": "neuroticism",
+      "timestamp": "2025-11-01T18:35:05.089362"
+    },
+    "goa_5": {
+      "option_id": 0,
+      "option_text": "You exceed performance targets",
+      "score_impact": 0.0,
+      "dimension": "goal_orientation",
+      "timestamp": "2025-11-01T18:35:05.570090"
+    },
+    "com_4": {
+      "option_id": 0,
+      "option_text": "Brief and efficient",
+      "score_impact": 0.0,
+      "dimension": "communication_style",
+      "timestamp": "2025-11-01T18:35:06.411945"
+    },
+    "neu_2": {
+      "option_id": 0,
+      "option_text": "Frequently - I plan for many scenarios",
+      "score_impact": 0.9,
+      "dimension": "neuroticism",
+      "timestamp": "2025-11-01T18:35:06.886231"
+    },
+    "ope_3": {
+      "option_id": 0,
+      "option_text": "Trying something new and adventurous",
+      "score_impact": 0.9,
+      "dimension": "openness",
+      "timestamp": "2025-11-01T18:35:07.773057"
+    },
+    "ext_2": {
+      "option_id": 0,
+      "option_text": "In a group discussion with multiple viewpoints",
+      "score_impact": 0.9,
+      "dimension": "extraversion",
+      "timestamp": "2025-11-01T18:35:08.270572"
+    },
+    "ope_5": {
+      "option_id": 0,
+      "option_text": "Embrace it enthusiastically",
+      "score_impact": 0.9,
+      "dimension": "openness",
+      "timestamp": "2025-11-01T18:35:09.280235"
+    },
+    "goa_1": {
+      "option_id": 0,
+      "option_text": "Achieving specific measurable results",
+      "score_impact": 0.0,
+      "dimension": "goal_orientation",
+      "timestamp": "2025-11-01T18:35:09.732414"
+    },
+    "ope_4": {
+      "option_id": 0,
+      "option_text": "Philosophy, art, abstract concepts",
+      "score_impact": 0.9,
+      "dimension": "openness",
+      "timestamp": "2025-11-01T18:35:10.566720"
+    },
+    "lea_6": {
+      "option_id": 0,
+      "option_text": "Watch experts perform it",
+      "score_impact": 0.0,
+      "dimension": "learning_preference",
+      "timestamp": "2025-11-01T18:35:10.947765"
+    },
+    "ope_6": {
+      "option_id": 0,
+      "option_text": "Value and respect tradition",
+      "score_impact": 0.2,
+      "dimension": "openness",
+      "timestamp": "2025-11-01T18:35:11.801225"
+    },
+    "com_2": {
+      "option_id": 0,
+      "option_text": "Be direct and straightforward",
+      "score_impact": 0.0,
+      "dimension": "communication_style",
+      "timestamp": "2025-11-01T18:35:12.151033"
+    },
+    "lea_1": {
+      "option_id": 0,
+      "option_text": "Visual diagrams and charts",
+      "score_impact": 0.0,
+      "dimension": "learning_preference",
+      "timestamp": "2025-11-01T18:35:13.053887"
+    },
+    "lea_3": {
+      "option_id": 0,
+      "option_text": "Watching demonstrations",
+      "score_impact": 0.0,
+      "dimension": "learning_preference",
+      "timestamp": "2025-11-01T18:35:13.466878"
+    },
+    "ext_1": {
+      "option_id": 0,
+      "option_text": "Discuss it with others to get different perspectives",
+      "score_impact": 0.8,
+      "dimension": "extraversion",
+      "timestamp": "2025-11-01T18:35:14.277928"
+    },
+    "agr_4": {
+      "option_id": 0,
+      "option_text": "Very important - I work hard to keep peace",
+      "score_impact": 0.9,
+      "dimension": "agreeableness",
+      "timestamp": "2025-11-01T18:35:14.739355"
+    },
+    "ext_4": {
+      "option_id": 0,
+      "option_text": "Actively participate and share ideas",
+      "score_impact": 0.9,
+      "dimension": "extraversion",
+      "timestamp": "2025-11-01T18:35:15.596747"
+    },
+    "com_1": {
+      "option_id": 0,
+      "option_text": "Direct and to the point",
+      "score_impact": 0.0,
+      "dimension": "communication_style",
+      "timestamp": "2025-11-01T18:35:16.021670"
+    },
+    "neu_5": {
+      "option_id": 0,
+      "option_text": "I get stressed easily and need support",
+      "score_impact": 0.9,
+      "dimension": "neuroticism",
+      "timestamp": "2025-11-01T18:35:16.855214"
+    },
+    "com_6": {
+      "option_id": 0,
+      "option_text": "Offer direct solutions",
+      "score_impact": 0.0,
+      "dimension": "communication_style",
+      "timestamp": "2025-11-01T18:35:17.167797"
+    },
+    "con_2": {
+      "option_id": 0,
+      "option_text": "Plan ahead and finish early",
+      "score_impact": 0.9,
+      "dimension": "conscientiousness",
+      "timestamp": "2025-11-01T18:35:18.061455"
+    },
+    "con_3": {
+      "option_id": 0,
+      "option_text": "Very organized and systematic",
+      "score_impact": 0.9,
+      "dimension": "conscientiousness",
+      "timestamp": "2025-11-01T18:35:18.519086"
+    },
+    "goa_4": {
+      "option_id": 0,
+      "option_text": "Clear objectives with measurable outcomes",
+      "score_impact": 0.0,
+      "dimension": "goal_orientation",
+      "timestamp": "2025-11-01T18:35:19.555874"
+    },
+    "agr_6": {
+      "option_id": 0,
+      "option_text": "Empathetic and supportive",
+      "score_impact": 0.9,
+      "dimension": "agreeableness",
+      "timestamp": "2025-11-01T18:36:03.699388"
+    },
+    "agr_1": {
+      "option_id": 0,
+      "option_text": "Try to understand their perspective and find common ground",
+      "score_impact": 0.9,
+      "dimension": "agreeableness",
+      "timestamp": "2025-11-01T18:38:30.943401"
+    }
+  },
+  "estimated_time": "10-15 minutes",
+  "can_pause": true,
+  "stage": "full"
+}

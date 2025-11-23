@@ -264,6 +264,10 @@ class IntegratedAIChatbot {
         this.lastAdminMessagesHash = null;
         this.lastUserMessagesHash = null;
         
+        // Sound notification settings
+        this.soundEnabled = localStorage.getItem('soundNotificationEnabled') === 'true';
+        this.notificationSound = null;
+        
         // Initialize general state manager
         this.stateManager = new StateManager();
         this.init();
@@ -308,6 +312,90 @@ class IntegratedAIChatbot {
         
         return date.toLocaleString('en-US', options);
     }
+    
+    maskEmail(email) {
+        /**
+         * Mask email showing only first 2 and last 2 chars of username
+         * Example: johndoe@example.com -> jo****oe@example.com
+         */
+        if (!email || !email.includes('@')) {
+            return email;
+        }
+        
+        const [username, domain] = email.split('@');
+        
+        // If username is 4 chars or less, show it all
+        if (username.length <= 4) {
+            return email;
+        }
+        
+        // Show first 2 and last 2 chars, mask the middle
+        const maskedUsername = username.slice(0, 2) + '****' + username.slice(-2);
+        return `${maskedUsername}@${domain}`;
+    }
+    
+    playNotificationSound() {
+        /**
+         * Play a notification sound when AI response is ready
+         */
+        if (!this.soundEnabled) {
+            console.log('🔕 Sound notifications disabled');
+            return;
+        }
+        
+        try {
+            console.log('🔔 Attempting to play notification sound...');
+            
+            // Create audio context for notification beep
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            // Configure pleasant notification sound (two-tone beep)
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+            oscillator.frequency.setValueAtTime(1000, audioContext.currentTime + 0.1);
+            
+            // Louder volume for better audibility
+            gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.4);
+            
+            console.log('✅ Notification sound played successfully');
+        } catch (error) {
+            console.error('❌ Failed to play notification sound:', error);
+        }
+    }
+    
+    toggleSoundNotification(enabled) {
+        /**
+         * Toggle sound notification on/off
+         */
+        this.soundEnabled = enabled;
+        localStorage.setItem('soundNotificationEnabled', enabled.toString());
+        console.log(`🔔 Sound notifications: ${enabled ? 'enabled' : 'disabled'}`);
+    }
+    
+    updateSoundIcon() {
+        /**
+         * Update sound icon based on current state
+         */
+        const soundIcon = document.getElementById('sound-icon');
+        if (soundIcon) {
+            if (this.soundEnabled) {
+                soundIcon.className = 'fas fa-volume-up';
+                soundIcon.style.color = '#28a745';  // Green for enabled
+            } else {
+                soundIcon.className = 'fas fa-volume-mute';
+                soundIcon.style.color = '#6c757d';  // Gray for disabled
+            }
+        }
+    }
 
     init() {
         this.setupEventListeners();
@@ -316,16 +404,31 @@ class IntegratedAIChatbot {
 
     setupEventListeners() {
         // Auth form listeners
-        document.getElementById('login-form').addEventListener('submit', (e) => this.handleLogin(e));
-        document.getElementById('signup-form').addEventListener('submit', (e) => this.handleSignup(e));
-        document.getElementById('show-signup').addEventListener('click', (e) => {
-            e.preventDefault();
-            this.showScreen('signup-screen');
-        });
-        document.getElementById('show-login').addEventListener('click', (e) => {
-            e.preventDefault();
-            this.showScreen('login-screen');
-        });
+        const loginForm = document.getElementById('login-form');
+        if (loginForm) {
+            loginForm.addEventListener('submit', (e) => this.handleLogin(e));
+        }
+        
+        const signupForm = document.getElementById('signup-form');
+        if (signupForm) {
+            signupForm.addEventListener('submit', (e) => this.handleSignup(e));
+        }
+        
+        const showSignupLink = document.getElementById('show-signup');
+        if (showSignupLink) {
+            showSignupLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.showScreen('signup-screen');
+            });
+        }
+        
+        const showLoginLink = document.getElementById('show-login');
+        if (showLoginLink) {
+            showLoginLink.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.showScreen('login-screen');
+            });
+        }
 
         // Dashboard navigation
         document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -344,6 +447,17 @@ class IntegratedAIChatbot {
             btn.addEventListener('click', (e) => this.switchPsychologySection(e.target.dataset.section));
         });
 
+        // Take Personality Test button
+        const takePersonalityTestBtn = document.getElementById('take-personality-test-btn');
+        if (takePersonalityTestBtn) {
+            takePersonalityTestBtn.addEventListener('click', () => {
+                console.log('Take Personality Test button clicked');
+                // Pass username as URL parameter
+                const username = this.currentUser?.username || 'unknown';
+                window.open(`/personality-test?username=${encodeURIComponent(username)}`, '_blank', 'width=1000,height=800');
+            });
+        }
+
         // Chart controls
         document.querySelectorAll('input[name="chart-type"]').forEach(radio => {
             radio.addEventListener('change', (e) => this.updateChart(e.target.value));
@@ -354,21 +468,57 @@ class IntegratedAIChatbot {
         document.getElementById('preferences-form').addEventListener('submit', (e) => this.handlePreferencesUpdate(e));
         document.getElementById('privacy-form').addEventListener('submit', (e) => this.handlePrivacyUpdate(e));
 
-        // Psychology traits
-        document.getElementById('add-trait-btn').addEventListener('click', () => this.showTraitModal());
-        document.getElementById('trait-form').addEventListener('submit', (e) => this.handleTraitSubmit(e));
-        document.getElementById('close-trait-modal').addEventListener('click', () => this.hideTraitModal());
-        document.getElementById('cancel-trait').addEventListener('click', () => this.hideTraitModal());
+        // Psychology traits - Add Trait button removed, but keep modal handlers for backward compatibility
+        const addTraitBtn = document.getElementById('add-trait-btn');
+        if (addTraitBtn) {
+            addTraitBtn.addEventListener('click', () => this.showTraitModal());
+        }
+        const traitForm = document.getElementById('trait-form');
+        if (traitForm) {
+            traitForm.addEventListener('submit', (e) => this.handleTraitSubmit(e));
+        }
+        const closeTraitModal = document.getElementById('close-trait-modal');
+        if (closeTraitModal) {
+            closeTraitModal.addEventListener('click', () => this.hideTraitModal());
+        }
+        const cancelTrait = document.getElementById('cancel-trait');
+        if (cancelTrait) {
+            cancelTrait.addEventListener('click', () => this.hideTraitModal());
+        }
 
-        // Conversations
-        document.getElementById('new-conversation-btn').addEventListener('click', () => this.showConversationModal());
-        document.getElementById('conversation-form').addEventListener('submit', (e) => this.handleConversationSubmit(e));
-        document.getElementById('close-conversation-modal').addEventListener('click', () => this.hideConversationModal());
-        document.getElementById('cancel-conversation').addEventListener('click', () => this.hideConversationModal());
-        document.getElementById('send-message-btn').addEventListener('click', () => this.sendMessage());
-        document.getElementById('message-input').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.sendMessage();
-        });
+        // Conversations (removed duplicate tab - these elements no longer exist)
+        // Kept for backward compatibility - add null checks
+        const newConversationBtn = document.getElementById('new-conversation-btn');
+        if (newConversationBtn) {
+            newConversationBtn.addEventListener('click', () => this.showConversationModal());
+        }
+        
+        const conversationForm = document.getElementById('conversation-form');
+        if (conversationForm) {
+            conversationForm.addEventListener('submit', (e) => this.handleConversationSubmit(e));
+        }
+        
+        const closeConversationModal = document.getElementById('close-conversation-modal');
+        if (closeConversationModal) {
+            closeConversationModal.addEventListener('click', () => this.hideConversationModal());
+        }
+        
+        const cancelConversation = document.getElementById('cancel-conversation');
+        if (cancelConversation) {
+            cancelConversation.addEventListener('click', () => this.hideConversationModal());
+        }
+        
+        const sendMessageBtn = document.getElementById('send-message-btn');
+        if (sendMessageBtn) {
+            sendMessageBtn.addEventListener('click', () => this.sendMessage());
+        }
+        
+        const messageInput = document.getElementById('message-input');
+        if (messageInput) {
+            messageInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') this.sendMessage();
+            });
+        }
 
         // AI Chat - Use once() to ensure single execution per attachment
         const newChatBtn = document.getElementById('new-chat-btn');
@@ -431,7 +581,63 @@ class IntegratedAIChatbot {
         this.attachSortHandlers();
 
         // Settings
-        document.getElementById('change-password-form').addEventListener('submit', (e) => this.handlePasswordChange(e));
+        const changePasswordForm = document.getElementById('change-password-form');
+        if (changePasswordForm) {
+            changePasswordForm.addEventListener('submit', (e) => this.handlePasswordChange(e));
+        }
+        
+        const changeEmailForm = document.getElementById('change-email-form');
+        if (changeEmailForm) {
+            changeEmailForm.addEventListener('submit', (e) => this.handleEmailChange(e));
+        }
+        
+        // Sound Notification Settings
+        const soundToggle = document.getElementById('sound-notification-toggle');
+        if (soundToggle) {
+            // Set initial state from localStorage
+            soundToggle.checked = this.soundEnabled;
+            
+            soundToggle.addEventListener('change', (e) => {
+                this.toggleSoundNotification(e.target.checked);
+                this.updateSoundIcon();  // Update the quick toggle icon too
+                this.showNotification(
+                    e.target.checked ? 'Sound notifications enabled 🔔' : 'Sound notifications disabled 🔕',
+                    'success'
+                );
+            });
+        }
+        
+        const testSoundBtn = document.getElementById('test-sound-btn');
+        if (testSoundBtn) {
+            testSoundBtn.addEventListener('click', () => {
+                this.playNotificationSound();
+                this.showNotification('Playing test sound 🔔', 'info');
+            });
+        }
+        
+        // Quick sound toggle button in chat interface
+        const quickSoundToggle = document.getElementById('toggle-sound-quick');
+        if (quickSoundToggle) {
+            quickSoundToggle.addEventListener('click', () => {
+                const newState = !this.soundEnabled;
+                this.toggleSoundNotification(newState);
+                this.updateSoundIcon();
+                
+                // Update settings checkbox too
+                const settingsToggle = document.getElementById('sound-notification-toggle');
+                if (settingsToggle) {
+                    settingsToggle.checked = newState;
+                }
+                
+                this.showNotification(
+                    newState ? 'Sound ON 🔔' : 'Sound OFF 🔕',
+                    'success'
+                );
+            });
+            
+            // Set initial icon state
+            this.updateSoundIcon();
+        }
         
         // Email Verification
         document.getElementById('verify-email-btn').addEventListener('click', () => this.showVerificationModal());
@@ -496,6 +702,7 @@ class IntegratedAIChatbot {
                 localStorage.setItem('authToken', this.authToken);
                 this.currentUser = { id: result.user_id, username: result.username };
                 localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
+                
                 console.log('🔧 Login Debug: User data saved, calling showDashboard');
                 this.showNotification('Login successful!', 'success');
                 await this.showDashboard();
@@ -505,6 +712,8 @@ class IntegratedAIChatbot {
                 this.showNotification(result.error || 'Login failed', 'error');
             }
         } catch (error) {
+            console.error('🔧 Login Error:', error);
+            console.error('🔧 Error stack:', error.stack);
             this.showNotification('Network error. Please try again.', 'error');
         }
     }
@@ -706,21 +915,33 @@ class IntegratedAIChatbot {
         await this.loadUserData();
         console.log('🔧 Dashboard Debug: User data loaded');
         
-        // Use general state manager to restore all states (but default to home if no saved state)
-        const savedTab = this.stateManager.getState('currentTab');
-        console.log('🔧 Dashboard Debug: Saved tab state:', savedTab);
+        // Check for URL parameters first (highest priority)
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlTab = urlParams.get('tab');
         
-        // Immediately restore the correct tab to prevent empty dashboard flash
-        if (!savedTab) {
-            // No saved state, go to home tab
-            console.log('🔧 Dashboard Debug: No saved tab, switching to home immediately');
-            this.switchTab('home');
-            console.log('🔧 Dashboard Debug: Switched to home tab (no saved state)');
+        if (urlTab) {
+            // URL parameter takes precedence
+            console.log('🔧 Dashboard Debug: URL tab parameter found:', urlTab);
+            this.switchTab(urlTab);
+            // Clear URL parameters after navigation
+            window.history.replaceState({}, '', window.location.pathname);
         } else {
-            // Restore saved states immediately
-            console.log('🔧 Dashboard Debug: Restoring saved states immediately');
-            this.stateManager.restoreStates(this);
-            console.log('🔧 Dashboard Debug: Restored saved states immediately');
+            // Use general state manager to restore all states (but default to chat if no saved state)
+            const savedTab = this.stateManager.getState('currentTab');
+            console.log('🔧 Dashboard Debug: Saved tab state:', savedTab);
+            
+            // Immediately restore the correct tab to prevent empty dashboard flash
+            if (!savedTab) {
+                // No saved state, go to Conversations tab (chat)
+                console.log('🔧 Dashboard Debug: No saved tab, switching to chat immediately');
+                this.switchTab('chat');
+                console.log('🔧 Dashboard Debug: Switched to chat tab (no saved state)');
+            } else {
+                // Restore saved states immediately
+                console.log('🔧 Dashboard Debug: Restoring saved states immediately');
+                this.stateManager.restoreStates(this);
+                console.log('🔧 Dashboard Debug: Restored saved states immediately');
+            }
         }
         
         // Start tracking scroll positions (only once)
@@ -761,13 +982,18 @@ class IntegratedAIChatbot {
     }
 
     async loadUserData() {
-        await Promise.all([
-            this.loadProfile(),
-            this.loadPsychologyTraits(),
-            this.loadConversations(),
-            this.loadChatSessions(),
-            this.loadMessageUsage()
-        ]);
+        try {
+            await Promise.all([
+                this.loadProfile().catch(err => console.error('Failed to load profile:', err)),
+                this.loadPsychologyTraits().catch(err => console.error('Failed to load psychology traits:', err)),
+                this.loadConversations().catch(err => console.error('Failed to load conversations:', err)),
+                this.loadChatSessions().catch(err => console.error('Failed to load chat sessions:', err)),
+                this.loadMessageUsage().catch(err => console.error('Failed to load message usage:', err))
+            ]);
+        } catch (error) {
+            console.error('🔧 LoadUserData Error:', error);
+            // Don't throw - allow dashboard to show even if some data fails to load
+        }
     }
     
     async loadMessageUsage() {
@@ -850,6 +1076,8 @@ class IntegratedAIChatbot {
             this.loadConversations();
         } else if (tabName === 'psychology') {
             this.loadPsychologyData();
+        } else if (tabName === 'settings') {
+            this.loadCurrentEmail();
         } else if (tabName === 'admin-chat') {
             this.loadAdminChat();
         } else if (tabName === 'admin') {
@@ -899,7 +1127,7 @@ class IntegratedAIChatbot {
 
     loadPersonalInfo(personalInfo) {
         const nameEl = document.getElementById('personal-name');
-        const emailEl = document.getElementById('personal-email');
+        const educationEl = document.getElementById('personal-education');
         const ageEl = document.getElementById('personal-age');
         const locationEl = document.getElementById('personal-location');
         const occupationEl = document.getElementById('personal-occupation');
@@ -907,7 +1135,7 @@ class IntegratedAIChatbot {
         const bioEl = document.getElementById('personal-bio');
 
         if (nameEl) nameEl.value = personalInfo.name || '';
-        if (emailEl) emailEl.value = personalInfo.email || '';
+        if (educationEl) educationEl.value = personalInfo.education || '';
         if (ageEl) ageEl.value = personalInfo.age || '';
         if (locationEl) locationEl.value = personalInfo.location || '';
         if (occupationEl) occupationEl.value = personalInfo.occupation || '';
@@ -967,14 +1195,34 @@ class IntegratedAIChatbot {
 
     async loadPsychologyData() {
         // Load comprehensive profile for psychology data
+        console.log('🔄 loadPsychologyData: Starting...');
         try {
             const response = await this.apiCall('/api/user/comprehensive-profile');
             const profile = await response.json();
             
-            if (profile && profile.preferences) {
+            if (profile && profile.preferences && (profile.preferences.jung_types || profile.preferences.big_five)) {
+                console.log('🔄 loadPsychologyData: Using comprehensive profile');
                 this.psychologyProfile = profile;
                 this.loadAssessmentHistory();
                 this.loadPsychologyChart();
+            } else {
+                console.log('🔄 loadPsychologyData: Comprehensive profile empty, fetching user profile');
+                // Fallback: Get user profile which has preferences
+                const profileResponse = await this.apiCall('/api/user/profile');
+                if (profileResponse.ok) {
+                    const userProfile = await profileResponse.json();
+                    if (userProfile.preferences && (userProfile.preferences.jung_types || userProfile.preferences.big_five)) {
+                        console.log('🔄 loadPsychologyData: Using user profile preferences');
+                        // Create compatible structure
+                        this.psychologyProfile = {
+                            preferences: userProfile.preferences
+                        };
+                        this.loadAssessmentHistory();
+                        this.loadPsychologyChart();
+                    } else {
+                        console.log('🔄 loadPsychologyData: No psychology data found');
+                    }
+                }
             }
         } catch (error) {
             console.error('Error loading psychology data:', error);
@@ -1072,7 +1320,17 @@ class IntegratedAIChatbot {
         if (!canvas || !this.psychologyProfile) return;
 
         const ctx = canvas.getContext('2d');
-        const assessmentHistory = this.psychologyProfile.preferences.assessment_history || [];
+        let assessmentHistory = this.psychologyProfile.preferences.assessment_history || [];
+        
+        // If no history but we have current traits, create a single-point history
+        if (assessmentHistory.length === 0 && this.psychologyProfile.preferences.jung_types && this.psychologyProfile.preferences.big_five) {
+            console.log('🔄 updateChart: Creating single-point history from current traits');
+            assessmentHistory = [{
+                timestamp: this.psychologyProfile.preferences.assessment_completed_at || new Date().toISOString(),
+                jung_types: this.psychologyProfile.preferences.jung_types,
+                big_five: this.psychologyProfile.preferences.big_five
+            }];
+        }
         
         if (assessmentHistory.length === 0) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1149,7 +1407,8 @@ class IntegratedAIChatbot {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         data.forEach((assessment, index) => {
-            const x = padding + (index / (data.length - 1)) * chartWidth;
+            // Handle single data point case
+            const x = data.length === 1 ? padding + chartWidth / 2 : padding + (index / (data.length - 1)) * chartWidth;
             const date = new Date(assessment.timestamp);
             const dateLabel = `${date.getMonth() + 1}/${date.getDate()}`;
             ctx.fillText(dateLabel, x, canvas.height - padding + 10);
@@ -1185,7 +1444,8 @@ class IntegratedAIChatbot {
             ctx.beginPath();
             
             data.forEach((assessment, dataIndex) => {
-                const x = padding + (dataIndex / (data.length - 1)) * chartWidth;
+                // Handle single data point case
+                const x = data.length === 1 ? padding + chartWidth / 2 : padding + (dataIndex / (data.length - 1)) * chartWidth;
                 const value = chartType === 'jung' ? assessment.jung_types[trait] : assessment.big_five[trait];
                 const y = canvas.height - padding - ((value - yRange[0]) / (yRange[1] - yRange[0])) * chartHeight;
                 
@@ -1193,6 +1453,14 @@ class IntegratedAIChatbot {
                     ctx.moveTo(x, y);
                 } else {
                     ctx.lineTo(x, y);
+                }
+                
+                // Draw a dot for single data point
+                if (data.length === 1) {
+                    ctx.fillStyle = colors[index];
+                    ctx.beginPath();
+                    ctx.arc(x, y, 5, 0, 2 * Math.PI);
+                    ctx.fill();
                 }
             });
             
@@ -1231,8 +1499,11 @@ class IntegratedAIChatbot {
 
     // Psychology traits methods
     async loadPsychologyTraits() {
-        // Load current traits from comprehensive profile instead
+        console.log('🔄 loadPsychologyTraits: Starting...');
+        
+        // First try comprehensive profile for Wai Tse compatibility
         if (this.psychologyProfile && this.psychologyProfile.preferences) {
+            console.log('🔄 loadPsychologyTraits: Using cached psychologyProfile');
             this.renderCurrentTraits(this.psychologyProfile.preferences);
         } else {
             // Load comprehensive profile if not already loaded
@@ -1240,9 +1511,34 @@ class IntegratedAIChatbot {
                 const response = await this.apiCall('/api/user/comprehensive-profile');
                 const profile = await response.json();
                 
-                if (profile && profile.preferences) {
+                if (profile && profile.preferences && (profile.preferences.jung_types || profile.preferences.big_five)) {
+                    console.log('🔄 loadPsychologyTraits: Got data from comprehensive profile');
                     this.psychologyProfile = profile;
                     this.renderCurrentTraits(profile.preferences);
+                } else {
+                    console.log('🔄 loadPsychologyTraits: Comprehensive profile empty, trying psychology-traits API');
+                    // Fallback to psychology-traits API for other users
+                    const traitsResponse = await this.apiCall('/api/user/psychology-traits');
+                    const traits = await traitsResponse.json();
+                    
+                    if (traits && traits.length > 0) {
+                        console.log(`🔄 loadPsychologyTraits: Got ${traits.length} traits from API`);
+                        // Convert traits array to preferences format
+                        const preferences = { jung_types: {}, big_five: {} };
+                        
+                        traits.forEach(trait => {
+                            if (trait.trait_name.startsWith('jung_')) {
+                                const jungKey = trait.trait_name.replace('jung_', '');
+                                preferences.jung_types[jungKey] = (trait.trait_value * 20) - 10; // Convert 0-1 to -10 to +10
+                            } else if (['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism'].includes(trait.trait_name)) {
+                                preferences.big_five[trait.trait_name] = trait.trait_value * 10; // Convert 0-1 to 0-10
+                            }
+                        });
+                        
+                        this.renderCurrentTraits(preferences);
+                    } else {
+                        console.log('🔄 loadPsychologyTraits: No traits found');
+                    }
                 }
             } catch (error) {
                 console.error('Failed to load psychology traits:', error);
@@ -1368,15 +1664,25 @@ class IntegratedAIChatbot {
 
     renderTraits(traits) {
         const traitsGrid = document.getElementById('traits-grid');
+        const assessmentTip = document.getElementById('assessment-tip');
         
         if (traits.length === 0) {
+            // Show tip when no traits
+            if (assessmentTip) {
+                assessmentTip.style.display = 'block';
+            }
             traitsGrid.innerHTML = `
                 <div class="empty-state">
                     <h3>No Psychology Traits</h3>
-                    <p>Add your first psychology trait to help the AI understand your personality better.</p>
+                    <p>Complete the personality assessment to populate your psychological profile.</p>
                 </div>
             `;
             return;
+        }
+
+        // Hide tip when traits exist (assessment completed)
+        if (assessmentTip) {
+            assessmentTip.style.display = 'none';
         }
 
         traitsGrid.innerHTML = traits.map(trait => `
@@ -1455,6 +1761,12 @@ class IntegratedAIChatbot {
 
     renderConversations(conversations) {
         const conversationsList = document.getElementById('conversations-list');
+        
+        // Check if element exists
+        if (!conversationsList) {
+            console.warn('conversations-list element not found in DOM');
+            return;
+        }
         
         if (conversations.length === 0) {
             conversationsList.innerHTML = `
@@ -1882,6 +2194,9 @@ class IntegratedAIChatbot {
                     aiMessage.appendChild(aiTimestamp);
                     messagesContainer.appendChild(aiMessage);
                     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                    
+                    // Play notification sound when AI response is ready
+                    this.playNotificationSound();
                 }
             } else if (response.status === 403) {
                 // Handle limit reached
@@ -1939,6 +2254,52 @@ class IntegratedAIChatbot {
             }
         } catch (error) {
             this.showNotification('Network error. Please try again.', 'error');
+        }
+    }
+
+    async handleEmailChange(e) {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const emailData = Object.fromEntries(formData);
+
+        if (!emailData.newEmail || !emailData.newEmail.includes('@')) {
+            this.showNotification('Please enter a valid email address', 'error');
+            return;
+        }
+
+        try {
+            const response = await this.apiCall('/api/auth/change-email', 'POST', {
+                newEmail: emailData.newEmail,
+                password: emailData.password
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                this.showNotification('✅ Email updated! Please check your new email for verification.', 'success');
+                e.target.reset();
+                // Reload current email
+                this.loadCurrentEmail();
+            } else {
+                this.showNotification(result.error || 'Failed to update email', 'error');
+            }
+        } catch (error) {
+            this.showNotification('Network error. Please try again.', 'error');
+        }
+    }
+
+    async loadCurrentEmail() {
+        try {
+            const response = await this.apiCall('/api/user/profile');
+            if (response.ok) {
+                const profile = await response.json();
+                const currentEmailInput = document.getElementById('current-email');
+                if (currentEmailInput && profile.email) {
+                    currentEmailInput.value = profile.email;
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load current email:', error);
         }
     }
 
@@ -2127,11 +2488,14 @@ class IntegratedAIChatbot {
             const isDeleted = user.is_deleted;
             const rowStyle = isDeleted ? 'opacity: 0.5; background: #f9f9f9;' : '';
             const deleteBtn = isDeleted 
-                ? `<button class="btn-small btn-success" onclick="app.restoreUser(${user.id})" title="Restore User">
-                       <i class="fas fa-undo"></i> Restore
+                ? `<button class="btn-small btn-success" onclick="app.restoreUser(${user.id})" title="Restore User" style="padding: 8px 10px;">
+                       <i class="fas fa-undo"></i>
+                   </button>
+                   <button class="btn-small btn-danger" onclick="app.permanentDeleteUser(${user.id}, '${user.username}')" title="Permanently Delete User (Cannot be undone!)" style="margin-left: 4px; padding: 8px 10px;">
+                       <i class="fas fa-trash-alt"></i>
                    </button>`
-                : `<button class="btn-small btn-danger" onclick="app.deleteUser(${user.id}, '${user.username}')" title="Delete User">
-                       <i class="fas fa-trash"></i> Delete
+                : `<button class="btn-small btn-danger" onclick="app.deleteUser(${user.id}, '${user.username}')" title="Soft Delete User (Can be restored)" style="padding: 8px 10px;">
+                       <i class="fas fa-trash"></i>
                    </button>`;
             
             return `
@@ -2149,12 +2513,19 @@ class IntegratedAIChatbot {
                         <strong>${user.username}${isDeleted ? ' <span style="color: #999;">(Deleted)</span>' : ''}</strong>
                     </td>
                     <td>${user.email}</td>
-                    <td><span class="role-badge ${user.role}">${user.role}</span></td>
+                    <td>
+                        <select class="role-selector" data-user-id="${user.id}" data-current-role="${user.role}" onchange="app.changeUserRole(${user.id}, this.value, '${user.username}')" style="padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; background: white; cursor: pointer;">
+                            <option value="guest" ${user.role === 'guest' ? 'selected' : ''}>Guest</option>
+                            <option value="user" ${user.role === 'user' ? 'selected' : ''}>User</option>
+                            <option value="paid" ${user.role === 'paid' ? 'selected' : ''}>Paid</option>
+                            <option value="administrator" ${user.role === 'administrator' ? 'selected' : ''}>Administrator</option>
+                        </select>
+                    </td>
                     <td>${user.total_messages}</td>
                     <td>${user.total_conversations}</td>
                     <td>${lastActive}</td>
                     <td>${createdDate}</td>
-                    <td>${deleteBtn}</td>
+                    <td style="white-space: nowrap; text-align: center;">${deleteBtn}</td>
                 </tr>
             `;
         }).join('');
@@ -2312,6 +2683,126 @@ class IntegratedAIChatbot {
             this.showNotification('Network error. Please try again.', 'error');
         }
     }
+    
+    async changeUserRole(userId, newRole, username) {
+        /**Change user's role */
+        try {
+            const response = await this.apiCall(`/api/admin/users/${userId}/role`, 'POST', {
+                role: newRole
+            });
+            
+            if (response.ok) {
+                this.showNotification(`User "${username}" role changed to ${newRole}`, 'success');
+                // Update the table row's data attribute
+                const row = document.querySelector(`tr[data-id="${userId}"]`);
+                if (row) {
+                    row.setAttribute('data-role', newRole);
+                }
+            } else {
+                const error = await response.json();
+                this.showNotification(error.error || 'Failed to change user role', 'error');
+                // Revert dropdown to previous value
+                const dropdown = document.querySelector(`select[data-user-id="${userId}"]`);
+                if (dropdown) {
+                    dropdown.value = dropdown.getAttribute('data-current-role');
+                }
+            }
+        } catch (error) {
+            console.error('Error changing user role:', error);
+            this.showNotification('Network error. Please try again.', 'error');
+            // Revert dropdown to previous value
+            const dropdown = document.querySelector(`select[data-user-id="${userId}"]`);
+            if (dropdown) {
+                dropdown.value = dropdown.getAttribute('data-current-role');
+            }
+        }
+    }
+    
+    async permanentDeleteUser(userId, username) {
+        /**Permanently delete a user and all their data */
+        const confirmed = confirm(
+            `⚠️ PERMANENT DELETE WARNING ⚠️\n\n` +
+            `Are you ABSOLUTELY SURE you want to PERMANENTLY delete user "${username}"?\n\n` +
+            `This will DELETE:\n` +
+            `• User account\n` +
+            `• All conversations\n` +
+            `• All messages\n` +
+            `• All related data\n\n` +
+            `This action CANNOT be undone!\n\n` +
+            `Click OK to permanently delete, or Cancel to abort.`
+        );
+        
+        if (!confirmed) {
+            return;
+        }
+        
+        try {
+            const response = await this.apiCall(`/api/admin/users/${userId}/permanent-delete`, 'POST');
+            
+            if (response.ok) {
+                this.showNotification(`User "${username}" has been permanently deleted`, 'success');
+                // Reload users table
+                await this.loadAdminData();
+            } else {
+                const error = await response.json();
+                this.showNotification(error.error || 'Failed to permanently delete user', 'error');
+            }
+        } catch (error) {
+            console.error('Error permanently deleting user:', error);
+            this.showNotification('Network error. Please try again.', 'error');
+        }
+    }
+    
+    async bulkDeleteAllDeletedUsers() {
+        /**Permanently delete ALL logically deleted users in one go */
+        // Get count of deleted users
+        const deletedUsers = this.allUsers.filter(u => u.is_deleted);
+        
+        if (deletedUsers.length === 0) {
+            this.showNotification('No deleted users to remove', 'info');
+            return;
+        }
+        
+        const confirmed = confirm(
+            `⚠️⚠️ BULK PERMANENT DELETE WARNING ⚠️⚠️\n\n` +
+            `Are you ABSOLUTELY SURE you want to PERMANENTLY delete ALL ${deletedUsers.length} deleted users?\n\n` +
+            `This will DELETE:\n` +
+            `• ${deletedUsers.length} user accounts\n` +
+            `• All their conversations\n` +
+            `• All their messages\n` +
+            `• All their related data\n\n` +
+            `This action CANNOT be undone!\n\n` +
+            `Click OK to proceed with BULK DELETE.`
+        );
+        
+        if (!confirmed) {
+            return;
+        }
+        
+        // Triple confirmation - type "DELETE ALL"
+        const typedConfirmation = prompt(`Type "DELETE ALL" to confirm bulk deletion of ${deletedUsers.length} users:`);
+        if (typedConfirmation !== 'DELETE ALL') {
+            this.showNotification('Confirmation does not match. Bulk deletion cancelled.', 'error');
+            return;
+        }
+        
+        try {
+            const response = await this.apiCall('/api/admin/users/bulk-delete-deleted', 'POST');
+            
+            if (response.ok) {
+                const result = await response.json();
+                this.showNotification(`Successfully deleted ${result.deleted_count} users permanently`, 'success');
+                // Reload users table
+                await this.loadAdminData();
+            } else {
+                const error = await response.json();
+                this.showNotification(error.error || 'Failed to bulk delete users', 'error');
+            }
+        } catch (error) {
+            console.error('Error bulk deleting users:', error);
+            this.showNotification('Network error. Please try again.', 'error');
+        }
+    }
 
     async checkEmailVerification() {
         /**Check if email is verified and show banner if not */
@@ -2319,23 +2810,47 @@ class IntegratedAIChatbot {
             const response = await this.apiCall('/api/auth/check-verification', 'GET');
             if (response.ok) {
                 const data = await response.json();
-                console.log('Email verification status:', data.verified);
+                console.log('✅ Email verification status:', data.verified);
                 
                 const banner = document.getElementById('email-verification-banner');
+                const bannerEmailSpan = document.getElementById('verification-banner-email');
+                
+                console.log('📧 Banner element found:', !!banner);
+                console.log('📧 Banner email span found:', !!bannerEmailSpan);
+                
                 if (banner) {
                     if (!data.verified) {
+                        // Get user profile to fetch email
+                        console.log('🔍 Fetching user profile for email...');
+                        const profileResponse = await this.apiCall('/api/user/profile', 'GET');
+                        if (profileResponse.ok) {
+                            const profile = await profileResponse.json();
+                            console.log('👤 Profile email:', profile.email);
+                            
+                            if (profile.email && bannerEmailSpan) {
+                                const maskedEmail = this.maskEmail(profile.email);
+                                console.log('🎭 Masked email:', maskedEmail);
+                                bannerEmailSpan.innerHTML = `Check your email (<strong>${maskedEmail}</strong>) for a 6-digit verification code.`;
+                                console.log('✅ Banner email text updated!');
+                            } else {
+                                console.warn('⚠️ Missing email or span element');
+                            }
+                        } else {
+                            console.error('❌ Failed to fetch profile');
+                        }
+                        
                         // Show verification banner for unverified users
                         banner.style.display = 'block';
-                        console.log('Showing verification banner - user not verified');
+                        console.log('✅ Showing verification banner - user not verified');
                     } else {
                         // Hide banner for verified users
                         banner.style.display = 'none';
-                        console.log('Hiding verification banner - user is verified');
+                        console.log('✅ Hiding verification banner - user is verified');
                     }
                 }
             }
         } catch (error) {
-            console.error('Error checking email verification:', error);
+            console.error('❌ Error checking email verification:', error);
         }
     }
 
@@ -2398,6 +2913,12 @@ class IntegratedAIChatbot {
 
     async loadAdminChat(scrollToBottom = true) {
         /**Load admin chat messages */
+        // Don't load if user is not authenticated
+        if (!this.authToken) {
+            console.log('Not authenticated, skipping admin chat load');
+            return;
+        }
+        
         try {
             // Load messages
             const response = await this.apiCall('/api/admin-chat/messages', 'GET');
@@ -2429,6 +2950,13 @@ class IntegratedAIChatbot {
         
         // Refresh every 5 seconds
         this.adminChatRefreshInterval = setInterval(async () => {
+            // Stop auto-refresh if user is not authenticated
+            if (!this.authToken) {
+                console.log('No auth token, stopping admin chat auto-refresh');
+                clearInterval(this.adminChatRefreshInterval);
+                return;
+            }
+            
             try {
                 const response = await this.apiCall('/api/admin-chat/messages', 'GET');
                 if (response.ok) {
@@ -2448,6 +2976,11 @@ class IntegratedAIChatbot {
                     
                     this.lastAdminMessageCount = messages.length;
                     this.renderAdminMessages(messages);
+                } else if (response.status === 401) {
+                    // Stop auto-refresh on authentication error
+                    console.log('Authentication error, stopping admin chat auto-refresh');
+                    clearInterval(this.adminChatRefreshInterval);
+                    return;
                 }
                 this.checkUnreadAdminMessages();
             } catch (error) {
@@ -2597,6 +3130,11 @@ class IntegratedAIChatbot {
     
     async checkUnreadAdminMessages() {
         /**Check for unread messages from admin */
+        // Don't check if user is not authenticated
+        if (!this.authToken) {
+            return;
+        }
+        
         try {
             const response = await this.apiCall('/api/admin-chat/unread-count', 'GET');
             if (response.ok) {
