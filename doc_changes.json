@@ -38,9 +38,9 @@
     "ai_compare\\wisdom_chatbot.py": "72978aa47f4bf569ead543d4cc90d2f0",
     "ai_compare\\__init__.py": "d41d8cd98f00b204e9800998ecf8427e",
     "app.py": "0091aa1d83f7fcdc36dcb4c052772486",
-    "requirements.txt": "de460fa54f13540cf9e6a298228a6241",
+    "requirements.txt": "311d7ad799e4faed4c859e755f76174f",
     ".env": "598ed9df8f31de62af8949518c2e77af"
   },
-  "last_update": "2025-11-24T09:04:32.751443",
-  "update_count": 3008
+  "last_update": "2025-11-24T09:11:22.657515",
+  "update_count": 3065
 }

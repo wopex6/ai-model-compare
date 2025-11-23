@@ -14,5 +14,8 @@ chromadb>=0.4.0
 beautifulsoup4>=4.12.0
 lxml>=4.9.0
 
+# Smart Response System Dependencies
+spacy>=3.7.0
+
 # Optional - Uncomment if needed
 #llama-cpp-python>=0.2.0  # Commented out - too large for PythonAnywhere free tier
