@@ -28,7 +28,37 @@ def migrate_admin_messages():
         """)
         
         if cursor.fetchone():
-            print("✅ admin_messages table already exists")
+            print("⚠️  admin_messages table exists - checking for missing columns...")
+            
+            # Get current columns
+            cursor.execute("PRAGMA table_info(admin_messages)")
+            columns = {col[1] for col in cursor.fetchall()}
+            
+            # Check for missing columns
+            required_columns = {
+                'file_url': 'TEXT',
+                'file_name': 'TEXT',
+                'file_size': 'INTEGER',
+                'reply_to': 'INTEGER'
+            }
+            
+            missing_columns = []
+            for col_name, col_type in required_columns.items():
+                if col_name not in columns:
+                    missing_columns.append((col_name, col_type))
+            
+            if missing_columns:
+                print(f"📝 Adding {len(missing_columns)} missing columns...")
+                for col_name, col_type in missing_columns:
+                    try:
+                        cursor.execute(f"ALTER TABLE admin_messages ADD COLUMN {col_name} {col_type}")
+                        print(f"   ✅ Added column: {col_name}")
+                    except Exception as e:
+                        print(f"   ⚠️  Column {col_name} might already exist: {e}")
+                conn.commit()
+                print("✅ Missing columns added!")
+            else:
+                print("✅ All columns exist - table is up to date!")
         else:
             print("📝 Creating admin_messages table...")
             
