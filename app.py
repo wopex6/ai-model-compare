@@ -29,6 +29,10 @@ from ai_compare.character_configs import CHARACTER_CONFIGS
 from integrated_database import IntegratedDatabase
 from email_service import EmailService
 
+# Import Smart Response System
+from smart_response.handler import SmartResponseHandler
+import sqlite3
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -103,6 +107,19 @@ personality_assessment_ui = PersonalityAssessmentUI(personality_profiler)
 
 # Initialize user profile system
 user_profile_manager = UserProfileManager()
+
+# Initialize Smart Response System
+print("\n=== Initializing Smart Response System ===")
+try:
+    smart_response_conn = sqlite3.connect('integrated_users.db', check_same_thread=False)
+    smart_handler = SmartResponseHandler(smart_response_conn)
+    # Track previous interactions for learning
+    previous_interactions = {}
+    print("✓ Smart Response System initialized")
+except Exception as e:
+    print(f"✗ Error initializing Smart Response: {e}")
+    smart_handler = None
+    previous_interactions = {}
 
 # Authentication middleware
 def authenticate_token():
@@ -1305,19 +1322,79 @@ def test_session_page():
     return render_template('test_session_restoration.html')
 
 @app.route('/coach/chat', methods=['POST'])
+@require_auth
 def coach_chat():
     try:
         data = request.get_json()
         message = data.get('message', '')
         include_context = data.get('include_context', True)
+        user_id = request.current_user.get('user_id')
         
         if not message.strip():
             return jsonify({'error': 'Message cannot be empty'}), 400
         
+        # ✨ SMART RESPONSE SYSTEM ✨
+        if smart_handler:
+            # Track previous interaction for learning
+            prev_key = f"{user_id}_coach"
+            if prev_key in previous_interactions:
+                prev = previous_interactions[prev_key]
+                time_diff = (datetime.now() - prev['timestamp']).total_seconds()
+                smart_handler.track_response(
+                    user_id=user_id,
+                    message=prev['message'],
+                    response_type=prev['response_type'],
+                    character='coach',
+                    user_followup=message,
+                    time_to_followup=time_diff
+                )
+            
+            # Check if this is small talk
+            response_type, response_data = smart_handler.process_message(
+                user_id, message, 'coach'
+            )
+            
+            if response_type == 'quick_reply':
+                # Use quick reply (instant, no API cost!)
+                print(f"💰 COST SAVED - Quick reply for: '{message}'")
+                result = {
+                    'response': response_data['text'],
+                    'type': 'quick_reply',
+                    'confidence': response_data['confidence'],
+                    'smart_response': True
+                }
+                
+                # Store for learning
+                previous_interactions[prev_key] = {
+                    'message': message,
+                    'response_type': 'quick_reply',
+                    'timestamp': datetime.now()
+                }
+                
+                return jsonify(result)
+            
+            # Log that we're using full AI
+            print(f"💸 API CALL - Full AI for: '{message}' (confidence: {response_data['confidence']:.2f})")
+        
+        # Use full AI
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         response = loop.run_until_complete(motivational_bot.chat(message, include_context))
         loop.close()
+        
+        # Store for learning
+        if smart_handler:
+            prev_key = f"{user_id}_coach"
+            previous_interactions[prev_key] = {
+                'message': message,
+                'response_type': 'full_ai',
+                'timestamp': datetime.now()
+            }
+        
+        # Add metadata
+        if isinstance(response, dict):
+            response['type'] = 'full_ai'
+            response['smart_response'] = True
         
         return jsonify(response)
     except Exception as e:
@@ -1338,6 +1415,24 @@ def toggle_reminders():
         active = data.get('active', True)
         motivational_bot.toggle_reminders(active)
         return jsonify({'success': True, 'reminders_active': active})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Smart Response System Stats Endpoint
+@app.route('/api/smart-response/stats')
+@require_auth
+def smart_response_stats():
+    """Get user's smart response learning statistics"""
+    try:
+        user_id = request.current_user.get('user_id')
+        if not smart_handler:
+            return jsonify({'error': 'Smart Response System not initialized'}), 503
+        
+        stats = smart_handler.get_user_stats(user_id)
+        return jsonify({
+            'success': True,
+            'stats': stats
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
