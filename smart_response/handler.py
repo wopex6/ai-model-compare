@@ -107,23 +107,43 @@ class SmartResponseHandler:
         if should_use_quick and detection['type'] == 'SMALL_TALK':
             # Generate quick reply
             category = detection.get('category', 'acknowledgment')
-            quick_reply_text = self.quick_replies.get_contextual_reply(
-                character,
-                category,
-                message,
-                context.get('last_ai_message')
-            )
             
-            return 'quick_reply', {
-                'text': quick_reply_text,
-                'confidence': adjusted_confidence,
-                'reasoning': detection['reasoning'],
-                'metadata': {
-                    'category': category,
-                    'detection_type': detection['type'],
-                    'context': context
+            if detection['category']:
+                # Get reply with contextual suggestion
+                reply, suggestion = self.quick_replies.get_reply_with_suggestion(
+                    character, 
+                    detection['category'],
+                    context={'recent_suggestions': context.get('recent_suggestions', [])}
+                )
+                
+                return 'quick_reply', {
+                    'text': reply,
+                    'suggestion': suggestion,  # NEW: Follow-up prompt
+                    'confidence': adjusted_confidence,
+                    'category': detection['category'],
+                    'metadata': {
+                        'detection_type': detection['type'],
+                        'context': context
+                    }
                 }
-            }
+            else:
+                quick_reply_text = self.quick_replies.get_contextual_reply(
+                    character,
+                    category,
+                    message,
+                    context.get('last_ai_message')
+                )
+                
+                return 'quick_reply', {
+                    'text': quick_reply_text,
+                    'confidence': adjusted_confidence,
+                    'reasoning': detection['reasoning'],
+                    'metadata': {
+                        'category': category,
+                        'detection_type': detection['type'],
+                        'context': context
+                    }
+                }
         else:
             # Use full AI
             return 'full_ai', {

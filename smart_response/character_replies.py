@@ -1,17 +1,18 @@
 """
 Character-Specific Quick Replies - Maintains character voice in fast responses
+Now with contextual follow-up suggestions to encourage deeper engagement
 """
 
 import random
-from typing import List, Dict
+from typing import List, Dict, Optional, Tuple
 
 
 class CharacterQuickReplies:
     """
-    Generates character-appropriate quick replies
+    Generates character-appropriate quick replies with follow-up suggestions
     """
     
-    # Character-specific reply templates
+    # Character-specific reply templates with follow-up prompts
     REPLIES = {
         'coach': {  # Max - Motivational Coach
             'greeting': [
@@ -19,10 +20,22 @@ class CharacterQuickReplies:
                 "What's up, superstar! 💪 Let's make today amazing!",
                 "Hey! Great to see you! Let's get after it! 🚀",
             ],
+            'greeting_followup': [
+                "What's your biggest goal right now?",
+                "What are you working on today?",
+                "Want to set a new milestone?",
+                "Ready to plan your next win?",
+                "What challenge can I help you tackle?",
+            ],
             'thanks': [
                 "You got this! 💪 Keep crushing it!",
                 "Anytime, champ! That's what I'm here for! 🔥",
                 "You're welcome! Now go make it happen! 🚀",
+            ],
+            'thanks_followup': [
+                "What's your next move?",
+                "Ready to tackle the next challenge?",
+                "What else can I help you crush today?",
             ],
             'acknowledgment': [
                 "Awesome! 💪 What's next on your action list?",
@@ -38,6 +51,11 @@ class CharacterQuickReplies:
                 "Go crush it! See you soon, champion! 💪",
                 "Later, superstar! Keep being awesome! 🔥",
                 "Catch you later! Keep up that amazing energy! 🚀",
+            ],
+            'farewell_followup': [
+                "Come back when you're ready for more!",
+                "Remember: You're unstoppable!",
+                "Let me know how it goes!",
             ]
         },
         
@@ -46,6 +64,12 @@ class CharacterQuickReplies:
                 "Welcome, friend. What wisdom do you seek today?",
                 "Greetings. Peace be with you on your journey.",
                 "Ah, hello. The path reveals itself to those who seek.",
+            ],
+            'greeting_followup': [
+                "What question weighs on your mind?",
+                "Is there a path you wish to explore?",
+                "What brings you here today?",
+                "Shall we discuss the nature of...?",
             ],
             'thanks': [
                 "You're most welcome. May peace guide your way.",
@@ -66,6 +90,11 @@ class CharacterQuickReplies:
                 "May your path be filled with peace and wisdom.",
                 "Go with serenity, friend. Until we meet again.",
                 "Farewell. May clarity guide your journey.",
+            ],
+            'farewell_followup': [
+                "Reflect on what we've discussed.",
+                "Practice mindfulness as you go.",
+                "Return when you seek more understanding.",
             ]
         },
         
@@ -74,6 +103,12 @@ class CharacterQuickReplies:
                 "Greetings. How may Stoic wisdom serve you today?",
                 "Welcome, friend. What troubles your mind?",
                 "Salve. Speak, and we shall reason together.",
+            ],
+            'greeting_followup': [
+                "What virtue do you wish to cultivate?",
+                "Is there a challenge testing your character?",
+                "What aspect of Stoicism shall we explore?",
+                "Tell me what weighs upon your mind.",
             ],
             'thanks': [
                 "You're welcome. Remember, gratitude is a virtue worth cultivating.",
@@ -94,6 +129,11 @@ class CharacterQuickReplies:
                 "Farewell. May virtue guide your actions always.",
                 "Go in peace. Remember, we control only our responses.",
                 "Vale. Practice your principles, not just your words.",
+            ],
+            'farewell_followup': [
+                "Reflect on today's wisdom.",
+                "Practice what we've discussed.",
+                "Remember: You control your response.",
             ]
         },
         
@@ -102,6 +142,12 @@ class CharacterQuickReplies:
                 "Hello. I'm here to listen. What's on your mind today?",
                 "Hi there. How are you feeling right now?",
                 "Welcome. I'm glad you're here. What would you like to explore?",
+            ],
+            'greeting_followup': [
+                "How have you been feeling lately?",
+                "What would you like to talk about today?",
+                "Is something particular on your mind?",
+                "What brought you here today?",
             ],
             'thanks': [
                 "You're welcome. I'm here whenever you need support.",
@@ -307,3 +353,41 @@ class CharacterQuickReplies:
                     reply = "Good. I trust this wisdom serves you well."
         
         return reply
+    
+    def get_reply_with_suggestion(self, character: str, category: str, 
+                                  context: Optional[Dict] = None) -> Tuple[str, Optional[str]]:
+        """
+        Get quick reply WITH a follow-up suggestion to encourage continued conversation
+        
+        Args:
+            character: Character name ('coach', 'sage', 'marcus', etc.)
+            category: Type of reply ('greeting', 'thanks', 'acknowledgment', etc.)
+            context: Optional context (conversation history, previous topics, etc.)
+        
+        Returns:
+            Tuple of (primary_reply, follow_up_suggestion)
+            Example: ("Hey there, champion! 🔥", "What goal are you working on today?")
+        """
+        # Get primary reply
+        primary_reply = self.get_reply(character, category)
+        
+        # Get follow-up suggestion (if available for this category)
+        followup_key = f"{category}_followup"
+        character = character.lower()
+        
+        suggestion = None
+        
+        # Try to get character-specific suggestion
+        if character in self.REPLIES and followup_key in self.REPLIES[character]:
+            suggestions = self.REPLIES[character][followup_key]
+            
+            # Smart selection based on context
+            if context and 'recent_topics' in context:
+                # Avoid repeating recent suggestions
+                recent = set(context.get('recent_suggestions', []))
+                available = [s for s in suggestions if s not in recent]
+                suggestion = random.choice(available) if available else random.choice(suggestions)
+            else:
+                suggestion = random.choice(suggestions)
+        
+        return (primary_reply, suggestion)
