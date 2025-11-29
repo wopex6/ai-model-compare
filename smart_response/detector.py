@@ -27,25 +27,35 @@ class SmallTalkDetector:
     Detects small talk vs complex messages using pattern matching + NLP
     """
     
+    # Common typo mappings for small talk
+    TYPO_CORRECTIONS = {
+        'helo': 'hello', 'hii': 'hi', 'heyy': 'hey', 'hy': 'hi',
+        'byr': 'bye', 'byee': 'bye', 'goodby': 'goodbye', 'cya': 'see you',
+        'thnks': 'thanks', 'thnx': 'thanks', 'thanx': 'thanks', 'thks': 'thanks',
+        'oka': 'ok', 'okk': 'ok', 'okey': 'okay', 'okie': 'okay',
+        'yess': 'yes', 'yea': 'yeah', 'yhea': 'yeah', 'ys': 'yes',
+        'noo': 'no', 'nop': 'nope', 'naa': 'nah'
+    }
+    
     # Pattern-based detection (instant, no NLP needed)
     OBVIOUS_PATTERNS = {
         'greeting': [
-            r'\b(hi|hello|hey|good morning|good evening|good afternoon|howdy|greetings)\b',
+            r'\b(hi|hello|hey|good morning|good evening|good afternoon|howdy|greetings|helo|hii|heyy|hy)\b',
         ],
         'farewell': [
-            r'\b(bye|goodbye|see you|talk later|catch you later|gtg|gotta go|take care)\b',
+            r'\b(bye|goodbye|see you|talk later|catch you later|gtg|gotta go|take care|byr|byee|goodby|cya)\b',
         ],
         'thanks': [
-            r'\b(thanks?|thank you|thx|ty|thanx|appreciate|appreciated|grateful)\b',
+            r'\b(thanks?|thank you|thx|ty|thanx|appreciate|appreciated|grateful|thnks|thnx|thks)\b',
         ],
         'acknowledgment': [
-            r'\b(ok|okay|got it|sure|alright|k|kk|understood|right|noted)\b',
+            r'\b(ok|okay|got it|sure|alright|k|kk|understood|right|noted|oka|okk|okey|okie)\b',
         ],
         'agreement': [
-            r'\b(yes|yeah|yep|yup|correct|exactly|absolutely|indeed)\b',
+            r'\b(yes|yeah|yep|yup|correct|exactly|absolutely|indeed|yess|yea|yhea|ys)\b',
         ],
         'disagreement': [
-            r'\b(no|nope|nah|not really|don\'t think so)\b',
+            r'\b(no|nope|nah|not really|don\'t think so|noo|nop|naa)\b',
         ],
         'simple_questions': [
             r'^(how are you|how\'s it going|what\'s up|sup)\??$',
