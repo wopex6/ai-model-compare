@@ -546,6 +546,11 @@
                     } else {
                         this.addMessage(data.response, 'coach', false, data);
                         
+                        // Show follow-up suggestion if available (Smart Response feature)
+                        if (data.suggestion) {
+                            this.addSuggestion(data.suggestion);
+                        }
+                        
                         // Add energy boost animation for motivational responses
                         if (data.motivational_action) {
                             document.body.classList.add('energy-boost');
@@ -578,6 +583,9 @@
                 if (metadata && metadata.motivational_action) {
                     metaInfo += ` • ${metadata.motivational_action.replace('_', ' ')}`;
                 }
+                if (metadata && metadata.type === 'quick_reply') {
+                    metaInfo += ` • ⚡ Smart Reply`;
+                }
                 
                 messageDiv.innerHTML = `
                     <div class="message-avatar">${avatar}</div>
@@ -589,6 +597,65 @@
                 
                 this.chatMessages.appendChild(messageDiv);
                 this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+            }
+            
+            addSuggestion(suggestionText) {
+                // Remove any existing suggestions first
+                const existingSuggestion = this.chatMessages.querySelector('.suggestion-prompt');
+                if (existingSuggestion) {
+                    existingSuggestion.remove();
+                }
+                
+                // Create new suggestion element
+                const suggestionDiv = document.createElement('div');
+                suggestionDiv.className = 'suggestion-prompt';
+                suggestionDiv.style.cssText = `
+                    margin: 10px 0;
+                    padding: 12px 16px;
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    border-radius: 12px;
+                    color: white;
+                    font-size: 14px;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+                    text-align: center;
+                    animation: slideIn 0.3s ease-out;
+                `;
+                suggestionDiv.innerHTML = `
+                    <div style="opacity: 0.8; font-size: 12px; margin-bottom: 4px;">💭 Suggestion</div>
+                    <div style="font-weight: 500;">${suggestionText}</div>
+                `;
+                
+                // Click to use suggestion
+                suggestionDiv.addEventListener('click', () => {
+                    this.messageInput.value = suggestionText;
+                    this.messageInput.focus();
+                    suggestionDiv.style.transform = 'scale(0.95)';
+                    suggestionDiv.style.opacity = '0.5';
+                });
+                
+                // Hover effects
+                suggestionDiv.addEventListener('mouseenter', () => {
+                    suggestionDiv.style.transform = 'translateY(-2px)';
+                    suggestionDiv.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.5)';
+                });
+                suggestionDiv.addEventListener('mouseleave', () => {
+                    suggestionDiv.style.transform = 'translateY(0)';
+                    suggestionDiv.style.boxShadow = '0 2px 8px rgba(102, 126, 234, 0.3)';
+                });
+                
+                this.chatMessages.appendChild(suggestionDiv);
+                this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+                
+                // Remove suggestion after user types something else
+                const clearSuggestion = () => {
+                    if (this.messageInput.value && this.messageInput.value !== suggestionText) {
+                        suggestionDiv.remove();
+                        this.messageInput.removeEventListener('input', clearSuggestion);
+                    }
+                };
+                this.messageInput.addEventListener('input', clearSuggestion);
             }
             
             async loadStats() {

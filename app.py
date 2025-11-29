@@ -169,6 +169,11 @@ def process_with_smart_response(message, character_name, ai_chat_function):
                 'smart_response': True
             }
             
+            # Add follow-up suggestion if available
+            if 'suggestion' in response_data and response_data['suggestion']:
+                result['suggestion'] = response_data['suggestion']
+                print(f"   💭 Suggestion: '{response_data['suggestion']}'")
+            
             # Store for learning
             previous_interactions[prev_key] = {
                 'message': message,
