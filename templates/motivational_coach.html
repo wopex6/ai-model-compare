@@ -523,9 +523,16 @@
                 this.showTyping();
                 
                 try {
+                    // Get auth token for Smart Response System
+                    const authToken = localStorage.getItem('authToken');
+                    const headers = { 'Content-Type': 'application/json' };
+                    if (authToken) {
+                        headers['Authorization'] = `Bearer ${authToken}`;
+                    }
+                    
                     const response = await fetch('/coach/chat', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: headers,
                         body: JSON.stringify({
                             message: messageText,
                             include_context: true
