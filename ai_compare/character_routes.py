@@ -7,13 +7,14 @@ import asyncio
 from .character_factory import CharacterFactory
 
 
-def register_character_routes(app, characters_dict):
+def register_character_routes(app, characters_dict, smart_response_processor=None):
     """
     Dynamically register routes for all characters
     
     Args:
         app: Flask app instance
         characters_dict: Dict mapping character_id to chatbot instance
+        smart_response_processor: Optional Smart Response processing function
     """
     
     # Get all character IDs
@@ -27,7 +28,7 @@ def register_character_routes(app, characters_dict):
             
         # Create route functions with proper closures
         _register_character_page(app, char_id)
-        _register_chat_endpoint(app, char_id, characters_dict)
+        _register_chat_endpoint(app, char_id, characters_dict, smart_response_processor)
         _register_insight_endpoint(app, char_id, characters_dict)
         _register_stats_endpoint(app, char_id, characters_dict)
 
@@ -57,8 +58,8 @@ def _register_character_page(app, character_id):
     )
 
 
-def _register_chat_endpoint(app, character_id, characters_dict):
-    """Register chat endpoint for character"""
+def _register_chat_endpoint(app, character_id, characters_dict, smart_response_processor=None):
+    """Register chat endpoint for character with Smart Response support"""
     
     def character_chat():
         try:
@@ -74,11 +75,22 @@ def _register_chat_endpoint(app, character_id, characters_dict):
             if not bot:
                 return jsonify({'error': f'Character {character_id} not initialized'}), 500
             
-            # Run async chat
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            response = loop.run_until_complete(bot.chat(message, include_context))
-            loop.close()
+            # Use Smart Response if available
+            if smart_response_processor:
+                def ai_function():
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    response = loop.run_until_complete(bot.chat(message, include_context))
+                    loop.close()
+                    return response
+                
+                response = smart_response_processor(message, character_id, ai_function)
+            else:
+                # Fallback to direct AI if Smart Response not available
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                response = loop.run_until_complete(bot.chat(message, include_context))
+                loop.close()
             
             return jsonify(response)
         except Exception as e:

@@ -121,6 +121,85 @@ except Exception as e:
     smart_handler = None
     previous_interactions = {}
 
+# Helper function for Smart Response integration
+def process_with_smart_response(message, character_name, ai_chat_function):
+    """
+    Common Smart Response processing for all characters
+    
+    Args:
+        message: User's message
+        character_name: Character identifier (coach, sage, marcus, etc.)
+        ai_chat_function: Function to call for full AI response
+    
+    Returns:
+        Response dict with 'response', 'type', etc.
+    """
+    # Check if user is authenticated (optional)
+    user_data = authenticate_token()
+    user_id = user_data.get('user_id') if user_data else None
+    
+    # Smart Response only for authenticated users
+    if smart_handler and user_id:
+        # Track previous interaction for learning
+        prev_key = f"{user_id}_{character_name}"
+        if prev_key in previous_interactions:
+            prev = previous_interactions[prev_key]
+            time_diff = (datetime.now() - prev['timestamp']).total_seconds()
+            smart_handler.track_response(
+                user_id=user_id,
+                message=prev['message'],
+                response_type=prev['response_type'],
+                character=character_name,
+                user_followup=message,
+                time_to_followup=time_diff
+            )
+        
+        # Check if this is small talk
+        response_type, response_data = smart_handler.process_message(
+            user_id, message, character_name
+        )
+        
+        if response_type == 'quick_reply':
+            # Use quick reply (instant, no API cost!)
+            print(f"💰 COST SAVED ({character_name}) - Quick reply for: '{message}'")
+            result = {
+                'response': response_data['text'],
+                'type': 'quick_reply',
+                'confidence': response_data['confidence'],
+                'smart_response': True
+            }
+            
+            # Store for learning
+            previous_interactions[prev_key] = {
+                'message': message,
+                'response_type': 'quick_reply',
+                'timestamp': datetime.now()
+            }
+            
+            return result
+        
+        # Log that we're using full AI
+        print(f"💸 API CALL ({character_name}) - Full AI for: '{message}' (confidence: {response_data['confidence']:.2f})")
+    
+    # Use full AI
+    response = ai_chat_function()
+    
+    # Store for learning (only if authenticated)
+    if smart_handler and user_id:
+        prev_key = f"{user_id}_{character_name}"
+        previous_interactions[prev_key] = {
+            'message': message,
+            'response_type': 'full_ai',
+            'timestamp': datetime.now()
+        }
+    
+    # Add metadata
+    if isinstance(response, dict):
+        response['type'] = 'full_ai'
+        response['smart_response'] = True
+    
+    return response
+
 # Authentication middleware
 def authenticate_token():
     """Middleware to authenticate JWT tokens"""
@@ -1331,73 +1410,15 @@ def coach_chat():
         if not message.strip():
             return jsonify({'error': 'Message cannot be empty'}), 400
         
-        # Check if user is authenticated (optional)
-        user_data = authenticate_token()
-        user_id = user_data.get('user_id') if user_data else None
+        # Use common Smart Response processing
+        def ai_function():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            response = loop.run_until_complete(motivational_bot.chat(message, include_context))
+            loop.close()
+            return response
         
-        # ✨ SMART RESPONSE SYSTEM (only for authenticated users) ✨
-        if smart_handler and user_id:
-            # Track previous interaction for learning
-            prev_key = f"{user_id}_coach"
-            if prev_key in previous_interactions:
-                prev = previous_interactions[prev_key]
-                time_diff = (datetime.now() - prev['timestamp']).total_seconds()
-                smart_handler.track_response(
-                    user_id=user_id,
-                    message=prev['message'],
-                    response_type=prev['response_type'],
-                    character='coach',
-                    user_followup=message,
-                    time_to_followup=time_diff
-                )
-            
-            # Check if this is small talk
-            response_type, response_data = smart_handler.process_message(
-                user_id, message, 'coach'
-            )
-            
-            if response_type == 'quick_reply':
-                # Use quick reply (instant, no API cost!)
-                print(f"💰 COST SAVED - Quick reply for: '{message}'")
-                result = {
-                    'response': response_data['text'],
-                    'type': 'quick_reply',
-                    'confidence': response_data['confidence'],
-                    'smart_response': True
-                }
-                
-                # Store for learning
-                previous_interactions[prev_key] = {
-                    'message': message,
-                    'response_type': 'quick_reply',
-                    'timestamp': datetime.now()
-                }
-                
-                return jsonify(result)
-            
-            # Log that we're using full AI
-            print(f"💸 API CALL - Full AI for: '{message}' (confidence: {response_data['confidence']:.2f})")
-        
-        # Use full AI
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        response = loop.run_until_complete(motivational_bot.chat(message, include_context))
-        loop.close()
-        
-        # Store for learning (only if authenticated)
-        if smart_handler and user_id:
-            prev_key = f"{user_id}_coach"
-            previous_interactions[prev_key] = {
-                'message': message,
-                'response_type': 'full_ai',
-                'timestamp': datetime.now()
-            }
-        
-        # Add metadata
-        if isinstance(response, dict):
-            response['type'] = 'full_ai'
-            response['smart_response'] = True
-        
+        response = process_with_smart_response(message, 'coach', ai_function)
         return jsonify(response)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1454,11 +1475,15 @@ def sage_chat():
         if not message.strip():
             return jsonify({'error': 'Message cannot be empty'}), 400
         
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        response = loop.run_until_complete(wisdom_bot.chat(message, include_context))
-        loop.close()
+        # Use common Smart Response processing
+        def ai_function():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            response = loop.run_until_complete(wisdom_bot.chat(message, include_context))
+            loop.close()
+            return response
         
+        response = process_with_smart_response(message, 'sage', ai_function)
         return jsonify(response)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1497,11 +1522,15 @@ def marcus_chat():
         if not message.strip():
             return jsonify({'error': 'Message cannot be empty'}), 400
         
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        response = loop.run_until_complete(stoic_bot.chat(message, include_context))
-        loop.close()
+        # Use common Smart Response processing
+        def ai_function():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            response = loop.run_until_complete(stoic_bot.chat(message, include_context))
+            loop.close()
+            return response
         
+        response = process_with_smart_response(message, 'marcus', ai_function)
         return jsonify(response)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1957,10 +1986,10 @@ def save_psychological_assessment():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Register dynamic character routes for ALL characters
+# Register dynamic character routes for ALL characters with Smart Response
 print("\n=== Registering Character Routes ===")
-register_character_routes(app, all_characters)
-print("✓ Dynamic routes registered for all 8 characters")
+register_character_routes(app, all_characters, process_with_smart_response)
+print("✓ Dynamic routes registered for all 8 characters with Smart Response")
 
 if __name__ == '__main__':
     # Enable auto-documentation only in development (not production)
