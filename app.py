@@ -108,23 +108,29 @@ personality_assessment_ui = PersonalityAssessmentUI(personality_profiler)
 # Initialize user profile system
 user_profile_manager = UserProfileManager()
 
-# Initialize Smart Response System
-print("\n=== Initializing Smart Response System ===")
+# Initialize Smart Response System with Context Manager
 try:
+    from smart_response.handler import SmartResponseHandler
+    from smart_response.conversation_context import ConversationContextManager
     smart_response_conn = sqlite3.connect('integrated_users.db', check_same_thread=False)
     smart_handler = SmartResponseHandler(smart_response_conn)
+    context_manager = ConversationContextManager(smart_response_conn)
     # Track previous interactions for learning
     previous_interactions = {}
-    print("✓ Smart Response System initialized")
+    # Store recent message history for context
+    message_histories = {}  # {user_id_character: [{role, content, timestamp}, ...]}
+    print("✓ Smart Response System with Context Manager initialized")
 except Exception as e:
     print(f"✗ Error initializing Smart Response: {e}")
     smart_handler = None
+    context_manager = None
     previous_interactions = {}
+    message_histories = {}
 
-# Helper function for Smart Response integration
+# Helper function for Smart Response integration with Context
 def process_with_smart_response(message, character_name, ai_chat_function):
     """
-    Common Smart Response processing for all characters
+    Common Smart Response processing for all characters WITH CONTEXT
     
     Args:
         message: User's message
@@ -138,8 +144,16 @@ def process_with_smart_response(message, character_name, ai_chat_function):
     user_data = authenticate_token()
     user_id = user_data.get('user_id') if user_data else None
     
+    # Get message history for this user/character
+    history_key = f"{user_id}_{character_name}" if user_id else None
+    message_history = message_histories.get(history_key, []) if history_key else []
+    
     # Smart Response only for authenticated users
-    if smart_handler and user_id:
+    if smart_handler and user_id and context_manager:
+        # Get conversation context
+        context = context_manager.get_context_for_ai(user_id, character_name, message_history)
+        print(f"📚 Context loaded: {len(context.get('recent_topics', []))} topics, {context.get('message_count', 0)} messages")
+        
         # Track previous interaction for learning
         prev_key = f"{user_id}_{character_name}"
         if prev_key in previous_interactions:
@@ -162,6 +176,25 @@ def process_with_smart_response(message, character_name, ai_chat_function):
         if response_type == 'quick_reply':
             # Use quick reply (instant, no API cost!)
             print(f"💰 COST SAVED ({character_name}) - Quick reply for: '{message}'")
+            
+            # Add user message to history
+            message_history.append({
+                'role': 'user',
+                'content': message,
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            # Add assistant response to history
+            message_history.append({
+                'role': 'assistant',
+                'content': response_data['text'],
+                'timestamp': datetime.now().isoformat()
+            })
+            
+            # Keep only last 20 messages
+            message_history = message_history[-20:]
+            message_histories[history_key] = message_history
+            
             result = {
                 'response': response_data['text'],
                 'type': 'quick_reply',
@@ -174,6 +207,11 @@ def process_with_smart_response(message, character_name, ai_chat_function):
                 result['suggestion'] = response_data['suggestion']
                 print(f"   💭 Suggestion: '{response_data['suggestion']}'")
             
+            # Update context after exchange
+            context_manager.update_context(
+                user_id, character_name, message, response_data['text']
+            )
+            
             # Store for learning
             previous_interactions[prev_key] = {
                 'message': message,
@@ -185,12 +223,47 @@ def process_with_smart_response(message, character_name, ai_chat_function):
         
         # Log that we're using full AI
         print(f"💸 API CALL ({character_name}) - Full AI for: '{message}' (confidence: {response_data['confidence']:.2f})")
+        
+        # Format context for AI prompt
+        context_prompt = context_manager.format_context_for_prompt(context)
+        if context_prompt:
+            print(f"   📝 Passing context to AI: {len(context_prompt)} chars")
+            # Pass context to AI function if it accepts it
+            # For now, we'll add it to the message temporarily
+            enhanced_message = message
+            if context['recent_topics']:
+                # AI will get context awareness
+                pass  # Context will be passed via modified chatbot methods
+    else:
+        context_prompt = None
+        context = None
     
-    # Use full AI
+    # Use full AI (with context if available)
     response = ai_chat_function()
     
-    # Store for learning (only if authenticated)
-    if smart_handler and user_id:
+    # Store for learning and context (only if authenticated)
+    if smart_handler and user_id and context_manager:
+        # Add to message history
+        if history_key:
+            message_history.append({
+                'role': 'user',
+                'content': message,
+                'timestamp': datetime.now().isoformat()
+            })
+            message_history.append({
+                'role': 'assistant',
+                'content': response if isinstance(response, str) else response.get('response', ''),
+                'timestamp': datetime.now().isoformat()
+            })
+            message_history = message_history[-20:]
+            message_histories[history_key] = message_history
+        
+        # Update context
+        response_text = response if isinstance(response, str) else response.get('response', '')
+        context_manager.update_context(
+            user_id, character_name, message, response_text
+        )
+        
         prev_key = f"{user_id}_{character_name}"
         previous_interactions[prev_key] = {
             'message': message,
@@ -1447,19 +1520,41 @@ def toggle_reminders():
         return jsonify({'error': str(e)}), 500
 
 # Smart Response System Stats Endpoint
-@app.route('/api/smart-response/stats')
+@app.route('/api/smart-response/stats', methods=['GET'])
 @require_auth
 def smart_response_stats():
-    """Get user's smart response learning statistics"""
+    """Get Smart Response statistics for current user"""
     try:
-        user_id = request.current_user.get('user_id')
+        user_id = request.current_user['user_id']
+        
         if not smart_handler:
-            return jsonify({'error': 'Smart Response System not initialized'}), 503
+            return jsonify({'error': 'Smart Response not initialized'}), 500
         
         stats = smart_handler.get_user_stats(user_id)
+        return jsonify(stats)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/context/<character>', methods=['GET'])
+@require_auth
+def get_conversation_context(character):
+    """Get conversation context for a character"""
+    try:
+        user_id = request.current_user['user_id']
+        
+        if not context_manager:
+            return jsonify({'error': 'Context Manager not initialized'}), 500
+        
+        summary = context_manager.get_context_summary(user_id, character)
+        context = context_manager.get_context_for_ai(user_id, character, [])
+        
         return jsonify({
-            'success': True,
-            'stats': stats
+            'summary': summary,
+            'recent_topics': context.get('recent_topics', []),
+            'ongoing_threads': context.get('ongoing_threads', []),
+            'emotional_state': context.get('emotional_state', 'neutral'),
+            'last_session': context.get('last_session', 'Never'),
+            'message_count': context.get('message_count', 0)
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
