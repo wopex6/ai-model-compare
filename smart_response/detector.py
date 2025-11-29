@@ -27,38 +27,142 @@ class SmallTalkDetector:
     Detects small talk vs complex messages using pattern matching + NLP
     """
     
-    # Common typo mappings for small talk
+    # Common typo mappings for small talk (expanded and flexible)
     TYPO_CORRECTIONS = {
-        'helo': 'hello', 'hii': 'hi', 'heyy': 'hey', 'hy': 'hi',
-        'byr': 'bye', 'byee': 'bye', 'goodby': 'goodbye', 'cya': 'see you',
+        # Greetings - more flexible
+        'helo': 'hello', 'helllo': 'hello', 'hllo': 'hello', 'helo': 'hello',
+        'hii': 'hi', 'hiii': 'hi', 'hiiii': 'hi', 'hiy': 'hi', 'hy': 'hi', 'hai': 'hi',
+        'heyy': 'hey', 'heyyy': 'hey', 'heyyyy': 'hey', 'heya': 'hey',
+        'hola': 'hello', 'ola': 'hello',
+        'gday': "g'day", 'g day': "g'day", 'gdday': "g'day",
+        'gud morning': 'good morning', 'gd morning': 'good morning', 'mornin': 'good morning',
+        'gud evening': 'good evening', 'gd evening': 'good evening', 'evenin': 'good evening',
+        'gud afternoon': 'good afternoon', 'gd afternoon': 'good afternoon', 'afternoon': 'good afternoon',
+        'goood day': 'good day', 'gud day': 'good day', 'gd day': 'good day',
+        'goood night': 'good night', 'gud night': 'good night', 'gd night': 'good night', 'nite': 'good night',
+        'howdy': 'howdy', 'howdie': 'howdy',
+        
+        # Farewells - more flexible
+        'byr': 'bye', 'byee': 'bye', 'byeee': 'bye', 'bi': 'bye', 'bai': 'bye',
+        'goodby': 'goodbye', 'goodbyee': 'goodbye', 'good bye': 'goodbye', 'gud bye': 'goodbye',
+        'cya': 'see you', 'c ya': 'see you', 'cu': 'see you', 'see ya': 'see you', 'c u': 'see you',
+        'later': 'talk later', 'l8r': 'talk later', 'ltr': 'talk later',
+        'gtg': 'gotta go', 'g2g': 'gotta go', 'got2go': 'gotta go',
+        'ttyl': 'talk to you later', 'talk 2 u later': 'talk to you later',
+        'tcare': 'take care', 'tc': 'take care',
+        'cheers': 'cheers', 'cheerz': 'cheers',
+        
+        # Thanks - more flexible
         'thnks': 'thanks', 'thnx': 'thanks', 'thanx': 'thanks', 'thks': 'thanks',
-        'oka': 'ok', 'okk': 'ok', 'okey': 'okay', 'okie': 'okay',
-        'yess': 'yes', 'yea': 'yeah', 'yhea': 'yeah', 'ys': 'yes',
-        'noo': 'no', 'nop': 'nope', 'naa': 'nah'
+        'thx': 'thanks', 'tx': 'thanks', 'ty': 'thanks', 'tyy': 'thanks',
+        'thank u': 'thank you', 'thanku': 'thank you', 'thnk u': 'thank you',
+        'thanks': 'thanks', 'thankss': 'thanks', 'thanksss': 'thanks',
+        'thaaaanks': 'thanks', 'thaaanks': 'thanks',
+        'gracias': 'thanks', 'merci': 'thanks', 'danke': 'thanks',
+        
+        # Acknowledgment - more flexible
+        'oka': 'ok', 'okk': 'ok', 'okkk': 'ok', 'okey': 'okay', 'okie': 'okay',
+        'k': 'ok', 'kk': 'ok', 'kkk': 'ok', 'kay': 'okay', 'mkay': 'okay',
+        'alrite': 'alright', 'aight': 'alright', 'ight': 'alright',
+        'got it': 'got it', 'gotit': 'got it', 'got  it': 'got it',
+        'sure thing': 'sure', 'sure thang': 'sure',
+        'cool': 'cool', 'kool': 'cool', 'coo': 'cool',
+        'noted': 'noted', 'noted.': 'noted',
+        
+        # Agreement - more flexible
+        'yess': 'yes', 'yesss': 'yes', 'yessss': 'yes', 'ys': 'yes',
+        'yea': 'yeah', 'yhea': 'yeah', 'yeaa': 'yeah', 'yeaaa': 'yeah',
+        'yep': 'yep', 'yepp': 'yep', 'yup': 'yup', 'yupp': 'yup', 'yuppp': 'yup',
+        'ya': 'yeah', 'yah': 'yeah', 'ye': 'yes',
+        'totally': 'absolutely', 'totes': 'absolutely', 'def': 'definitely',
+        
+        # Disagreement - more flexible
+        'noo': 'no', 'nooo': 'no', 'noooo': 'no', 'nop': 'nope', 'nope': 'nope',
+        'naa': 'nah', 'naah': 'nah', 'naaah': 'nah',
+        'nuh uh': 'no', 'nuh-uh': 'no', 'nuhuh': 'no'
     }
     
-    # Pattern-based detection (instant, no NLP needed)
+    # Pattern-based detection (instant, no NLP needed) - EXPANDED
     OBVIOUS_PATTERNS = {
         'greeting': [
-            r'\b(hi|hello|hey|good morning|good evening|good afternoon|howdy|greetings|helo|hii|heyy|hy)\b',
+            # English
+            r'\b(hi|hello|hey|good morning|good evening|good afternoon|good day|good night)\b',
+            r'\b(howdy|greetings|salutations|welcome)\b',
+            r"\b(g'day|gday|yo|sup|wassup|what's up)\b",
+            # Common typos and variations
+            r'\b(helo|helllo|hllo|hii|hiii|hy|hai|heyy|heyyy|hiy)\b',
+            r'\b(gud morning|gd morning|mornin|gud day|gd day|gud evening|evenin)\b',
+            # Casual
+            r'\b(heya|hiya|ello)\b',
+            # International
+            r'\b(hola|bonjour|ciao|aloha)\b',
         ],
         'farewell': [
-            r'\b(bye|goodbye|see you|talk later|catch you later|gtg|gotta go|take care|byr|byee|goodby|cya)\b',
+            # Standard farewells
+            r'\b(bye|goodbye|see you|talk later|catch you later|take care)\b',
+            r'\b(farewell|so long|until next time|see you soon)\b',
+            # Casual/slang
+            r'\b(gtg|gotta go|g2g|got2go|ttyl|laters|peace|peace out)\b',
+            r'\b(cya|c ya|cu|c u|see ya|later|l8r|ltr)\b',
+            # Variations and typos
+            r'\b(byr|byee|byeee|bi|bai|goodby|gud bye|good bye)\b',
+            r'\b(tcare|tc|cheers|cheerz)\b',
+            # International
+            r'\b(adios|au revoir|sayonara|arrivederci)\b',
         ],
         'thanks': [
-            r'\b(thanks?|thank you|thx|ty|thanx|appreciate|appreciated|grateful|thnks|thnx|thks)\b',
+            # Standard thanks
+            r'\b(thanks?|thank you|thx|ty|appreciated?|grateful)\b',
+            # Variations
+            r'\b(thnks|thnx|thanx|thks|tx|tyy|thanku|thank u|thnk u)\b',
+            r'\b(thankss|thanksss|thaaaanks|thaaanks)\b',
+            # Phrases
+            r'\b(much appreciated|thanks a lot|thanks so much|thank you so much)\b',
+            r'\b(thanks again|thank you again|appreciate it|appreciate that)\b',
+            # International
+            r'\b(gracias|merci|danke|arigato|spasibo)\b',
         ],
         'acknowledgment': [
-            r'\b(ok|okay|got it|sure|alright|k|kk|understood|right|noted|oka|okk|okey|okie)\b',
+            # Standard
+            r'\b(ok|okay|got it|sure|alright|understood|right|noted)\b',
+            # Casual/short
+            r'\b(k|kk|kkk|kay|mkay|oka|okk|okkk|okey|okie)\b',
+            r'\b(alrite|aight|ight|gotit|got  it)\b',
+            # Phrases
+            r'\b(sure thing|sure thang|will do|can do|no problem|no prob)\b',
+            r'\b(cool|kool|coo|sweet|nice|great|awesome|perfect)\b',
+            r'\b(roger|roger that|copy|copy that|10-4)\b',
         ],
         'agreement': [
-            r'\b(yes|yeah|yep|yup|correct|exactly|absolutely|indeed|yess|yea|yhea|ys)\b',
+            # Standard
+            r'\b(yes|yeah|yep|yup|correct|exactly|absolutely|indeed)\b',
+            # Variations
+            r'\b(yess|yesss|ys|yea|yhea|yeaa|yeaaa|yepp|yupp|yuppp)\b',
+            r'\b(ya|yah|ye)\b',
+            # Strong agreement
+            r'\b(totally|definitely|certainly|for sure|of course|obviously)\b',
+            r'\b(totes|def|fo sho|fer sure)\b',
+            # Informal
+            r'\b(uh huh|uh-huh|mhm|mmhmm|yeppers)\b',
         ],
         'disagreement': [
-            r'\b(no|nope|nah|not really|don\'t think so|noo|nop|naa)\b',
+            # Standard
+            r'\b(no|nope|nah|not really|don\'t think so)\b',
+            # Variations
+            r'\b(noo|nooo|noooo|nop|naa|naah|naaah)\b',
+            # Strong disagreement
+            r'\b(absolutely not|definitely not|no way|nuh uh|nuh-uh|nuhuh)\b',
+            # Informal
+            r'\b(naw|naww|nuh|nupe)\b',
         ],
         'simple_questions': [
-            r'^(how are you|how\'s it going|what\'s up|sup)\??$',
+            # How are you
+            r"^(how are you|how's it going|how ya doing|how you doing)\??$",
+            r"^(how are ya|how r u|how r you|howdy doing)\??$",
+            # What's up
+            r"^(what's up|whats up|sup|wassup|what up|wazzup)\??$",
+            # Other simple
+            r"^(you good|you okay|u ok|u good|all good)\??$",
         ]
     }
     
