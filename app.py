@@ -108,22 +108,27 @@ personality_assessment_ui = PersonalityAssessmentUI(personality_profiler)
 # Initialize user profile system
 user_profile_manager = UserProfileManager()
 
-# Initialize Smart Response System with Context Manager
+# Initialize Smart Response System with Context Manager and Dual-Layer History
 try:
     from smart_response.handler import SmartResponseHandler
     from smart_response.conversation_context import ConversationContextManager
+    from smart_response.dual_layer_history import DualLayerHistorySystem
     smart_response_conn = sqlite3.connect('integrated_users.db', check_same_thread=False)
     smart_handler = SmartResponseHandler(smart_response_conn)
     context_manager = ConversationContextManager(smart_response_conn)
+    history_system = DualLayerHistorySystem(smart_response_conn)
     # Track previous interactions for learning
     previous_interactions = {}
     # Store recent message history for context
     message_histories = {}  # {user_id_character: [{role, content, timestamp}, ...]}
-    print("✓ Smart Response System with Context Manager initialized")
+    print("✓ Smart Response System with Context Manager and Dual-Layer History initialized")
 except Exception as e:
     print(f"✗ Error initializing Smart Response: {e}")
+    import traceback
+    traceback.print_exc()
     smart_handler = None
     context_manager = None
+    history_system = None
     previous_interactions = {}
     message_histories = {}
 
@@ -212,6 +217,21 @@ def process_with_smart_response(message, character_name, ai_chat_function):
                 user_id, character_name, message, response_data['text']
             )
             
+            # DUAL-LAYER HISTORY: Store interaction
+            if history_system:
+                primary_id = history_system.store_interaction(
+                    user_id, character_name,
+                    message, response_data['text'],
+                    'quick_reply',
+                    metadata={'session_id': history_key}
+                )
+                # Store analytical layer
+                history_system.analyze_and_store_secondary(
+                    primary_id, user_id, character_name,
+                    interpretation=None,  # Auto-analyze
+                    context=context
+                )
+            
             # Store for learning
             previous_interactions[prev_key] = {
                 'message': message,
@@ -263,6 +283,21 @@ def process_with_smart_response(message, character_name, ai_chat_function):
         context_manager.update_context(
             user_id, character_name, message, response_text
         )
+        
+        # DUAL-LAYER HISTORY: Store interaction
+        if history_system:
+            primary_id = history_system.store_interaction(
+                user_id, character_name,
+                message, response_text,
+                'full_ai',
+                metadata={'session_id': history_key}
+            )
+            # Store analytical layer
+            history_system.analyze_and_store_secondary(
+                primary_id, user_id, character_name,
+                interpretation=None,  # Auto-analyze
+                context=context
+            )
         
         prev_key = f"{user_id}_{character_name}"
         previous_interactions[prev_key] = {
@@ -1556,6 +1591,48 @@ def get_conversation_context(character):
             'last_session': context.get('last_session', 'Never'),
             'message_count': context.get('message_count', 0)
         })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Dual-Layer History Endpoints
+@app.route('/api/history/<character>', methods=['GET'])
+@require_auth
+def get_conversation_history(character):
+    """Get conversation history (dual-layer) for a character"""
+    try:
+        user_id = request.current_user['user_id']
+        
+        if not history_system:
+            return jsonify({'error': 'History System not initialized'}), 500
+        
+        layer = request.args.get('layer', 'both')  # primary, secondary, or both
+        limit = int(request.args.get('limit', 20))
+        
+        history = history_system.get_conversation_history(
+            user_id, character, layer=layer, limit=limit
+        )
+        
+        return jsonify({
+            'layer': layer,
+            'count': len(history),
+            'history': history
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/history/<character>/stats', methods=['GET'])
+@require_auth
+def get_history_stats(character):
+    """Get statistics about conversation history"""
+    try:
+        user_id = request.current_user['user_id']
+        
+        if not history_system:
+            return jsonify({'error': 'History System not initialized'}), 500
+        
+        stats = history_system.get_stats(user_id, character)
+        
+        return jsonify(stats)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
