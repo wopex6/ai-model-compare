@@ -17,7 +17,7 @@ STATS_URL = f"{BASE_URL}/api/smart-response/stats"
 
 # Test credentials (use your actual credentials)
 USERNAME = "Wai Tse"
-PASSWORD = "your_password"  # UPDATE THIS
+PASSWORD = "123"  # Using the restored password
 
 def get_auth_token():
     """Login and get JWT token"""
