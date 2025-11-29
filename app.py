@@ -1322,19 +1322,21 @@ def test_session_page():
     return render_template('test_session_restoration.html')
 
 @app.route('/coach/chat', methods=['POST'])
-@require_auth
 def coach_chat():
     try:
         data = request.get_json()
         message = data.get('message', '')
         include_context = data.get('include_context', True)
-        user_id = request.current_user.get('user_id')
         
         if not message.strip():
             return jsonify({'error': 'Message cannot be empty'}), 400
         
-        # ✨ SMART RESPONSE SYSTEM ✨
-        if smart_handler:
+        # Check if user is authenticated (optional)
+        user_data = authenticate_token()
+        user_id = user_data.get('user_id') if user_data else None
+        
+        # ✨ SMART RESPONSE SYSTEM (only for authenticated users) ✨
+        if smart_handler and user_id:
             # Track previous interaction for learning
             prev_key = f"{user_id}_coach"
             if prev_key in previous_interactions:
@@ -1382,8 +1384,8 @@ def coach_chat():
         response = loop.run_until_complete(motivational_bot.chat(message, include_context))
         loop.close()
         
-        # Store for learning
-        if smart_handler:
+        # Store for learning (only if authenticated)
+        if smart_handler and user_id:
             prev_key = f"{user_id}_coach"
             previous_interactions[prev_key] = {
                 'message': message,
