@@ -108,20 +108,22 @@ personality_assessment_ui = PersonalityAssessmentUI(personality_profiler)
 # Initialize user profile system
 user_profile_manager = UserProfileManager()
 
-# Initialize Smart Response System with Context Manager and Dual-Layer History
+# Initialize Smart Response System with Context Manager, Dual-Layer History, and AI Budget Manager
 try:
     from smart_response.handler import SmartResponseHandler
     from smart_response.conversation_context import ConversationContextManager
     from smart_response.dual_layer_history import DualLayerHistorySystem
+    from smart_response.ai_budget_manager import AIBudgetManager
     smart_response_conn = sqlite3.connect('integrated_users.db', check_same_thread=False)
     smart_handler = SmartResponseHandler(smart_response_conn)
     context_manager = ConversationContextManager(smart_response_conn)
     history_system = DualLayerHistorySystem(smart_response_conn)
+    ai_budget = AIBudgetManager(smart_response_conn)
     # Track previous interactions for learning
     previous_interactions = {}
     # Store recent message history for context
     message_histories = {}  # {user_id_character: [{role, content, timestamp}, ...]}
-    print("✓ Smart Response System with Context Manager and Dual-Layer History initialized")
+    print("✓ Smart Response System with AI Budget Control initialized")
 except Exception as e:
     print(f"✗ Error initializing Smart Response: {e}")
     import traceback
@@ -129,6 +131,7 @@ except Exception as e:
     smart_handler = None
     context_manager = None
     history_system = None
+    ai_budget = None
     previous_interactions = {}
     message_histories = {}
 
@@ -258,8 +261,53 @@ def process_with_smart_response(message, character_name, ai_chat_function):
         context_prompt = None
         context = None
     
+    # AI BUDGET CONTROL: Check if AI call is allowed
+    if ai_budget:
+        allowed, deny_reason = ai_budget.request_ai_call(
+            call_type='user_chat',
+            purpose=f'{character_name} - User: "{message[:50]}..."',
+            user_id=user_id,
+            character=character_name,
+            is_background=False
+        )
+        
+        if not allowed:
+            # BUDGET EXCEEDED - Use fallback response
+            print(f"⛔ AI call denied: {deny_reason}")
+            fallback_response = {
+                'response': "I'm currently at my conversation limit for today. I'll be back tomorrow with full energy! In the meantime, try our quick reply suggestions or come back later.",
+                'type': 'budget_limited',
+                'reason': deny_reason
+            }
+            return fallback_response
+    
     # Use full AI (with context if available)
-    response = ai_chat_function()
+    ai_call_success = False
+    ai_error = None
+    try:
+        response = ai_chat_function()
+        ai_call_success = True
+    except Exception as e:
+        ai_error = str(e)
+        ai_call_success = False
+        # Notify user of API failure
+        response = {
+            'response': f"I'm having trouble connecting right now. Please try again in a moment. ({ai_error[:50]})",
+            'type': 'api_error',
+            'error': ai_error
+        }
+    
+    # Log AI call result
+    if ai_budget:
+        ai_budget.log_ai_call(
+            call_type='user_chat',
+            purpose=f'{character_name} chat',
+            success=ai_call_success,
+            user_id=user_id,
+            character=character_name,
+            is_background=False,
+            error_message=ai_error
+        )
     
     # Store for learning and context (only if authenticated)
     if smart_handler and user_id and context_manager:
@@ -1633,6 +1681,76 @@ def get_history_stats(character):
         stats = history_system.get_stats(user_id, character)
         
         return jsonify(stats)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# AI Budget Management Endpoints
+@app.route('/api/ai-budget/status', methods=['GET'])
+def get_ai_budget_status():
+    """Get current AI budget status and usage"""
+    try:
+        if not ai_budget:
+            return jsonify({'error': 'AI Budget Manager not initialized'}), 500
+        
+        report = ai_budget.get_usage_report()
+        return jsonify(report)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/ai-budget/notifications', methods=['GET'])
+def get_ai_notifications():
+    """Get unread AI budget notifications"""
+    try:
+        if not ai_budget:
+            return jsonify({'error': 'AI Budget Manager not initialized'}), 500
+        
+        notifications = ai_budget.get_unread_notifications()
+        return jsonify({
+            'count': len(notifications),
+            'notifications': notifications
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/ai-budget/notifications/acknowledge', methods=['POST'])
+def acknowledge_ai_notifications():
+    """Acknowledge AI budget notifications"""
+    try:
+        if not ai_budget:
+            return jsonify({'error': 'AI Budget Manager not initialized'}), 500
+        
+        data = request.get_json()
+        notification_id = data.get('notification_id')
+        
+        if notification_id == 'all':
+            ai_budget.acknowledge_all_notifications()
+            return jsonify({'success': True, 'message': 'All notifications acknowledged'})
+        elif notification_id:
+            ai_budget.acknowledge_notification(int(notification_id))
+            return jsonify({'success': True, 'message': 'Notification acknowledged'})
+        else:
+            return jsonify({'error': 'notification_id required'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/ai-budget/reset-circuit-breaker', methods=['POST'])
+def reset_ai_circuit_breaker():
+    """Reset AI circuit breaker (admin only)"""
+    try:
+        if not ai_budget:
+            return jsonify({'error': 'AI Budget Manager not initialized'}), 500
+        
+        data = request.get_json()
+        reason = data.get('reason', 'Manual reset via API')
+        
+        # In production: verify admin authorization here
+        ai_budget.reset_circuit_breaker(reason)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Circuit breaker reset',
+            'reason': reason
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
