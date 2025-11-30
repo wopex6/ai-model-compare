@@ -4,22 +4,26 @@ Enhanced Conversation Context Manager
 - Passes context to AI for better responses
 - Uses AI to update context intelligently
 - Generates dynamic follow-up suggestions
+- Captures and prioritizes explicit user statements
 """
 
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 import json
 import sqlite3
+from smart_response.explicit_context_handler import ExplicitContextHandler
 
 
 class ConversationContextManager:
     """
     Manages persistent conversation context with AI-powered updates
+    Now includes explicit context extraction (CRITICAL priority)
     """
     
     def __init__(self, db_connection):
         self.db = db_connection
         self._init_context_tables()
+        self.explicit_handler = ExplicitContextHandler(db_connection)
     
     def _init_context_tables(self):
         """Create tables for context storage"""
@@ -118,6 +122,8 @@ class ConversationContextManager:
         
         # Build context summary
         context = {
+            'user_id': user_id,  # For explicit context access
+            'character': character,  # For explicit context access
             'conversation_summary': stored_context.get('summary', 'New conversation'),
             'recent_topics': [t['topic'] for t in recent_topics],
             'user_preferences': stored_context.get('preferences', {}),
@@ -133,17 +139,30 @@ class ConversationContextManager:
     def format_context_for_prompt(self, context: Dict) -> str:
         """
         Format context as a string for AI prompt
+        EXPLICIT CONTEXT goes at the TOP (CRITICAL priority)
         
         Args:
             context: Context dictionary
         
         Returns:
-            Formatted context string
+            Formatted context string with explicit context first
         """
-        if not context or context.get('message_count', 0) == 0:
-            return ""
+        parts = []
         
-        parts = ["[Conversation Context]"]
+        # PRIORITY 1: EXPLICIT CONTEXT (from user's own words)
+        if context.get('user_id') and context.get('character'):
+            explicit_context = self.explicit_handler.format_for_ai_prompt(
+                context['user_id'], context['character']
+            )
+            if explicit_context:
+                parts.append(explicit_context)
+                parts.append("")  # Blank line separator
+        
+        # PRIORITY 2: General conversation context
+        if not context or context.get('message_count', 0) == 0:
+            return "\n".join(parts) if parts else ""
+        
+        parts.append("[Conversation Context]")
         
         # Summary
         if context.get('conversation_summary') and context['conversation_summary'] != 'New conversation':
@@ -159,7 +178,7 @@ class ConversationContextManager:
             threads_str = "; ".join(context['ongoing_threads'][:2])
             parts.append(f"Ongoing: {threads_str}")
         
-        # Emotional state
+        # Emotional state (from inference, not explicit)
         if context.get('emotional_state') and context['emotional_state'] != 'neutral':
             parts.append(f"User seems: {context['emotional_state']}")
         
@@ -174,6 +193,7 @@ class ConversationContextManager:
                       context_updates: Optional[Dict] = None):
         """
         Update conversation context after an exchange
+        NOW includes explicit context extraction (CRITICAL priority)
         
         Args:
             user_id: User ID
@@ -183,6 +203,9 @@ class ConversationContextManager:
             context_updates: Optional AI-extracted updates
         """
         cursor = self.db.cursor()
+        
+        # FIRST: Extract explicit context from user's message (CRITICAL priority)
+        self.explicit_handler.extract_explicit_context(user_id, character, message)
         
         # Update last session
         self._upsert_context(user_id, character, 'last_session_date', 
