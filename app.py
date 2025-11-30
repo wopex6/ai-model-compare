@@ -152,6 +152,12 @@ def process_with_smart_response(message, character_name, ai_chat_function):
     user_data = authenticate_token()
     user_id = user_data.get('user_id') if user_data else None
     
+    # DEBUG: Log authentication status
+    if user_id:
+        print(f"✓ Authenticated user_id={user_id} for character={character_name}")
+    else:
+        print(f"⚠️ No authentication for character={character_name}")
+    
     # Get message history for this user/character
     history_key = f"{user_id}_{character_name}" if user_id else None
     message_history = message_histories.get(history_key, []) if history_key else []

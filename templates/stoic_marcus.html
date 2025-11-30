@@ -532,11 +532,16 @@ What challenges do you face? What wisdom do you seek?
             addMessage('Contemplating your words...', 'assistant', loadingId);
             
             try {
+                // Include auth token if available (for personalized context)
+                const authToken = localStorage.getItem('authToken');
+                const headers = { 'Content-Type': 'application/json' };
+                if (authToken) {
+                    headers['Authorization'] = `Bearer ${authToken}`;
+                }
+                
                 const response = await fetch('/marcus/chat', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: headers,
                     body: JSON.stringify({
                         message: message,
                         include_context: true

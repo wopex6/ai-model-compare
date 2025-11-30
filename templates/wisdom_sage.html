@@ -556,9 +556,16 @@
                 this.showTyping();
                 
                 try {
+                    // Include auth token if available (for personalized context)
+                    const authToken = localStorage.getItem('authToken');
+                    const headers = { 'Content-Type': 'application/json' };
+                    if (authToken) {
+                        headers['Authorization'] = `Bearer ${authToken}`;
+                    }
+                    
                     const response = await fetch('/sage/chat', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: headers,
                         body: JSON.stringify({
                             message: messageText,
                             include_context: true

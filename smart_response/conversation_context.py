@@ -205,7 +205,12 @@ class ConversationContextManager:
         cursor = self.db.cursor()
         
         # FIRST: Extract explicit context from user's message (CRITICAL priority)
-        self.explicit_handler.extract_explicit_context(user_id, character, message)
+        print(f"🔍 Extracting explicit context for user_id={user_id}, character={character}")
+        extracted = self.explicit_handler.extract_explicit_context(user_id, character, message)
+        if extracted:
+            print(f"   ✓ Extracted {len(extracted)} explicit context items")
+        else:
+            print(f"   ℹ️ No explicit context found in message")
         
         # Update last session
         self._upsert_context(user_id, character, 'last_session_date', 
