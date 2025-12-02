@@ -455,16 +455,13 @@ What challenges do you face? What wisdom do you seek?
         
         async function loadDailyReflection() {
             try {
-                const response = await fetch('/marcus/daily-reflection');
+                const response = await fetch('/stoic_philosopher/daily-insight');
                 const data = await response.json();
                 
                 const reflectionDiv = document.getElementById('daily-reflection');
+                // Dynamic endpoint returns simple insight text
                 reflectionDiv.innerHTML = `
-                    <p><strong>"${data.quote}"</strong></p>
-                    <p style="text-align: right; margin-top: 10px;">— ${data.author}</p>
-                    <p style="margin-top: 15px; font-size: 0.9rem; color: #4a5568;">
-                        ${data.reflection_prompt}
-                    </p>
+                    <p style="font-style: italic;">${data.insight}</p>
                 `;
             } catch (error) {
                 console.error('Error loading reflection:', error);
@@ -473,7 +470,7 @@ What challenges do you face? What wisdom do you seek?
         
         async function loadStats() {
             try {
-                const response = await fetch('/marcus/stats');
+                const response = await fetch('/stoic_philosopher/stats');
                 const data = await response.json();
                 
                 document.getElementById('session-count').textContent = data.session_id ? '1' : '0';
@@ -539,7 +536,7 @@ What challenges do you face? What wisdom do you seek?
                     headers['Authorization'] = `Bearer ${authToken}`;
                 }
                 
-                const response = await fetch('/marcus/chat', {
+                const response = await fetch('/stoic_philosopher/chat', {
                     method: 'POST',
                     headers: headers,
                     body: JSON.stringify({
