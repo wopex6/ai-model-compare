@@ -262,8 +262,20 @@ class PersonalityTrendAnalyzer:
         emotions = [c for c in recent_context if c['type'] == 'emotional_state']
         goals = [c for c in recent_context if c['type'] == 'goal']
         preferences = [c for c in recent_context if c['type'] == 'preference']
-        intentions = [c for c in recent_context if c['type'] == 'intention']
-        values = [c for c in recent_context if c['type'] == 'value']
+        needs = [c for c in recent_context if c['type'] == 'need']
+        self_descriptions = [c for c in recent_context if c['type'] == 'self_description']
+        
+        # Debug: Show what we're analyzing
+        print(f"   📋 Context retrieved: {len(emotions)} emotions, {len(goals)} goals, {len(preferences)} preferences", flush=True)
+        if emotions:
+            print(f"      Emotions: {[e['value'] for e in emotions]}", flush=True)
+        if goals:
+            print(f"      Goals: {[g['value'] for g in goals]}", flush=True)
+        if preferences:
+            print(f"      Preferences: {[p['value'] for p in preferences]}", flush=True)
+        
+        # Note: All goals (including intentions, efforts, etc.) are stored as type='goal'
+        # They're differentiated by context_key, but for pattern analysis we treat them all as goals
         
         # 1. Analyze Big Five patterns from emotions
         big_five = self._analyze_big_five(emotions)
@@ -274,7 +286,8 @@ class PersonalityTrendAnalyzer:
         inferred_traits.extend(temperament)
         
         # 3. Analyze value patterns (comprehensive)
-        value_traits = self._analyze_values(emotions, goals, preferences, intentions, values)
+        # Pass goals for all goal-related analysis (intentions, efforts, aspirations all included)
+        value_traits = self._analyze_values(emotions, goals, preferences, needs, self_descriptions)
         inferred_traits.extend(value_traits)
         
         # Store high-confidence inferences
@@ -365,17 +378,17 @@ class PersonalityTrendAnalyzer:
         return traits
     
     def _analyze_values(self, emotions: List[Dict], goals: List[Dict], 
-                       preferences: List[Dict], intentions: List[Dict],
-                       values: List[Dict]) -> List[Dict]:
+                       preferences: List[Dict], needs: List[Dict],
+                       self_descriptions: List[Dict]) -> List[Dict]:
         """Analyze core values and motivations from multiple signals"""
         traits = []
         
         # Extract text from each type
         emotion_texts = [e['value'].lower() for e in emotions]
-        goal_texts = [g['value'].lower() for g in goals]
+        goal_texts = [g['value'].lower() for g in goals]  # Includes all intentions, efforts, etc.
         pref_texts = [p['value'].lower() for p in preferences]
-        intention_texts = [i['value'].lower() for i in intentions]
-        value_texts = [v['value'].lower() for v in values]
+        need_texts = [n['value'].lower() for n in needs]
+        desc_texts = [d['value'].lower() for d in self_descriptions]
         
         for trait_name, pattern in self.VALUE_PATTERNS.items():
             # Match across all sources
@@ -383,8 +396,8 @@ class PersonalityTrendAnalyzer:
                 'emotions': [],
                 'goals': [],
                 'preferences': [],
-                'intentions': [],
-                'values': []
+                'needs': [],
+                'self_descriptions': []
             }
             
             # Check emotions
@@ -392,7 +405,7 @@ class PersonalityTrendAnalyzer:
                 if any(k in emotion for k in pattern.get('emotions', [])):
                     matches['emotions'].append(emotion)
             
-            # Check goals
+            # Check goals (includes intentions, efforts, aspirations, etc.)
             for goal in goal_texts:
                 if any(k in goal for k in pattern.get('goals', [])):
                     matches['goals'].append(goal)
@@ -402,15 +415,15 @@ class PersonalityTrendAnalyzer:
                 if any(k in pref for k in pattern.get('preferences', [])):
                     matches['preferences'].append(pref)
             
-            # Check intentions
-            for intent in intention_texts:
-                if any(k in intent for k in pattern.get('goals', [])):
-                    matches['intentions'].append(intent)
+            # Check needs
+            for need in need_texts:
+                if any(k in need for k in pattern.get('goals', [])):  # Needs often express values/goals
+                    matches['needs'].append(need)
             
-            # Check values
-            for val in value_texts:
-                if any(k in val for k in pattern.get('goals', [])):
-                    matches['values'].append(val)
+            # Check self-descriptions (for personality traits matching values)
+            for desc in desc_texts:
+                if any(k in desc for k in pattern.get('goals', [])):
+                    matches['self_descriptions'].append(desc)
             
             # Total evidence count
             total_evidence = sum(len(v) for v in matches.values())
