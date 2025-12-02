@@ -62,9 +62,10 @@ class ExplicitContextHandler:
                 expires_at TIMESTAMP,
                 
                 -- Metadata
-                extracted_via TEXT,
+                extracted_via TEXT
                 
-                UNIQUE(user_id, character, context_type, context_key)
+                -- NO UNIQUE CONSTRAINT - allow historical tracking!
+                -- Old constraint was deleting history instead of preserving it
             )
         ''')
         
@@ -91,6 +92,10 @@ class ExplicitContextHandler:
         - "I want success" or I want success
         And both work the same way.
         """
+        # Handle None and invalid input
+        if message is None:
+            return ""
+        
         # Strip leading/trailing whitespace
         normalized = message.strip()
         
@@ -198,6 +203,7 @@ class ExplicitContextHandler:
         patterns = [
             (r"my goal is (?:to |that )?(.*?)(?:\.|,|and|but|$)", 'goal', 0.95),
             (r"i want to (.*?)(?:\.|,|and|but|because|$)", 'intention', 0.90),
+            (r"i want (.*?)(?:\.|,|and|but|because|$)", 'intention', 0.88),  # Without "to"
             (r"i'?m trying to (.*?)(?:\.|,|and|but|because|$)", 'effort', 0.90),
             (r"i hope to (.*?)(?:\.|,|and|but|$)", 'aspiration', 0.85),
             (r"i need to (.*?)(?:\.|,|and|but|because|$)", 'requirement', 0.85),
