@@ -2442,3 +2442,216 @@ if __name__ == '__main__':
     print("=" * 35)
     
     app.run(debug=True, host='0.0.0.0', port=5000)
+
+
+# ============================================
+# AI USAGE MONITORING (ADMIN ONLY)
+# ============================================
+
+@app.route('/admin/ai-usage-monitor')
+@require_auth
+def ai_usage_monitor_page():
+    """AI Usage Monitoring Dashboard (Admin Only)"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return "Access Denied: Administrator access required", 403
+        
+        return render_template('ai_usage_monitor.html')
+    except Exception as e:
+        return f"Error: {str(e)}", 500
+
+
+@app.route('/api/admin/ai-usage/summary')
+@require_auth
+def get_ai_usage_summary():
+    """Get summary statistics for AI usage"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        conn = sqlite3.connect('integrated_users.db')
+        cursor = conn.cursor()
+        
+        # Today's calls
+        cursor.execute('''
+            SELECT COUNT(*) FROM ai_usage_log
+            WHERE DATE(timestamp) = DATE('now')
+            AND success = 1
+        ''')
+        today_calls = cursor.fetchone()[0]
+        
+        # Month's calls
+        cursor.execute('''
+            SELECT COUNT(*) FROM ai_usage_log
+            WHERE DATE(timestamp, 'start of month') = DATE('now', 'start of month')
+            AND success = 1
+        ''')
+        month_calls = cursor.fetchone()[0]
+        
+        # Costs (assuming $0.002 per call)
+        today_cost = today_calls * 0.002
+        month_cost = month_calls * 0.002
+        
+        conn.close()
+        
+        return jsonify({
+            'today_calls': today_calls,
+            'month_calls': month_calls,
+            'today_cost': today_cost,
+            'month_cost': month_cost,
+            'system_cap': 2000,
+            'month_cap_dollars': 120
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/ai-usage/daily')
+@require_auth
+def get_daily_ai_usage():
+    """Get today's AI usage by user"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        sort_by = request.args.get('sort', 'calls_desc')
+        
+        conn = sqlite3.connect('integrated_users.db')
+        cursor = conn.cursor()
+        
+        # Get today's usage per user
+        cursor.execute('''
+            SELECT 
+                u.id,
+                u.username,
+                u.role,
+                COUNT(a.id) as call_count
+            FROM users u
+            LEFT JOIN ai_usage_log a ON u.id = a.user_id 
+                AND DATE(a.timestamp) = DATE('now')
+                AND a.success = 1
+            GROUP BY u.id, u.username, u.role
+            HAVING call_count > 0
+        ''')
+        
+        users = []
+        for row in cursor.fetchall():
+            users.append({
+                'user_id': row[0],
+                'username': row[1],
+                'is_admin': row[2] == 'administrator',
+                'calls': row[3]
+            })
+        
+        conn.close()
+        
+        # Sort
+        if sort_by == 'calls_desc':
+            users.sort(key=lambda x: x['calls'], reverse=True)
+        elif sort_by == 'calls_asc':
+            users.sort(key=lambda x: x['calls'])
+        elif sort_by == 'username':
+            users.sort(key=lambda x: x['username'].lower())
+        elif sort_by == 'role':
+            users.sort(key=lambda x: (not x['is_admin'], x['username'].lower()))
+        
+        return jsonify(users)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/ai-usage/monthly')
+@require_auth
+def get_monthly_ai_usage():
+    """Get this month's AI usage by user"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        sort_by = request.args.get('sort', 'calls_desc')
+        
+        conn = sqlite3.connect('integrated_users.db')
+        cursor = conn.cursor()
+        
+        # Get month's usage per user
+        cursor.execute('''
+            SELECT 
+                u.id,
+                u.username,
+                u.role,
+                COUNT(a.id) as total_calls,
+                DATE(a.timestamp) as call_date
+            FROM users u
+            LEFT JOIN ai_usage_log a ON u.id = a.user_id 
+                AND DATE(a.timestamp, 'start of month') = DATE('now', 'start of month')
+                AND a.success = 1
+            GROUP BY u.id, u.username, u.role, call_date
+        ''')
+        
+        # Aggregate by user
+        user_data = {}
+        for row in cursor.fetchall():
+            user_id = row[0]
+            if user_id not in user_data:
+                user_data[user_id] = {
+                    'user_id': user_id,
+                    'username': row[1],
+                    'is_admin': row[2] == 'administrator',
+                    'total_calls': 0,
+                    'daily_calls': []
+                }
+            user_data[user_id]['total_calls'] += row[3]
+            if row[4]:  # If there's a date
+                user_data[user_id]['daily_calls'].append(row[3])
+        
+        # Calculate stats
+        users = []
+        for user_id, data in user_data.items():
+            if data['total_calls'] > 0:
+                daily_calls = data['daily_calls']
+                avg_daily = data['total_calls'] / max(len(daily_calls), 1)
+                peak_day = max(daily_calls) if daily_calls else 0
+                
+                # Determine trend (simple: compare first half vs second half)
+                if len(daily_calls) >= 4:
+                    mid = len(daily_calls) // 2
+                    first_half_avg = sum(daily_calls[:mid]) / mid
+                    second_half_avg = sum(daily_calls[mid:]) / (len(daily_calls) - mid)
+                    if second_half_avg > first_half_avg * 1.2:
+                        trend = 'up'
+                    elif second_half_avg < first_half_avg * 0.8:
+                        trend = 'down'
+                    else:
+                        trend = 'stable'
+                else:
+                    trend = 'stable'
+                
+                users.append({
+                    'user_id': user_id,
+                    'username': data['username'],
+                    'is_admin': data['is_admin'],
+                    'total_calls': data['total_calls'],
+                    'avg_daily': avg_daily,
+                    'peak_day': peak_day,
+                    'trend': trend
+                })
+        
+        conn.close()
+        
+        # Sort
+        if sort_by == 'calls_desc':
+            users.sort(key=lambda x: x['total_calls'], reverse=True)
+        elif sort_by == 'calls_asc':
+            users.sort(key=lambda x: x['total_calls'])
+        elif sort_by == 'username':
+            users.sort(key=lambda x: x['username'].lower())
+        elif sort_by == 'cost_desc':
+            users.sort(key=lambda x: x['total_calls'], reverse=True)
+        
+        return jsonify(users)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
