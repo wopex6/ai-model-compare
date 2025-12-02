@@ -4,7 +4,36 @@ Eliminates need to manually create routes for each character
 """
 from flask import render_template, request, jsonify
 import asyncio
+import threading
 from .character_factory import CharacterFactory
+
+# Create a persistent event loop for async operations
+# This prevents "Event loop is closed" warnings
+_event_loop = None
+_loop_thread = None
+_loop_lock = threading.Lock()
+
+def _get_event_loop():
+    """Get or create a persistent event loop running in a separate thread"""
+    global _event_loop, _loop_thread
+    
+    with _loop_lock:
+        if _event_loop is None or not _event_loop.is_running():
+            def run_loop(loop):
+                asyncio.set_event_loop(loop)
+                loop.run_forever()
+            
+            _event_loop = asyncio.new_event_loop()
+            _loop_thread = threading.Thread(target=run_loop, args=(_event_loop,), daemon=True)
+            _loop_thread.start()
+    
+    return _event_loop
+
+def _run_async(coroutine):
+    """Run an async coroutine in the persistent event loop"""
+    loop = _get_event_loop()
+    future = asyncio.run_coroutine_threadsafe(coroutine, loop)
+    return future.result()
 
 
 def register_character_routes(app, characters_dict, smart_response_processor=None):
@@ -78,19 +107,14 @@ def _register_chat_endpoint(app, character_id, characters_dict, smart_response_p
             # Use Smart Response if available
             if smart_response_processor:
                 def ai_function():
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    response = loop.run_until_complete(bot.chat(message, include_context))
-                    loop.close()
-                    return response
+                    # Use persistent event loop (no create/close warnings)
+                    return _run_async(bot.chat(message, include_context))
                 
                 response = smart_response_processor(message, character_id, ai_function)
             else:
                 # Fallback to direct AI if Smart Response not available
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                response = loop.run_until_complete(bot.chat(message, include_context))
-                loop.close()
+                # Use persistent event loop (no create/close warnings)
+                response = _run_async(bot.chat(message, include_context))
             
             return jsonify(response)
         except Exception as e:
