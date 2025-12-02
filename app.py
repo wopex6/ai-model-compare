@@ -1648,6 +1648,173 @@ def get_conversation_context(character):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# Explicit Context Control Endpoints
+@app.route('/api/explicit-context', methods=['GET'])
+@require_auth
+def get_explicit_context():
+    """Get all explicit context for the authenticated user"""
+    try:
+        user_id = request.current_user['user_id']
+        character = request.args.get('character', None)
+        context_type = request.args.get('type', None)
+        
+        if not context_manager or not context_manager.explicit_handler:
+            return jsonify({'error': 'Context Manager not initialized'}), 500
+        
+        context_items = context_manager.explicit_handler.get_explicit_context(
+            user_id, character if character else '', context_type
+        )
+        
+        return jsonify({
+            'count': len(context_items),
+            'items': context_items
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/explicit-context/<int:context_id>', methods=['PUT'])
+@require_auth
+def update_explicit_context(context_id):
+    """Update an explicit context item"""
+    try:
+        user_id = request.current_user['user_id']
+        data = request.get_json()
+        
+        if not context_manager or not context_manager.explicit_handler:
+            return jsonify({'error': 'Context Manager not initialized'}), 500
+        
+        # Verify ownership
+        cursor = context_manager.db.cursor()
+        cursor.execute('''
+            SELECT user_id FROM explicit_context WHERE id = ?
+        ''', (context_id,))
+        row = cursor.fetchone()
+        
+        if not row:
+            return jsonify({'error': 'Context not found'}), 404
+        
+        if row[0] != user_id:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        # Update the context
+        cursor.execute('''
+            UPDATE explicit_context
+            SET context_value = ?,
+                original_statement = ?,
+                timestamp = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (
+            data.get('value'),
+            data.get('original_statement', 'Manually updated'),
+            context_id
+        ))
+        context_manager.db.commit()
+        
+        return jsonify({'success': True, 'message': 'Context updated'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/explicit-context/<int:context_id>', methods=['DELETE'])
+@require_auth
+def delete_explicit_context(context_id):
+    """Delete (deactivate) an explicit context item"""
+    try:
+        user_id = request.current_user['user_id']
+        
+        if not context_manager or not context_manager.explicit_handler:
+            return jsonify({'error': 'Context Manager not initialized'}), 500
+        
+        # Verify ownership
+        cursor = context_manager.db.cursor()
+        cursor.execute('''
+            SELECT user_id FROM explicit_context WHERE id = ?
+        ''', (context_id,))
+        row = cursor.fetchone()
+        
+        if not row:
+            return jsonify({'error': 'Context not found'}), 404
+        
+        if row[0] != user_id:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        # Deactivate the context
+        context_manager.explicit_handler.deactivate_context(context_id)
+        
+        return jsonify({'success': True, 'message': 'Context removed'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/explicit-context/<int:context_id>/reclassify', methods=['POST'])
+@require_auth
+def reclassify_explicit_context(context_id):
+    """Reclassify an explicit context item (change its type)"""
+    try:
+        user_id = request.current_user['user_id']
+        data = request.get_json()
+        new_type = data.get('context_type')
+        new_key = data.get('context_key')
+        
+        if not context_manager or not context_manager.explicit_handler:
+            return jsonify({'error': 'Context Manager not initialized'}), 500
+        
+        # Verify ownership
+        cursor = context_manager.db.cursor()
+        cursor.execute('''
+            SELECT user_id FROM explicit_context WHERE id = ?
+        ''', (context_id,))
+        row = cursor.fetchone()
+        
+        if not row:
+            return jsonify({'error': 'Context not found'}), 404
+        
+        if row[0] != user_id:
+            return jsonify({'error': 'Unauthorized'}), 403
+        
+        # Update type/key
+        cursor.execute('''
+            UPDATE explicit_context
+            SET context_type = ?,
+                context_key = ?,
+                timestamp = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (new_type, new_key, context_id))
+        context_manager.db.commit()
+        
+        return jsonify({'success': True, 'message': 'Context reclassified'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/explicit-context', methods=['POST'])
+@require_auth
+def add_explicit_context():
+    """Manually add explicit context"""
+    try:
+        user_id = request.current_user['user_id']
+        data = request.get_json()
+        
+        if not context_manager or not context_manager.explicit_handler:
+            return jsonify({'error': 'Context Manager not initialized'}), 500
+        
+        context_id = context_manager.explicit_handler.store_explicit_context(
+            user_id=user_id,
+            character=data.get('character', ''),
+            context_type=data.get('context_type'),
+            context_key=data.get('context_key'),
+            context_value=data.get('context_value'),
+            original_statement=data.get('original_statement', 'Manually added'),
+            priority='CRITICAL',
+            confidence=data.get('confidence', 1.0),
+            extracted_via='manual_entry'
+        )
+        
+        return jsonify({
+            'success': True,
+            'context_id': context_id,
+            'message': 'Context added'
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 # Dual-Layer History Endpoints
 @app.route('/api/history/<character>', methods=['GET'])
 @require_auth
