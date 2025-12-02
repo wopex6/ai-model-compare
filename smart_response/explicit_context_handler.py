@@ -380,6 +380,7 @@ class ExplicitContextHandler:
                                extracted_via: str = 'manual') -> int:
         """
         Store explicit context with CRITICAL priority
+        Implements context merging: new emotional states/goals replace old ones
         
         Returns:
             ID of stored context
@@ -387,6 +388,24 @@ class ExplicitContextHandler:
         cursor = self.db.cursor()
         
         try:
+            # For certain context types, deactivate old values before storing new
+            # (emotional state and current goals are transient, not cumulative)
+            merge_types = ['emotional_state']  # Emotional state should be current
+            
+            if context_type in merge_types:
+                # Deactivate previous context of same type/key
+                cursor.execute('''
+                    UPDATE explicit_context
+                    SET active = 0
+                    WHERE user_id = ? AND character = ? 
+                    AND context_type = ? AND context_key = ?
+                    AND active = 1
+                ''', (user_id, character, context_type, context_key))
+                
+                deactivated = cursor.rowcount
+                if deactivated > 0:
+                    print(f"   ↻ Updated {context_type}.{context_key} (deactivated {deactivated} old)")
+            
             # Use INSERT OR REPLACE to update if exists
             cursor.execute('''
                 INSERT OR REPLACE INTO explicit_context
@@ -404,7 +423,7 @@ class ExplicitContextHandler:
             context_id = cursor.lastrowid
             
             # Log what was captured
-            print(f"📝 EXPLICIT CONTEXT: {context_type}.{context_key} = '{context_value}' (priority: {priority})")
+            print(f"📝 EXPLICIT CONTEXT: {context_type}.{context_key} = '{context_value}' (priority: {priority}, confidence: {confidence:.2f})")
             
             return context_id
             
