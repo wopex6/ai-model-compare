@@ -81,16 +81,43 @@ class ExplicitContextHandler:
         self.db.commit()
         print("✓ Explicit Context Handler initialized")
     
-    def extract_explicit_context(self, user_id: int, character: str, 
-                                 message: str) -> List[Dict]:
+    def _normalize_message(self, message: str) -> str:
         """
-        Extract all explicit context from a message
+        Normalize message for pattern matching
+        Strips quotes and handles punctuation transparently
+        
+        Users should be able to type:
+        - "I'm stressed" or I'm stressed
+        - "I want success" or I want success
+        And both work the same way.
+        """
+        # Strip leading/trailing whitespace
+        normalized = message.strip()
+        
+        # Remove surrounding quotes (single or double)
+        if (normalized.startswith('"') and normalized.endswith('"')) or \
+           (normalized.startswith("'") and normalized.endswith("'")):
+            normalized = normalized[1:-1].strip()
+        
+        # Remove quotes around specific phrases (common in typed messages)
+        # e.g., 'I want "success"' → 'I want success'
+        normalized = normalized.replace('"', '').replace("'s ", "'s ")  # Keep possessives
+        
+        return normalized
+    
+    def extract_explicit_context(self, user_id: int, character: str, message: str) -> List[Dict]:
+        """
+        Extract explicit context from user message
         
         Returns:
-            List of extracted context items with priority
+            List of extracted context items
         """
         extracted = []
-        message_lower = message.lower()
+        
+        # Normalize message: strip quotes and clean punctuation for pattern matching
+        # This makes the system transparent to formatting variations
+        message_normalized = self._normalize_message(message)
+        message_lower = message_normalized.lower()
         
         # Pattern 1: Emotional state - "I'm feeling X"
         emotional = self._extract_emotional_state(message, message_lower)
