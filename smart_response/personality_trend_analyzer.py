@@ -298,7 +298,13 @@ class PersonalityTrendAnalyzer:
         return inferred_traits
     
     def _get_recent_context(self, user_id: int, character: str, days: int) -> List[Dict]:
-        """Get all explicit context from recent time window"""
+        """
+        Get all explicit context from recent time window
+        
+        NOTE: Does NOT filter by active=1 because we need ALL historical patterns,
+        not just current state. Emotional states get deactivated when new ones arrive,
+        but we need to see the full pattern over time for trait inference.
+        """
         cursor = self.db.cursor()
         
         cutoff_date = datetime.now() - timedelta(days=days)
@@ -308,7 +314,6 @@ class PersonalityTrendAnalyzer:
             FROM explicit_context
             WHERE user_id = ? AND character = ? 
             AND timestamp >= ?
-            AND active = 1
             ORDER BY timestamp DESC
         ''', (user_id, character, cutoff_date))
         
