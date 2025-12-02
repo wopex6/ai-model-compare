@@ -2409,40 +2409,6 @@ print("\n=== Registering Character Routes ===")
 register_character_routes(app, all_characters, process_with_smart_response)
 print("✓ Dynamic routes registered for all 8 characters with Smart Response")
 
-if __name__ == '__main__':
-    # Enable auto-documentation only in development (not production)
-    is_production = os.environ.get('FLASK_ENV') == 'production'
-    
-    if not is_production:
-        enable_auto_docs()
-        update_docs_now()
-    else:
-        print("📚 Auto-docs disabled in production mode")
-    
-    # Print conversation storage info on startup
-    print(f"\n=== Conversation Storage Info ===")
-    print(f"Storage directory: {chatbot.conversation_manager.storage_dir.absolute()}")
-    sessions = chatbot.conversation_manager.list_sessions()
-    print(f"Found {len(sessions)} existing sessions")
-    if sessions:
-        print("Recent sessions:")
-        for session in sessions[:3]:
-            print(f"  - {session['session_id'][:8]}... ({session['message_count']} messages, {session['last_updated']})")
-    print("=" * 35)
-    
-    # Print user profile storage info
-    print(f"\n=== User Profile Storage Info ===")
-    print(f"Storage directory: {user_profile_manager.storage_dir.absolute()}")
-    profiles = user_profile_manager.list_all_profiles()
-    print(f"Found {len(profiles)} user profiles")
-    if profiles:
-        print("Recent profiles:")
-        for profile in profiles[:3]:
-            print(f"  - {profile['name']} ({profile['completion']}% complete, {profile['total_conversations']} conversations)")
-    print("=" * 35)
-    
-    app.run(debug=True, host='0.0.0.0', port=5000)
-
 
 # ============================================
 # AI USAGE MONITORING (ADMIN ONLY)
@@ -2655,3 +2621,38 @@ def get_monthly_ai_usage():
         return jsonify(users)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+if __name__ == '__main__':
+    # Enable auto-documentation only in development (not production)
+    is_production = os.environ.get('FLASK_ENV') == 'production'
+    
+    if not is_production:
+        enable_auto_docs()
+        update_docs_now()
+    else:
+        print("📚 Auto-docs disabled in production mode")
+    
+    # Print conversation storage info on startup
+    print(f"\n=== Conversation Storage Info ===")
+    print(f"Storage directory: {chatbot.conversation_manager.storage_dir.absolute()}")
+    sessions = chatbot.conversation_manager.list_sessions()
+    print(f"Found {len(sessions)} existing sessions")
+    if sessions:
+        print("Recent sessions:")
+        for session in sessions[:3]:
+            print(f"  - {session['session_id'][:8]}... ({session['message_count']} messages, {session['last_updated']})")
+    print("=" * 35)
+    
+    # Print user profile storage info
+    print(f"\n=== User Profile Storage Info ===")
+    print(f"Storage directory: {user_profile_manager.storage_dir.absolute()}")
+    profiles = user_profile_manager.list_all_profiles()
+    print(f"Found {len(profiles)} user profiles")
+    if profiles:
+        print("Recent profiles:")
+        for profile in profiles[:3]:
+            print(f"  - {profile['name']} ({profile['completion']}% complete, {profile['total_conversations']} conversations)")
+    print("=" * 35)
+    
+    app.run(debug=True, host='0.0.0.0', port=5000)
