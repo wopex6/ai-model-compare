@@ -263,8 +263,11 @@ class PsychologistChatbot(KnowledgeEnhancedMixin, AIChatbot):
             return await super().chat(message)
     
     async def _provide_coping_strategies(self, message: str) -> Dict:
-        """Provide evidence-based coping strategies"""
+        """Provide evidence-based coping strategies (CONTEXT-AWARE)"""
         message_lower = message.lower()
+        
+        # Extract explicit context if present
+        context_data = self._extract_context_from_message(message)
         
         # Detect issue area
         issue_area = None
@@ -282,7 +285,18 @@ class PsychologistChatbot(KnowledgeEnhancedMixin, AIChatbot):
         if issue_area and issue_area in self.coping_strategies:
             strategies = self.coping_strategies[issue_area]
             
-            response = f"I hear that you're dealing with **{issue_area.replace('_', '-')}**. "
+            # Context-aware intro
+            if context_data:
+                emotion = context_data.get('emotion', issue_area.replace('_', ' '))
+                goal = context_data.get('goal', '')
+                
+                if goal:
+                    response = f"I can see you're experiencing {emotion} while working toward {goal}. That's a significant challenge, and your feelings are completely valid. "
+                else:
+                    response = f"I hear that you're experiencing {emotion}. Your feelings are valid and understandable. "
+            else:
+                response = f"I hear that you're dealing with **{issue_area.replace('_', '-')}**. "
+            
             response += "Here are some evidence-based strategies that many people find helpful:\n\n"
             
             for i, strategy in enumerate(strategies, 1):
@@ -290,10 +304,15 @@ class PsychologistChatbot(KnowledgeEnhancedMixin, AIChatbot):
             
             response += "\n**Important note**: These strategies work best when practiced regularly. "
             response += "Start with one or two that resonate with you, rather than trying everything at once.\n\n"
+            
+            # Context-aware closing
+            if context_data and context_data.get('goal'):
+                response += f"💡 These strategies can help you manage {issue_area} while staying focused on {context_data['goal']}. "
+            
             response += "Would you like me to elaborate on any of these strategies, or discuss "
             response += "what might work best for your specific situation?"
             
-            return {"response": response, "strategies_provided": issue_area}
+            return {"response": response, "strategies_provided": issue_area, "context_used": bool(context_data)}
         
         # General coping response
         if hasattr(self, '_knowledge_enabled') and self._knowledge_enabled:
