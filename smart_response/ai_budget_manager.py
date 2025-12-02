@@ -16,16 +16,18 @@ class AIBudgetManager:
     Manages AI usage with strict limits and monitoring
     
     USER REQUIREMENTS:
-    - Maximum 100 AI calls per day PER USER
-    - Each admin gets 100 calls/day
-    - Each regular user gets 100 calls/day
+    - Admins: 1000 AI calls per day
+    - Regular users: 100 calls per day
+    - System-wide cap: 2000 calls per day TOTAL
     - Notify user when funds run out
     - Monitor and detect unusual patterns
     - Circuit breaker for emergencies
     """
     
     # HARD LIMITS (as per user requirements)
-    DAILY_CALL_LIMIT = 100  # Maximum 100 calls/day PER USER
+    DAILY_CALL_LIMIT_USER = 100  # Maximum 100 calls/day per regular user
+    DAILY_CALL_LIMIT_ADMIN = 1000  # Maximum 1000 calls/day per admin
+    SYSTEM_DAILY_CAP = 2000  # Maximum 2000 calls/day SYSTEM-WIDE
     HOURLY_CALL_LIMIT = 30  # Maximum 30 calls/hour per user (prevent spikes)
     BACKGROUND_CALL_LIMIT = 10  # Maximum 10 background calls/day per user
     
@@ -128,9 +130,9 @@ class AIBudgetManager:
         ''')
         
         self.db.commit()
-        print("✓ AI Budget Manager initialized (100 calls/day limit per user)")
+        print("✓ AI Budget Manager initialized (Users: 100/day, Admins: 1000/day, System cap: 2000/day)")
     
-    def can_make_ai_call(self, user_id: Optional[int] = None, is_background: bool = False) -> Tuple[bool, str]:
+    def can_make_ai_call(self, user_id: Optional[int] = None, is_admin: bool = False, is_background: bool = False) -> Tuple[bool, str]:
         """
         Request permission to make an AI call
         
@@ -147,23 +149,43 @@ class AIBudgetManager:
             )
             return False, "Circuit breaker active - AI calls temporarily halted"
         
-        # Check daily limit per user (HARD LIMIT)
-        calls_today = self._get_calls_in_period('day', user_id)
-        if calls_today >= self.DAILY_CALL_LIMIT:
-            self._trigger_circuit_breaker(f"Daily limit reached: {calls_today}/{self.DAILY_CALL_LIMIT} calls")
+        # Check system-wide cap first (HARD LIMIT)
+        system_calls_today = self._get_calls_in_period('day', user_id=None)
+        if system_calls_today >= self.SYSTEM_DAILY_CAP:
+            self._trigger_circuit_breaker(f"System daily cap reached: {system_calls_today}/{self.SYSTEM_DAILY_CAP} calls")
             self._notify_user(
-                'daily_limit_reached',
-                f'AI call limit reached: {calls_today}/{self.DAILY_CALL_LIMIT} calls today. System using fallback responses.',
+                'system_daily_cap_reached',
+                f'System-wide daily cap reached: {system_calls_today}/{self.SYSTEM_DAILY_CAP} calls today. All users affected.',
                 'critical'
             )
-            return False, f"Daily limit reached: {calls_today}/{self.DAILY_CALL_LIMIT} calls for user {user_id}"
+            return False, f"System daily cap reached: {system_calls_today}/{self.SYSTEM_DAILY_CAP} calls"
+        
+        # Check daily limit per user (HARD LIMIT)
+        user_daily_limit = self.DAILY_CALL_LIMIT_ADMIN if is_admin else self.DAILY_CALL_LIMIT_USER
+        calls_today = self._get_calls_in_period('day', user_id)
+        if calls_today >= user_daily_limit:
+            self._notify_user(
+                'daily_limit_reached',
+                f'AI call limit reached: {calls_today}/{user_daily_limit} calls today. Using fallback responses.',
+                'critical'
+            )
+            return False, f"Daily limit reached: {calls_today}/{user_daily_limit} calls for user {user_id} ({'admin' if is_admin else 'user'})"
         
         # WARN at 80% of daily limit
-        if calls_today >= self.DAILY_CALL_LIMIT * 0.8:
-            remaining = self.DAILY_CALL_LIMIT - calls_today
+        if calls_today >= user_daily_limit * 0.8:
+            remaining = user_daily_limit - calls_today
             self._notify_user(
                 'daily_limit_warning',
-                f'AI budget warning: {calls_today}/{self.DAILY_CALL_LIMIT} calls used today. {remaining} remaining.',
+                f'AI budget warning: {calls_today}/{user_daily_limit} calls used today. {remaining} remaining.',
+                'warning'
+            )
+        
+        # WARN at 80% of system cap
+        if system_calls_today >= self.SYSTEM_DAILY_CAP * 0.8:
+            system_remaining = self.SYSTEM_DAILY_CAP - system_calls_today
+            self._notify_user(
+                'system_cap_warning',
+                f'System budget warning: {system_calls_today}/{self.SYSTEM_DAILY_CAP} total calls today. {system_remaining} remaining system-wide.',
                 'warning'
             )
         
