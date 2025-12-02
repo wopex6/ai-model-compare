@@ -176,8 +176,8 @@ const CharacterChatHelper = {
             this.addMessage(chatContainerId, message, 'bot');
         }
         
-        // TODO: Send error to server for logging
-        // this.logErrorToServer(error, characterName);
+        // Send error to server for logging and monitoring
+        this.logErrorToServer(error, characterName);
     },
     
     /**
@@ -315,6 +315,32 @@ const CharacterChatHelper = {
         
         if (input) input.disabled = !enabled;
         if (button) button.disabled = !enabled;
+    },
+    
+    /**
+     * Log error to server for monitoring and debugging
+     * @param {Error} error - The error object
+     * @param {string} characterName - Character where error occurred
+     */
+    async logErrorToServer(error, characterName) {
+        try {
+            await fetch('/api/log-error', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    error: error.toString(),
+                    character: characterName,
+                    context: error.message || '',
+                    timestamp: new Date().toISOString(),
+                    user_agent: navigator.userAgent,
+                    url: window.location.href,
+                    stack_trace: error.stack || ''
+                })
+            });
+        } catch (loggingError) {
+            // Silent fail - don't break frontend if logging fails
+            console.warn('Failed to log error to server:', loggingError);
+        }
     }
 };
 
