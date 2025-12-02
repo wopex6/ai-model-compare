@@ -201,11 +201,13 @@ class ExplicitContextHandler:
         preferences = []
         
         patterns = [
-            (r"i prefer (.*?)(?:\.|,|over|than|and|but|$)", 'preference', 0.90),
+            (r"i (?:really |strongly )?prefer (.*?)(?:\.|,|over|than|and|but|to|$)", 'preference', 0.90),
+            (r"i'?d prefer (.*?)(?:\.|,|over|than|and|but|to|$)", 'preference', 0.88),
             (r"i like (to |that )?(.*?)(?:\.|,|and|but|because|$)", 'like', 0.85),
             (r"i don'?t like (to |that )?(.*?)(?:\.|,|and|but|because|$)", 'dislike', 0.85),
             (r"i love (to |that )?(.*?)(?:\.|,|and|but|because|$)", 'love', 0.90),
             (r"i hate (to |that )?(.*?)(?:\.|,|and|but|because|$)", 'hate', 0.85),
+            (r"i enjoy (.*?)(?:\.|,|and|but|because|$)", 'enjoy', 0.85),
         ]
         
         for pattern, pref_type, confidence in patterns:
@@ -275,21 +277,36 @@ class ExplicitContextHandler:
         pattern = r"i'?m (?:a |an |very |really |quite )?([\w\s-]+?)(?:\.|,|and|but|person|$)"
         matches = re.finditer(pattern, message_lower)
         
+        # Words that indicate emotional state or temporary condition, not personality
+        emotional_words = [
+            'feeling', 'thinking', 'going', 'doing', 'trying', 'working',
+            'stressed', 'worried', 'excited', 'happy', 'sad', 'angry',
+            'frustrated', 'overwhelmed', 'tired', 'motivated', 'inspired',
+            'exhausted', 'nervous', 'scared', 'hopeful', 'disappointed'
+        ]
+        
         for match in matches:
             trait = match.group(1).strip()
             
+            # Skip if it contains emotional words (handled by emotional_state extraction)
+            if any(emo in trait for emo in emotional_words):
+                continue
+            
+            # Skip if it contains context words like "about", "for", "with" 
+            # e.g., "feeling stressed about deadlines" should not be a trait
+            if 'about' in trait or 'for' in trait or 'with' in trait:
+                continue
+            
             # Check if it's a known trait or long enough to be meaningful
             if trait in traits or (len(trait) > 4 and len(trait) < 40):
-                # Avoid capturing emotions (handled separately)
-                if trait not in ['feeling', 'thinking', 'going', 'doing']:
-                    descriptions.append({
-                        'type': 'self_description',
-                        'key': 'personality_trait',
-                        'value': trait,
-                        'priority': self.PRIORITY_CRITICAL,
-                        'confidence': 0.85,
-                        'extracted_via': 'self_description_pattern'
-                    })
+                descriptions.append({
+                    'type': 'self_description',
+                    'key': 'personality_trait',
+                    'value': trait,
+                    'priority': self.PRIORITY_CRITICAL,
+                    'confidence': 0.85 if trait in traits else 0.70,
+                    'extracted_via': 'self_description_pattern'
+                })
         
         return descriptions
     
