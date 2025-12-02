@@ -16,16 +16,18 @@ class AIBudgetManager:
     Manages AI usage with strict limits and monitoring
     
     USER REQUIREMENTS:
-    - Maximum 100 AI calls per day (TOTAL)
+    - Maximum 100 AI calls per day PER USER
+    - Each admin gets 100 calls/day
+    - Each regular user gets 100 calls/day
     - Notify user when funds run out
     - Monitor and detect unusual patterns
     - Circuit breaker for emergencies
     """
     
     # HARD LIMITS (as per user requirements)
-    DAILY_CALL_LIMIT = 100  # Maximum 100 calls/day TOTAL
-    HOURLY_CALL_LIMIT = 30  # Maximum 30 calls/hour (prevent spikes)
-    BACKGROUND_CALL_LIMIT = 10  # Maximum 10 background calls/day
+    DAILY_CALL_LIMIT = 100  # Maximum 100 calls/day PER USER
+    HOURLY_CALL_LIMIT = 30  # Maximum 30 calls/hour per user (prevent spikes)
+    BACKGROUND_CALL_LIMIT = 10  # Maximum 10 background calls/day per user
     
     # RATE LIMITS
     CALLS_PER_MINUTE = 20  # Max 20 calls/minute
@@ -87,6 +89,11 @@ class AIBudgetManager:
             ON ai_usage_log(call_type, timestamp)
         ''')
         
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_usage_user_time 
+            ON ai_usage_log(user_id, timestamp)
+        ''')
+        
         # Track unusual patterns
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS ai_usage_patterns (
@@ -121,12 +128,9 @@ class AIBudgetManager:
         ''')
         
         self.db.commit()
-        print("✓ AI Budget Manager initialized (100 calls/day limit)")
+        print("✓ AI Budget Manager initialized (100 calls/day limit per user)")
     
-    def request_ai_call(self, call_type: str, purpose: str,
-                       user_id: Optional[int] = None,
-                       character: Optional[str] = None,
-                       is_background: bool = False) -> Tuple[bool, str]:
+    def can_make_ai_call(self, user_id: Optional[int] = None, is_background: bool = False) -> Tuple[bool, str]:
         """
         Request permission to make an AI call
         
@@ -143,8 +147,8 @@ class AIBudgetManager:
             )
             return False, "Circuit breaker active - AI calls temporarily halted"
         
-        # CHECK DAILY LIMIT (MOST IMPORTANT)
-        calls_today = self._get_calls_in_period('day')
+        # Check daily limit per user (HARD LIMIT)
+        calls_today = self._get_calls_in_period('day', user_id)
         if calls_today >= self.DAILY_CALL_LIMIT:
             self._trigger_circuit_breaker(f"Daily limit reached: {calls_today}/{self.DAILY_CALL_LIMIT} calls")
             self._notify_user(
@@ -152,7 +156,7 @@ class AIBudgetManager:
                 f'AI call limit reached: {calls_today}/{self.DAILY_CALL_LIMIT} calls today. System using fallback responses.',
                 'critical'
             )
-            return False, f"Daily limit reached: {calls_today}/{self.DAILY_CALL_LIMIT} calls"
+            return False, f"Daily limit reached: {calls_today}/{self.DAILY_CALL_LIMIT} calls for user {user_id}"
         
         # WARN at 80% of daily limit
         if calls_today >= self.DAILY_CALL_LIMIT * 0.8:
@@ -163,8 +167,8 @@ class AIBudgetManager:
                 'warning'
             )
         
-        # Check hourly limit (prevent spikes)
-        calls_this_hour = self._get_calls_in_period('hour')
+        # Check hourly limit per user (prevent spikes)
+        calls_this_hour = self._get_calls_in_period('hour', user_id)
         if calls_this_hour >= self.HOURLY_CALL_LIMIT:
             self._trigger_throttle(f"Hourly limit reached: {calls_this_hour}/{self.HOURLY_CALL_LIMIT}")
             self._notify_user(
@@ -172,13 +176,13 @@ class AIBudgetManager:
                 f'AI calls throttled: {calls_this_hour}/{self.HOURLY_CALL_LIMIT} calls this hour. Using cached responses.',
                 'warning'
             )
-            return False, f"Hourly limit reached: {calls_this_hour}/{self.HOURLY_CALL_LIMIT} calls"
+            return False, f"Hourly limit reached: {calls_this_hour}/{self.HOURLY_CALL_LIMIT} calls for user {user_id}"
         
-        # Check background limit (if background call)
+        # Check background limit per user (if background call)
         if is_background:
-            background_today = self._get_background_calls_today()
+            background_today = self._get_background_calls_today(user_id)
             if background_today >= self.BACKGROUND_CALL_LIMIT:
-                return False, f"Background limit reached: {background_today}/{self.BACKGROUND_CALL_LIMIT} calls"
+                return False, f"Background limit reached: {background_today}/{self.BACKGROUND_CALL_LIMIT} calls for user {user_id}"
         
         # Check rate limits (prevent rapid firing)
         calls_last_minute = self._get_calls_last_n_minutes(1)
@@ -238,34 +242,56 @@ class AIBudgetManager:
                     'high'
                 )
     
-    def _get_calls_in_period(self, period: str) -> int:
-        """Get number of calls in specified period"""
+    def _get_calls_in_period(self, period: str, user_id: Optional[int] = None) -> int:
+        """Get number of calls in specified period for a specific user"""
         cursor = self.db.cursor()
         
         if period == 'day':
-            cursor.execute('''
-                SELECT COUNT(*) FROM ai_usage_log
-                WHERE DATE(timestamp) = DATE('now')
-            ''')
+            if user_id:
+                cursor.execute('''
+                    SELECT COUNT(*) FROM ai_usage_log
+                    WHERE DATE(timestamp) = DATE('now')
+                    AND user_id = ?
+                ''', (user_id,))
+            else:
+                cursor.execute('''
+                    SELECT COUNT(*) FROM ai_usage_log
+                    WHERE DATE(timestamp) = DATE('now')
+                ''')
         elif period == 'hour':
-            cursor.execute('''
-                SELECT COUNT(*) FROM ai_usage_log
-                WHERE timestamp > datetime('now', '-1 hour')
-            ''')
+            if user_id:
+                cursor.execute('''
+                    SELECT COUNT(*) FROM ai_usage_log
+                    WHERE timestamp > datetime('now', '-1 hour')
+                    AND user_id = ?
+                ''', (user_id,))
+            else:
+                cursor.execute('''
+                    SELECT COUNT(*) FROM ai_usage_log
+                    WHERE timestamp > datetime('now', '-1 hour')
+                ''')
         else:
             return 0
         
         return cursor.fetchone()[0]
     
-    def _get_background_calls_today(self) -> int:
-        """Get background calls made today"""
+    def _get_background_calls_today(self, user_id: Optional[int] = None) -> int:
+        """Get background calls made today for a specific user"""
         cursor = self.db.cursor()
         
-        cursor.execute('''
-            SELECT COUNT(*) FROM ai_usage_log
-            WHERE DATE(timestamp) = DATE('now')
-            AND is_background = 1
-        ''')
+        if user_id:
+            cursor.execute('''
+                SELECT COUNT(*) FROM ai_usage_log
+                WHERE DATE(timestamp) = DATE('now')
+                AND is_background = 1
+                AND user_id = ?
+            ''', (user_id,))
+        else:
+            cursor.execute('''
+                SELECT COUNT(*) FROM ai_usage_log
+                WHERE DATE(timestamp) = DATE('now')
+                AND is_background = 1
+            ''')
         
         return cursor.fetchone()[0]
     
