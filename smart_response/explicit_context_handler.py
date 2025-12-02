@@ -406,9 +406,10 @@ class ExplicitContextHandler:
                 if deactivated > 0:
                     print(f"   ↻ Updated {context_type}.{context_key} (deactivated {deactivated} old)", flush=True)
             
-            # Use INSERT OR REPLACE to update if exists
+            # Use INSERT to always create new row (preserve history for pattern analysis)
+            # Previous rows are deactivated above, not deleted
             cursor.execute('''
-                INSERT OR REPLACE INTO explicit_context
+                INSERT INTO explicit_context
                 (user_id, character, context_type, context_key, context_value,
                  original_statement, priority, confidence, extracted_via,
                  timestamp, active)
