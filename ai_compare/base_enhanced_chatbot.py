@@ -170,8 +170,11 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
             return await super().chat(message)
     
     async def _provide_strategy(self, message: str) -> Dict:
-        """Provide strategy/technique from configured strategies"""
+        """Provide strategy/technique from configured strategies (CONTEXT-AWARE)"""
         message_lower = message.lower()
+        
+        # Extract explicit context if present (prepended by Smart Response)
+        context_data = self._extract_context_from_message(message)
         
         # Find matching strategy category
         for strategy_key, strategy_info in self.strategies.items():
@@ -183,7 +186,10 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
                 
                 response = f"**{strategy_name}**\n\n"
                 
-                if "intro" in strategy_info:
+                # Context-aware intro
+                if context_data:
+                    response += self._build_context_aware_intro(context_data, strategy_key)
+                elif "intro" in strategy_info:
                     response += f"{strategy_info['intro']}\n\n"
                 
                 response += "**Here are some effective techniques:**\n\n"
@@ -197,10 +203,13 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
                 if "note" in strategy_info:
                     response += f"\n**Note**: {strategy_info['note']}\n"
                 
-                if "closing" in strategy_info:
+                # Context-aware closing
+                if context_data and context_data.get('goal'):
+                    response += f"\n💡 Remember: These strategies can help you stay focused on {context_data['goal']} while managing {context_data.get('emotion', 'stress')}."
+                elif "closing" in strategy_info:
                     response += f"\n{strategy_info['closing']}"
                 
-                return {"response": response, "strategy_provided": strategy_key}
+                return {"response": response, "strategy_provided": strategy_key, "context_used": bool(context_data)}
         
         # General fallback
         if self._knowledge_enabled:
@@ -312,6 +321,65 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
         ])
         message_lower = message.lower()
         return any(word in message_lower for word in emotion_words)
+    
+    def _extract_context_from_message(self, message: str) -> Optional[Dict]:
+        """
+        Extract explicit context from message (prepended by Smart Response)
+        Returns dict with emotion, goal, etc. or None if no context found
+        """
+        # Check if message contains the context marker
+        if "USER'S EXPLICIT STATEMENTS" not in message:
+            return None
+        
+        context = {}
+        lines = message.split('\n')
+        
+        for line in lines:
+            # Extract emotion
+            if "emotional state:" in line.lower() or "current emotion:" in line.lower():
+                emotion = line.split(':', 1)[1].strip()
+                context['emotion'] = emotion
+            
+            # Extract goal
+            if "goal:" in line.lower():
+                goal = line.split(':', 1)[1].strip()
+                context['goal'] = goal
+            
+            # Extract other context items
+            if "preference:" in line.lower():
+                preference = line.split(':', 1)[1].strip()
+                context['preference'] = preference
+        
+        return context if context else None
+    
+    def _build_context_aware_intro(self, context_data: Dict, strategy_key: str) -> str:
+        """
+        Build a personalized intro based on user's explicit context
+        """
+        emotion = context_data.get('emotion', '')
+        goal = context_data.get('goal', '')
+        
+        # Build personalized opening
+        intro = ""
+        
+        if emotion and goal:
+            intro = f"I can see you're dealing with {emotion} while working toward {goal}. That's a challenging combination, and it's completely understandable. "
+        elif emotion:
+            intro = f"I hear that you're experiencing {emotion}. "
+        elif goal:
+            intro = f"As you work toward {goal}, "
+        
+        # Add strategy-specific context
+        if strategy_key == "anxiety":
+            intro += "Here are evidence-based strategies specifically for managing anxiety:\n\n"
+        elif strategy_key == "stress":
+            intro += "Here are evidence-based techniques for stress management:\n\n"
+        elif strategy_key == "depression":
+            intro += "Here are evidence-based strategies that can help:\n\n"
+        else:
+            intro += "Here are some effective strategies:\n\n"
+        
+        return intro
     
     def get_daily_insight(self) -> str:
         """Get a daily insight from configured insights"""
