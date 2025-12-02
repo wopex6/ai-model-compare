@@ -12,18 +12,22 @@ from datetime import datetime, timedelta
 import json
 import sqlite3
 from smart_response.explicit_context_handler import ExplicitContextHandler
+from smart_response.personality_trend_analyzer import PersonalityTrendAnalyzer
 
 
 class ConversationContextManager:
     """
     Manages persistent conversation context with AI-powered updates
-    Now includes explicit context extraction (CRITICAL priority)
+    Now includes:
+    - Explicit context extraction (CRITICAL priority)
+    - Personality pattern analysis (HIGH priority inferred traits)
     """
     
     def __init__(self, db_connection):
         self.db = db_connection
         self._init_context_tables()
         self.explicit_handler = ExplicitContextHandler(db_connection)
+        self.personality_analyzer = PersonalityTrendAnalyzer(db_connection)
     
     def _init_context_tables(self):
         """Create tables for context storage"""
@@ -158,6 +162,15 @@ class ConversationContextManager:
                 parts.append(explicit_context)
                 parts.append("")  # Blank line separator
         
+        # PRIORITY 1.5: INFERRED PERSONALITY PATTERNS (from observations)
+        if context.get('user_id') and context.get('character'):
+            inferred_patterns = self.personality_analyzer.format_for_ai_prompt(
+                context['user_id'], context['character']
+            )
+            if inferred_patterns:
+                parts.append(inferred_patterns)
+                parts.append("")  # Blank line separator
+        
         # PRIORITY 2: General conversation context
         if not context or context.get('message_count', 0) == 0:
             return "\n".join(parts) if parts else ""
@@ -211,6 +224,18 @@ class ConversationContextManager:
             print(f"   ✓ Extracted {len(extracted)} explicit context items")
         else:
             print(f"   ℹ️ No explicit context found in message")
+        
+        # SECOND: Analyze patterns every 5th message (avoid overhead)
+        message_count = self._get_message_count(user_id, character)
+        if message_count % 5 == 0:
+            print(f"🧠 Analyzing personality patterns (message #{message_count})...")
+            inferred = self.personality_analyzer.analyze_patterns(user_id, character, days=14)
+            if inferred:
+                high_conf = [t for t in inferred if t['confidence'] >= 0.70]
+                if high_conf:
+                    print(f"   ✓ Inferred {len(high_conf)} personality traits/values")
+                    for trait in high_conf[:3]:  # Show top 3
+                        print(f"     - {trait['category']}: {trait['trait']} (confidence: {trait['confidence']:.0%})")
         
         # Update last session
         self._upsert_context(user_id, character, 'last_session_date', 
@@ -266,6 +291,16 @@ class ConversationContextManager:
                 INSERT INTO conversation_topics (user_id, character, topic)
                 VALUES (?, ?, ?)
             ''', (user_id, character, topic))
+    
+    def _get_message_count(self, user_id: int, character: str) -> int:
+        """Get total message count for user-character conversation"""
+        cursor = self.db.cursor()
+        cursor.execute('''
+            SELECT COUNT(*) FROM conversation_topics
+            WHERE user_id = ? AND character = ?
+        ''', (user_id, character))
+        row = cursor.fetchone()
+        return row[0] if row else 0
     
     def _extract_topics(self, text: str) -> List[str]:
         """
