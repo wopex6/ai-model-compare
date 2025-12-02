@@ -119,11 +119,34 @@ try:
     context_manager = ConversationContextManager(smart_response_conn)
     history_system = DualLayerHistorySystem(smart_response_conn)
     ai_budget = AIBudgetManager(smart_response_conn)
+    
+    # Initialize frontend error logging table
+    cursor = smart_response_conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS frontend_errors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            user_id INTEGER,
+            error_message TEXT NOT NULL,
+            character TEXT,
+            context TEXT,
+            user_agent TEXT,
+            url TEXT,
+            stack_trace TEXT
+        )
+    ''')
+    cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_frontend_errors_timestamp
+        ON frontend_errors(timestamp DESC)
+    ''')
+    smart_response_conn.commit()
+    
     # Track previous interactions for learning
     previous_interactions = {}
     # Store recent message history for context
     message_histories = {}  # {user_id_character: [{role, content, timestamp}, ...]}
     print("✓ Smart Response System with AI Budget Control initialized")
+    print("✓ Frontend error logging initialized")
 except Exception as e:
     print(f"✗ Error initializing Smart Response: {e}")
     import traceback
@@ -1647,6 +1670,45 @@ def get_conversation_context(character):
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+# Frontend Error Logging Endpoint
+@app.route('/api/log-error', methods=['POST'])
+def log_frontend_error():
+    """Log frontend errors to database for monitoring and debugging"""
+    try:
+        data = request.get_json()
+        
+        # Get user_id if authenticated
+        user_data = authenticate_token()
+        user_id = user_data.get('user_id') if user_data else None
+        
+        if not smart_response_conn:
+            return jsonify({'status': 'error', 'message': 'Database not initialized'}), 500
+        
+        cursor = smart_response_conn.cursor()
+        cursor.execute('''
+            INSERT INTO frontend_errors 
+            (user_id, error_message, character, context, user_agent, url, stack_trace)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            user_id,
+            data.get('error', 'Unknown error'),
+            data.get('character'),
+            data.get('context'),
+            data.get('user_agent'),
+            data.get('url'),
+            data.get('stack_trace')
+        ))
+        smart_response_conn.commit()
+        
+        # Log to console for immediate visibility
+        print(f"🐛 Frontend Error: {data.get('error')} (character: {data.get('character')}, user: {user_id})")
+        
+        return jsonify({'status': 'logged'})
+    except Exception as e:
+        # Silent fail - don't break frontend if logging fails
+        print(f"⚠️ Error logging frontend error: {e}")
+        return jsonify({'status': 'failed'}), 200  # Return 200 to not disrupt frontend
 
 # Explicit Context Control Endpoints
 @app.route('/api/explicit-context', methods=['GET'])
