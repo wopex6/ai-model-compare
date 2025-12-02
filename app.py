@@ -166,10 +166,13 @@ def process_with_smart_response(message, character_name, ai_chat_function):
     Args:
         message: User's message
         character_name: Character identifier (coach, sage, marcus, etc.)
-        ai_chat_function: Function to call for full AI response
+        ai_chat_function: Function that accepts enhanced_message and returns AI response
     
     Returns:
         Response dict with 'response', 'type', etc.
+        
+    Note: ai_chat_function will receive enhanced_message (with context prepended)
+    instead of the original message when context is available.
     """
     # Check if user is authenticated (optional)
     user_data = authenticate_token()
@@ -280,15 +283,16 @@ def process_with_smart_response(message, character_name, ai_chat_function):
         context_prompt = context_manager.format_context_for_prompt(context)
         if context_prompt:
             print(f"   📝 Passing context to AI: {len(context_prompt)} chars")
-            # Pass context to AI function if it accepts it
-            # For now, we'll add it to the message temporarily
+            # Prepend context to message so AI receives it
+            # This makes AI aware of user's emotional state, goals, and preferences
+            enhanced_message = f"{context_prompt}\n\nUser's current message: {message}"
+            print(f"   ✓ Context prepended to message for AI awareness")
+        else:
             enhanced_message = message
-            if context['recent_topics']:
-                # AI will get context awareness
-                pass  # Context will be passed via modified chatbot methods
     else:
         context_prompt = None
         context = None
+        enhanced_message = message
     
     # AI BUDGET CONTROL: Check if AI call is allowed
     if ai_budget:
@@ -314,7 +318,7 @@ def process_with_smart_response(message, character_name, ai_chat_function):
     ai_call_success = False
     ai_error = None
     try:
-        response = ai_chat_function()
+        response = ai_chat_function(enhanced_message)
         ai_call_success = True
     except Exception as e:
         ai_error = str(e)
@@ -1601,10 +1605,10 @@ def coach_chat():
             return jsonify({'error': 'Message cannot be empty'}), 400
         
         # Use common Smart Response processing
-        def ai_function():
+        def ai_function(enhanced_message):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            response = loop.run_until_complete(motivational_bot.chat(message, include_context))
+            response = loop.run_until_complete(motivational_bot.chat(enhanced_message, include_context))
             loop.close()
             return response
         
@@ -2006,10 +2010,10 @@ def sage_chat():
             return jsonify({'error': 'Message cannot be empty'}), 400
         
         # Use common Smart Response processing
-        def ai_function():
+        def ai_function(enhanced_message):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            response = loop.run_until_complete(wisdom_bot.chat(message, include_context))
+            response = loop.run_until_complete(wisdom_bot.chat(enhanced_message, include_context))
             loop.close()
             return response
         
@@ -2053,10 +2057,10 @@ def marcus_chat():
             return jsonify({'error': 'Message cannot be empty'}), 400
         
         # Use common Smart Response processing
-        def ai_function():
+        def ai_function(enhanced_message):
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            response = loop.run_until_complete(stoic_bot.chat(message, include_context))
+            response = loop.run_until_complete(stoic_bot.chat(enhanced_message, include_context))
             loop.close()
             return response
         

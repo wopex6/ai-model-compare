@@ -106,9 +106,10 @@ def _register_chat_endpoint(app, character_id, characters_dict, smart_response_p
             
             # Use Smart Response if available
             if smart_response_processor:
-                def ai_function():
+                def ai_function(enhanced_message):
                     # Use persistent event loop (no create/close warnings)
-                    return _run_async(bot.chat(message, include_context))
+                    # enhanced_message includes explicit context prepended by Smart Response
+                    return _run_async(bot.chat(enhanced_message, include_context))
                 
                 response = smart_response_processor(message, character_id, ai_function)
             else:
