@@ -1,0 +1,14 @@
+IMPROVE: Transparent Quote and Punctuation Handling
+
+USER REQUEST: Quote marks should be transparent to users
+
+ISSUE: Quotes broke extraction
+- I want success worked
+- "I want success" did not work
+
+FIX: Added _normalize_message() to strip quotes before pattern matching
+
+IMPACT:
+- More forgiving extraction  
+- Better UX - formatting variations work
+- Users do not need to worry about quotes
