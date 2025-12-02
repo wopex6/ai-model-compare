@@ -217,7 +217,11 @@ class ConversationContextManager:
         """
         cursor = self.db.cursor()
         
-        # FIRST: Extract explicit context from user's message (CRITICAL priority)
+        # FIRST: Increment message counter
+        message_count = self._get_message_count(user_id, character) + 1
+        self._upsert_context(user_id, character, 'message_count', str(message_count))
+        
+        # SECOND: Extract explicit context from user's message (CRITICAL priority)
         print(f"🔍 Extracting explicit context for user_id={user_id}, character={character}")
         extracted = self.explicit_handler.extract_explicit_context(user_id, character, message)
         if extracted:
@@ -225,18 +229,25 @@ class ConversationContextManager:
         else:
             print(f"   ℹ️ No explicit context found in message")
         
-        # SECOND: Analyze patterns every 5th message (avoid overhead)
-        message_count = self._get_message_count(user_id, character)
+        # THIRD: Analyze patterns every 5th message (avoid overhead)
+        print(f"🔢 Message count: {message_count}")
         if message_count % 5 == 0:
             print(f"🧠 Analyzing personality patterns (message #{message_count})...")
             inferred = self.personality_analyzer.analyze_patterns(user_id, character, days=14)
+            print(f"   📊 Total traits found: {len(inferred) if inferred else 0}")
             if inferred:
                 high_conf = [t for t in inferred if t['confidence'] >= 0.70]
+                low_conf = [t for t in inferred if t['confidence'] < 0.70]
                 if high_conf:
-                    print(f"   ✓ Inferred {len(high_conf)} personality traits/values")
+                    print(f"   ✓ Inferred {len(high_conf)} personality traits/values (≥70% confidence)")
                     for trait in high_conf[:3]:  # Show top 3
                         print(f"     - {trait['category']}: {trait['trait']} (confidence: {trait['confidence']:.0%})")
-        
+                if low_conf:
+                    print(f"   ⚠️ Found {len(low_conf)} traits below 70% threshold (not shown)")
+                    for trait in low_conf[:2]:  # Show top 2 low-conf
+                        print(f"     - {trait['category']}: {trait['trait']} (confidence: {trait['confidence']:.0%}) - needs more evidence")
+            else:
+                print(f"   ℹ️ No patterns detected yet (need 3+ occurrences)")
         # Update last session
         self._upsert_context(user_id, character, 'last_session_date', 
                             datetime.now().strftime('%Y-%m-%d %H:%M'))
@@ -295,12 +306,20 @@ class ConversationContextManager:
     def _get_message_count(self, user_id: int, character: str) -> int:
         """Get total message count for user-character conversation"""
         cursor = self.db.cursor()
+        
+        # Check if message_count context exists
         cursor.execute('''
-            SELECT COUNT(*) FROM conversation_topics
-            WHERE user_id = ? AND character = ?
+            SELECT context_data FROM conversation_context
+            WHERE user_id = ? AND character = ? AND context_type = 'message_count'
         ''', (user_id, character))
+        
         row = cursor.fetchone()
-        return row[0] if row else 0
+        if row:
+            return int(row[0])
+        else:
+            # Initialize to 0 if not exists
+            self._upsert_context(user_id, character, 'message_count', '0')
+            return 0
     
     def _extract_topics(self, text: str) -> List[str]:
         """
