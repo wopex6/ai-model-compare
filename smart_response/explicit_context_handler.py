@@ -404,7 +404,7 @@ class ExplicitContextHandler:
                 
                 deactivated = cursor.rowcount
                 if deactivated > 0:
-                    print(f"   ↻ Updated {context_type}.{context_key} (deactivated {deactivated} old)")
+                    print(f"   ↻ Updated {context_type}.{context_key} (deactivated {deactivated} old)", flush=True)
             
             # Use INSERT OR REPLACE to update if exists
             cursor.execute('''
@@ -423,12 +423,12 @@ class ExplicitContextHandler:
             context_id = cursor.lastrowid
             
             # Log what was captured
-            print(f"📝 EXPLICIT CONTEXT: {context_type}.{context_key} = '{context_value}' (priority: {priority}, confidence: {confidence:.2f})")
+            print(f"📝 EXPLICIT CONTEXT: {context_type}.{context_key} = '{context_value}' (priority: {priority}, confidence: {confidence:.2f})", flush=True)
             
             return context_id
             
         except Exception as e:
-            print(f"⚠️ Error storing explicit context: {e}")
+            print(f"⚠️ Error storing explicit context: {e}", flush=True)
             return 0
     
     def get_explicit_context(self, user_id: int, character: str,

@@ -222,32 +222,32 @@ class ConversationContextManager:
         self._upsert_context(user_id, character, 'message_count', str(message_count))
         
         # SECOND: Extract explicit context from user's message (CRITICAL priority)
-        print(f"🔍 Extracting explicit context for user_id={user_id}, character={character}")
+        print(f"🔍 Extracting explicit context for user_id={user_id}, character={character}", flush=True)
         extracted = self.explicit_handler.extract_explicit_context(user_id, character, message)
         if extracted:
-            print(f"   ✓ Extracted {len(extracted)} explicit context items")
+            print(f"   ✓ Extracted {len(extracted)} explicit context items", flush=True)
         else:
-            print(f"   ℹ️ No explicit context found in message")
+            print(f"   ℹ️ No explicit context found in message", flush=True)
         
         # THIRD: Analyze patterns every 5th message (avoid overhead)
-        print(f"🔢 Message count: {message_count}")
+        print(f"🔢 Message count: {message_count}", flush=True)
         if message_count % 5 == 0:
-            print(f"🧠 Analyzing personality patterns (message #{message_count})...")
+            print(f"🧠 Analyzing personality patterns (message #{message_count})...", flush=True)
             inferred = self.personality_analyzer.analyze_patterns(user_id, character, days=14)
-            print(f"   📊 Total traits found: {len(inferred) if inferred else 0}")
+            print(f"   📊 Total traits found: {len(inferred) if inferred else 0}", flush=True)
             if inferred:
                 high_conf = [t for t in inferred if t['confidence'] >= 0.70]
                 low_conf = [t for t in inferred if t['confidence'] < 0.70]
                 if high_conf:
-                    print(f"   ✓ Inferred {len(high_conf)} personality traits/values (≥70% confidence)")
+                    print(f"   ✓ Inferred {len(high_conf)} personality traits/values (≥70% confidence)", flush=True)
                     for trait in high_conf[:3]:  # Show top 3
-                        print(f"     - {trait['category']}: {trait['trait']} (confidence: {trait['confidence']:.0%})")
+                        print(f"     - {trait['category']}: {trait['trait']} (confidence: {trait['confidence']:.0%})", flush=True)
                 if low_conf:
-                    print(f"   ⚠️ Found {len(low_conf)} traits below 70% threshold (not shown)")
+                    print(f"   ⚠️ Found {len(low_conf)} traits below 70% threshold (not shown)", flush=True)
                     for trait in low_conf[:2]:  # Show top 2 low-conf
-                        print(f"     - {trait['category']}: {trait['trait']} (confidence: {trait['confidence']:.0%}) - needs more evidence")
+                        print(f"     - {trait['category']}: {trait['trait']} (confidence: {trait['confidence']:.0%}) - needs more evidence", flush=True)
             else:
-                print(f"   ℹ️ No patterns detected yet (need 3+ occurrences)")
+                print(f"   ℹ️ No patterns detected yet (need 3+ occurrences)", flush=True)
         # Update last session
         self._upsert_context(user_id, character, 'last_session_date', 
                             datetime.now().strftime('%Y-%m-%d %H:%M'))
