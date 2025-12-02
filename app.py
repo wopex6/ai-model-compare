@@ -1579,11 +1579,6 @@ def export_chat_session():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Motivational Coach routes
-@app.route('/coach')
-def motivational_coach():
-    return render_template('motivational_coach.html')
-
 @app.route('/personality-test')
 def personality_test_page():
     """Direct access to personality assessment interface"""
@@ -1594,37 +1589,7 @@ def test_session_page():
     """Debug page for testing session restoration"""
     return render_template('test_session_restoration.html')
 
-@app.route('/coach/chat', methods=['POST'])
-def coach_chat():
-    try:
-        data = request.get_json()
-        message = data.get('message', '')
-        include_context = data.get('include_context', True)
-        
-        if not message.strip():
-            return jsonify({'error': 'Message cannot be empty'}), 400
-        
-        # Use common Smart Response processing
-        def ai_function(enhanced_message):
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            response = loop.run_until_complete(motivational_bot.chat(enhanced_message, include_context))
-            loop.close()
-            return response
-        
-        response = process_with_smart_response(message, 'coach', ai_function)
-        return jsonify(response)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/coach/stats')
-def coach_stats():
-    try:
-        stats = motivational_bot.get_motivational_stats()
-        return jsonify(stats)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
+# Special endpoint for coach-specific reminder toggle (not in dynamic system)
 @app.route('/coach/toggle-reminders', methods=['POST'])
 def toggle_reminders():
     try:
@@ -1993,107 +1958,7 @@ def reset_ai_circuit_breaker():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Wisdom Sage routes
-@app.route('/sage')
-def wisdom_sage():
-    """Wisdom Sage - Taoist philosophy chatbot"""
-    return render_template('wisdom_sage.html')
-
-@app.route('/sage/chat', methods=['POST'])
-def sage_chat():
-    try:
-        data = request.get_json()
-        message = data.get('message', '')
-        include_context = data.get('include_context', True)
-        
-        if not message.strip():
-            return jsonify({'error': 'Message cannot be empty'}), 400
-        
-        # Use common Smart Response processing
-        def ai_function(enhanced_message):
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            response = loop.run_until_complete(wisdom_bot.chat(enhanced_message, include_context))
-            loop.close()
-            return response
-        
-        response = process_with_smart_response(message, 'sage', ai_function)
-        return jsonify(response)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/sage/daily-wisdom')
-def sage_daily_wisdom():
-    """Get daily wisdom from Sage Wei"""
-    try:
-        wisdom = wisdom_bot.get_daily_wisdom()
-        return jsonify(wisdom)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/sage/stats')
-def sage_stats():
-    """Get wisdom chatbot statistics"""
-    try:
-        stats = wisdom_bot.get_wisdom_stats()
-        return jsonify(stats)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-# Stoic Philosophy routes
-@app.route('/marcus')
-def stoic_philosopher():
-    """Marcus - Stoic philosophy chatbot"""
-    return render_template('stoic_marcus.html')
-
-@app.route('/marcus/chat', methods=['POST'])
-def marcus_chat():
-    try:
-        data = request.get_json()
-        message = data.get('message', '')
-        include_context = data.get('include_context', True)
-        
-        if not message.strip():
-            return jsonify({'error': 'Message cannot be empty'}), 400
-        
-        # Use common Smart Response processing
-        def ai_function(enhanced_message):
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            response = loop.run_until_complete(stoic_bot.chat(enhanced_message, include_context))
-            loop.close()
-            return response
-        
-        response = process_with_smart_response(message, 'marcus', ai_function)
-        return jsonify(response)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/marcus/daily-reflection')
-def marcus_daily_reflection():
-    """Get daily Stoic reflection from Marcus"""
-    try:
-        reflection = stoic_bot.get_daily_reflection()
-        return jsonify(reflection)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/marcus/stats')
-def marcus_stats():
-    """Get Stoic chatbot statistics"""
-    try:
-        stats = {
-            "session_id": stoic_bot.session_id,
-            "character": stoic_bot.personality.traits.character,
-            "conversation_count": len(stoic_bot.conversation_history),
-            "principles_count": len(stoic_bot.stoic_principles),
-            "exercises_count": len(stoic_bot.stoic_exercises)
-        }
-        return jsonify(stats)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-# Note: Psychologist routes now handled by dynamic character system
+# Note: Coach, Sage, Marcus, Psychologist routes now handled by dynamic character system
 
 # Personality Assessment routes
 @app.route('/personality/feedback/<session_id>')

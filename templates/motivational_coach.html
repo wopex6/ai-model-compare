@@ -526,7 +526,7 @@
                 
                 try {
                     // Use AuthHelper for authenticated requests (consistency with other characters)
-                    const response = await AuthHelper.authenticatedFetch('/coach/chat', {
+                    const response = await AuthHelper.authenticatedFetch('/super_motivational_coach/chat', {
                         method: 'POST',
                         body: JSON.stringify({
                             message: messageText,
@@ -655,7 +655,7 @@
             
             async loadStats() {
                 try {
-                    const response = await fetch('/coach/stats');
+                    const response = await fetch('/super_motivational_coach/stats');
                     const stats = await response.json();
                     
                     if (stats.system_stats) {
