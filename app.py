@@ -295,23 +295,42 @@ def process_with_smart_response(message, character_name, ai_chat_function):
         enhanced_message = message
     
     # AI BUDGET CONTROL: Check if AI call is allowed
-    if ai_budget:
-        allowed, deny_reason = ai_budget.request_ai_call(
-            call_type='user_chat',
-            purpose=f'{character_name} - User: "{message[:50]}..."',
+    if ai_budget and user_id:
+        # Check if user is admin
+        is_admin = False
+        try:
+            user_role = integrated_db.get_user_role(user_id)
+            is_admin = (user_role == 'administrator')
+            print(f"   🔑 User role: {user_role} (admin={is_admin})")
+        except:
+            is_admin = False
+        
+        allowed, deny_reason = ai_budget.can_make_ai_call(
             user_id=user_id,
-            character=character_name,
+            is_admin=is_admin,
             is_background=False
         )
         
         if not allowed:
             # BUDGET EXCEEDED - Use fallback response
             print(f"⛔ AI call denied: {deny_reason}")
+            limit_type = "1000/day admin limit" if is_admin else "100/day limit"
             fallback_response = {
-                'response': "I'm currently at my conversation limit for today. I'll be back tomorrow with full energy! In the meantime, try our quick reply suggestions or come back later.",
+                'response': f"I've reached my conversation {limit_type} for today. I'll be back tomorrow with full energy! Try our quick reply suggestions or come back later.",
                 'type': 'budget_limited',
-                'reason': deny_reason
+                'reason': deny_reason,
+                'is_admin': is_admin
             }
+            # Log the denied call
+            ai_budget.log_ai_call(
+                call_type='user_chat',
+                purpose=f'{character_name} chat (DENIED)',
+                success=False,
+                user_id=user_id,
+                character=character_name,
+                is_background=False,
+                error_message=deny_reason
+            )
             return fallback_response
     
     # Use full AI (with context if available)
