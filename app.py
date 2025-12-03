@@ -2440,7 +2440,7 @@ def get_user_context():
         # Build query
         if character == 'all':
             cursor.execute('''
-                SELECT id, character, timestamp, context_type, context_key, 
+                SELECT id, user_id, character, timestamp, context_type, context_key, 
                        context_value, original_statement, priority, confidence, 
                        active, expires_at
                 FROM explicit_context
@@ -2449,7 +2449,7 @@ def get_user_context():
             ''', (user_id,))
         else:
             cursor.execute('''
-                SELECT id, character, timestamp, context_type, context_key, 
+                SELECT id, user_id, character, timestamp, context_type, context_key, 
                        context_value, original_statement, priority, confidence, 
                        active, expires_at
                 FROM explicit_context
@@ -2465,19 +2465,20 @@ def get_user_context():
         for row in rows:
             item = {
                 'id': row[0],
-                'character': row[1],
-                'timestamp': row[2],
-                'context_type': row[3],
-                'context_key': row[4],
-                'context_value': row[5],
-                'original_statement': row[6],
-                'priority': row[7],
-                'confidence': row[8],
-                'active': bool(row[9]),
-                'expires_at': row[10]
+                'user_id': row[1],
+                'character': row[2],
+                'timestamp': row[3],
+                'context_type': row[4],
+                'context_key': row[5],
+                'context_value': row[6],
+                'original_statement': row[7],
+                'priority': row[8],
+                'confidence': row[9],
+                'active': bool(row[10]),
+                'expires_at': row[11]
             }
             
-            context_type = row[3]
+            context_type = row[4]
             if context_type not in context_by_type:
                 context_by_type[context_type] = []
             context_by_type[context_type].append(item)
@@ -2627,6 +2628,17 @@ def ai_usage_monitor_page():
     JavaScript can check localStorage for the token and make authenticated API calls.
     """
     return render_template('ai_usage_monitor.html')
+
+
+@app.route('/admin/context-manager')
+def context_manager_page():
+    """Context Manager Dashboard (Admin Only)
+    
+    Note: Page itself is not authenticated - authentication happens via JavaScript
+    when calling the API endpoints. This allows the page to load and then the
+    JavaScript can check localStorage for the token and make authenticated API calls.
+    """
+    return render_template('context_manager.html')
 
 
 @app.route('/api/admin/ai-usage/summary')
