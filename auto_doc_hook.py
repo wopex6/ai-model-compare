@@ -29,14 +29,14 @@ class AutoDocHook:
             # Register cleanup on exit
             atexit.register(self.stop_monitoring)
             
-            print("📚 Auto-documentation monitoring started")
+            print("[AutoDoc] Monitoring started")
     
     def stop_monitoring(self):
         """Stop background documentation monitoring."""
         self.running = False
         if self.thread and self.thread.is_alive():
             self.thread.join(timeout=1)
-        print("📚 Auto-documentation monitoring stopped")
+        print("[AutoDoc] Monitoring stopped")
     
     def _monitor_loop(self):
         """Background monitoring loop."""
@@ -44,9 +44,9 @@ class AutoDocHook:
             try:
                 changes = self.updater.update_all_documentation()
                 if any(changes.values()):
-                    print("📝 Documentation automatically updated")
+                    print("[AutoDoc] Documentation automatically updated")
             except Exception as e:
-                print(f"📚 Documentation update error: {e}")
+                print(f"[AutoDoc] Documentation update error: {e}")
             
             # Wait for next check
             for _ in range(self.update_interval):
@@ -59,13 +59,13 @@ class AutoDocHook:
         try:
             changes = self.updater.update_all_documentation()
             if any(changes.values()):
-                print("📝 Documentation force-updated")
+                print("[AutoDoc] Documentation force-updated")
                 return changes
             else:
-                print("📚 Documentation already up to date")
+                print("[AutoDoc] Documentation already up to date")
                 return changes
         except Exception as e:
-            print(f"📚 Documentation update error: {e}")
+            print(f"[AutoDoc] Documentation update error: {e}")
             return {}
 
 # Global instance for easy integration
