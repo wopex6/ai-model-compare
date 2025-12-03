@@ -2493,13 +2493,13 @@ def get_daily_ai_usage():
             SELECT 
                 u.id,
                 u.username,
-                u.role,
+                u.user_role,
                 COUNT(a.id) as call_count
             FROM users u
             LEFT JOIN ai_usage_log a ON u.id = a.user_id 
                 AND DATE(a.timestamp) = DATE('now')
                 AND a.success = 1
-            GROUP BY u.id, u.username, u.role
+            GROUP BY u.id, u.username, u.user_role
             HAVING call_count > 0
         ''')
         
@@ -2551,14 +2551,14 @@ def get_monthly_ai_usage():
             SELECT 
                 u.id,
                 u.username,
-                u.role,
+                u.user_role,
                 COUNT(a.id) as total_calls,
                 DATE(a.timestamp) as call_date
             FROM users u
             LEFT JOIN ai_usage_log a ON u.id = a.user_id 
                 AND DATE(a.timestamp, 'start of month') = DATE('now', 'start of month')
                 AND a.success = 1
-            GROUP BY u.id, u.username, u.role, call_date
+            GROUP BY u.id, u.username, u.user_role, call_date
         ''')
         
         # Aggregate by user
