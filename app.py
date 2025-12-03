@@ -2418,11 +2418,20 @@ print("✓ Dynamic routes registered for all 8 characters with Smart Response")
 @require_auth
 def get_user_context():
     """
-    Get all explicit context for the current user
+    Get all explicit context (ADMIN ONLY)
     Returns context organized by type (emotional_states, goals, preferences, etc.)
     """
     try:
-        user_id = request.current_user['user_id']
+        # Admin only
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        # Allow admin to query any user's context
+        user_id = request.args.get('user_id')
+        if not user_id:
+            user_id = request.current_user['user_id']
+        
         character = request.args.get('character', 'all')
         
         conn = sqlite3.connect('integrated_users.db')
@@ -2491,17 +2500,21 @@ def get_user_context():
 @require_auth
 def update_user_context(context_id):
     """
-    Update a specific context item (value or active status)
-    Users can only update their own context
+    Update a specific context item (ADMIN ONLY)
+    Admins can update any context item
     """
     try:
-        user_id = request.current_user['user_id']
+        # Admin only
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return jsonify({'error': 'Admin access required'}), 403
+        
         data = request.json
         
         conn = sqlite3.connect('integrated_users.db')
         cursor = conn.cursor()
         
-        # Verify ownership
+        # Verify context exists
         cursor.execute('''
             SELECT user_id FROM explicit_context WHERE id = ?
         ''', (context_id,))
@@ -2510,10 +2523,6 @@ def update_user_context(context_id):
         if not result:
             conn.close()
             return jsonify({'error': 'Context item not found'}), 404
-        
-        if result[0] != user_id:
-            conn.close()
-            return jsonify({'error': 'Unauthorized - you can only edit your own context'}), 403
         
         # Update allowed fields
         update_fields = []
@@ -2559,17 +2568,20 @@ def update_user_context(context_id):
 @require_auth
 def delete_user_context(context_id):
     """
-    Delete (deactivate) a specific context item
+    Delete (deactivate) a specific context item (ADMIN ONLY)
     Soft delete: sets active = 0 instead of removing from database
-    Users can only delete their own context
+    Admins can delete any context item
     """
     try:
-        user_id = request.current_user['user_id']
+        # Admin only
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return jsonify({'error': 'Admin access required'}), 403
         
         conn = sqlite3.connect('integrated_users.db')
         cursor = conn.cursor()
         
-        # Verify ownership
+        # Verify context exists
         cursor.execute('''
             SELECT user_id FROM explicit_context WHERE id = ?
         ''', (context_id,))
@@ -2578,10 +2590,6 @@ def delete_user_context(context_id):
         if not result:
             conn.close()
             return jsonify({'error': 'Context item not found'}), 404
-        
-        if result[0] != user_id:
-            conn.close()
-            return jsonify({'error': 'Unauthorized - you can only delete your own context'}), 403
         
         # Soft delete (set active = 0)
         cursor.execute('''

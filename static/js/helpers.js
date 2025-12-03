@@ -260,17 +260,22 @@ function debounce(func, wait = 300) {
 
 
 // ============================================
-// CONTEXT API HELPERS
+// CONTEXT API HELPERS (ADMIN ONLY)
 // ============================================
 
 /**
- * Get user's stored context
+ * Get user's stored context (ADMIN ONLY)
  * @param {string} character - Character name or 'all'
+ * @param {number} userId - User ID to query (optional, defaults to current admin)
  * @returns {Promise<Object>} Context data
  */
-async function getUserContext(character = 'all') {
+async function getUserContext(character = 'all', userId = null) {
     try {
-        const response = await apiRequest(`/api/user/context?character=${character}`);
+        let url = `/api/user/context?character=${character}`;
+        if (userId) {
+            url += `&user_id=${userId}`;
+        }
+        const response = await apiRequest(url);
         if (!response.ok) {
             throw new Error('Failed to get user context');
         }
@@ -282,7 +287,7 @@ async function getUserContext(character = 'all') {
 }
 
 /**
- * Update user context item
+ * Update user context item (ADMIN ONLY)
  * @param {number} contextId - Context item ID
  * @param {Object} updates - Fields to update
  * @returns {Promise<Object>} Response data
@@ -304,7 +309,7 @@ async function updateUserContext(contextId, updates) {
 }
 
 /**
- * Delete user context item
+ * Delete user context item (ADMIN ONLY)
  * @param {number} contextId - Context item ID
  * @returns {Promise<Object>} Response data
  */
