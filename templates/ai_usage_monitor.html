@@ -397,13 +397,22 @@
 
         // Check authentication on page load
         document.addEventListener('DOMContentLoaded', function() {
-            const token = localStorage.getItem('token');
+            console.log('AI Usage Monitor - Checking authentication...');
+            
+            const token = localStorage.getItem('authToken');  // Fixed: use 'authToken' not 'token'
+            console.log('Token found:', token ? 'YES' : 'NO');
+            
             if (!token) {
                 // No token - redirect to login
+                console.error('No authentication token found in localStorage');
                 alert('Please login first');
-                window.location.href = '/chatchat';
+                setTimeout(() => {
+                    window.location.href = '/chatchat';
+                }, 100);
                 return;
             }
+            
+            console.log('Token valid, loading data...');
             loadAllData();
         });
 
@@ -433,7 +442,7 @@
             try {
                 const response = await fetch('/api/admin/ai-usage/summary', {
                     headers: {
-                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
                     }
                 });
 
@@ -460,7 +469,7 @@
             try {
                 const response = await fetch(`/api/admin/ai-usage/daily?sort=${sortBy}`, {
                     headers: {
-                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
                     }
                 });
 
@@ -521,7 +530,7 @@
             try {
                 const response = await fetch(`/api/admin/ai-usage/monthly?sort=${sortBy}`, {
                     headers: {
-                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                        'Authorization': `Bearer ${localStorage.getItem('authToken')}`
                     }
                 });
 
