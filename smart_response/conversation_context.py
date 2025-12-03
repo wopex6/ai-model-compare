@@ -145,6 +145,8 @@ class ConversationContextManager:
         Format context as a string for AI prompt
         EXPLICIT CONTEXT goes at the TOP (CRITICAL priority)
         
+        Phase 3: Now includes PERSONALITY-AWARE INTERPRETATION
+        
         Args:
             context: Context dictionary
         
@@ -161,6 +163,21 @@ class ConversationContextManager:
             if explicit_context:
                 parts.append(explicit_context)
                 parts.append("")  # Blank line separator
+        
+        # PRIORITY 1.2: PERSONALITY-AWARE INTERPRETATION (Phase 3)
+        # Get the most recent personality interpretation
+        if context.get('user_id') and hasattr(self.explicit_handler, 'personality_interpreter'):
+            try:
+                recent_interpretations = self.explicit_handler.personality_interpreter.get_interpretation_history(
+                    context['user_id'], limit=1
+                )
+                if recent_interpretations:
+                    latest = recent_interpretations[0]
+                    interp_text = self.explicit_handler.personality_interpreter.format_for_ai_prompt(latest)
+                    parts.append(interp_text)
+                    parts.append("")  # Blank line separator
+            except Exception as e:
+                pass  # Silently fail if interpretation not available
         
         # PRIORITY 1.5: INFERRED PERSONALITY PATTERNS (from observations)
         if context.get('user_id') and context.get('character'):
