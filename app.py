@@ -2616,6 +2616,160 @@ def delete_user_context(context_id):
 
 
 # ============================================
+# PATTERN EXPANSION & ARCHIVAL (ADMIN ONLY)
+# ============================================
+
+@app.route('/admin/pattern-manager')
+def pattern_manager_page():
+    """Pattern Manager Dashboard (Admin Only)"""
+    return render_template('pattern_manager.html')
+
+
+@app.route('/api/admin/patterns/suggestions')
+@require_auth
+def get_pattern_suggestions():
+    """Get pending pattern suggestions"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        from smart_response.pattern_expander import PatternExpander
+        expander = PatternExpander()
+        suggestions = expander.get_pending_suggestions()
+        
+        return jsonify({
+            'success': True,
+            'suggestions': suggestions,
+            'count': len(suggestions)
+        })
+    except Exception as e:
+        print(f"❌ Error getting pattern suggestions: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/patterns/analyze', methods=['POST'])
+@require_auth
+def run_pattern_analysis():
+    """Manually trigger pattern analysis"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        data = request.json or {}
+        days = data.get('days', 7)
+        limit = data.get('limit', 50)
+        
+        from smart_response.pattern_expander import PatternExpander
+        expander = PatternExpander()
+        suggestions = expander.analyze_recent_messages(days=days, limit=limit)
+        
+        return jsonify({
+            'success': True,
+            'suggestions_count': len(suggestions),
+            'message': f'Analyzed messages from last {days} days'
+        })
+    except Exception as e:
+        print(f"❌ Error running pattern analysis: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/patterns/<int:pattern_id>/approve', methods=['POST'])
+@require_auth
+def approve_pattern(pattern_id):
+    """Approve a pattern suggestion"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        data = request.json or {}
+        notes = data.get('notes')
+        
+        from smart_response.pattern_expander import PatternExpander
+        expander = PatternExpander()
+        expander.approve_pattern(pattern_id, request.current_user['user_id'], notes)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Pattern approved'
+        })
+    except Exception as e:
+        print(f"❌ Error approving pattern: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/patterns/<int:pattern_id>/reject', methods=['POST'])
+@require_auth
+def reject_pattern(pattern_id):
+    """Reject a pattern suggestion"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        data = request.json or {}
+        reason = data.get('reason')
+        
+        from smart_response.pattern_expander import PatternExpander
+        expander = PatternExpander()
+        expander.reject_pattern(pattern_id, request.current_user['user_id'], reason)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Pattern rejected'
+        })
+    except Exception as e:
+        print(f"❌ Error rejecting pattern: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/archival/run', methods=['POST'])
+@require_auth
+def run_archival_maintenance():
+    """Manually trigger archival maintenance"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        from smart_response.context_archival import ContextArchival
+        archival = ContextArchival()
+        results = archival.run_maintenance()
+        
+        return jsonify({
+            'success': True,
+            'results': results
+        })
+    except Exception as e:
+        print(f"❌ Error running archival: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/archival/stats')
+@require_auth
+def get_archival_stats():
+    """Get archival statistics"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        from smart_response.context_archival import ContextArchival
+        archival = ContextArchival()
+        stats = archival.get_archival_statistics()
+        
+        return jsonify({
+            'success': True,
+            'stats': stats
+        })
+    except Exception as e:
+        print(f"❌ Error getting archival stats: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================
 # AI USAGE MONITORING (ADMIN ONLY)
 # ============================================
 
