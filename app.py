@@ -2415,17 +2415,14 @@ print("✓ Dynamic routes registered for all 8 characters with Smart Response")
 # ============================================
 
 @app.route('/admin/ai-usage-monitor')
-@require_auth
 def ai_usage_monitor_page():
-    """AI Usage Monitoring Dashboard (Admin Only)"""
-    try:
-        user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
-            return "Access Denied: Administrator access required", 403
-        
-        return render_template('ai_usage_monitor.html')
-    except Exception as e:
-        return f"Error: {str(e)}", 500
+    """AI Usage Monitoring Dashboard (Admin Only)
+    
+    Note: Page itself is not authenticated - authentication happens via JavaScript
+    when calling the API endpoints. This allows the page to load and then the
+    JavaScript can check localStorage for the token and make authenticated API calls.
+    """
+    return render_template('ai_usage_monitor.html')
 
 
 @app.route('/api/admin/ai-usage/summary')
