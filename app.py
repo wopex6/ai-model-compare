@@ -2411,6 +2411,202 @@ print("✓ Dynamic routes registered for all 8 characters with Smart Response")
 
 
 # ============================================
+# USER CONTEXT API (PHASE 2 POLISH)
+# ============================================
+
+@app.route('/api/user/context')
+@require_auth
+def get_user_context():
+    """
+    Get all explicit context for the current user
+    Returns context organized by type (emotional_states, goals, preferences, etc.)
+    """
+    try:
+        user_id = request.current_user['user_id']
+        character = request.args.get('character', 'all')
+        
+        conn = sqlite3.connect('integrated_users.db')
+        cursor = conn.cursor()
+        
+        # Build query
+        if character == 'all':
+            cursor.execute('''
+                SELECT id, character, timestamp, context_type, context_key, 
+                       context_value, original_statement, priority, confidence, 
+                       active, expires_at
+                FROM explicit_context
+                WHERE user_id = ? AND active = 1
+                ORDER BY timestamp DESC
+            ''', (user_id,))
+        else:
+            cursor.execute('''
+                SELECT id, character, timestamp, context_type, context_key, 
+                       context_value, original_statement, priority, confidence, 
+                       active, expires_at
+                FROM explicit_context
+                WHERE user_id = ? AND character = ? AND active = 1
+                ORDER BY timestamp DESC
+            ''', (user_id, character))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        # Organize by context type
+        context_by_type = {}
+        for row in rows:
+            item = {
+                'id': row[0],
+                'character': row[1],
+                'timestamp': row[2],
+                'context_type': row[3],
+                'context_key': row[4],
+                'context_value': row[5],
+                'original_statement': row[6],
+                'priority': row[7],
+                'confidence': row[8],
+                'active': bool(row[9]),
+                'expires_at': row[10]
+            }
+            
+            context_type = row[3]
+            if context_type not in context_by_type:
+                context_by_type[context_type] = []
+            context_by_type[context_type].append(item)
+        
+        return jsonify({
+            'success': True,
+            'user_id': user_id,
+            'context_by_type': context_by_type,
+            'total_items': len(rows)
+        })
+        
+    except Exception as e:
+        print(f"❌ Error in get_user_context: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/user/context/<int:context_id>', methods=['PUT'])
+@require_auth
+def update_user_context(context_id):
+    """
+    Update a specific context item (value or active status)
+    Users can only update their own context
+    """
+    try:
+        user_id = request.current_user['user_id']
+        data = request.json
+        
+        conn = sqlite3.connect('integrated_users.db')
+        cursor = conn.cursor()
+        
+        # Verify ownership
+        cursor.execute('''
+            SELECT user_id FROM explicit_context WHERE id = ?
+        ''', (context_id,))
+        
+        result = cursor.fetchone()
+        if not result:
+            conn.close()
+            return jsonify({'error': 'Context item not found'}), 404
+        
+        if result[0] != user_id:
+            conn.close()
+            return jsonify({'error': 'Unauthorized - you can only edit your own context'}), 403
+        
+        # Update allowed fields
+        update_fields = []
+        update_values = []
+        
+        if 'context_value' in data:
+            update_fields.append('context_value = ?')
+            update_values.append(data['context_value'])
+        
+        if 'active' in data:
+            update_fields.append('active = ?')
+            update_values.append(1 if data['active'] else 0)
+        
+        if not update_fields:
+            conn.close()
+            return jsonify({'error': 'No valid fields to update'}), 400
+        
+        # Perform update
+        update_values.append(context_id)
+        cursor.execute(f'''
+            UPDATE explicit_context
+            SET {', '.join(update_fields)}
+            WHERE id = ?
+        ''', update_values)
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Context updated successfully',
+            'context_id': context_id
+        })
+        
+    except Exception as e:
+        print(f"❌ Error in update_user_context: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/user/context/<int:context_id>', methods=['DELETE'])
+@require_auth
+def delete_user_context(context_id):
+    """
+    Delete (deactivate) a specific context item
+    Soft delete: sets active = 0 instead of removing from database
+    Users can only delete their own context
+    """
+    try:
+        user_id = request.current_user['user_id']
+        
+        conn = sqlite3.connect('integrated_users.db')
+        cursor = conn.cursor()
+        
+        # Verify ownership
+        cursor.execute('''
+            SELECT user_id FROM explicit_context WHERE id = ?
+        ''', (context_id,))
+        
+        result = cursor.fetchone()
+        if not result:
+            conn.close()
+            return jsonify({'error': 'Context item not found'}), 404
+        
+        if result[0] != user_id:
+            conn.close()
+            return jsonify({'error': 'Unauthorized - you can only delete your own context'}), 403
+        
+        # Soft delete (set active = 0)
+        cursor.execute('''
+            UPDATE explicit_context
+            SET active = 0
+            WHERE id = ?
+        ''', (context_id,))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Context item deleted successfully',
+            'context_id': context_id
+        })
+        
+    except Exception as e:
+        print(f"❌ Error in delete_user_context: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================
 # AI USAGE MONITORING (ADMIN ONLY)
 # ============================================
 
