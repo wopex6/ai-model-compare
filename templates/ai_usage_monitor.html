@@ -337,7 +337,9 @@
                         <tr>
                             <th>User</th>
                             <th>Role</th>
-                            <th>Calls Today</th>
+                            <th>User Prompts</th>
+                            <th>Auto Calls</th>
+                            <th>Total Calls</th>
                             <th>Quota</th>
                             <th>Usage %</th>
                             <th>Cost Today</th>
@@ -346,7 +348,7 @@
                     </thead>
                     <tbody id="daily-usage-table">
                         <tr>
-                            <td colspan="7" class="loading">
+                            <td colspan="9" class="loading">
                                 <i class="fas fa-spinner"></i>
                                 <p>Loading data...</p>
                             </td>
@@ -376,6 +378,8 @@
                         <tr>
                             <th>User</th>
                             <th>Role</th>
+                            <th>User Prompts</th>
+                            <th>Auto Calls</th>
                             <th>Total Calls</th>
                             <th>Daily Avg</th>
                             <th>Total Cost</th>
@@ -385,7 +389,7 @@
                     </thead>
                     <tbody id="monthly-usage-table">
                         <tr>
-                            <td colspan="7" class="loading">
+                            <td colspan="9" class="loading">
                                 <i class="fas fa-spinner"></i>
                                 <p>Loading data...</p>
                             </td>
@@ -484,19 +488,19 @@
                 const users = await response.json();
                 
                 if (users.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><i class="fas fa-inbox"></i><p>No AI usage today</p></td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="9" class="empty-state"><i class="fas fa-inbox"></i><p>No AI usage today</p></td></tr>';
                     return;
                 }
 
                 tbody.innerHTML = users.map(user => {
                     const quota = user.is_admin ? 1000 : 100;
-                    const percentage = (user.calls / quota * 100).toFixed(1);
-                    const cost = (user.calls * 0.002).toFixed(2);
+                    const percentage = (user.total_calls / quota * 100).toFixed(1);
+                    const cost = (user.total_calls * 0.002).toFixed(2);
                     
                     let statusBadge = '<span class="badge badge-success">Normal</span>';
                     let progressClass = '';
                     
-                    if (user.calls >= quota) {
+                    if (user.total_calls >= quota) {
                         statusBadge = '<span class="badge badge-danger">Quota Exceeded</span>';
                         progressClass = 'danger';
                     } else if (percentage >= 80) {
@@ -508,7 +512,9 @@
                         <tr>
                             <td><strong>${user.username}</strong></td>
                             <td>${user.is_admin ? '<span class="badge badge-admin">Admin</span>' : '<span class="badge badge-user">User</span>'}</td>
-                            <td><strong>${user.calls}</strong></td>
+                            <td><strong style="color: #2196F3;">${user.user_calls}</strong></td>
+                            <td><strong style="color: #9E9E9E;">${user.auto_calls}</strong></td>
+                            <td><strong>${user.total_calls}</strong></td>
                             <td>${quota}</td>
                             <td>
                                 <div>${percentage}%</div>
@@ -523,7 +529,7 @@
                 }).join('');
             } catch (error) {
                 console.error('Error loading daily usage:', error);
-                tbody.innerHTML = '<tr><td colspan="7" class="error"><i class="fas fa-exclamation-triangle"></i> Error loading data</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="error"><i class="fas fa-exclamation-triangle"></i> Error loading data</td></tr>';
             }
         }
 
@@ -545,7 +551,7 @@
                 const users = await response.json();
                 
                 if (users.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><i class="fas fa-inbox"></i><p>No AI usage this month</p></td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="9" class="empty-state"><i class="fas fa-inbox"></i><p>No AI usage this month</p></td></tr>';
                     return;
                 }
 
@@ -564,6 +570,8 @@
                         <tr>
                             <td><strong>${user.username}</strong></td>
                             <td>${user.is_admin ? '<span class="badge badge-admin">Admin</span>' : '<span class="badge badge-user">User</span>'}</td>
+                            <td><strong style="color: #2196F3;">${user.user_calls}</strong></td>
+                            <td><strong style="color: #9E9E9E;">${user.auto_calls}</strong></td>
                             <td><strong>${user.total_calls}</strong></td>
                             <td>${avgDaily} / day</td>
                             <td class="cost-indicator"><i class="fas fa-dollar-sign"></i>${cost}</td>
@@ -574,7 +582,7 @@
                 }).join('');
             } catch (error) {
                 console.error('Error loading monthly usage:', error);
-                tbody.innerHTML = '<tr><td colspan="7" class="error"><i class="fas fa-exclamation-triangle"></i> Error loading data</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" class="error"><i class="fas fa-exclamation-triangle"></i> Error loading data</td></tr>';
             }
         }
     </script>

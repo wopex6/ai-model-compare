@@ -2494,13 +2494,15 @@ def get_daily_ai_usage():
                 u.id,
                 u.username,
                 u.user_role,
-                COUNT(a.id) as call_count
+                COUNT(CASE WHEN (a.is_background = 0 AND a.is_automated = 0) THEN 1 END) as user_calls,
+                COUNT(CASE WHEN (a.is_background = 1 OR a.is_automated = 1) THEN 1 END) as auto_calls,
+                COUNT(a.id) as total_calls
             FROM users u
             LEFT JOIN ai_usage_log a ON u.id = a.user_id 
                 AND DATE(a.timestamp) = DATE('now')
                 AND a.success = 1
             GROUP BY u.id, u.username, u.user_role
-            HAVING call_count > 0
+            HAVING total_calls > 0
         ''')
         
         users = []
@@ -2509,16 +2511,18 @@ def get_daily_ai_usage():
                 'user_id': row[0],
                 'username': row[1],
                 'is_admin': row[2] == 'administrator',
-                'calls': row[3]
+                'user_calls': row[3],
+                'auto_calls': row[4],
+                'total_calls': row[5]
             })
         
         conn.close()
         
         # Sort
         if sort_by == 'calls_desc':
-            users.sort(key=lambda x: x['calls'], reverse=True)
+            users.sort(key=lambda x: x['total_calls'], reverse=True)
         elif sort_by == 'calls_asc':
-            users.sort(key=lambda x: x['calls'])
+            users.sort(key=lambda x: x['total_calls'])
         elif sort_by == 'username':
             users.sort(key=lambda x: x['username'].lower())
         elif sort_by == 'role':
@@ -2552,6 +2556,8 @@ def get_monthly_ai_usage():
                 u.id,
                 u.username,
                 u.user_role,
+                COUNT(CASE WHEN (a.is_background = 0 AND a.is_automated = 0) THEN 1 END) as user_calls,
+                COUNT(CASE WHEN (a.is_background = 1 OR a.is_automated = 1) THEN 1 END) as auto_calls,
                 COUNT(a.id) as total_calls,
                 DATE(a.timestamp) as call_date
             FROM users u
@@ -2570,12 +2576,16 @@ def get_monthly_ai_usage():
                     'user_id': user_id,
                     'username': row[1],
                     'is_admin': row[2] == 'administrator',
+                    'user_calls': 0,
+                    'auto_calls': 0,
                     'total_calls': 0,
                     'daily_calls': []
                 }
-            user_data[user_id]['total_calls'] += row[3]
-            if row[4]:  # If there's a date
-                user_data[user_id]['daily_calls'].append(row[3])
+            user_data[user_id]['user_calls'] += row[3]
+            user_data[user_id]['auto_calls'] += row[4]
+            user_data[user_id]['total_calls'] += row[5]
+            if row[6]:  # If there's a date
+                user_data[user_id]['daily_calls'].append(row[5])
         
         # Calculate stats
         users = []
@@ -2603,6 +2613,8 @@ def get_monthly_ai_usage():
                     'user_id': user_id,
                     'username': data['username'],
                     'is_admin': data['is_admin'],
+                    'user_calls': data['user_calls'],
+                    'auto_calls': data['auto_calls'],
                     'total_calls': data['total_calls'],
                     'avg_daily': avg_daily,
                     'peak_day': peak_day,
