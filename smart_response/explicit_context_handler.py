@@ -4,12 +4,20 @@ Extracts and prioritizes user's explicit statements
 
 USER REQUIREMENT: "For context explicitly stated by the user has to be taken seriously"
 This system captures explicit user statements with CRITICAL priority.
+
+Phase 3 Enhancement: Now includes personality-aware interpretation
 """
 
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 import re
 import sqlite3
+
+# Phase 3: Import personality interpreter
+try:
+    from smart_response.personality_interpreter import PersonalityAwareContextInterpreter
+except ImportError:
+    from personality_interpreter import PersonalityAwareContextInterpreter
 
 
 class ExplicitContextHandler:
@@ -33,6 +41,15 @@ class ExplicitContextHandler:
     def __init__(self, db_connection):
         self.db = db_connection
         self._init_tables()
+        
+        # Phase 3: Initialize personality interpreter
+        # Get db_path from connection (if available)
+        try:
+            db_path = db_connection.execute("PRAGMA database_list").fetchone()[2]
+        except:
+            db_path = 'integrated_users.db'  # Default fallback
+        
+        self.personality_interpreter = PersonalityAwareContextInterpreter(db_path)
     
     def _init_tables(self):
         """Create explicit context storage table"""
@@ -114,8 +131,10 @@ class ExplicitContextHandler:
         """
         Extract explicit context from user message
         
+        Phase 3: Now also includes personality-aware interpretation
+        
         Returns:
-            List of extracted context items
+            List of extracted context items with personality interpretations
         """
         extracted = []
         
@@ -153,8 +172,23 @@ class ExplicitContextHandler:
         values = self._extract_values(message, message_lower)
         extracted.extend(values)
         
-        # Store all extracted context
+        # Phase 3: Get personality-aware interpretation of this message
+        personality_interpretation = None
+        if extracted:  # Only interpret if we extracted something
+            try:
+                personality_interpretation = self.personality_interpreter.interpret_event_with_personality(
+                    user_id, character, {'message': message}
+                )
+            except Exception as e:
+                print(f"⚠️ Personality interpretation failed: {e}")
+                personality_interpretation = None
+        
+        # Store all extracted context with personality interpretation
         for item in extracted:
+            # Attach personality interpretation to each item
+            if personality_interpretation:
+                item['personality_interpretation'] = personality_interpretation
+            
             self.store_explicit_context(
                 user_id, character,
                 item['type'], item['key'], item['value'],
