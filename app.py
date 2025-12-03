@@ -2468,6 +2468,9 @@ def get_ai_usage_summary():
             'month_cap_dollars': 120
         })
     except Exception as e:
+        print(f"❌ Error in get_ai_usage_summary: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
@@ -2523,6 +2526,9 @@ def get_daily_ai_usage():
         
         return jsonify(users)
     except Exception as e:
+        print(f"❌ Error in get_daily_ai_usage: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
@@ -2617,6 +2623,9 @@ def get_monthly_ai_usage():
         
         return jsonify(users)
     except Exception as e:
+        print(f"❌ Error in get_monthly_ai_usage: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 
