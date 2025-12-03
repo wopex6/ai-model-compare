@@ -10,9 +10,16 @@ import schedule
 import time
 import threading
 from datetime import datetime
-from smart_response.pattern_expander import PatternExpander
-from smart_response.context_archival import ContextArchival
-from smart_response.ai_budget_manager import AIBudgetManager
+
+# Handle imports for both direct execution and package import
+try:
+    from smart_response.pattern_expander import PatternExpander
+    from smart_response.context_archival import ContextArchival
+    from smart_response.ai_budget_manager import AIBudgetManager
+except ModuleNotFoundError:
+    from pattern_expander import PatternExpander
+    from context_archival import ContextArchival
+    from ai_budget_manager import AIBudgetManager
 
 
 class BackgroundScheduler:
@@ -21,7 +28,7 @@ class BackgroundScheduler:
     Respects AI budget limits
     """
     
-    def __init__(self, db_path='integrated_users.db'):
+    def __init__(self, db_path='integrated_users.db', budget_manager=None):
         self.db_path = db_path
         self.running = False
         self.thread = None
@@ -29,7 +36,7 @@ class BackgroundScheduler:
         # Initialize components
         self.pattern_expander = PatternExpander(db_path)
         self.context_archival = ContextArchival(db_path)
-        self.budget_manager = AIBudgetManager(db_path)
+        self.budget_manager = budget_manager  # Pass in from app.py, or None for testing
     
     def schedule_tasks(self):
         """Configure task schedule"""
@@ -40,8 +47,8 @@ class BackgroundScheduler:
         # Weekly tasks (run Sunday at 3 AM)
         schedule.every().sunday.at("03:00").do(self.run_pattern_expansion)
         
-        # Monthly tasks (run 1st of month at 4 AM)
-        schedule.every().month.at("04:00").do(self.run_monthly_cleanup)
+        # Monthly tasks (run every 30 days at 4 AM - approximates monthly)
+        schedule.every(30).days.at("04:00").do(self.run_monthly_cleanup)
         
         print("✓ Background tasks scheduled:")
         print("   - Context maintenance: Daily at 2:00 AM")
@@ -77,8 +84,8 @@ class BackgroundScheduler:
         print(f"{'='*60}")
         
         try:
-            # Check budget first
-            if not self.budget_manager.can_make_call(
+            # Check budget first (if budget manager available)
+            if self.budget_manager and not self.budget_manager.can_make_call(
                 purpose='background_pattern_expansion',
                 is_background=True
             ):
@@ -201,17 +208,21 @@ if __name__ == '__main__':
     scheduler.run_manual_task('context_maintenance')
     
     print("\n2. Checking if pattern expansion can run (budget)...")
-    can_run = scheduler.budget_manager.can_make_call(
-        purpose='test_pattern_expansion',
-        is_background=True
-    )
-    print(f"   Can run: {can_run}")
-    
-    if can_run:
-        print("\n3. Running pattern expansion manually...")
-        scheduler.run_manual_task('pattern_expansion')
+    if scheduler.budget_manager:
+        can_run = scheduler.budget_manager.can_make_call(
+            purpose='test_pattern_expansion',
+            is_background=True
+        )
+        print(f"   Can run: {can_run}")
+        
+        if can_run:
+            print("\n3. Running pattern expansion manually...")
+            scheduler.run_manual_task('pattern_expansion')
+        else:
+            print("\n3. Skipping pattern expansion (budget limit)")
     else:
-        print("\n3. Skipping pattern expansion (budget limit)")
+        print("   Budget manager not initialized (test mode)")
+        print("\n3. Skipping pattern expansion (no budget manager)")
     
     print("\n" + "=" * 60)
     print("TEST COMPLETE")
