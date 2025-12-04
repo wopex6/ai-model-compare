@@ -31,6 +31,7 @@ Thumbs.db
 user_profiles/
 conversation_history/
 conversations/
+personality_profiles/
 
 # Logs
 *.log
@@ -44,3 +45,14 @@ gpt.py
 test_env.py
 test_gpt_direct.py 
 gpt.py 
+
+# Database backups
+*.db.backup_*
+*.sqlite.backup_*
+
+# Debug and test files
+*_test.py
+test_*.py
+Screenshot*.png
+personality_test_debug.png
+debug_*.md
