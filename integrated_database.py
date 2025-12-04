@@ -17,6 +17,9 @@ class IntegratedDatabase:
         self.init_database()
         self.create_default_user()
         self.add_email_verification_columns()
+        
+        # Initialize PersonalityResolver (lazy import to avoid circular dependency)
+        self._resolver = None
     
     def get_connection(self):
         """Get database connection"""
@@ -57,7 +60,7 @@ class IntegratedDatabase:
             )
         ''')
         
-        # Psychology traits table
+        # Psychology traits table (current/active assessment)
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS psychology_traits (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,11 +68,38 @@ class IntegratedDatabase:
                 trait_name TEXT NOT NULL,
                 trait_value REAL NOT NULL,
                 trait_description TEXT,
+                source TEXT DEFAULT 'assessment',
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
                 UNIQUE(user_id, trait_name)
             )
+        ''')
+        
+        # Assessment history table (Phase 3.2 - track all assessments)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS assessment_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                assessment_version TEXT DEFAULT 'big5_v1',
+                openness REAL,
+                conscientiousness REAL,
+                extraversion REAL,
+                agreeableness REAL,
+                neuroticism REAL,
+                completion_time_seconds INTEGER,
+                questions_answered INTEGER DEFAULT 44,
+                started_at DATETIME,
+                completed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                notes TEXT,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        ''')
+        
+        # Create index for faster queries
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_assessment_history_user 
+            ON assessment_history(user_id, completed_at DESC)
         ''')
         
         # AI Conversations table
@@ -909,21 +939,63 @@ class IntegratedDatabase:
             if not last_updated or row[3] > last_updated:
                 last_updated = row[3]
         
-        # Get personality data source
+        # 3-TIER FALLBACK: Assessment → Inferred → Defaults (Phase 3.2.2)
         if traits:
+            # Tier 1: Formal Assessment (highest confidence)
             source = 'assessment'
             confidence = 0.85
         else:
-            # Check for inferred traits
+            # Tier 2: Inferred from conversations (medium confidence)
             cursor.execute('''
-                SELECT COUNT(*) FROM inferred_traits WHERE user_id = ?
+                SELECT openness, conscientiousness, extraversion, agreeableness, neuroticism, confidence, last_updated
+                FROM inferred_personality WHERE user_id = ?
             ''', (user_id,))
-            if cursor.fetchone()[0] > 0:
+            inferred = cursor.fetchone()
+            
+            if inferred:
                 source = 'inferred'
-                confidence = 0.65
+                confidence = inferred[5]  # Use actual inferred confidence
+                last_updated = inferred[6]
+                
+                # Convert inferred traits to same format as psychology_traits
+                big5_names = ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'emotional_stability']
+                big5_descriptions = {
+                    'openness': 'Creative, curious, open to new experiences',
+                    'conscientiousness': 'Organized, disciplined, goal-oriented',
+                    'extraversion': 'Outgoing, energetic, socially engaged',
+                    'agreeableness': 'Cooperative, kind, empathetic',
+                    'emotional_stability': 'Calm, resilient, emotionally stable'
+                }
+                
+                traits = {}
+                for i, name in enumerate(big5_names):
+                    traits[name] = {
+                        'value': inferred[i],
+                        'description': big5_descriptions[name],
+                        'updated_at': last_updated
+                    }
             else:
+                # Tier 3: Neutral defaults (lowest confidence)
                 source = 'default'
                 confidence = 0.30
+                
+                # Provide neutral default traits (0.5 = moderate/balanced)
+                big5_names = ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'emotional_stability']
+                big5_descriptions = {
+                    'openness': 'Balanced between traditional and novel approaches',
+                    'conscientiousness': 'Flexible balance of organization and spontaneity',
+                    'extraversion': 'Adaptable in both social and solitary settings',
+                    'agreeableness': 'Balanced empathy with directness',
+                    'emotional_stability': 'Moderate emotional awareness and resilience'
+                }
+                
+                traits = {}
+                for name in big5_names:
+                    traits[name] = {
+                        'value': 0.5,
+                        'description': big5_descriptions[name],
+                        'updated_at': None
+                    }
         
         conn.close()
         
@@ -933,8 +1005,75 @@ class IntegratedDatabase:
             'source': source,
             'confidence': confidence,
             'last_updated': last_updated,
-            'has_assessment': len(traits) > 0
+            'has_assessment': source == 'assessment'
         }
+    
+    @property
+    def resolver(self):
+        """Lazy-load PersonalityResolver to avoid circular imports"""
+        if self._resolver is None:
+            from smart_response.personality_resolver import PersonalityResolver
+            self._resolver = PersonalityResolver(self)
+        return self._resolver
+    
+    def get_personality_profile_v2(
+        self, 
+        user_id: int, 
+        context: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Get personality profile using smart resolution logic (RECOMMENDED)
+        
+        This method uses PersonalityResolver for intelligent data selection:
+        - Prioritizes fresh assessment data
+        - Blends old assessment with recent inferred data
+        - Provides confidence scores and recommendations
+        - Caches results for performance
+        
+        Args:
+            user_id: User ID
+            context: Optional context hint ('character_selection', 'response_tone', 'action_plan')
+        
+        Returns:
+            {
+                'user_id': int,
+                'traits': {
+                    'openness': 0.80,
+                    'conscientiousness': 0.70,
+                    'extraversion': 0.60,
+                    'agreeableness': 0.90,
+                    'neuroticism': 0.30
+                },
+                'confidence': 0.85,
+                'source': 'assessment',  # or 'inferred', 'blended', 'default'
+                'metadata': {...},
+                'recommendations': {...}
+            }
+        
+        Example:
+            profile = db.get_personality_profile_v2(user_id, context='character_selection')
+            if profile['confidence'] > 0.7:
+                # Use personality data for personalization
+                character = select_character(profile['traits'])
+        """
+        result = self.resolver.get_decision_ready_profile(user_id, context)
+        result['user_id'] = user_id
+        return result
+    
+    def clear_personality_cache(self, user_id: Optional[int] = None):
+        """
+        Clear personality profile cache
+        
+        Call this after:
+        - User completes new assessment
+        - Inference updates traits
+        - Any personality data change
+        
+        Args:
+            user_id: Optional user ID. If None, clears all cache.
+        """
+        if self._resolver:
+            self._resolver.clear_cache(user_id)
     
     def get_personality_interpretations(self, user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
         """Get recent personality interpretations for a user"""
@@ -1010,6 +1149,262 @@ class IntegratedDatabase:
             'average_confidence': round(avg_confidence, 2),
             'personality_source': profile['source'],
             'has_assessment': profile['has_assessment']
+        }
+    
+    # ==================== ASSESSMENT HISTORY (PHASE 3.2 ENHANCEMENT) ====================
+    
+    def save_assessment_to_history(self, user_id: int, trait_scores: Dict[str, float], 
+                                   started_at: str = None, completion_time_seconds: int = None,
+                                   notes: str = None) -> int:
+        """
+        Save completed assessment to history before updating current traits
+        
+        Args:
+            user_id: User ID
+            trait_scores: Dict with Big 5 scores (0-1 scale)
+            started_at: ISO timestamp when assessment started
+            completion_time_seconds: Time taken to complete
+            notes: Optional notes (e.g., "Retake after 6 months")
+            
+        Returns:
+            ID of history record
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                INSERT INTO assessment_history 
+                (user_id, openness, conscientiousness, extraversion, agreeableness, neuroticism,
+                 completion_time_seconds, started_at, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                user_id,
+                trait_scores.get('openness', 0.5),
+                trait_scores.get('conscientiousness', 0.5),
+                trait_scores.get('extraversion', 0.5),
+                trait_scores.get('agreeableness', 0.5),
+                trait_scores.get('neuroticism', 0.5),
+                completion_time_seconds,
+                started_at,
+                notes
+            ))
+            
+            history_id = cursor.lastrowid
+            conn.commit()
+            
+            # Clear personality cache since data changed
+            self.clear_personality_cache(user_id)
+            
+            return history_id
+            
+        except Exception as e:
+            print(f"Error saving assessment history: {e}")
+            conn.rollback()
+            return 0
+        finally:
+            conn.close()
+    
+    def get_assessment_history(self, user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
+        """
+        Get assessment history for a user
+        
+        Returns list ordered by most recent first
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT id, assessment_version, openness, conscientiousness, extraversion,
+                   agreeableness, neuroticism, completion_time_seconds, questions_answered,
+                   started_at, completed_at, notes
+            FROM assessment_history
+            WHERE user_id = ?
+            ORDER BY completed_at DESC
+            LIMIT ?
+        ''', (user_id, limit))
+        
+        history = []
+        for row in cursor.fetchall():
+            history.append({
+                'id': row[0],
+                'version': row[1],
+                'traits': {
+                    'openness': row[2],
+                    'conscientiousness': row[3],
+                    'extraversion': row[4],
+                    'agreeableness': row[5],
+                    'neuroticism': row[6]
+                },
+                'completion_time_seconds': row[7],
+                'questions_answered': row[8],
+                'started_at': row[9],
+                'completed_at': row[10],
+                'notes': row[11]
+            })
+        
+        conn.close()
+        return history
+    
+    def compare_assessments(self, user_id: int, assessment1_id: int, assessment2_id: int = None) -> Dict[str, Any]:
+        """
+        Compare two assessments or compare an assessment to current profile
+        
+        Args:
+            user_id: User ID
+            assessment1_id: First assessment (usually older)
+            assessment2_id: Second assessment (None = use current profile)
+            
+        Returns:
+            Comparison with changes, trends, and insights
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Get first assessment
+        cursor.execute('''
+            SELECT openness, conscientiousness, extraversion, agreeableness, neuroticism, completed_at
+            FROM assessment_history
+            WHERE id = ? AND user_id = ?
+        ''', (assessment1_id, user_id))
+        
+        row1 = cursor.fetchone()
+        if not row1:
+            conn.close()
+            return {'error': 'First assessment not found'}
+        
+        traits1 = {
+            'openness': row1[0],
+            'conscientiousness': row1[1],
+            'extraversion': row1[2],
+            'agreeableness': row1[3],
+            'neuroticism': row1[4]
+        }
+        date1 = row1[5]
+        
+        # Get second assessment or current profile
+        if assessment2_id:
+            cursor.execute('''
+                SELECT openness, conscientiousness, extraversion, agreeableness, neuroticism, completed_at
+                FROM assessment_history
+                WHERE id = ? AND user_id = ?
+            ''', (assessment2_id, user_id))
+            
+            row2 = cursor.fetchone()
+            if not row2:
+                conn.close()
+                return {'error': 'Second assessment not found'}
+            
+            traits2 = {
+                'openness': row2[0],
+                'conscientiousness': row2[1],
+                'extraversion': row2[2],
+                'agreeableness': row2[3],
+                'neuroticism': row2[4]
+            }
+            date2 = row2[5]
+        else:
+            # Use current profile
+            profile = self.get_personality_profile(user_id)
+            traits2 = {k: v['value'] for k, v in profile['traits'].items()}
+            date2 = profile['last_updated']
+        
+        conn.close()
+        
+        # Calculate changes
+        changes = {}
+        total_change = 0
+        for trait in traits1.keys():
+            change = traits2.get(trait, 0.5) - traits1[trait]
+            changes[trait] = {
+                'old_value': round(traits1[trait] * 100, 1),
+                'new_value': round(traits2.get(trait, 0.5) * 100, 1),
+                'change': round(change * 100, 1),
+                'direction': 'increased' if change > 0.05 else 'decreased' if change < -0.05 else 'stable'
+            }
+            total_change += abs(change)
+        
+        # Interpret overall change
+        avg_change = total_change / len(traits1)
+        if avg_change < 0.05:
+            stability = 'Very stable - Your personality has remained consistent'
+        elif avg_change < 0.10:
+            stability = 'Mostly stable with minor changes'
+        elif avg_change < 0.20:
+            stability = 'Moderate changes - Some personality shifts detected'
+        else:
+            stability = 'Significant changes - Notable personality evolution'
+        
+        return {
+            'comparison': changes,
+            'overall_change': round(avg_change * 100, 1),
+            'stability_assessment': stability,
+            'date1': date1,
+            'date2': date2,
+            'time_between': self._calculate_time_between(date1, date2)
+        }
+    
+    def _calculate_time_between(self, date1: str, date2: str) -> str:
+        """Calculate human-readable time between two dates"""
+        try:
+            from datetime import datetime
+            d1 = datetime.fromisoformat(date1) if isinstance(date1, str) else date1
+            d2 = datetime.fromisoformat(date2) if isinstance(date2, str) else date2
+            
+            diff = abs((d2 - d1).days)
+            
+            if diff < 7:
+                return f"{diff} day{'s' if diff != 1 else ''}"
+            elif diff < 30:
+                weeks = diff // 7
+                return f"{weeks} week{'s' if weeks != 1 else ''}"
+            elif diff < 365:
+                months = diff // 30
+                return f"{months} month{'s' if months != 1 else ''}"
+            else:
+                years = diff // 365
+                return f"{years} year{'s' if years != 1 else ''}"
+        except:
+            return "Unknown"
+    
+    def get_trait_trends(self, user_id: int, trait_name: str) -> Dict[str, Any]:
+        """
+        Get trend data for a specific trait over time
+        
+        Returns history of values suitable for charting
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute(f'''
+            SELECT completed_at, {trait_name}
+            FROM assessment_history
+            WHERE user_id = ?
+            ORDER BY completed_at ASC
+        ''', (user_id,))
+        
+        data_points = []
+        for row in cursor.fetchall():
+            data_points.append({
+                'date': row[0],
+                'value': round(row[1] * 100, 1)
+            })
+        
+        conn.close()
+        
+        # Calculate trend
+        if len(data_points) >= 2:
+            first_val = data_points[0]['value']
+            last_val = data_points[-1]['value']
+            trend = 'increasing' if last_val > first_val + 5 else 'decreasing' if last_val < first_val - 5 else 'stable'
+        else:
+            trend = 'insufficient_data'
+        
+        return {
+            'trait': trait_name,
+            'data_points': data_points,
+            'trend': trend,
+            'assessments_count': len(data_points)
         }
     
     def update_user_role(self, user_id: int, new_role: str) -> bool:

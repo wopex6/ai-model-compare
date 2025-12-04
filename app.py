@@ -29,6 +29,9 @@ from ai_compare.character_configs import CHARACTER_CONFIGS
 from integrated_database import IntegratedDatabase
 from email_service import EmailService
 
+# Import Personality Systems
+from smart_response.trait_inference import TraitInferenceEngine
+
 # Import Smart Response System
 from smart_response.handler import SmartResponseHandler
 import sqlite3
@@ -71,6 +74,9 @@ integrated_db = IntegratedDatabase()
 email_service = EmailService()
 ai_compare = AICompare()
 chatbot = AIChatbot()
+
+# Initialize Trait Inference Engine
+trait_inference = TraitInferenceEngine(integrated_db)
 
 # Initialize ALL characters through factory (unified system)
 print("\n=== Initializing All Characters ===")
@@ -522,6 +528,15 @@ def login():
             'username': user['username'],
             'exp': datetime.utcnow() + timedelta(hours=24)
         }, JWT_SECRET, algorithm='HS256')
+        
+        # Also set session for cross-page compatibility
+        session['user_id'] = user['id']
+        session['username'] = user['username']
+        session['role'] = user_role
+        
+        print(f"🔐 Login successful for user {user['id']} ({user['username']})")
+        print(f"   Session set: {dict(session)}")
+        print(f"   Token generated: {token[:20]}...")
         
         return jsonify({
             'success': True,
@@ -1498,6 +1513,14 @@ def chat_message():
                 'session_id': session_id
             }
             user_profile_manager.record_interaction(user_id, interaction_data)
+            
+            # Run trait inference if needed (Phase 3.2.2)
+            try:
+                inference_result = trait_inference.run_inference_if_needed(user_id)
+                if inference_result:
+                    print(f"✅ Trait inference updated for user {user_id}: confidence={inference_result['confidence']}")
+            except Exception as e:
+                print(f"⚠️ Trait inference error (non-critical): {e}")
         
         # Include session_id in response
         response['session_id'] = chatbot_instance.session_id
@@ -1615,6 +1638,119 @@ def personality_dashboard_page():
     # Note: Authentication is handled client-side via JavaScript
     # The dashboard will check auth token and redirect to login if needed
     return render_template('personality_dashboard.html')
+
+@app.route('/psychological-profile')
+def psychological_profile_redirect():
+    """Redirect to unified personality test page"""
+    return redirect('/personality-test', code=302)
+
+@app.route('/psychological-assessment')
+def psychological_assessment_redirect():
+    """Redirect to unified personality test page"""
+    return redirect('/personality-test', code=302)
+
+# ==================== ASSESSMENT HISTORY API (PHASE 3.2 ENHANCEMENT) ====================
+
+@app.route('/api/personality/history', methods=['GET'])
+def get_personality_assessment_history():
+    """Get assessment history for a user (supports both token and session auth)"""
+    try:
+        # Try token authentication first
+        user_data = authenticate_token()
+        
+        print(f"🔐 Auth Debug:")
+        print(f"   Token auth result: {user_data}")
+        print(f"   Session contents: {dict(session)}")
+        print(f"   Has user_id in session: {'user_id' in session}")
+        
+        if user_data:
+            user_id = user_data['user_id']
+            print(f"   ✅ Using token auth for user {user_id}")
+        elif 'user_id' in session:
+            # Fall back to session-based authentication
+            user_id = session['user_id']
+            print(f"   ✅ Using session auth for user {user_id}")
+        else:
+            print(f"   ❌ No authentication found")
+            return jsonify({'error': 'Authentication required'}), 401
+        
+        limit = request.args.get('limit', 10, type=int)
+        
+        print(f"📊 Fetching assessment history for user {user_id} (limit: {limit})")
+        history = integrated_db.get_assessment_history(user_id, limit)
+        print(f"   Found {len(history)} assessment(s)")
+        
+        # Flatten the response - move traits to top level for frontend compatibility
+        # Also normalize values to 0-1 scale if they're on 0-10 scale
+        flattened_history = []
+        for item in history:
+            # Detect if values are on 0-10 scale (any value > 1.0)
+            traits = item['traits']
+            needs_normalization = any(v > 1.0 for v in traits.values())
+            
+            flat_item = {
+                'id': item['id'],
+                'completed_at': item['completed_at'],
+                'started_at': item['started_at'],
+                'openness': traits['openness'] / 10.0 if needs_normalization else traits['openness'],
+                'conscientiousness': traits['conscientiousness'] / 10.0 if needs_normalization else traits['conscientiousness'],
+                'extraversion': traits['extraversion'] / 10.0 if needs_normalization else traits['extraversion'],
+                'agreeableness': traits['agreeableness'] / 10.0 if needs_normalization else traits['agreeableness'],
+                'neuroticism': traits['neuroticism'] / 10.0 if needs_normalization else traits['neuroticism'],
+                'notes': item.get('notes')
+            }
+            flattened_history.append(flat_item)
+        
+        return jsonify({
+            'success': True,
+            'history': flattened_history,
+            'count': len(flattened_history)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/personality/compare', methods=['GET'])
+@require_auth
+def compare_personality_assessments():
+    """Compare two assessments or compare an assessment to current profile"""
+    try:
+        user_id = request.current_user['user_id']
+        assessment1_id = request.args.get('assessment1_id', type=int)
+        assessment2_id = request.args.get('assessment2_id', type=int)
+        
+        if not assessment1_id:
+            return jsonify({'error': 'assessment1_id is required'}), 400
+        
+        comparison = integrated_db.compare_assessments(user_id, assessment1_id, assessment2_id)
+        
+        if 'error' in comparison:
+            return jsonify(comparison), 404
+        
+        return jsonify({
+            'success': True,
+            'comparison': comparison
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/personality/trends/<trait_name>', methods=['GET'])
+@require_auth
+def get_personality_trait_trends(trait_name):
+    """Get trend data for a specific trait over time"""
+    try:
+        user_id = request.current_user['user_id']
+        
+        valid_traits = ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism']
+        if trait_name not in valid_traits:
+            return jsonify({'error': f'Invalid trait. Must be one of: {", ".join(valid_traits)}'}), 400
+        
+        trend = integrated_db.get_trait_trends(user_id, trait_name)
+        return jsonify({
+            'success': True,
+            'trend': trend
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/test-session')
 def test_session_page():
@@ -2273,16 +2409,6 @@ def user_profile_page():
     """User profile management page"""
     return render_template('user_profile.html')
 
-@app.route('/psychological-assessment')
-def psychological_assessment():
-    """Psychological assessment questionnaire page"""
-    return render_template('psychological_assessment.html')
-
-@app.route('/psychological-profile')
-def psychological_profile():
-    """Psychological profile display page"""
-    return render_template('psychological_profile.html')
-
 @app.route('/api/profile/create', methods=['POST'])
 def create_user_profile():
     """Create a new user profile"""
@@ -2448,83 +2574,103 @@ def record_interaction():
 
 @app.route('/api/psychological-assessment', methods=['POST'])
 def save_psychological_assessment():
-    """Save psychological assessment results"""
+    """
+    Save psychological assessment results (Phase 3.2 Enhanced)
+    Now saves to both assessment_history and current profile
+    """
     try:
         data = request.get_json()
         user_id = data.get('user_id')
         scores = data.get('scores', {})
-        completed_at = data.get('completed_at')
+        started_at = data.get('started_at')  # ISO timestamp when started
+        completion_time_seconds = data.get('completion_time_seconds')
+        notes = data.get('notes', '')
         
         if not user_id:
             return jsonify({'error': 'User ID is required'}), 400
         
-        # Update user profile with psychological assessment data
         from datetime import datetime
-        ei_score = scores.get('extraversion', 5) - scores.get('introversion', 5)
-        sn_score = scores.get('sensing', 5) - scores.get('intuition', 5)
-        tf_score = scores.get('thinking', 5) - scores.get('feeling', 5)
-        jp_score = scores.get('judging', 5) - scores.get('perceiving', 5)
-        openness_score = scores.get('openness', 5)
-        conscientiousness_score = scores.get('conscientiousness', 5)
-        extraversion_score = scores.get('extraversion', 5)
-        agreeableness_score = scores.get('agreeableness', 5)
-        neuroticism_score = scores.get('neuroticism', 5)
         
-        # Save psychological attributes to user profile with timestamp and history
+        # Phase 3.2: Big 5 scores (0-1 scale)
+        trait_scores = {
+            'openness': scores.get('openness', 0.5),
+            'conscientiousness': scores.get('conscientiousness', 0.5),
+            'extraversion': scores.get('extraversion', 0.5),
+            'agreeableness': scores.get('agreeableness', 0.5),
+            'neuroticism': scores.get('neuroticism', 0.5)
+        }
+        
+        # SAVE TO ASSESSMENT HISTORY (Phase 3.2 - never overwrite!)
+        history_id = integrated_db.save_assessment_to_history(
+            user_id=user_id,
+            trait_scores=trait_scores,
+            started_at=started_at,
+            completion_time_seconds=completion_time_seconds,
+            notes=notes
+        )
+        
+        # Get comparison to previous assessment (if exists)
+        previous_assessments = integrated_db.get_assessment_history(user_id, limit=2)
+        comparison = None
+        if len(previous_assessments) >= 2:
+            # Compare newest (just saved) to second newest
+            comparison = integrated_db.compare_assessments(
+                user_id,
+                previous_assessments[1]['id'],  # Previous assessment
+                previous_assessments[0]['id']   # Just saved
+            )
+        
+        # Maintain old system compatibility
         current_timestamp = datetime.now().isoformat()
-        
-        # Get existing profile to maintain history
         existing_profile = user_profile_manager.get_user_profile(user_id)
-        assessment_history = existing_profile.get('preferences', {}).get('assessment_history', []) if existing_profile else []
+        old_assessment_history = existing_profile.get('preferences', {}).get('assessment_history', []) if existing_profile else []
         
-        # Create new assessment entry
+        # Create entry for old system
         new_assessment = {
             'timestamp': current_timestamp,
-            'jung_types': {
-                'extraversion_introversion': ei_score,
-                'sensing_intuition': sn_score,
-                'thinking_feeling': tf_score,
-                'judging_perceiving': jp_score
-            },
             'big_five': {
-                'openness': openness_score,
-                'conscientiousness': conscientiousness_score,
-                'extraversion': extraversion_score,
-                'agreeableness': agreeableness_score,
-                'neuroticism': neuroticism_score
+                'openness': trait_scores['openness'],
+                'conscientiousness': trait_scores['conscientiousness'],
+                'extraversion': trait_scores['extraversion'],
+                'agreeableness': trait_scores['agreeableness'],
+                'neuroticism': trait_scores['neuroticism']
             }
         }
         
-        # Add to history
-        assessment_history.append(new_assessment)
+        old_assessment_history.append(new_assessment)
+        if len(old_assessment_history) > 10:
+            old_assessment_history = old_assessment_history[-10:]
         
-        # Keep only last 10 assessments to prevent unlimited growth
-        if len(assessment_history) > 10:
-            assessment_history = assessment_history[-10:]
-        
+        # Update old system for compatibility
         psychological_attributes = {
-            'jung_types': {
-                'extraversion_introversion': ei_score,
-                'sensing_intuition': sn_score,
-                'thinking_feeling': tf_score,
-                'judging_perceiving': jp_score
-            },
-            'big_five': {
-                'openness': openness_score,
-                'conscientiousness': conscientiousness_score,
-                'extraversion': extraversion_score,
-                'agreeableness': agreeableness_score,
-                'neuroticism': neuroticism_score
-            },
+            'big_five': trait_scores,
             'assessment_completed_at': current_timestamp,
-            'assessment_history': assessment_history
+            'assessment_history': old_assessment_history
         }
         
         user_profile_manager.update_preferences(user_id, psychological_attributes)
-        return jsonify({
+        
+        # Build response with comparison if available
+        response_data = {
             'success': True,
-            'message': 'Psychological assessment saved successfully'
-        })
+            'message': 'Assessment saved successfully!',
+            'history_id': history_id,
+            'assessment_count': len(previous_assessments)
+        }
+        
+        if comparison:
+            response_data['comparison'] = {
+                'overall_change': comparison['overall_change'],
+                'stability': comparison['stability_assessment'],
+                'time_between': comparison['time_between'],
+                'significant_changes': [
+                    {'trait': trait, 'change': data['change'], 'direction': data['direction']}
+                    for trait, data in comparison['comparison'].items()
+                    if abs(data['change']) >= 5  # 5%+ change
+                ]
+            }
+        
+        return jsonify(response_data)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
