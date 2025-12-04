@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personality Insights Dashboard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .header h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .access-badge {
+            display: inline-block;
+            padding: 5px 15px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .stat-box {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .trait-item {
+            margin-bottom: 15px;
+        }
+
+        .trait-name {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+
+        .trait-bar {
+            height: 10px;
+            background: #e9ecef;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .trait-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            border-radius: 5px;
+            transition: width 0.5s ease;
+        }
+
+        .interpretation-item {
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            border-left: 4px solid #667eea;
+        }
+
+        .interpretation-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .event-type {
+            display: inline-block;
+            padding: 3px 10px;
+            background: #667eea;
+            color: white;
+            border-radius: 15px;
+            font-size: 11px;
+            text-transform: uppercase;
+        }
+
+        .confidence-badge {
+            padding: 3px 10px;
+            border-radius: 15px;
+            font-size: 11px;
+            font-weight: bold;
+        }
+
+        .confidence-high {
+            background: #28a745;
+            color: white;
+        }
+
+        .confidence-medium {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .confidence-low {
+            background: #dc3545;
+            color: white;
+        }
+
+        .interpretation-text {
+            color: #333;
+            margin: 5px 0;
+            font-size: 14px;
+        }
+
+        .interpretation-approach {
+            color: #666;
+            font-size: 13px;
+            font-style: italic;
+        }
+
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .no-data i {
+            font-size: 48px;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 12px 25px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            transition: transform 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: white;
+        }
+
+        .spinner {
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .source-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .source-assessment {
+            background: #28a745;
+            color: white;
+        }
+
+        .source-inferred {
+            background: #ffc107;
+            color: #333;
+        }
+
+        .source-default {
+            background: #dc3545;
+            color: white;
+        }
+
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin: 20px 0;
+        }
+
+        .back-link {
+            color: white;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+            padding: 10px 20px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+            transition: background 0.3s;
+        }
+
+        .back-link:hover {
+            background: rgba(255,255,255,0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/chatchat" class="back-link">
+            <i class="fas fa-arrow-left"></i>
+            Back to Characters
+        </a>
+
+        <div class="header">
+            <h1><i class="fas fa-brain"></i> Personality Insights Dashboard</h1>
+            <p>Deep dive into how your personality shapes your coaching experience</p>
+            <span class="access-badge">⭐ Master Access</span>
+        </div>
+
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p>Loading your personality insights...</p>
+        </div>
+
+        <div id="content" style="display: none;">
+            <!-- Stats Overview -->
+            <div class="grid">
+                <div class="card">
+                    <h2><i class="fas fa-chart-line"></i> Statistics</h2>
+                    <div id="stats-content"></div>
+                </div>
+
+                <div class="card">
+                    <h2><i class="fas fa-database"></i> Data Source</h2>
+                    <div id="source-content"></div>
+                </div>
+            </div>
+
+            <!-- Personality Profile -->
+            <div class="card" style="margin-bottom: 30px;">
+                <h2><i class="fas fa-user-circle"></i> Your Personality Profile (Big 5 Traits)</h2>
+                <div id="profile-content"></div>
+                <div class="chart-container">
+                    <canvas id="traitsChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Recent Interpretations -->
+            <div class="card">
+                <h2><i class="fas fa-lightbulb"></i> Recent Interpretations</h2>
+                <p style="color: #666; font-size: 14px; margin-bottom: 20px;">
+                    How your personality influenced recent interactions
+                </p>
+                <div id="interpretations-content"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let traitsChart = null;
+
+        // Check authentication first
+        function checkAuth() {
+            const token = localStorage.getItem('authToken');
+            if (!token) {
+                // No token - redirect to login
+                window.location.href = '/chatchat';
+                return false;
+            }
+            return true;
+        }
+
+        async function loadDashboard() {
+            // Check authentication before loading
+            if (!checkAuth()) {
+                return;
+            }
+
+            try {
+                // Load all data in parallel with auth headers
+                const authToken = localStorage.getItem('authToken');
+                console.log('🔐 Auth token exists:', !!authToken);
+                
+                const headers = {
+                    'Authorization': `Bearer ${authToken}`,
+                    'Content-Type': 'application/json'
+                };
+                
+                console.log('📡 Loading personality data...');
+                
+                // Load with better error handling
+                const profileResponse = await fetch('/api/personality/profile', {
+                    method: 'GET',
+                    headers: headers
+                });
+                const interpretationsResponse = await fetch('/api/personality/interpretations?limit=10', {
+                    method: 'GET',
+                    headers: headers
+                });
+                const statsResponse = await fetch('/api/personality/stats', {
+                    method: 'GET',
+                    headers: headers
+                });
+                
+                // Check for errors
+                if (!profileResponse.ok) {
+                    const error = await profileResponse.json();
+                    console.error('❌ Profile API error:', error);
+                    throw new Error(error.error || 'Failed to load profile');
+                }
+                if (!interpretationsResponse.ok) {
+                    const error = await interpretationsResponse.json();
+                    console.error('❌ Interpretations API error:', error);
+                    throw new Error(error.error || 'Failed to load interpretations');
+                }
+                if (!statsResponse.ok) {
+                    const error = await statsResponse.json();
+                    console.error('❌ Stats API error:', error);
+                    throw new Error(error.error || 'Failed to load stats');
+                }
+                
+                const profile = await profileResponse.json();
+                const interpretations = await interpretationsResponse.json();
+                const stats = await statsResponse.json();
+                
+                console.log('✅ Data loaded:', {profile, interpretations, stats});
+
+                // Display stats
+                displayStats(stats);
+                
+                // Display source
+                displaySource(profile);
+
+                // Display profile
+                displayProfile(profile);
+
+                // Display interpretations
+                displayInterpretations(interpretations);
+
+                // Hide loading, show content
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+                document.getElementById('loading').innerHTML = `
+                    <div class="no-data">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>Error loading personality insights</p>
+                        <p style="font-size: 12px; margin-top: 10px;">${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        function displayStats(stats) {
+            // Check if no data
+            if (stats.total_interpretations === 0) {
+                document.getElementById('stats-content').innerHTML = `
+                    <div class="no-data-message" style="
+                        text-align: center;
+                        padding: 40px 20px;
+                        background: linear-gradient(135deg, rgba(102, 126, 234, 0.05), rgba(118, 75, 162, 0.05));
+                        border-radius: 12px;
+                        border: 2px dashed #667eea;
+                    ">
+                        <i class="fas fa-chart-bar" style="font-size: 48px; color: #667eea; margin-bottom: 15px;"></i>
+                        <h3 style="color: #333; margin-bottom: 10px;">No Interpretations Yet</h3>
+                        <p style="color: #666; font-size: 14px; line-height: 1.6; margin-bottom: 20px;">
+                            Start chatting with the AI to generate personality-aware insights!<br>
+                            The system will analyze your messages and provide personalized interpretations.
+                        </p>
+                        <a href="/chatchat" class="btn" style="
+                            display: inline-block;
+                            padding: 10px 20px;
+                            background: #667eea;
+                            color: white;
+                            text-decoration: none;
+                            border-radius: 8px;
+                            font-weight: 600;
+                        ">
+                            <i class="fas fa-comments"></i> Start Chatting
+                        </a>
+                    </div>
+                `;
+                return;
+            }
+
+            const html = `
+                <div class="stat-box">
+                    <span class="stat-label">Total Interpretations</span>
+                    <span class="stat-value">${stats.total_interpretations}</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-label">Average Confidence</span>
+                    <span class="stat-value">${Math.round(stats.average_confidence * 100)}%</span>
+                </div>
+                ${Object.entries(stats.by_event_type).map(([type, count]) => `
+                    <div class="stat-box">
+                        <span class="stat-label">${type.replace('_', ' ')}</span>
+                        <span class="stat-value">${count}</span>
+                    </div>
+                `).join('')}
+            `;
+            document.getElementById('stats-content').innerHTML = html;
+        }
+
+        function displaySource(profile) {
+            const sourceInfo = {
+                'assessment': {
+                    icon: 'fa-clipboard-check',
+                    title: 'Formal Assessment',
+                    description: 'Based on your completed personality test',
+                    class: 'source-assessment',
+                    confidence: '85%'
+                },
+                'inferred': {
+                    icon: 'fa-brain',
+                    title: 'Inferred from Conversations',
+                    description: 'Learned from your interactions',
+                    class: 'source-inferred',
+                    confidence: '65%'
+                },
+                'default': {
+                    icon: 'fa-question-circle',
+                    title: 'Default Profile',
+                    description: 'Using neutral defaults',
+                    class: 'source-default',
+                    confidence: '30%'
+                }
+            };
+
+            const info = sourceInfo[profile.source];
+            const html = `
+                <div style="text-align: center;">
+                    <i class="fas ${info.icon}" style="font-size: 48px; color: #667eea; margin-bottom: 15px;"></i>
+                    <h3 style="color: #333; margin-bottom: 10px;">${info.title}</h3>
+                    <p style="color: #666; font-size: 14px; margin-bottom: 15px;">${info.description}</p>
+                    <span class="source-indicator ${info.class}">
+                        Confidence: ${info.confidence}
+                    </span>
+                    ${!profile.has_assessment ? `
+                        <div style="margin-top: 20px;">
+                            <a href="/personality-test" class="btn">
+                                <i class="fas fa-clipboard-list"></i> Take Personality Assessment
+                            </a>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+            document.getElementById('source-content').innerHTML = html;
+        }
+
+        function displayProfile(profile) {
+            if (!profile.has_assessment) {
+                document.getElementById('profile-content').innerHTML = `
+                    <div class="no-data">
+                        <i class="fas fa-clipboard-list"></i>
+                        <p>No personality assessment completed yet</p>
+                        <p style="font-size: 12px; margin-top: 10px;">
+                            Take the assessment to unlock detailed personality insights
+                        </p>
+                        <a href="/personality-test" class="btn" style="margin-top: 15px;">
+                            Start Assessment
+                        </a>
+                    </div>
+                `;
+                return;
+            }
+
+            const traitLabels = {
+                'openness': 'Openness to Experience',
+                'conscientiousness': 'Conscientiousness',
+                'extraversion': 'Extraversion',
+                'agreeableness': 'Agreeableness',
+                'neuroticism': 'Neuroticism'
+            };
+
+            const html = Object.entries(profile.traits).map(([name, data]) => `
+                <div class="trait-item">
+                    <div class="trait-name">
+                        <strong>${traitLabels[name] || name}</strong>
+                        <span>${Math.round(data.value * 100)}%</span>
+                    </div>
+                    <div class="trait-bar">
+                        <div class="trait-fill" style="width: ${data.value * 100}%"></div>
+                    </div>
+                    ${data.description ? `<p style="color: #666; font-size: 12px; margin-top: 5px;">${data.description}</p>` : ''}
+                </div>
+            `).join('');
+
+            document.getElementById('profile-content').innerHTML = html;
+
+            // Create radar chart
+            createTraitsChart(profile.traits);
+        }
+
+        function createTraitsChart(traits) {
+            const ctx = document.getElementById('traitsChart');
+            
+            if (traitsChart) {
+                traitsChart.destroy();
+            }
+
+            const traitNames = Object.keys(traits);
+            const traitValues = Object.values(traits).map(t => t.value * 100);
+
+            traitsChart = new Chart(ctx, {
+                type: 'radar',
+                data: {
+                    labels: traitNames.map(n => n.charAt(0).toUpperCase() + n.slice(1)),
+                    datasets: [{
+                        label: 'Your Personality Profile',
+                        data: traitValues,
+                        fill: true,
+                        backgroundColor: 'rgba(102, 126, 234, 0.2)',
+                        borderColor: 'rgb(102, 126, 234)',
+                        pointBackgroundColor: 'rgb(102, 126, 234)',
+                        pointBorderColor: '#fff',
+                        pointHoverBackgroundColor: '#fff',
+                        pointHoverBorderColor: 'rgb(102, 126, 234)'
+                    }]
+                },
+                options: {
+                    elements: {
+                        line: {
+                            borderWidth: 3
+                        }
+                    },
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                stepSize: 20
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function displayInterpretations(data) {
+            const interpretations = data.interpretations || [];
+            if (interpretations.length === 0) {
+                document.getElementById('interpretations-content').innerHTML = `
+                    <div class="no-data-message" style="
+                        text-align: center;
+                        padding: 40px 20px;
+                        background: linear-gradient(135deg, rgba(102, 126, 234, 0.05), rgba(118, 75, 162, 0.05));
+                        border-radius: 12px;
+                        border: 2px dashed #667eea;
+                    ">
+                        <i class="fas fa-lightbulb" style="font-size: 48px; color: #667eea; margin-bottom: 15px;"></i>
+                        <h3 style="color: #333; margin-bottom: 10px;">No Interpretations Yet</h3>
+                        <p style="color: #666; font-size: 14px; line-height: 1.6; margin-bottom: 10px;">
+                            Personality interpretations appear when you:
+                        </p>
+                        <ul style="color: #666; font-size: 14px; text-align: left; max-width: 400px; margin: 0 auto 20px; line-height: 1.8;">
+                            <li> Share your feelings or goals</li>
+                            <li> Discuss challenges or successes</li>
+                            <li> Express emotions or concerns</li>
+                            <li> Have meaningful conversations</li>
+                        </ul>
+                        <p style="color: #666; font-size: 12px; font-style: italic; margin-bottom: 20px;">
+                            Tip: Complete the personality assessment for more accurate insights!
+                        </p>
+                        <div style="display: flex; gap: 10px; justify-content: center;">
+                            <a href="/chatchat" class="btn" style="
+                                display: inline-block;
+                                padding: 10px 20px;
+                                background: #667eea;
+                                color: white;
+                                text-decoration: none;
+                                border-radius: 8px;
+                                font-weight: 600;
+                            ">
+                                <i class="fas fa-comments"></i> Start Chatting
+                            </a>
+                            <a href="/personality-test" class="btn" style="
+                                display: inline-block;
+                                padding: 10px 20px;
+                                background: white;
+                                color: #667eea;
+                                text-decoration: none;
+                                border-radius: 8px;
+                                border: 2px solid #667eea;
+                                font-weight: 600;
+                            ">
+                                <i class="fas fa-clipboard-check"></i> Take Assessment
+                            </a>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            const html = interpretations.map(interp => {
+                const confidenceClass = interp.confidence >= 0.7 ? 'confidence-high' : 
+                                       interp.confidence >= 0.5 ? 'confidence-medium' : 'confidence-low';
+                const confidenceText = interp.confidence >= 0.7 ? 'High' : 
+                                      interp.confidence >= 0.5 ? 'Medium' : 'Low';
+
+                return `
+                    <div class="interpretation-item">
+                        <div class="interpretation-header">
+                            <span class="event-type">${interp.event_type}</span>
+                            <span class="confidence-badge ${confidenceClass}">${confidenceText} (${Math.round(interp.confidence * 100)}%)</span>
+                        </div>
+                        <p class="interpretation-text"><strong>Message:</strong> "${interp.raw_message.substring(0, 100)}${interp.raw_message.length > 100 ? '...' : ''}"</p>
+                        <p class="interpretation-text"><strong>Interpretation:</strong> ${interp.interpretation}</p>
+                        ${interp.emotional_impact ? `<p class="interpretation-text"><strong>Impact:</strong> ${interp.emotional_impact}</p>` : ''}
+                        <p class="interpretation-approach">→ Approach: ${interp.recommended_approach}</p>
+                        <p style="color: #999; font-size: 11px; margin-top: 5px;">
+                            <i class="fas fa-user"></i> ${interp.character} • 
+                            <i class="fas fa-clock"></i> ${new Date(interp.created_at).toLocaleString()}
+                        </p>
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('interpretations-content').innerHTML = html;
+        }
+
+        // Load dashboard on page load
+        window.addEventListener('load', loadDashboard);
+    </script>
+</body>
+</html>

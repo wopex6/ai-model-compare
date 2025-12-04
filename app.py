@@ -461,6 +461,9 @@ def signup():
         if not user_id:
             return jsonify({'error': 'Username or email already exists'}), 400
         
+        # Get user role (new users are 'guest' by default)
+        user_role = integrated_db.get_user_role(user_id)
+        
         # Generate and send verification code
         print(f"📧 Attempting to send verification email to {email}")
         try:
@@ -474,8 +477,6 @@ def signup():
                 print(f"⚠️  Warning: Could not send verification email to {email}")
         except Exception as e:
             print(f"❌ Error sending verification email: {e}")
-            import traceback
-            traceback.print_exc()
             email_sent = False
         
         # Generate JWT token
@@ -490,6 +491,7 @@ def signup():
             'token': token,
             'user_id': user_id,
             'username': username,
+            'role': user_role,  # Include role in signup response
             'email_verified': False,
             'verification_sent': email_sent
         })
@@ -511,6 +513,9 @@ def login():
         if not user:
             return jsonify({'error': 'Invalid credentials'}), 401
         
+        # Get user role
+        user_role = integrated_db.get_user_role(user['id'])
+        
         # Generate JWT token
         token = jwt.encode({
             'user_id': user['id'],
@@ -522,7 +527,8 @@ def login():
             'success': True,
             'token': token,
             'user_id': user['id'],
-            'username': user['username']
+            'username': user['username'],
+            'role': user_role  # Include role in login response
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1603,6 +1609,13 @@ def personality_test_page():
     """Direct access to personality assessment interface"""
     return render_template('personality_test.html')
 
+@app.route('/personality-dashboard')
+def personality_dashboard_page():
+    """Personality Insights Dashboard (Master/Admin only)"""
+    # Note: Authentication is handled client-side via JavaScript
+    # The dashboard will check auth token and redirect to login if needed
+    return render_template('personality_dashboard.html')
+
 @app.route('/test-session')
 def test_session_page():
     """Debug page for testing session restoration"""
@@ -1960,19 +1973,130 @@ def acknowledge_ai_notifications():
 def reset_ai_circuit_breaker():
     """Reset AI circuit breaker (admin only)"""
     try:
-        if not ai_budget:
-            return jsonify({'error': 'AI Budget Manager not initialized'}), 500
+        # Require authentication
+        if not hasattr(request, 'current_user'):
+            return jsonify({'error': 'Authentication required'}), 401
         
-        data = request.get_json()
-        reason = data.get('reason', 'Manual reset via API')
+        # Admin only
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return jsonify({'error': 'Admin access required'}), 403
         
-        # In production: verify admin authorization here
-        ai_budget.reset_circuit_breaker(reason)
+        # Reset circuit breaker
+        ai_budget_manager.reset_circuit_breaker()
         
         return jsonify({
             'success': True,
-            'message': 'Circuit breaker reset',
-            'reason': reason
+            'message': 'Circuit breaker reset successfully'
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/personality/profile', methods=['GET'])
+@app.route('/api/personality/profile/<int:user_id>', methods=['GET'])
+@require_auth
+def get_personality_profile(user_id=None):
+    """Get personality profile with Big 5 traits (Master/Admin only)"""
+    try:
+        
+        # Check personality access (master or admin)
+        if not integrated_db.has_personality_access(request.current_user['user_id']):
+            return jsonify({'error': 'Master or Admin access required for personality features'}), 403
+        
+        # Default to current user, admins can query others
+        target_user_id = user_id if user_id else request.current_user['user_id']
+        
+        # Get profile
+        profile = integrated_db.get_personality_profile(target_user_id)
+        
+        return jsonify(profile)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/personality/interpretations', methods=['GET'])
+@app.route('/api/personality/interpretations/<int:user_id>', methods=['GET'])
+@require_auth
+def get_personality_interpretations(user_id=None):
+    """Get recent personality interpretations (Master/Admin only)"""
+    try:
+        
+        # Check personality access (master or admin)
+        if not integrated_db.has_personality_access(request.current_user['user_id']):
+            return jsonify({'error': 'Master or Admin access required for personality features'}), 403
+        
+        # Default to current user, admins can query others
+        target_user_id = user_id if user_id else request.current_user['user_id']
+        
+        # Get limit from query params
+        limit = request.args.get('limit', 10, type=int)
+        limit = min(limit, 50)  # Cap at 50
+        
+        # Get interpretations
+        interpretations = integrated_db.get_personality_interpretations(target_user_id, limit)
+        
+        return jsonify({
+            'user_id': target_user_id,
+            'count': len(interpretations),
+            'interpretations': interpretations
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/personality/stats', methods=['GET'])
+@app.route('/api/personality/stats/<int:user_id>', methods=['GET'])
+@require_auth
+def get_personality_stats(user_id=None):
+    """Get personality interpretation statistics (Master/Admin only)"""
+    try:
+        
+        # Check personality access (master or admin)
+        if not integrated_db.has_personality_access(request.current_user['user_id']):
+            return jsonify({'error': 'Master or Admin access required for personality features'}), 403
+        
+        # Default to current user, admins can query others
+        target_user_id = user_id if user_id else request.current_user['user_id']
+        
+        # Get stats
+        stats = integrated_db.get_personality_stats(target_user_id)
+        stats['user_id'] = target_user_id
+        
+        return jsonify(stats)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/personality/conversation-stats', methods=['GET'])
+@require_auth
+def get_personality_conversation_stats():
+    """Get personality interpretation counts by conversation (Master/Admin only)"""
+    try:
+        # Check personality access (master or admin)
+        if not integrated_db.has_personality_access(request.current_user['user_id']):
+            return jsonify({'error': 'Master or Admin access required for personality features'}), 403
+        
+        # Get interpretation counts per conversation for current user
+        user_id = request.current_user['user_id']
+        
+        # Query database for interpretation counts by conversation
+        conn = integrated_db.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT conversation_id, COUNT(*) as count
+            FROM personality_interpretations
+            WHERE user_id = ?
+            GROUP BY conversation_id
+        ''', (user_id,))
+        
+        results = cursor.fetchall()
+        conn.close()
+        
+        # Convert to dictionary
+        by_conversation = {row[0]: row[1] for row in results if row[0]}
+        
+        return jsonify({
+            'user_id': user_id,
+            'by_conversation': by_conversation,
+            'total_conversations': len(by_conversation)
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500

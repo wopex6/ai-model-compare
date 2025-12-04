@@ -334,6 +334,28 @@ class IntegratedAIChatbot {
         return `${maskedUsername}@${domain}`;
     }
     
+    checkPersonalityAccessButton() {
+        /**Check if user has access to personality features and show button */
+        const user = this.currentUser;
+        console.log('🔍 Personality Button Check: Checking access for user:', user);
+        
+        // Check both 'role' and 'user_role' properties (API returns 'user_role')
+        const userRole = user?.role || user?.user_role;
+        
+        if (user && (userRole === 'master' || userRole === 'administrator')) {
+            const dashboardBtn = document.getElementById('personality-dashboard-btn');
+            console.log('✅ User has personality access! Role:', userRole);
+            if (dashboardBtn) {
+                dashboardBtn.style.display = 'inline-flex';
+                console.log('✅ Personality Insights button made visible');
+            } else {
+                console.error('❌ Dashboard button element not found');
+            }
+        } else {
+            console.log('❌ User does not have personality access. Role:', userRole);
+        }
+    }
+
     playNotificationSound() {
         /**
          * Play a notification sound when AI response is ready
@@ -700,10 +722,14 @@ class IntegratedAIChatbot {
                 console.log('🔧 Login Debug: Login successful, setting up user data');
                 this.authToken = result.token;
                 localStorage.setItem('authToken', this.authToken);
-                this.currentUser = { id: result.user_id, username: result.username };
+                this.currentUser = { 
+                    id: result.user_id, 
+                    username: result.username,
+                    role: result.role  // Save role from login response
+                };
                 localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
                 
-                console.log('🔧 Login Debug: User data saved, calling showDashboard');
+                console.log('🔧 Login Debug: User data saved with role:', result.role);
                 this.showNotification('Login successful!', 'success');
                 await this.showDashboard();
                 console.log('🔧 Login Debug: showDashboard completed');
@@ -739,7 +765,12 @@ class IntegratedAIChatbot {
             if (response.ok) {
                 this.authToken = result.token;
                 localStorage.setItem('authToken', this.authToken);
-                this.currentUser = { id: result.user_id, username: result.username };
+                this.currentUser = { 
+                    id: result.user_id, 
+                    username: result.username,
+                    role: result.role  // Save role from signup response
+                };
+                localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
                 this.showNotification('Account created successfully!', 'success');
                 this.showDashboard();
             } else {
@@ -914,6 +945,12 @@ class IntegratedAIChatbot {
         console.log('🔧 Dashboard Debug: Loading user data');
         await this.loadUserData();
         console.log('🔧 Dashboard Debug: User data loaded');
+        
+        // Check personality access after dashboard loads (for Phase 3.1 features)
+        this.checkPersonalityAccessButton();
+        
+        // Start tracking scrolls to prevent unwanted restorations
+        console.log('🔧 Dashboard Debug: Started scroll tracking');
         
         // Check for URL parameters first (highest priority)
         const urlParams = new URLSearchParams(window.location.search);
@@ -1759,35 +1796,68 @@ class IntegratedAIChatbot {
         }
     }
 
-    renderConversations(conversations) {
+    async renderConversations(conversations) {
         const conversationsList = document.getElementById('conversations-list');
         
         // Check if element exists
         if (!conversationsList) {
-            console.warn('conversations-list element not found in DOM');
+            console.error('conversations-list element not found in DOM');
             return;
         }
         
         if (conversations.length === 0) {
-            conversationsList.innerHTML = `
-                <div class="empty-state">
-                    <h3>No Conversations</h3>
-                    <p>Start your first conversation!</p>
-                </div>
-            `;
+            conversationsList.innerHTML = '<p style="color: #999; padding: 20px;">No conversations yet</p>';
             return;
         }
-
+        
+        // Check if user has personality access
+        const hasPersonalityAccess = this.currentUser && 
+            (this.currentUser.role === 'master' || this.currentUser.role === 'administrator');
+        
+        // If user has access, fetch interpretation counts for conversations
+        let interpretationCounts = {};
+        if (hasPersonalityAccess) {
+            try {
+                const response = await this.apiCall('/api/personality/conversation-stats', 'GET');
+                if (response.ok) {
+                    const data = await response.json();
+                    interpretationCounts = data.by_conversation || {};
+                }
+            } catch (error) {
+                console.log('Could not fetch interpretation counts:', error);
+            }
+        }
+        
         conversationsList.innerHTML = conversations.map(conv => {
-            const date = new Date(conv.updated_at);
-            const formattedDate = date.toLocaleDateString();
-            const formattedTime = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const datetime = `${formattedDate} ${formattedTime}`;
+            const interpCount = interpretationCounts[conv.id] || 0;
+            const hasInterpretations = interpCount > 0;
             
             return `
-                <div class="conversation-item" data-session-id="${conv.session_id}" onclick="app.selectConversation('${conv.session_id}')">
-                    <div class="conversation-title">${conv.title}</div>
-                    <div class="conversation-date">${datetime}</div>
+                <div class="conversation-item ${conv.id === this.currentConversationId ? 'active' : ''}" 
+                     data-conversation-id="${conv.id}"
+                     onclick="window.app.loadConversation(${conv.id})">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div class="conversation-title" style="flex: 1;">${conv.character_name || 'Unknown'}</div>
+                        ${hasInterpretations ? `
+                            <span class="personality-indicator" style="
+                                display: inline-flex;
+                                align-items: center;
+                                gap: 4px;
+                                padding: 2px 6px;
+                                background: linear-gradient(135deg, rgba(102, 126, 234, 0.15), rgba(118, 75, 162, 0.15));
+                                border-radius: 10px;
+                                font-size: 10px;
+                                font-weight: 600;
+                                color: #667eea;
+                                border: 1px solid rgba(102, 126, 234, 0.3);
+                            " title="${interpCount} personality interpretation${interpCount > 1 ? 's' : ''}">
+                                <i class="fas fa-brain" style="font-size: 9px;"></i>
+                                ${interpCount}
+                            </span>
+                        ` : ''}
+                    </div>
+                    <div class="conversation-preview">${conv.last_message || 'No messages'}</div>
+                    <div class="conversation-date">${this.formatTimestamp(conv.updated_at)}</div>
                 </div>
             `;
         }).join('');
@@ -3001,6 +3071,13 @@ class IntegratedAIChatbot {
         /**Render admin chat messages with file attachments */
         const container = document.getElementById('admin-chat-messages');
         
+        if (!container) {
+            console.error('❌ Admin chat container not found! Check if template has id="admin-chat-messages"');
+            return;
+        }
+        
+        console.log(`📨 Rendering ${messages.length} admin messages, scrollToBottom: ${scrollToBottom}`);
+        
         if (messages.length === 0) {
             container.innerHTML = '<p style="text-align: center; color: #999;">No messages yet. Start a conversation with the admin!</p>';
             return;
@@ -3011,8 +3088,10 @@ class IntegratedAIChatbot {
         
         // Skip re-render if content hasn't changed (prevents video interruption)
         if (messagesHash === this.lastAdminMessagesHash && !scrollToBottom) {
+            console.log('⏭️ Skipping re-render - messages unchanged');
             return; // Content unchanged, skip re-render
         }
+        console.log('✅ Rendering messages - hash changed or forced scroll');
         this.lastAdminMessagesHash = messagesHash;
         
         // Save current scroll position
@@ -3290,6 +3369,13 @@ class IntegratedAIChatbot {
         /**Render messages for admin view with file attachments */
         const container = document.getElementById('admin-chat-messages-view');
         
+        if (!container) {
+            console.error('❌ Admin user chat container not found! Check if template has id="admin-chat-messages-view"');
+            return;
+        }
+        
+        console.log(`📨 Rendering ${messages.length} messages for user ${username}, scrollToBottom: ${scrollToBottom}`);
+        
         if (messages.length === 0) {
             container.innerHTML = '<p style="text-align: center; color: #999;">No messages yet</p>';
             return;
@@ -3300,8 +3386,10 @@ class IntegratedAIChatbot {
         
         // Skip re-render if content hasn't changed (prevents video interruption)
         if (messagesHash === this.lastUserMessagesHash && !scrollToBottom) {
+            console.log('⏭️ Skipping re-render - messages unchanged');
             return; // Content unchanged, skip re-render
         }
+        console.log('✅ Rendering user messages - hash changed or forced scroll');
         this.lastUserMessagesHash = messagesHash;
         
         // Save current scroll position
