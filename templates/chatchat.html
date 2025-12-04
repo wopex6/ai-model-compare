@@ -101,6 +101,10 @@
                     <button class="nav-btn" data-tab="ai-characters"><i class="fas fa-robot"></i> AI Characters</button>
                     <button class="nav-btn" data-tab="profile">Profile</button>
                     <button class="nav-btn" data-tab="psychology">Psychology</button>
+                    <a href="/personality-dashboard" class="nav-btn" id="personality-dashboard-btn" style="display: none; text-decoration: none; color: inherit;">
+                        <i class="fas fa-brain"></i> Personality Insights
+                        <span class="badge" style="background: linear-gradient(135deg, #667eea, #764ba2);">⭐</span>
+                    </a>
                     <button class="nav-btn" data-tab="settings">Settings</button>
                     <button class="nav-btn" data-tab="admin-chat" id="admin-chat-tab-btn">
                         <i class="fas fa-comment-dots"></i> Contact Admin
@@ -975,7 +979,8 @@
     <div id="notification" class="notification"></div>
 
     <script src="{{ url_for('static', filename='file_upload_handler.js') }}"></script>
-    <script src="{{ url_for('static', filename='multi_user_app.js') }}?v=20251120_2240"></script>
+    <script src="{{ url_for('static', filename='personality_interpretation_display.js') }}"></script>
+    <script src="{{ url_for('static', filename='multi_user_app.js') }}?v=20251204_1310"></script>
     <style>
         /* Prevent scroll flash by setting initial scroll position */
         html {
@@ -1779,6 +1784,46 @@
             
             // Let the StateManager handle scroll restoration with proper timing
         });
+        
+        // Check user role and show personality dashboard button for Master/Admin
+        const checkPersonalityAccess = () => {
+            // Wait for app to be fully initialized
+            if (!window.app) {
+                console.log('⏳ App not ready yet, waiting...');
+                setTimeout(checkPersonalityAccess, 500);
+                return;
+            }
+            
+            const user = window.app.currentUser;
+            console.log('🔍 Checking personality access for user:', user);
+            
+            // Check both 'role' and 'user_role' properties (API returns 'user_role')
+            const userRole = user?.role || user?.user_role;
+            
+            if (user && (userRole === 'master' || userRole === 'administrator')) {
+                const dashboardBtn = document.getElementById('personality-dashboard-btn');
+                console.log('✅ User has personality access! Role:', userRole);
+                if (dashboardBtn) {
+                    dashboardBtn.style.display = 'inline-flex';
+                    console.log('✅ Personality Insights button made visible');
+                } else {
+                    console.error('❌ Dashboard button element not found');
+                }
+            } else {
+                console.log('❌ User does not have personality access. Role:', userRole, 'User object:', user);
+            }
+        };
+        
+        // Start checking when page loads
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', checkPersonalityAccess);
+        } else {
+            checkPersonalityAccess();
+        }
+        
+        // Also check after delays in case user loads later
+        setTimeout(checkPersonalityAccess, 1000);
+        setTimeout(checkPersonalityAccess, 2000);
     </script>
 </body>
 </html>

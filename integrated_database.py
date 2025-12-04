@@ -724,7 +724,7 @@ class IntegratedDatabase:
     # ==================== USER ROLES & MESSAGE LIMITS ====================
     
     def get_user_role(self, user_id: int) -> str:
-        """Get user role (administrator, paid, guest)"""
+        """Get user role (administrator, master, paid, guest)"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
@@ -733,6 +733,11 @@ class IntegratedDatabase:
         conn.close()
         
         return result[0] if result else 'guest'
+    
+    def has_personality_access(self, user_id: int) -> bool:
+        """Check if user has access to Phase 3.1 personality features (master or administrator only)"""
+        role = self.get_user_role(user_id)
+        return role in ['administrator', 'master']
     
     def get_message_usage(self, user_id: int) -> Dict[str, Any]:
         """Get user's message usage for today"""
@@ -753,10 +758,7 @@ class IntegratedDatabase:
         role = self.get_user_role(user_id)
         
         # Set limits based on role
-        if role == 'administrator':
-            limit = None  # Unlimited
-            remaining = None
-        elif role == 'paid':
+        if role in ['administrator', 'master', 'paid']:
             limit = None  # Unlimited
             remaining = None
         else:  # guest
@@ -882,6 +884,133 @@ class IntegratedDatabase:
             return False
         finally:
             conn.close()
+    
+    # ==================== PERSONALITY FEATURES (PHASE 3.1) ====================
+    
+    def get_personality_profile(self, user_id: int) -> Dict[str, Any]:
+        """Get user's personality profile with Big 5 traits"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT trait_name, trait_value, trait_description, updated_at
+            FROM psychology_traits
+            WHERE user_id = ?
+        ''', (user_id,))
+        
+        traits = {}
+        last_updated = None
+        for row in cursor.fetchall():
+            traits[row[0]] = {
+                'value': row[1],
+                'description': row[2],
+                'updated_at': row[3]
+            }
+            if not last_updated or row[3] > last_updated:
+                last_updated = row[3]
+        
+        # Get personality data source
+        if traits:
+            source = 'assessment'
+            confidence = 0.85
+        else:
+            # Check for inferred traits
+            cursor.execute('''
+                SELECT COUNT(*) FROM inferred_traits WHERE user_id = ?
+            ''', (user_id,))
+            if cursor.fetchone()[0] > 0:
+                source = 'inferred'
+                confidence = 0.65
+            else:
+                source = 'default'
+                confidence = 0.30
+        
+        conn.close()
+        
+        return {
+            'user_id': user_id,
+            'traits': traits,
+            'source': source,
+            'confidence': confidence,
+            'last_updated': last_updated,
+            'has_assessment': len(traits) > 0
+        }
+    
+    def get_personality_interpretations(self, user_id: int, limit: int = 10) -> List[Dict[str, Any]]:
+        """Get recent personality interpretations for a user"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT 
+                id, character, event_type, raw_event, raw_message,
+                interpretation, emotional_impact, recommended_approach,
+                confidence, traits_used, created_at
+            FROM personality_interpretations
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+        ''', (user_id, limit))
+        
+        interpretations = []
+        for row in cursor.fetchall():
+            interpretations.append({
+                'id': row[0],
+                'character': row[1],
+                'event_type': row[2],
+                'raw_event': row[3],
+                'raw_message': row[4],
+                'interpretation': row[5],
+                'emotional_impact': row[6],
+                'recommended_approach': row[7],
+                'confidence': row[8],
+                'traits_used': json.loads(row[9]) if row[9] else {},
+                'created_at': row[10]
+            })
+        
+        conn.close()
+        return interpretations
+    
+    def get_personality_stats(self, user_id: int) -> Dict[str, Any]:
+        """Get personality interpretation statistics for a user"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        # Total interpretations
+        cursor.execute('''
+            SELECT COUNT(*) FROM personality_interpretations WHERE user_id = ?
+        ''', (user_id,))
+        total = cursor.fetchone()[0]
+        
+        # By event type
+        cursor.execute('''
+            SELECT event_type, COUNT(*) 
+            FROM personality_interpretations 
+            WHERE user_id = ?
+            GROUP BY event_type
+        ''', (user_id,))
+        by_event_type = {row[0]: row[1] for row in cursor.fetchall()}
+        
+        # Average confidence
+        cursor.execute('''
+            SELECT AVG(confidence) 
+            FROM personality_interpretations 
+            WHERE user_id = ?
+        ''', (user_id,))
+        avg_confidence = cursor.fetchone()[0] or 0.0
+        
+        # Get personality source
+        profile = self.get_personality_profile(user_id)
+        
+        conn.close()
+        
+        return {
+            'total_interpretations': total,
+            'by_event_type': by_event_type,
+            'average_confidence': round(avg_confidence, 2),
+            'personality_source': profile['source'],
+            'has_assessment': profile['has_assessment']
+        }
     
     def update_user_role(self, user_id: int, new_role: str) -> bool:
         """Update a user's role"""
