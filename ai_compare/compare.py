@@ -40,11 +40,13 @@ class AICompare:
                 }
                 self._model_providers[name] = provider_map[name]
                 
-                # Pre-initialize the model configurations to cache them
-                if hasattr(model_instance, '_get_models'):
-                    await model_instance._get_models()
-                elif hasattr(model_instance, '_get_config'):
-                    await model_instance._get_config()
+                # CRITICAL FIX: Skip pre-initialization to avoid 10-minute hangs
+                # These async calls were timing out on PythonAnywhere (HARAKIRI)
+                # Models will initialize lazily on first use instead
+                # if hasattr(model_instance, '_get_models'):
+                #     await model_instance._get_models()
+                # elif hasattr(model_instance, '_get_config'):
+                #     await model_instance._get_config()
                 self.models[name] = model_instance
             except ValueError:
                 pass  # Skip models with missing API keys
