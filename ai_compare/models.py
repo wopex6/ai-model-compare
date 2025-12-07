@@ -5,6 +5,7 @@ import aiohttp
 from typing import Optional
 from dotenv import load_dotenv
 from .model_discovery import ModelDiscovery
+import httpx
 
 load_dotenv()
 
@@ -24,7 +25,15 @@ class ChatGPTModel(AIModel):
         if not api_key:
             raise ValueError("OpenAI API key not found")
         from openai import AsyncOpenAI
-        self.client = AsyncOpenAI(api_key=api_key)
+        # Add timeout to prevent 504 Gateway Timeout on PythonAnywhere
+        self.client = AsyncOpenAI(
+            api_key=api_key,
+            timeout=20.0,  # 20 second timeout
+            http_client=httpx.AsyncClient(
+                timeout=20.0,
+                limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+            )
+        )
         self.api_key = api_key
         self.discovery = ModelDiscovery()
         self.models = None
@@ -54,7 +63,15 @@ class ClaudeModel(AIModel):
         if not api_key:
             raise ValueError("Anthropic API key not found")
         import anthropic
-        self.client = anthropic.AsyncAnthropic(api_key=api_key)
+        # Add timeout to prevent 504 Gateway Timeout on PythonAnywhere
+        self.client = anthropic.AsyncAnthropic(
+            api_key=api_key,
+            timeout=20.0,  # 20 second timeout
+            http_client=httpx.AsyncClient(
+                timeout=20.0,
+                limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+            )
+        )
         self.api_key = api_key
         self.discovery = ModelDiscovery()
         self.models = None
