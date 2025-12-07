@@ -106,12 +106,22 @@ def _register_chat_endpoint(app, character_id, characters_dict, smart_response_p
             
             # Use Smart Response if available
             if smart_response_processor:
+                import time
                 def ai_function(enhanced_message):
                     # Use persistent event loop (no create/close warnings)
                     # enhanced_message includes explicit context prepended by Smart Response
-                    return _run_async(bot.chat(enhanced_message, include_context))
+                    print(f"⏱️ [{time.time():.2f}] STEP 3: Inside ai_function wrapper for {character_id}")
+                    print(f"   📦 About to call bot.chat() for {bot.__class__.__name__}")
+                    
+                    result = _run_async(bot.chat(enhanced_message, include_context))
+                    
+                    print(f"⏱️ [{time.time():.2f}] STEP 4: bot.chat() completed")
+                    print(f"   ✅ Result type: {type(result)}")
+                    return result
                 
+                print(f"⏱️ [{time.time():.2f}] STEP 5: Calling smart_response_processor")
                 response = smart_response_processor(message, character_id, ai_function)
+                print(f"⏱️ [{time.time():.2f}] STEP 6: smart_response_processor returned")
             else:
                 # Fallback to direct AI if Smart Response not available
                 # Use persistent event loop (no create/close warnings)
