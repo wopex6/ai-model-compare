@@ -1,6 +1,15 @@
+# CRITICAL: Load .env FIRST before any other imports!
+# This must be at the top because ai_compare modules also call load_dotenv()
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Load with ABSOLUTE path (critical for WSGI/PythonAnywhere)
+_env_path = Path(__file__).parent / '.env'
+load_dotenv(_env_path, override=True)
+
+# Now import everything else
 from flask import Flask, render_template, request, jsonify, session, redirect, send_from_directory
 from flask_cors import CORS
-from dotenv import load_dotenv
 from werkzeug.utils import secure_filename
 import asyncio
 import os
@@ -36,11 +45,7 @@ from smart_response.trait_inference import TraitInferenceEngine
 from smart_response.handler import SmartResponseHandler
 import sqlite3
 
-# Load environment variables from .env file
-load_dotenv()
-
 # Disable auto-docs in production
-import os
 os.environ['DISABLE_AUTO_DOCS'] = 'true'
 
 app = Flask(__name__)
