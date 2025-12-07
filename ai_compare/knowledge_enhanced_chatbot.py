@@ -45,8 +45,11 @@ class KnowledgeEnhancedMixin:
         
         try:
             # Search knowledge base
+            # FIXED: Run blocking search_knowledge() in thread pool to avoid blocking async loop
             print(f"⏱️ [{time.time():.2f}] enhance_with_knowledge: Searching knowledge system...")
-            results = self.knowledge_system.search_knowledge(
+            import asyncio
+            results = await asyncio.to_thread(
+                self.knowledge_system.search_knowledge,
                 character_id=self.character_id,
                 query=user_message,
                 n_results=n_results

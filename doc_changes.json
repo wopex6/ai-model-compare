@@ -3,7 +3,7 @@
     "ai_compare\\adaptive_personality.py": "3b294733e2fead11a2e1189770156190",
     "ai_compare\\admin_logger.py": "bc84a8a3407fd69c6b6eea16e89ae757",
     "ai_compare\\base_chatbot.py": "e8cd64b5d66275737413cf1a4de1ff61",
-    "ai_compare\\base_enhanced_chatbot.py": "5b38ec807154e683c0514254ba926362",
+    "ai_compare\\base_enhanced_chatbot.py": "9f7b0621ff2b3c46156f52d8eb9105d4",
     "ai_compare\\character_configs.py": "378d1d49f96d5c92f6b727947924378e",
     "ai_compare\\character_factory.py": "20d2cdb76163504543f68581ee40bdd2",
     "ai_compare\\character_routes.py": "e937284a5ed488dad75c1afd03996561",
@@ -15,7 +15,7 @@
     "ai_compare\\endpoint_registry.py": "1d40d60132c35f80090b4be7a5a3e1b1",
     "ai_compare\\knowledge_config.py": "2e7d2fbca3382e40c41b400a3fcf053c",
     "ai_compare\\knowledge_discovery.py": "fc9ccf2fe3a821138f9ab9b3bed17dd6",
-    "ai_compare\\knowledge_enhanced_chatbot.py": "2e4299eba8ef90dfb50b7c026320a6ec",
+    "ai_compare\\knowledge_enhanced_chatbot.py": "962de33c79c42f8d7080e1cba98fe06e",
     "ai_compare\\knowledge_system.py": "4c533ece7efa5d899a0f161a42b1d4be",
     "ai_compare\\knowledge_tracker.py": "f94636b48d6fffff12b9f006abb5efd9",
     "ai_compare\\knowledge_vector_store.py": "86c32ac7bc562af8b68bbc1f579e232f",
@@ -41,6 +41,6 @@
     "requirements.txt": "a0c0ba845255584721907b0ff0aabe84",
     ".env": "598ed9df8f31de62af8949518c2e77af"
   },
-  "last_update": "2025-12-08T00:31:15.540343",
-  "update_count": 1336
+  "last_update": "2025-12-08T00:38:36.031674",
+  "update_count": 1366
 }
