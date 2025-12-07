@@ -36,9 +36,13 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
         self.config = config or {}
         
         # Setup knowledge system if available
+        # TEMPORARY FIX: Disable knowledge system - it has synchronous blocking calls
+        # that hang the async event loop on PythonAnywhere
         try:
             self.setup_knowledge(character_id)
-            self._knowledge_enabled = True
+            # self._knowledge_enabled = True  # DISABLED - causes 10-min hang
+            self._knowledge_enabled = False  # Force disable until we make search_knowledge() async
+            print(f"⚠️ Knowledge system temporarily disabled for {character_id} (prevents blocking)")
         except ImportError as e:
             print(f"Knowledge system not available for {character_id}: {e}")
             self._knowledge_enabled = False
