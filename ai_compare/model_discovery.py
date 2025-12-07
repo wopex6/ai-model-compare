@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from dotenv import load_dotenv
 import logging
+import httpx
 
 load_dotenv(override=True)
 
@@ -125,7 +126,15 @@ class ModelDiscovery:
         
         async def discover_models():
             from openai import AsyncOpenAI
-            client = AsyncOpenAI(api_key=api_key)
+            # Add timeout to prevent hangs on PythonAnywhere
+            client = AsyncOpenAI(
+                api_key=api_key,
+                timeout=10.0,  # 10 second timeout for discovery
+                http_client=httpx.AsyncClient(
+                    timeout=10.0,
+                    limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+                )
+            )
             models = await client.models.list()
             
             # Get all GPT models and sort by capability
