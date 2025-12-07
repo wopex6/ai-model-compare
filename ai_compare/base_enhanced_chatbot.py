@@ -36,13 +36,15 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
         self.config = config or {}
         
         # Setup knowledge system if available
-        # FIXED: Knowledge system now uses asyncio.to_thread() to avoid blocking
+        # DISABLED: Even with asyncio.to_thread(), knowledge_system.search_knowledge()
+        # still hangs - likely due to ChromaDB/vector DB not being thread-safe
+        # or blocking on initialization. Needs proper async implementation.
         try:
             self.setup_knowledge(character_id)
-            self._knowledge_enabled = True  # Re-enabled with thread pool fix
-            print(f"✅ Knowledge system enabled for {character_id} (async-safe)")
+            self._knowledge_enabled = False  # FORCE DISABLE - still causes hangs
+            # print(f"⚠️ Knowledge system disabled for {character_id} (prevents blocking)")
         except ImportError as e:
-            print(f"Knowledge system not available for {character_id}: {e}")
+            # print(f"Knowledge system not available for {character_id}: {e}")
             self._knowledge_enabled = False
         
         # Load character-specific configuration
