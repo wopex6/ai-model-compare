@@ -6,6 +6,7 @@ import aiohttp
 from typing import Optional
 from dotenv import load_dotenv
 from .model_config import get_fallback_models, get_primary_model
+import httpx
 
 # Load environment variables once at module import
 load_dotenv(override=True)
@@ -28,7 +29,15 @@ class ChatGPTModel(AIModel):
             raise ValueError("OpenAI API key not found")
         
         from openai import OpenAI
-        self.client = OpenAI(api_key=api_key)
+        # Add timeout to prevent 504 Gateway Timeout on PythonAnywhere
+        self.client = OpenAI(
+            api_key=api_key,
+            timeout=20.0,  # 20 second timeout
+            http_client=httpx.Client(
+                timeout=20.0,
+                limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+            )
+        )
         self.models = get_fallback_models('openai')
 
     
@@ -60,7 +69,15 @@ class ClaudeModel(AIModel):
         if not api_key:
             raise ValueError("Anthropic API key not found")
         import anthropic
-        self.client = anthropic.AsyncAnthropic(api_key=api_key)
+        # Add timeout to prevent 504 Gateway Timeout on PythonAnywhere
+        self.client = anthropic.AsyncAnthropic(
+            api_key=api_key,
+            timeout=20.0,  # 20 second timeout
+            http_client=httpx.AsyncClient(
+                timeout=20.0,
+                limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+            )
+        )
         self.models = get_fallback_models('anthropic')
     
     async def get_response(self, prompt: str) -> str:
