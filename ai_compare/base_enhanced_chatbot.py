@@ -78,8 +78,14 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
         Enhanced chat with specialized knowledge
         Detects topic area and provides appropriate responses
         """
+        import time
+        print(f"⏱️ [{time.time():.2f}] STEP 7: Inside bot.chat() for {self.character_id}")
+        print(f"   📝 Message: {user_message[:100]}...")
+        
         # Detect what type of inquiry this is
+        print(f"⏱️ [{time.time():.2f}] STEP 8: Detecting topic area...")
         topic_area = self._detect_topic_area(user_message)
+        print(f"⏱️ [{time.time():.2f}] STEP 9: Topic area detected: {topic_area}")
         
         # Route to appropriate handler
         if topic_area == "concept_inquiry" and self.concepts:
@@ -96,12 +102,18 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
         
         # For general conversation, use knowledge-enhanced chat if available
         if self._knowledge_enabled:
+            print(f"⏱️ [{time.time():.2f}] STEP 10: Calling chat_with_knowledge()")
             response = await self.chat_with_knowledge(user_message, include_context)
+            print(f"⏱️ [{time.time():.2f}] STEP 11: chat_with_knowledge() returned")
         else:
+            print(f"⏱️ [{time.time():.2f}] STEP 10: Calling parent chat()")
             response = await super().chat(user_message)
+            print(f"⏱️ [{time.time():.2f}] STEP 11: parent chat() returned")
         
         # Add character-specific enhancement
+        print(f"⏱️ [{time.time():.2f}] STEP 12: Adding character enhancement")
         response = self._add_character_enhancement(response, user_message)
+        print(f"⏱️ [{time.time():.2f}] STEP 13: Returning final response")
         
         return response
     

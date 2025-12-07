@@ -58,17 +58,28 @@ class AICompare:
     
     async def ask_all(self, question: str) -> Dict[str, str]:
         """Ask the same question to all available AI models concurrently."""
+        import time
+        print(f"⏱️ [{time.time():.2f}] STEP 18: Inside ask_all()")
+        print(f"   📋 Question length: {len(question)} chars")
+        
+        print(f"⏱️ [{time.time():.2f}] STEP 19: Ensuring models initialized...")
         await self._ensure_models_initialized()
+        print(f"⏱️ [{time.time():.2f}] STEP 20: Models initialized: {list(self.models.keys())}")
         
         if not self.models:
             raise ValueError("No AI models available. Please provide at least one valid API key.")
         
         tasks = []
         for model_name, model in self.models.items():
+            print(f"⏱️ [{time.time():.2f}] Adding task for {model_name}")
             tasks.append(self._safe_ask(model_name, model, question))
         
+        print(f"⏱️ [{time.time():.2f}] STEP 21: 🔥 About to gather {len(tasks)} async tasks - THIS MAY HANG!")
         responses = await asyncio.gather(*tasks)
+        print(f"⏱️ [{time.time():.2f}] STEP 22: ✅ All tasks completed!")
+        
         result = dict(responses)
+        print(f"⏱️ [{time.time():.2f}] STEP 23: Got {len(result)} responses")
         
         # Auto-generate summaries if multiple successful responses
         successful_responses = {k: v for k, v in result.items() if not v.startswith('Error:')}
@@ -90,6 +101,8 @@ class AICompare:
     
     async def _safe_ask(self, model_name: str, model, question: str) -> tuple:
         """Safely ask a question to a model with error handling and token validation."""
+        import time
+        print(f"⏱️ [{time.time():.2f}] _safe_ask START for {model_name}")
         try:
             # Validate and truncate input if necessary
             provider = self._model_providers.get(model_name, 'openai')
@@ -101,7 +114,9 @@ class AICompare:
             if was_truncated:
                 processed_question += f"\n\n[Note: Input was automatically truncated to fit {provider} model limits]"
             
+            print(f"⏱️ [{time.time():.2f}] _safe_ask: 🔥 Calling {model_name}.get_response() - MAY HANG HERE!")
             response = await model.get_response(processed_question)
+            print(f"⏱️ [{time.time():.2f}] _safe_ask: ✅ {model_name} returned response")
             
             # Add truncation info to response if applicable
             if was_truncated:

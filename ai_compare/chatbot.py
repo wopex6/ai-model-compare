@@ -69,10 +69,17 @@ class AIChatbot:
         enhanced_message, tool_results = self.function_parser.enhance_prompt_with_tools(user_message, self.tools)
         
         # Build context-aware prompt
+        import time
+        print(f"⏱️ [{time.time():.2f}] STEP 14: Building enhanced prompt")
         enhanced_prompt = self._build_enhanced_prompt(enhanced_message, include_context)
+        print(f"⏱️ [{time.time():.2f}] STEP 15: Prompt built, length: {len(enhanced_prompt)} chars")
         
         # Get response from model comparison system
+        print(f"⏱️ [{time.time():.2f}] STEP 16: ⚠️ CRITICAL - About to call ai_compare.ask_all() ⚠️")
+        print(f"   🔥 THIS IS WHERE IT LIKELY HANGS!")
         model_responses = await self.ai_compare.ask_all(enhanced_prompt)
+        print(f"⏱️ [{time.time():.2f}] STEP 17: ✅ ai_compare.ask_all() returned!")
+        print(f"   📊 Got {len(model_responses)} responses")
         
         # Extract consolidated response
         consolidated_response = model_responses.get('_auto_consolidated', '')
