@@ -8,6 +8,7 @@ from datetime import datetime
 from typing import Dict, List, Optional
 from .personality_profiler import PersonalityProfiler, PersonalityProfile
 from .adaptive_personality import AdaptivePersonality
+from integrated_database import IntegratedDatabase
 
 class PersonalityFeedbackWindow:
     """Manages personality feedback display and user interaction"""
@@ -266,6 +267,51 @@ class PersonalityAssessmentUI:
             # Assessment completed, analyze and save profile
             profile = self.profiler.analyze_responses(user_id)
             self.profiler.save_profile(profile)
+            
+            # PHASE 3.2: ALSO save to assessment_history for tracking over time
+            try:
+                db = IntegratedDatabase()
+                
+                # Extract Big 5 scores from profile
+                big5_scores = profile.big_five_traits
+                trait_scores = {
+                    'openness': big5_scores['openness'] / 100.0,  # Convert to 0-1 scale
+                    'conscientiousness': big5_scores['conscientiousness'] / 100.0,
+                    'extraversion': big5_scores['extraversion'] / 100.0,
+                    'agreeableness': big5_scores['agreeableness'] / 100.0,
+                    'neuroticism': big5_scores['neuroticism'] / 100.0
+                }
+                
+                # Save to history
+                history_id = db.save_assessment_to_history(
+                    user_id=int(user_id),
+                    trait_scores=trait_scores,
+                    started_at=None,  # We don't track start time in old system
+                    completion_time_seconds=None,
+                    notes=f"Assessment completed via personality test page"
+                )
+                
+                print(f"✅ Assessment saved to history (ID: {history_id}) for user {user_id}")
+                
+                # Check if this is a retake - get comparison
+                history = db.get_assessment_history(int(user_id), limit=2)
+                if len(history) >= 2:
+                    comparison = db.compare_assessments(
+                        int(user_id),
+                        history[1]['id'],  # Previous
+                        history[0]['id']   # Current
+                    )
+                    print(f"📊 Assessment comparison: {comparison['overall_change']}% change, {comparison['stability_assessment']}")
+                    
+                    # Add comparison to response
+                    next_question['comparison'] = {
+                        'overall_change': comparison['overall_change'],
+                        'stability': comparison['stability_assessment'],
+                        'time_between': comparison['time_between']
+                    }
+            except Exception as e:
+                # Don't break assessment if history save fails
+                print(f"⚠️ Warning: Could not save to assessment_history: {e}")
             
             return next_question
         
