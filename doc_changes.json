@@ -15,7 +15,7 @@
     "ai_compare\\endpoint_registry.py": "1d40d60132c35f80090b4be7a5a3e1b1",
     "ai_compare\\knowledge_config.py": "2e7d2fbca3382e40c41b400a3fcf053c",
     "ai_compare\\knowledge_discovery.py": "fc9ccf2fe3a821138f9ab9b3bed17dd6",
-    "ai_compare\\knowledge_enhanced_chatbot.py": "0ab7a21b4f758b88442299405830b273",
+    "ai_compare\\knowledge_enhanced_chatbot.py": "2e4299eba8ef90dfb50b7c026320a6ec",
     "ai_compare\\knowledge_system.py": "4c533ece7efa5d899a0f161a42b1d4be",
     "ai_compare\\knowledge_tracker.py": "f94636b48d6fffff12b9f006abb5efd9",
     "ai_compare\\knowledge_vector_store.py": "86c32ac7bc562af8b68bbc1f579e232f",
@@ -41,6 +41,6 @@
     "requirements.txt": "a0c0ba845255584721907b0ff0aabe84",
     ".env": "598ed9df8f31de62af8949518c2e77af"
   },
-  "last_update": "2025-12-08T00:13:21.674457",
-  "update_count": 1262
+  "last_update": "2025-12-08T00:27:04.176228",
+  "update_count": 1319
 }
