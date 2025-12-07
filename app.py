@@ -194,6 +194,40 @@ def process_with_smart_response(message, character_name, ai_chat_function):
     history_key = f"{user_id}_{character_name}" if user_id else None
     message_history = message_histories.get(history_key, []) if history_key else []
     
+    # Load from database if not in memory (after server restart)
+    if not message_history and user_id and history_key and history_system:
+        try:
+            # Load last 20 messages from dual-layer history
+            db_history = history_system.get_conversation_history(
+                user_id, character_name, layer='primary', limit=20
+            )
+            
+            # Convert to message_history format (chronological order)
+            db_history.reverse()  # Oldest first
+            message_history = []
+            for msg in db_history:
+                # Add user message
+                message_history.append({
+                    'role': 'user',
+                    'content': msg['user_message'],
+                    'timestamp': msg['timestamp']
+                })
+                # Add assistant response
+                message_history.append({
+                    'role': 'assistant',
+                    'content': msg['assistant_response'],
+                    'timestamp': msg['timestamp']
+                })
+            
+            # Cache in memory for this session
+            message_histories[history_key] = message_history
+            
+            if message_history:
+                print(f"📚 Loaded {len(message_history)//2} conversation turns from database for {character_name}")
+        except Exception as e:
+            print(f"⚠️ Failed to load history from database: {e}")
+            message_history = []
+    
     # Smart Response only for authenticated users
     if smart_handler and user_id and context_manager:
         # Get conversation context
