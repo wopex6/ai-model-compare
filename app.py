@@ -322,20 +322,14 @@ def process_with_smart_response(message, character_name, ai_chat_function):
             return result
         
         # Log that we're using full AI
-        import time
         print(f"💸 API CALL ({character_name}) - Full AI for: '{message}' (confidence: {response_data['confidence']:.2f})")
-        print(f"⏱️ [{time.time():.2f}] Starting full AI flow")
         
         # Format context for AI prompt
-        print(f"⏱️ [{time.time():.2f}] Formatting context for prompt...")
         context_prompt = context_manager.format_context_for_prompt(context)
-        print(f"⏱️ [{time.time():.2f}] Context formatted")
         if context_prompt:
-            print(f"   📝 Passing context to AI: {len(context_prompt)} chars")
             # Prepend context to message so AI receives it
             # This makes AI aware of user's emotional state, goals, and preferences
             enhanced_message = f"{context_prompt}\n\nUser's current message: {message}"
-            print(f"   ✓ Context prepended to message for AI awareness")
         else:
             enhanced_message = message
     else:
@@ -383,23 +377,12 @@ def process_with_smart_response(message, character_name, ai_chat_function):
             return fallback_response
     
     # Use full AI (with context if available)
-    import time
     ai_call_success = False
     ai_error = None
     try:
-        print(f"⏱️ [{time.time():.2f}] STEP 1: About to call ai_chat_function for {character_name}")
-        print(f"   📨 Message length: {len(enhanced_message)} chars")
-        print(f"   🎯 Calling: {ai_chat_function.__name__ if hasattr(ai_chat_function, '__name__') else type(ai_chat_function)}")
-        
         response = ai_chat_function(enhanced_message)
-        
-        print(f"⏱️ [{time.time():.2f}] STEP 2: ai_chat_function returned successfully")
-        print(f"   ✅ Response received, length: {len(str(response)) if response else 0}")
         ai_call_success = True
     except Exception as e:
-        print(f"⏱️ [{time.time():.2f}] ❌ STEP 2 FAILED: Exception in ai_chat_function")
-        print(f"   Exception type: {type(e).__name__}")
-        print(f"   Exception message: {str(e)[:200]}")
         ai_error = str(e)
         ai_call_success = False
         # Notify user of API failure

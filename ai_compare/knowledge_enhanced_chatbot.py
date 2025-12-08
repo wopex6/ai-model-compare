@@ -36,17 +36,13 @@ class KnowledgeEnhancedMixin:
         Enhance a user message with relevant knowledge
         Returns: Context string to add to the prompt
         """
-        import time
-        print(f"⏱️ [{time.time():.2f}] enhance_with_knowledge: START")
-        
         if not self._knowledge_enabled:
-            print(f"⏱️ [{time.time():.2f}] enhance_with_knowledge: Knowledge disabled, returning empty")
             return ""
         
         try:
             # Search knowledge base
-            # FIXED: Run blocking search_knowledge() in thread pool to avoid blocking async loop
-            print(f"⏱️ [{time.time():.2f}] enhance_with_knowledge: Searching knowledge system...")
+            # NOTE: search_knowledge() is synchronous - causes blocking!
+            # Knowledge system disabled until proper async implementation
             import asyncio
             results = await asyncio.to_thread(
                 self.knowledge_system.search_knowledge,
@@ -54,7 +50,6 @@ class KnowledgeEnhancedMixin:
                 query=user_message,
                 n_results=n_results
             )
-            print(f"⏱️ [{time.time():.2f}] enhance_with_knowledge: Search returned {len(results) if results else 0} results")
             
             if not results:
                 return ""
@@ -81,7 +76,7 @@ class KnowledgeEnhancedMixin:
             return "\n".join(context_parts)
         
         except Exception as e:
-            print(f"Knowledge enhancement error: {e}")
+            # Silently fail - knowledge enhancement is optional
             return ""
     
     async def chat_with_knowledge(self, 
@@ -91,15 +86,8 @@ class KnowledgeEnhancedMixin:
         Chat with automatic knowledge enhancement
         Override this in your chatbot class
         """
-        import time
-        print(f"⏱️ [{time.time():.2f}] STEP 11: Inside chat_with_knowledge()")
-        print(f"   📚 Knowledge enabled: {self._knowledge_enabled}")
-        
         # Get knowledge context
-        print(f"⏱️ [{time.time():.2f}] STEP 12: Calling enhance_with_knowledge()")
         knowledge_context = await self.enhance_with_knowledge(user_message)
-        print(f"⏱️ [{time.time():.2f}] STEP 13: enhance_with_knowledge() returned")
-        print(f"   📖 Knowledge context length: {len(knowledge_context) if knowledge_context else 0}")
         
         # Combine with user message
         enhanced_message = user_message
@@ -107,11 +95,8 @@ class KnowledgeEnhancedMixin:
             enhanced_message = user_message + knowledge_context
         
         # Call parent chat method (must be implemented by child)
-        print(f"⏱️ [{time.time():.2f}] STEP 14: Calling parent (super) chat()")
         if hasattr(super(), 'chat'):
-            result = await super().chat(enhanced_message, include_context)
-            print(f"⏱️ [{time.time():.2f}] STEP 15: Parent chat() returned")
-            return result
+            return await super().chat(enhanced_message, include_context)
         else:
             raise NotImplementedError("Child class must implement chat() method")
     
