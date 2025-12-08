@@ -77,10 +77,15 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
             "icon": "fa-robot"
         })
     
-    async def chat(self, user_message: str, include_context: bool = True) -> Dict:
+    async def chat(self, user_message: str, include_context: bool = True, save_user_message: bool = True) -> Dict:
         """
         Enhanced chat with specialized knowledge
         Detects topic area and provides appropriate responses
+        
+        Args:
+            user_message: The user's message
+            include_context: Whether to include conversation history
+            save_user_message: Whether to save the user message (False when Smart Response already saved it)
         """
         # Detect what type of inquiry this is
         topic_area = self._detect_topic_area(user_message)
@@ -100,9 +105,9 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
         
         # For general conversation, use knowledge-enhanced chat if available
         if self._knowledge_enabled:
-            response = await self.chat_with_knowledge(user_message, include_context)
+            response = await self.chat_with_knowledge(user_message, include_context, save_user_message)
         else:
-            response = await super().chat(user_message)
+            response = await super().chat(user_message, include_context, save_user_message)
         
         # Add character-specific enhancement
         response = self._add_character_enhancement(response, user_message)
@@ -168,6 +173,7 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
                 return {"response": response, "concept_explained": concept_key}
         
         # If no specific concept found, use knowledge-enhanced chat
+        # Note: save_user_message not available in this context (concept lookup)
         if self._knowledge_enabled:
             return await self.chat_with_knowledge(message)
         else:
@@ -219,7 +225,7 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
         if self._knowledge_enabled:
             return await self.chat_with_knowledge(message)
         else:
-            return await super().chat(message)
+            return await super().chat(message, include_context=False, save_user_message=False)
     
     async def _explain_approach(self, message: str) -> Dict:
         """Explain an approach/method from configured approaches"""

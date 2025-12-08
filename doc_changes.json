@@ -3,7 +3,7 @@
     "ai_compare\\adaptive_personality.py": "3b294733e2fead11a2e1189770156190",
     "ai_compare\\admin_logger.py": "bc84a8a3407fd69c6b6eea16e89ae757",
     "ai_compare\\base_chatbot.py": "84a10ec8aa5c38ff31502bb76c32d777",
-    "ai_compare\\base_enhanced_chatbot.py": "efb8376c1546d1483282ad35184d1780",
+    "ai_compare\\base_enhanced_chatbot.py": "3cb978d6df7d55af815c00b698d90318",
     "ai_compare\\character_configs.py": "378d1d49f96d5c92f6b727947924378e",
     "ai_compare\\character_factory.py": "20d2cdb76163504543f68581ee40bdd2",
     "ai_compare\\character_routes.py": "c852f4c6cd0b03557a617b0371e22a72",
@@ -37,10 +37,10 @@
     "ai_compare\\user_profile_manager.py": "ba541700b0809395afa6046e650a7d80",
     "ai_compare\\wisdom_chatbot.py": "72978aa47f4bf569ead543d4cc90d2f0",
     "ai_compare\\__init__.py": "d41d8cd98f00b204e9800998ecf8427e",
-    "app.py": "7e7f3b9f0471606205e03de1cb0feaf0",
+    "app.py": "682a5e29f560b8cb2bb92fc4b771ac41",
     "requirements.txt": "a0c0ba845255584721907b0ff0aabe84",
     ".env": "598ed9df8f31de62af8949518c2e77af"
   },
-  "last_update": "2025-12-08T20:07:15.492211",
-  "update_count": 930
+  "last_update": "2025-12-08T20:32:09.545212",
+  "update_count": 1061
 }
