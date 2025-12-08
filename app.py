@@ -7,6 +7,18 @@ from dotenv import load_dotenv
 _env_path = Path(__file__).parent / '.env'
 load_dotenv(_env_path, override=True)
 
+# Fix Windows console encoding for Unicode characters (emojis, checkmarks, etc.)
+import sys
+if sys.platform == 'win32':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except AttributeError:
+        # Python < 3.7
+        import codecs
+        sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+        sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
+
 # Now import everything else
 from flask import Flask, render_template, request, jsonify, session, redirect, send_from_directory
 from flask_cors import CORS
