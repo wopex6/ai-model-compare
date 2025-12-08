@@ -59,7 +59,7 @@ class BaseChatbot(ABC):
         self.conversation_history = []
         self.adaptive_personality = AdaptivePersonality(self.session_id, self.personality_profiler)
     
-    async def chat(self, user_message: str, include_context: bool = True) -> Dict[str, any]:
+    async def chat(self, user_message: str, include_context: bool = True, save_user_message: bool = True) -> Dict[str, any]:
         """
         CORE PROCESSING PIPELINE - Shared by all characters
         
@@ -72,6 +72,7 @@ class BaseChatbot(ABC):
         Args:
             user_message: User's input message
             include_context: Whether to include conversation history
+            save_user_message: Whether to save the user message (False when Smart Response already saved it)
             
         Returns:
             Dict with response and metadata
@@ -86,7 +87,7 @@ class BaseChatbot(ABC):
         final_response_data = await self._postprocess_response(response_data, user_message)
         
         # STEP 4: Save to database (shared by all)
-        await self._save_conversation(user_message, final_response_data)
+        await self._save_conversation(user_message, final_response_data, save_user_message)
         
         return final_response_data
     
@@ -182,20 +183,22 @@ class BaseChatbot(ABC):
         # Characters can override to add their own enhancements
         return response_data
     
-    async def _save_conversation(self, user_message: str, response_data: Dict):
+    async def _save_conversation(self, user_message: str, response_data: Dict, save_user_message: bool = True):
         """
         Save conversation to database - SHARED BY ALL CHARACTERS
         This ensures consistent data storage
         
         Args:
-            user_message: User's message
-            response_data: AI's response data
+            user_message: The user's message
+            response_data: The response data dict
+            save_user_message: Whether to save user message (False when Smart Response already saved it)
         """
-        # Save user message
-        self.conversation_manager.save_message(
-            self.session_id, "user", user_message,
-            {"personality_adapted": True}
-        )
+        # Save user message only if not already saved by Smart Response
+        if save_user_message:
+            self.conversation_manager.save_message(
+                self.session_id, "user", user_message,
+                {"personality_adapted": True}
+            )
         
         # Save assistant response
         self.conversation_manager.save_message(
