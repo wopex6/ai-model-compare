@@ -107,7 +107,17 @@ class AICompare:
             
             return (model_name, response)
         except Exception as e:
-            return (model_name, f"Error: {str(e)}")
+            # Provide user-friendly error message with model name
+            error_type = type(e).__name__
+            if "timeout" in str(e).lower():
+                error_msg = f"Error: {model_name} timed out. Try again or use another model."
+            elif "rate" in str(e).lower() and "limit" in str(e).lower():
+                error_msg = f"Error: {model_name} rate limit reached. Please wait a moment."
+            elif "api" in str(e).lower() or "key" in str(e).lower():
+                error_msg = f"Error: {model_name} API issue. Check configuration."
+            else:
+                error_msg = f"Error: {model_name} - {error_type}: {str(e)[:100]}"
+            return (model_name, error_msg)
     
     async def summarize_responses(self, responses: Dict[str, str], model_name: str = None) -> str:
         """Use specified model to summarize all responses."""
