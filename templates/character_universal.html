@@ -435,11 +435,12 @@
                 
                 document.getElementById('typingIndicator').style.display = 'none';
                 
-                // Save session ID if returned (for new sessions)
-                if (data.session_id && !sessionId) {
+                // CRITICAL FIX: Always update session ID to stay in sync with backend
+                if (data.session_id) {
+                    const isNewSession = !sessionId;
                     sessionId = data.session_id;
                     setCookie(`session_${characterId}`, sessionId);
-                    console.log(`New session created: ${sessionId}`);
+                    console.log(isNewSession ? `🆕 New session: ${sessionId}` : `🔄 Session updated: ${sessionId}`);
                 }
                 
                 if (data.response) {
