@@ -22,8 +22,74 @@ def test_conversation_history_in_browser():
         # Enable console logging
         page.on("console", lambda msg: print(f"   [Browser Console] {msg.type}: {msg.text}"))
         
+        # Capture network requests to see API calls
+        history_responses = []
+        chat_responses = []
+        def handle_response(response):
+            if '/history' in response.url:
+                try:
+                    body = response.json()
+                    history_responses.append({
+                        'url': response.url,
+                        'status': response.status,
+                        'body': body
+                    })
+                    print(f"   [Network] History API called: {response.url}")
+                    print(f"   [Network] Status: {response.status}")
+                    print(f"   [Network] Response: {body}")
+                except:
+                    pass
+            elif '/chat' in response.url and 'scientist' in response.url:
+                try:
+                    body = response.json()
+                    chat_responses.append({
+                        'url': response.url,
+                        'status': response.status,
+                        'body': body
+                    })
+                    print(f"   [Network] Chat API called: {response.url}")
+                    print(f"   [Network] Status: {response.status}")
+                    print(f"   [Network] Session ID in response: {body.get('session_id', 'MISSING!')}")
+                except:
+                    pass
+        
+        page.on("response", handle_response)
+        
+        # LOGIN FIRST
+        print("\n2️⃣ Logging in...")
+        page.goto("http://localhost:5000/")
+        page.wait_for_load_state("networkidle")
+        time.sleep(1)
+        
+        # Click "Login here" link to show login form
+        try:
+            login_link = page.locator("#show-login")
+            if login_link.is_visible(timeout=2000):
+                print("   Clicking 'Login here' link...")
+                login_link.click()
+                time.sleep(1)
+        except:
+            print("   Login form already visible or link not found")
+        
+        # Fill in login credentials
+        print("   Filling in credentials...")
+        username_field = page.locator("#login-username")
+        password_field = page.locator("#login-password")
+        
+        username_field.fill("Wai Tse")
+        password_field.fill("123")
+        
+        # Submit login
+        print("   Submitting login...")
+        login_button = page.locator("#login-form button[type='submit']")
+        login_button.click()
+        
+        # Wait for login to complete
+        time.sleep(2)
+        print("   ✅ Logged in successfully")
+        
         # Navigate to scientist page
-        print("\n2️⃣ Navigating to scientist page...")
+        print("\n3️⃣ Navigating to scientist page...")
         page.goto("http://localhost:5000/scientist")
         
         # Wait for page to load
@@ -73,9 +139,13 @@ def test_conversation_history_in_browser():
             return False
         
         # Send first message
-        print("\n3️⃣ Sending first message: 'Hello, my name is Alice'...")
+        print("\n4️⃣ Sending first message: 'Hello, my name is Alice'...")
         input_field = page.locator("#userInput")
         input_field.fill("Hello, my name is Alice")
+        
+        # Check session_id BEFORE sending
+        session_before = page.evaluate("() => window.sessionId")
+        print(f"   Session ID before send: {session_before}")
         
         send_button = page.locator(".send-btn-sci")
         send_button.click()
@@ -84,13 +154,17 @@ def test_conversation_history_in_browser():
         print("   ⏳ Waiting for AI response...")
         time.sleep(5)  # Wait for quick reply or AI response
         
+        # Check session_id AFTER sending
+        session_after = page.evaluate("() => window.sessionId")
+        print(f"   Session ID after send: {session_after}")
+        
         # Check if message appears in chat
         messages = page.locator(".message-sci")
         message_count = messages.count()
         print(f"   ✅ Messages in chat: {message_count}")
         
         # Send second message
-        print("\n4️⃣ Sending second message: 'I like quantum physics'...")
+        print("\n5️⃣ Sending second message: 'I like quantum physics'...")
         input_field.fill("I like quantum physics")
         send_button.click()
         
@@ -103,37 +177,41 @@ def test_conversation_history_in_browser():
         print(f"   ✅ Messages in chat: {new_count}")
         
         # Check cookies - THIS IS CRITICAL!
-        print("\n5️⃣ Checking session cookie...")
+        print("\n6️⃣ Checking session cookie...")
         cookies = context.cookies()
         session_cookie = None
         
         for cookie in cookies:
             if cookie['name'].startswith('session_'):
                 session_cookie = cookie
-                print(f"   ✅ Found cookie: {cookie['name']} = {cookie['value'][:30]}...")
+                print(f"   ✅ Found cookie: {cookie['name']} = {cookie['value']}...")
                 break
         
         if not session_cookie:
             print("   ❌ ERROR: No session cookie found!")
             print(f"   Available cookies: {[c['name'] for c in cookies]}")
         
+        # Also check what session_id is in the page's JavaScript
+        session_id_from_js = page.evaluate("() => window.sessionId")
+        print(f"   Session ID in JavaScript: {session_id_from_js}")
+        
         # Get current message count before leaving
         messages_before = page.locator(".message-sci").count()
-        print(f"\n6️⃣ Current message count: {messages_before}")
+        print(f"\n7️⃣ Current message count: {messages_before}")
         
         # CRITICAL TEST: Leave the page
-        print("\n7️⃣ Leaving page (navigating to home)...")
+        print("\n8️⃣ Leaving page (navigating to home)...")
         page.goto("http://localhost:5000/")
         time.sleep(1)
         
         # Return to scientist page
-        print("\n8️⃣ Returning to scientist page...")
+        print("\n9️⃣ Returning to scientist page...")
         page.goto("http://localhost:5000/scientist")
         page.wait_for_load_state("networkidle")
         time.sleep(3)  # Wait for history to load
         
         # Check if messages are still there
-        print("\n9️⃣ Checking if history loaded...")
+        print("\n🔟 Checking if history loaded...")
         messages_after = page.locator(".message-sci").count()
         print(f"   Messages after return: {messages_after}")
         print(f"   Messages before leaving: {messages_before}")
