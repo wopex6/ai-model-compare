@@ -6,7 +6,7 @@
     "ai_compare\\base_enhanced_chatbot.py": "efb8376c1546d1483282ad35184d1780",
     "ai_compare\\character_configs.py": "378d1d49f96d5c92f6b727947924378e",
     "ai_compare\\character_factory.py": "20d2cdb76163504543f68581ee40bdd2",
-    "ai_compare\\character_routes.py": "456c48f6ebc44f2c295938ef7bd387d5",
+    "ai_compare\\character_routes.py": "c852f4c6cd0b03557a617b0371e22a72",
     "ai_compare\\chatbot.py": "b8a17d31ad8610d2d08a3f041075df68",
     "ai_compare\\chatbot_personality.py": "025d04afba774d1b46ffec853e44e7f2",
     "ai_compare\\compare.py": "cbd13ee42e1e6a0d8f49ec43be482aaa",
@@ -41,6 +41,6 @@
     "requirements.txt": "a0c0ba845255584721907b0ff0aabe84",
     ".env": "598ed9df8f31de62af8949518c2e77af"
   },
-  "last_update": "2025-12-08T19:30:51.613981",
-  "update_count": 784
+  "last_update": "2025-12-08T20:07:15.492211",
+  "update_count": 930
 }
