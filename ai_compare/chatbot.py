@@ -51,13 +51,14 @@ class AIChatbot:
         # Initialize adaptive personality for this session
         self.adaptive_personality = AdaptivePersonality(self.session_id, self.personality_profiler)
     
-    async def chat(self, user_message: str, include_context: bool = True) -> Dict[str, any]:
+    async def chat(self, user_message: str, include_context: bool = True, save_user_message: bool = True) -> Dict[str, any]:
         """
         Process user message and generate personality-aware response
         
         Args:
             user_message: The user's input message
             include_context: Whether to include conversation context
+            save_user_message: Whether to save the user message (False when Smart Response already saved it)
             
         Returns:
             Dict containing response, metadata, and conversation info
@@ -100,10 +101,13 @@ class AIChatbot:
         final_response = self.adaptive_personality.adapt_response_style(user_message, base_response)
         
         # Save messages to persistent storage
-        self.conversation_manager.save_message(
-            self.session_id, "user", user_message,
-            {"personality_adapted": True}
-        )
+        # Only save user message if not already saved by Smart Response
+        if save_user_message:
+            self.conversation_manager.save_message(
+                self.session_id, "user", user_message,
+                {"personality_adapted": True}
+            )
+        
         self.conversation_manager.save_message(
             self.session_id, "assistant", final_response,
             {

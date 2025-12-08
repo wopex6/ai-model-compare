@@ -120,10 +120,15 @@ def _register_chat_endpoint(app, character_id, characters_dict, smart_response_p
             
             # Use Smart Response if available
             if smart_response_processor:
+                # CRITICAL FIX: Save original message, not enhanced one
+                # Smart Response adds context for AI, but user should see their original message
+                bot.conversation_manager.save_message(session_id, "user", message)
+                
                 def ai_function(enhanced_message):
                     # Use persistent event loop (no create/close warnings)
                     # enhanced_message includes explicit context prepended by Smart Response
-                    return _run_async(bot.chat(enhanced_message, include_context))
+                    # Pass save_user_message=False to prevent double-saving
+                    return _run_async(bot.chat(enhanced_message, include_context, save_user_message=False))
                 
                 response = smart_response_processor(message, character_id, ai_function)
             else:
