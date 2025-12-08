@@ -232,23 +232,11 @@ def investigate_history_issues():
             for log in error_logs[-5:]:
                 print(f"  {log}")
         
-        print("\n=== SAVING DEBUG INFO ===")
-        with open('playwright_debug_output.json', 'w') as f:
-            json.dump({
-                'console_logs': console_logs,
-                'network_requests': network_requests,
-                'network_responses': network_responses,
-                'user_messages_count': len(user_messages_after),
-                'bot_messages_count': len(bot_messages_after),
-                'refresh_test_results': bot_message_counts
-            }, f, indent=2)
-        print("✓ Debug info saved to playwright_debug_output.json")
-        
         # Take screenshot
         timestamp_str = str(int(time.time()))
         screenshot_path = f'test_screenshots/history_investigation_{timestamp_str}.png'
         page.screenshot(path=screenshot_path)
-        print(f"✓ Screenshot saved to {screenshot_path}")
+        print(f"\n✓ Screenshot saved to {screenshot_path}")
         
         # NEW: Test multiple refreshes to check for intermittent issues
         print("\n=== STEP 7: MULTIPLE REFRESH TEST (5 iterations) ===")
@@ -291,6 +279,18 @@ def investigate_history_issues():
             print("  ⚠️  INTERMITTENT ISSUE CONFIRMED: Bot message visibility varies!")
         else:
             print("  ✓ Bot message visibility consistent across refreshes")
+        
+        print("\n=== SAVING DEBUG INFO ===")
+        with open('playwright_debug_output.json', 'w') as f:
+            json.dump({
+                'console_logs': console_logs,
+                'network_requests': network_requests,
+                'network_responses': network_responses,
+                'user_messages_count': len(user_messages_after),
+                'bot_messages_count': len(bot_messages_after),
+                'refresh_test_results': bot_message_counts
+            }, f, indent=2)
+        print("✓ Debug info saved to playwright_debug_output.json")
         
         # Keep browser open for manual inspection
         print("\n=== BROWSER OPEN FOR INSPECTION ===")
