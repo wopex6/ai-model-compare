@@ -577,9 +577,16 @@
                         document.getElementById('chatMessages').innerHTML = '';
                         
                         // Display all messages
-                        data.messages.forEach(msg => {
+                        console.log(`📊 Message breakdown:`);
+                        const userMsgs = data.messages.filter(m => m.role === 'user').length;
+                        const assistantMsgs = data.messages.filter(m => m.role === 'assistant').length;
+                        console.log(`   User messages: ${userMsgs}, Assistant messages: ${assistantMsgs}`);
+                        
+                        data.messages.forEach((msg, index) => {
                             const sender = msg.role === 'user' ? 'user' : 'bot';
                             const timestamp = msg.timestamp || new Date().toISOString();
+                            const preview = msg.content.substring(0, 50);
+                            console.log(`   ${index + 1}. [${msg.role}] → [${sender}] ${preview}...`);
                             addMessage(msg.content, sender, false, timestamp); // Don't scroll for each
                         });
                         
@@ -700,6 +707,8 @@
             
             messageDiv.appendChild(bubble);
             messagesDiv.appendChild(messageDiv);
+            
+            console.log(`✅ Added ${sender} message to DOM: "${text.substring(0, 30)}..."`);
             
             if (shouldScroll) {
                 messagesDiv.scrollTop = messagesDiv.scrollHeight;
