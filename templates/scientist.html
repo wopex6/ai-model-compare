@@ -580,7 +580,8 @@
                         // Display all messages
                         data.messages.forEach(msg => {
                             const sender = msg.role === 'user' ? 'user' : 'bot';
-                            addMessage(msg.content, sender, false); // Don't scroll for each
+                            const timestamp = msg.timestamp || new Date().toISOString();
+                            addMessage(msg.content, sender, false, timestamp); // Don't scroll for each
                         });
                         
                         // Update query count
@@ -630,7 +631,7 @@
             
             if (!message) return;
             
-            addMessage(message, 'user');
+            addMessage(message, 'user', true, new Date().toISOString());
             input.value = '';
             
             queryCount++;
@@ -667,7 +668,7 @@
                 }
                 
                 if (data.response) {
-                    addMessage(data.response, 'bot');
+                    addMessage(data.response, 'bot', true, new Date().toISOString());
                 }
             } catch (error) {
                 console.error('Error:', error);
@@ -675,16 +676,26 @@
             }
         }
 
-        function addMessage(text, sender, shouldScroll = true) {
+        function addMessage(text, sender, shouldScroll = true, timestamp = null) {
             const messagesDiv = document.getElementById('chatMessages');
             const messageDiv = document.createElement('div');
             messageDiv.className = `message-sci ${sender}`;
             
             const bubble = document.createElement('div');
             bubble.className = 'message-bubble-sci';
+            
+            // Format timestamp
+            let timeStr = '';
+            if (timestamp) {
+                const date = new Date(timestamp);
+                const hours = date.getHours().toString().padStart(2, '0');
+                const minutes = date.getMinutes().toString().padStart(2, '0');
+                timeStr = `<span style="font-size: 0.75em; color: #888; margin-left: 8px;">${hours}:${minutes}</span>`;
+            }
+            
             bubble.innerHTML = sender === 'bot' 
-                ? `<strong>Dr. Nova:</strong> ${text}`
-                : `<strong>You:</strong> ${text}`;
+                ? `<strong>Dr. Nova:</strong> ${text}${timeStr}`
+                : `<strong>You:</strong> ${text}${timeStr}`;
             
             messageDiv.appendChild(bubble);
             messagesDiv.appendChild(messageDiv);
