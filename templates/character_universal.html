@@ -324,17 +324,75 @@
     <script>
         const characterId = "{{ character_id }}";
         let messageCount = 0;
+        let sessionId = null;
 
-        // Load daily insight
+        // Load daily insight and conversation history
         window.addEventListener('load', async () => {
             try {
-                const response = await fetch(`/${characterId}/daily-insight`);
-                const data = await response.json();
-                document.getElementById('dailyInsight').textContent = data.insight || data.wisdom || data;
+                // Load daily insight
+                const insightResponse = await fetch(`/${characterId}/daily-insight`);
+                const insightData = await insightResponse.json();
+                document.getElementById('dailyInsight').textContent = insightData.insight || insightData.wisdom || insightData;
             } catch (error) {
                 console.error('Error loading daily insight:', error);
             }
+
+            // Load conversation history
+            await loadConversationHistory();
         });
+
+        async function loadConversationHistory() {
+            try {
+                // Get session ID from cookie or create new session
+                sessionId = getCookie(`session_${characterId}`);
+                
+                if (sessionId) {
+                    console.log(`Loading history for session: ${sessionId}`);
+                    
+                    // Fetch conversation history from backend
+                    const response = await fetch(`/${characterId}/history?session_id=${sessionId}`);
+                    const data = await response.json();
+                    
+                    if (data.messages && data.messages.length > 0) {
+                        console.log(`Loaded ${data.messages.length} messages from history`);
+                        
+                        // Clear welcome message
+                        document.getElementById('chatMessages').innerHTML = '';
+                        
+                        // Display all messages
+                        data.messages.forEach(msg => {
+                            const sender = msg.role === 'user' ? 'user' : 'bot';
+                            addMessage(msg.content, sender, false); // Don't scroll for each
+                        });
+                        
+                        // Update message count
+                        messageCount = data.messages.length;
+                        document.getElementById('messageCount').textContent = messageCount;
+                        
+                        // Scroll to bottom once
+                        const messagesDiv = document.getElementById('chatMessages');
+                        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                    }
+                } else {
+                    console.log('No existing session found, starting new conversation');
+                }
+            } catch (error) {
+                console.error('Error loading conversation history:', error);
+            }
+        }
+
+        function getCookie(name) {
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
+            return null;
+        }
+
+        function setCookie(name, value, days = 365) {
+            const expires = new Date();
+            expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
+            document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`;
+        }
 
         function handleKeyPress(event) {
             if (event.key === 'Enter') {
@@ -367,12 +425,22 @@
                     headers: {
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ message: message })
+                    body: JSON.stringify({ 
+                        message: message,
+                        session_id: sessionId 
+                    })
                 });
                 
                 const data = await response.json();
                 
                 document.getElementById('typingIndicator').style.display = 'none';
+                
+                // Save session ID if returned (for new sessions)
+                if (data.session_id && !sessionId) {
+                    sessionId = data.session_id;
+                    setCookie(`session_${characterId}`, sessionId);
+                    console.log(`New session created: ${sessionId}`);
+                }
                 
                 if (data.response) {
                     addMessage(data.response, 'bot');
@@ -386,7 +454,7 @@
             }
         }
 
-        function addMessage(text, sender) {
+        function addMessage(text, sender, shouldScroll = true) {
             const messagesDiv = document.getElementById('chatMessages');
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${sender}`;
@@ -402,7 +470,10 @@
             
             messageDiv.appendChild(bubble);
             messagesDiv.appendChild(messageDiv);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            
+            if (shouldScroll) {
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
         }
     </script>
 </body>
