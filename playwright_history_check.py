@@ -53,8 +53,8 @@ def test_conversation_history_in_browser():
         input_exists = page.locator("#userInput").is_visible(timeout=5000)
         print(f"   Input field visible: {input_exists}")
         
-        # Check if button exists
-        button_exists = page.locator(".send-btn").is_visible(timeout=5000)
+        # Check if button exists (scientist uses custom class)
+        button_exists = page.locator(".send-btn-sci").is_visible(timeout=5000)
         print(f"   Send button visible: {button_exists}")
         
         if not button_exists:
@@ -77,7 +77,7 @@ def test_conversation_history_in_browser():
         input_field = page.locator("#userInput")
         input_field.fill("Hello, my name is Alice")
         
-        send_button = page.locator(".send-btn")
+        send_button = page.locator(".send-btn-sci")
         send_button.click()
         
         # Wait for response
@@ -85,7 +85,7 @@ def test_conversation_history_in_browser():
         time.sleep(5)  # Wait for quick reply or AI response
         
         # Check if message appears in chat
-        messages = page.locator(".message")
+        messages = page.locator(".message-sci")
         message_count = messages.count()
         print(f"   ✅ Messages in chat: {message_count}")
         
@@ -98,7 +98,7 @@ def test_conversation_history_in_browser():
         time.sleep(5)
         
         # Check message count increased
-        messages = page.locator(".message")
+        messages = page.locator(".message-sci")
         new_count = messages.count()
         print(f"   ✅ Messages in chat: {new_count}")
         
@@ -118,7 +118,7 @@ def test_conversation_history_in_browser():
             print(f"   Available cookies: {[c['name'] for c in cookies]}")
         
         # Get current message count before leaving
-        messages_before = page.locator(".message").count()
+        messages_before = page.locator(".message-sci").count()
         print(f"\n6️⃣ Current message count: {messages_before}")
         
         # CRITICAL TEST: Leave the page
@@ -134,7 +134,7 @@ def test_conversation_history_in_browser():
         
         # Check if messages are still there
         print("\n9️⃣ Checking if history loaded...")
-        messages_after = page.locator(".message").count()
+        messages_after = page.locator(".message-sci").count()
         print(f"   Messages after return: {messages_after}")
         print(f"   Messages before leaving: {messages_before}")
         
