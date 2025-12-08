@@ -2,6 +2,7 @@
 Playwright test to investigate conversation history issues
 - Issue 1: Smart Response history not displayed
 - Issue 2: Temporary AI problems
+- Issue 3: Bot messages intermittently visible/invisible
 """
 
 from playwright.sync_api import sync_playwright, expect
@@ -128,6 +129,36 @@ def investigate_history_issues():
         print(f"✓ User messages after return: {len(user_messages_after)}")
         print(f"✓ Bot messages after return: {len(bot_messages_after)}")
         
+        # NEW: Check CSS visibility of bot messages
+        print("\n=== CHECKING BOT MESSAGE VISIBILITY ===")
+        for i, bot_msg in enumerate(bot_messages_after[:3]):
+            try:
+                is_visible = bot_msg.is_visible()
+                bounding_box = bot_msg.bounding_box()
+                computed_style = page.evaluate('''(element) => {
+                    const style = window.getComputedStyle(element);
+                    return {
+                        display: style.display,
+                        visibility: style.visibility,
+                        opacity: style.opacity,
+                        textAlign: style.textAlign,
+                        width: style.width,
+                        height: style.height
+                    };
+                }''', bot_msg)
+                
+                print(f"  Bot message {i+1}:")
+                print(f"    is_visible(): {is_visible}")
+                print(f"    bounding_box: {bounding_box}")
+                print(f"    CSS display: {computed_style['display']}")
+                print(f"    CSS visibility: {computed_style['visibility']}")
+                print(f"    CSS opacity: {computed_style['opacity']}")
+                print(f"    CSS text-align: {computed_style['textAlign']}")
+                print(f"    CSS width: {computed_style['width']}")
+                print(f"    CSS height: {computed_style['height']}")
+            except Exception as e:
+                print(f"  Bot message {i+1}: ERROR - {e}")
+        
         # Check for our test message
         page_text = page.inner_text('#chatMessages')
         if test_message[:20] in page_text:
@@ -208,13 +239,58 @@ def investigate_history_issues():
                 'network_requests': network_requests,
                 'network_responses': network_responses,
                 'user_messages_count': len(user_messages_after),
-                'bot_messages_count': len(bot_messages_after)
+                'bot_messages_count': len(bot_messages_after),
+                'refresh_test_results': bot_message_counts
             }, f, indent=2)
         print("✓ Debug info saved to playwright_debug_output.json")
         
         # Take screenshot
-        page.screenshot(path='test_screenshots/history_investigation.png')
-        print("✓ Screenshot saved to test_screenshots/history_investigation.png")
+        timestamp_str = str(int(time.time()))
+        screenshot_path = f'test_screenshots/history_investigation_{timestamp_str}.png'
+        page.screenshot(path=screenshot_path)
+        print(f"✓ Screenshot saved to {screenshot_path}")
+        
+        # NEW: Test multiple refreshes to check for intermittent issues
+        print("\n=== STEP 7: MULTIPLE REFRESH TEST (5 iterations) ===")
+        bot_message_counts = []
+        for iteration in range(5):
+            print(f"\n  Iteration {iteration + 1}/5:")
+            page.reload()
+            time.sleep(3)
+            
+            user_msgs = page.query_selector_all('.message-sci.user, .message.user')
+            bot_msgs = page.query_selector_all('.message-sci.bot, .message.bot')
+            
+            # Check visible bot messages
+            visible_bot_msgs = [m for m in bot_msgs if m.is_visible()]
+            
+            print(f"    User messages: {len(user_msgs)}")
+            print(f"    Bot messages (total): {len(bot_msgs)}")
+            print(f"    Bot messages (visible): {len(visible_bot_msgs)}")
+            
+            bot_message_counts.append({
+                'iteration': iteration + 1,
+                'total': len(bot_msgs),
+                'visible': len(visible_bot_msgs)
+            })
+            
+            # If bot messages missing, take screenshot
+            if len(bot_msgs) > 0 and len(visible_bot_msgs) < len(bot_msgs):
+                screenshot_name = f'test_screenshots/bot_messages_missing_iter{iteration+1}.png'
+                page.screenshot(path=screenshot_name)
+                print(f"    ⚠️  MISMATCH! Screenshot: {screenshot_name}")
+        
+        print("\n  === CONSISTENCY CHECK ===")
+        totals = [c['total'] for c in bot_message_counts]
+        visibles = [c['visible'] for c in bot_message_counts]
+        
+        print(f"  Bot message totals: {totals}")
+        print(f"  Bot message visible: {visibles}")
+        
+        if len(set(visibles)) > 1:
+            print("  ⚠️  INTERMITTENT ISSUE CONFIRMED: Bot message visibility varies!")
+        else:
+            print("  ✓ Bot message visibility consistent across refreshes")
         
         # Keep browser open for manual inspection
         print("\n=== BROWSER OPEN FOR INSPECTION ===")
