@@ -528,6 +528,9 @@
         </div>
     </div>
 
+    <script src="{{ url_for('static', filename='auth_helper.js') }}"></script>
+    <script src="{{ url_for('static', filename='character_history.js') }}"></script>
+    
     <script>
         // Create stars
         const starsContainer = document.getElementById('starsContainer');
@@ -541,7 +544,7 @@
         }
 
         let queryCount = 0;
-        let sessionId = null;
+        let historyManager = null;  // Will be initialized on load
 
         window.addEventListener('load', async () => {
             try {
@@ -655,11 +658,12 @@
                 
                 const data = await response.json();
                 
-                // Save session ID if returned (for new sessions)
-                if (data.session_id && !sessionId) {
+                // CRITICAL FIX: Always update session ID to stay in sync with backend
+                if (data.session_id) {
+                    const isNewSession = !sessionId;
                     sessionId = data.session_id;
                     setCookie('session_scientist', sessionId);
-                    console.log(`New session created: ${sessionId}`);
+                    console.log(isNewSession ? `🆕 New session: ${sessionId}` : `🔄 Session updated: ${sessionId}`);
                 }
                 
                 if (data.response) {
