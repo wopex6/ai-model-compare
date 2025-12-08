@@ -106,10 +106,17 @@ def _register_chat_endpoint(app, character_id, characters_dict, smart_response_p
             if not bot:
                 return jsonify({'error': f'Character {character_id} not initialized'}), 500
             
-            # Create new session if not provided
+            # Create new session if not provided, or load existing session
             if not session_id:
                 session_id = bot.conversation_manager.create_session(character_id)
                 print(f"Created new session: {session_id}")
+            else:
+                # Load the session so bot uses correct session_id
+                print(f"Loading existing session: {session_id}")
+            
+            # CRITICAL: Set the bot's session_id to the request's session_id
+            # This ensures messages are saved to the correct session
+            bot.session_id = session_id
             
             # Use Smart Response if available
             if smart_response_processor:
