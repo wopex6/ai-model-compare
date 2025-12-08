@@ -471,7 +471,9 @@
                 const date = new Date(timestamp);
                 const hours = date.getHours().toString().padStart(2, '0');
                 const minutes = date.getMinutes().toString().padStart(2, '0');
-                timeStr = `<span style="font-size: 0.75em; color: #888; margin-left: 8px;">${hours}:${minutes}</span>`;
+                // Blue for user, gray for bot
+                const color = sender === 'user' ? '#4A9EFF' : '#888';
+                timeStr = `<span style="font-size: 0.75em; color: ${color}; margin-left: 8px;">${hours}:${minutes}</span>`;
             }
             
             if (sender === 'bot') {
