@@ -60,6 +60,7 @@ def register_character_routes(app, characters_dict, smart_response_processor=Non
         _register_chat_endpoint(app, char_id, characters_dict, smart_response_processor)
         _register_insight_endpoint(app, char_id, characters_dict)
         _register_stats_endpoint(app, char_id, characters_dict)
+        _register_history_endpoint(app, char_id, characters_dict)
 
 
 def _register_character_page(app, character_id):
@@ -95,6 +96,7 @@ def _register_chat_endpoint(app, character_id, characters_dict, smart_response_p
             data = request.get_json()
             message = data.get('message', '')
             include_context = data.get('include_context', True)
+            session_id = data.get('session_id')  # Get session ID from request
             
             if not message.strip():
                 return jsonify({'error': 'Message cannot be empty'}), 400
@@ -103,6 +105,11 @@ def _register_chat_endpoint(app, character_id, characters_dict, smart_response_p
             bot = characters_dict.get(character_id)
             if not bot:
                 return jsonify({'error': f'Character {character_id} not initialized'}), 500
+            
+            # Create new session if not provided
+            if not session_id:
+                session_id = bot.conversation_manager.create_session(character_id)
+                print(f"Created new session: {session_id}")
             
             # Use Smart Response if available
             if smart_response_processor:
@@ -116,6 +123,12 @@ def _register_chat_endpoint(app, character_id, characters_dict, smart_response_p
                 # Fallback to direct AI if Smart Response not available
                 # Use persistent event loop (no create/close warnings)
                 response = _run_async(bot.chat(message, include_context))
+            
+            # Add session_id to response
+            if isinstance(response, dict):
+                response['session_id'] = session_id
+            else:
+                response = {'response': response, 'session_id': session_id}
             
             return jsonify(response)
         except Exception as e:
@@ -174,4 +187,35 @@ def _register_stats_endpoint(app, character_id, characters_dict):
         f'/{character_id}/stats',
         endpoint=f'{character_id}_stats',
         view_func=character_stats
+    )
+
+
+def _register_history_endpoint(app, character_id, characters_dict):
+    """Register conversation history endpoint"""
+    
+    def character_history():
+        try:
+            session_id = request.args.get('session_id')
+            
+            if not session_id:
+                return jsonify({'messages': []}), 200
+            
+            bot = characters_dict.get(character_id)
+            if not bot:
+                return jsonify({'error': f'Character {character_id} not initialized'}), 500
+            
+            # Get conversation history from conversation manager
+            messages = bot.conversation_manager.get_conversation_history(session_id)
+            
+            return jsonify({'messages': messages})
+        except Exception as e:
+            print(f"Error in {character_id} history: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    # Register route
+    app.add_url_rule(
+        f'/{character_id}/history',
+        endpoint=f'{character_id}_history',
+        view_func=character_history,
+        methods=['GET']
     )
