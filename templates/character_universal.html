@@ -362,7 +362,9 @@
                         // Display all messages
                         data.messages.forEach(msg => {
                             const sender = msg.role === 'user' ? 'user' : 'bot';
-                            addMessage(msg.content, sender, false); // Don't scroll for each
+                            const timestamp = msg.timestamp || new Date().toISOString();
+                            console.log(`📝 Loading message: [${sender}] ${msg.content.substring(0, 50)}... (${timestamp})`);
+                            addMessage(msg.content, sender, false, timestamp); // Don't scroll for each
                         });
                         
                         // Update message count
@@ -411,7 +413,7 @@
             
             if (!message) return;
             
-            addMessage(message, 'user');
+            addMessage(message, 'user', true, new Date().toISOString());
             input.value = '';
             
             messageCount++;
@@ -444,18 +446,18 @@
                 }
                 
                 if (data.response) {
-                    addMessage(data.response, 'bot');
+                    addMessage(data.response, 'bot', true, new Date().toISOString());
                 } else if (data.error) {
-                    addMessage('I apologize, but I encountered an error. Please try again.', 'bot');
+                    addMessage('I apologize, but I encountered an error. Please try again.', 'bot', true, new Date().toISOString());
                 }
             } catch (error) {
                 console.error('Error:', error);
                 document.getElementById('typingIndicator').style.display = 'none';
-                addMessage('I apologize, but I had trouble processing that. Please try again.', 'bot');
+                addMessage('I apologize, but I had trouble processing that. Please try again.', 'bot', true, new Date().toISOString());
             }
         }
 
-        function addMessage(text, sender, shouldScroll = true) {
+        function addMessage(text, sender, shouldScroll = true, timestamp = null) {
             const messagesDiv = document.getElementById('chatMessages');
             const messageDiv = document.createElement('div');
             messageDiv.className = `message ${sender}`;
@@ -463,14 +465,25 @@
             const bubble = document.createElement('div');
             bubble.className = 'message-bubble';
             
+            // Format timestamp
+            let timeStr = '';
+            if (timestamp) {
+                const date = new Date(timestamp);
+                const hours = date.getHours().toString().padStart(2, '0');
+                const minutes = date.getMinutes().toString().padStart(2, '0');
+                timeStr = `<span style="font-size: 0.75em; color: #888; margin-left: 8px;">${hours}:${minutes}</span>`;
+            }
+            
             if (sender === 'bot') {
-                bubble.innerHTML = `<strong>{{ character.display_name }}:</strong> ${text}`;
+                bubble.innerHTML = `<strong>{{ character.display_name }}:</strong> ${text}${timeStr}`;
             } else {
-                bubble.innerHTML = `<strong>You:</strong> ${text}`;
+                bubble.innerHTML = `<strong>You:</strong> ${text}${timeStr}`;
             }
             
             messageDiv.appendChild(bubble);
             messagesDiv.appendChild(messageDiv);
+            
+            console.log(`✅ Added ${sender} message to DOM`);
             
             if (shouldScroll) {
                 messagesDiv.scrollTop = messagesDiv.scrollHeight;
