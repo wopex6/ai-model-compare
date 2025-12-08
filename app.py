@@ -385,11 +385,24 @@ def process_with_smart_response(message, character_name, ai_chat_function):
     except Exception as e:
         ai_error = str(e)
         ai_call_success = False
-        # Notify user of API failure
+        
+        # Provide user-friendly error messages based on error type
+        if "timeout" in ai_error.lower():
+            user_message = "The AI is taking longer than usual to respond. Please try again - it should work on the next attempt."
+        elif "api" in ai_error.lower() or "key" in ai_error.lower():
+            user_message = "There's a temporary issue with the AI service. Our team has been notified. Please try again in a few moments."
+        elif "rate limit" in ai_error.lower():
+            user_message = "We're getting a lot of requests right now. Please wait a moment and try again."
+        elif "connection" in ai_error.lower() or "network" in ai_error.lower():
+            user_message = "Having trouble connecting to the AI service. Please check your internet connection and try again."
+        else:
+            user_message = "I'm having trouble processing your request right now. Please try again in a moment."
+        
         response = {
-            'response': f"I'm having trouble connecting right now. Please try again in a moment. ({ai_error[:50]})",
+            'response': user_message,
             'type': 'api_error',
-            'error': ai_error
+            'error': ai_error,  # Technical details for debugging
+            'retry_suggested': True
         }
     
     # Log AI call result

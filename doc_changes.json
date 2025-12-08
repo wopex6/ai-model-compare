@@ -7,9 +7,9 @@
     "ai_compare\\character_configs.py": "378d1d49f96d5c92f6b727947924378e",
     "ai_compare\\character_factory.py": "20d2cdb76163504543f68581ee40bdd2",
     "ai_compare\\character_routes.py": "8b9a429f311a4a7e62d001be2f2eb03c",
-    "ai_compare\\chatbot.py": "cc3fda92ff4ac81f3edf30481dbd3cda",
+    "ai_compare\\chatbot.py": "8a89eed309452c5cdde3f01d7190cd61",
     "ai_compare\\chatbot_personality.py": "025d04afba774d1b46ffec853e44e7f2",
-    "ai_compare\\compare.py": "89913f74f3777548da57a47f013078e2",
+    "ai_compare\\compare.py": "cbd13ee42e1e6a0d8f49ec43be482aaa",
     "ai_compare\\conversation_manager.py": "f4dbc4026ad7f2def70f0c847c5e1018",
     "ai_compare\\doc_updater.py": "2ba22c73cdfb7f0afec4f423f460e59e",
     "ai_compare\\endpoint_registry.py": "1d40d60132c35f80090b4be7a5a3e1b1",
@@ -37,10 +37,10 @@
     "ai_compare\\user_profile_manager.py": "ba541700b0809395afa6046e650a7d80",
     "ai_compare\\wisdom_chatbot.py": "72978aa47f4bf569ead543d4cc90d2f0",
     "ai_compare\\__init__.py": "d41d8cd98f00b204e9800998ecf8427e",
-    "app.py": "7b150b93a358dad74f12313ef6fa02e4",
+    "app.py": "7e7f3b9f0471606205e03de1cb0feaf0",
     "requirements.txt": "a0c0ba845255584721907b0ff0aabe84",
     ".env": "598ed9df8f31de62af8949518c2e77af"
   },
-  "last_update": "2025-12-08T14:34:52.949676",
-  "update_count": 1
+  "last_update": "2025-12-08T14:36:48.585331",
+  "update_count": 9
 }

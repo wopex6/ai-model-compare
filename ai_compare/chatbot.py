@@ -84,6 +84,14 @@ class AIChatbot:
             
             if successful_responses:
                 consolidated_response = await self.ai_compare.consolidate_responses(successful_responses)
+            else:
+                # All models failed - provide helpful fallback
+                failed_models = [k for k in model_responses.keys() if not k.startswith('_')]
+                consolidated_response = (
+                    "I apologize, but I'm having technical difficulties right now. "
+                    f"All AI models ({', '.join(failed_models)}) encountered errors. "
+                    "Please try again in a moment. If the problem persists, contact support."
+                )
         
         # Apply personality filter to response
         base_response = self._apply_personality_filter(consolidated_response)
