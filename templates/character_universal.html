@@ -475,8 +475,8 @@
                 const date = new Date(timestamp);
                 const hours = date.getHours().toString().padStart(2, '0');
                 const minutes = date.getMinutes().toString().padStart(2, '0');
-                // Blue for user, gray for bot
-                const color = sender === 'user' ? '#4A9EFF' : '#888';
+                // Bright cyan for user, gray for bot
+                const color = sender === 'user' ? '#00E5FF' : '#888';
                 timeStr = `<span style="font-size: 0.75em; color: ${color}; margin-left: 8px;">${hours}:${minutes}</span>`;
             }
             
