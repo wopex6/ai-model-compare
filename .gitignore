@@ -54,6 +54,5 @@ gpt.py
 # Debug and test files
 *_test.py
 test_*.py
-Screenshot*.png
 personality_test_debug.png
 debug_*.md
