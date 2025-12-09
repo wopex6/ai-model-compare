@@ -7,7 +7,8 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="/static/auth_helper.js"></script>
-    <script src="/static/character_chat_helper.js"></script>
+    <script src="/static/message_handler.js"></script>
+    <script src="/static/conversation_box.js"></script>
     <style>
         body {
             background: linear-gradient(135deg, #ff6b6b 0%, #4ecdc4 50%, #45b7d1 100%);
@@ -490,228 +491,44 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // Initialize MessageHandler (ConversationBox will use this)
+        MessageHandler.init('super_motivational_coach', {
+            userColor: '#ff6b6b',
+            botColor: '#4ecdc4',
+            characterDisplayName: 'Coach Max',
+            messageClass: 'message',
+            bubbleClass: 'message-content'
+        });
+
+        // Initialize ConversationBox for database integration
+        ConversationBox.init('super_motivational_coach', {
+            inputElementId: 'messageInput',
+            sendButtonId: 'sendBtn',
+            onResponseReceived: (data) => {
+                // Custom motivational features
+                if (data.motivational_action) {
+                    document.body.classList.add('energy-boost');
+                    setTimeout(() => document.body.classList.remove('energy-boost'), 1000);
+                }
+                if (data.motivational_action === 'progress_updated' || data.motivational_action === 'goal_added') {
+                    setTimeout(() => motivationalCoach.loadStats(), 1000);
+                }
+            }
+        });
+
+        // MotivationalCoach class for custom features (stats, suggestions, etc.)
         class MotivationalCoach {
             constructor() {
-                this.messageInput = document.getElementById('messageInput');
-                this.sendBtn = document.getElementById('sendBtn');
-                this.chatMessages = document.getElementById('chatMessages');
-                this.typingIndicator = document.getElementById('typingIndicator');
-                this.sessionId = null;
-                
-                this.initializeEventListeners();
-                this.loadConversationHistory();
                 this.loadStats();
                 this.startPeriodicUpdates();
+                this.initializeEventListeners();
             }
             
             initializeEventListeners() {
-                this.sendBtn.addEventListener('click', () => this.sendMessage());
-                this.messageInput.addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') this.sendMessage();
-                });
-                
                 document.getElementById('remindersToggle').addEventListener('change', (e) => {
                     this.toggleReminders(e.target.checked);
                 });
             }
-            
-            async loadConversationHistory() {
-                try {
-                    // Get session ID from cookie
-                    this.sessionId = this.getCookie('session_super_motivational_coach');
-                    
-                    if (this.sessionId) {
-                        console.log(`Loading history for session: ${this.sessionId}`);
-                        
-                        // Fetch conversation history from backend
-                        const response = await fetch(`/super_motivational_coach/history?session_id=${this.sessionId}`);
-                        const data = await response.json();
-                        
-                        if (data.messages && data.messages.length > 0) {
-                            console.log(`Loaded ${data.messages.length} messages from history`);
-                            
-                            // Clear welcome message
-                            this.chatMessages.innerHTML = '';
-                            
-                            // Display all messages
-                            data.messages.forEach(msg => {
-                                const sender = msg.role === 'user' ? 'user' : 'coach';
-                                this.addMessage(msg.content, sender, false);
-                            });
-                            
-                            // Scroll to bottom once
-                            this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
-                        }
-                    } else {
-                        console.log('No existing session found, starting new conversation');
-                    }
-                } catch (error) {
-                    console.error('Error loading conversation history:', error);
-                }
-            }
-            
-            getCookie(name) {
-                const value = `; ${document.cookie}`;
-                const parts = value.split(`; ${name}=`);
-                if (parts.length === 2) return parts.pop().split(';').shift();
-                return null;
-            }
-            
-            setCookie(name, value, days = 365) {
-                const expires = new Date();
-                expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
-                document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`;
-            }
-            
-            async sendMessage(message = null) {
-                const messageText = message || this.messageInput.value.trim();
-                if (!messageText) return;
-                
-                // Add user message
-                this.addMessage(messageText, 'user');
-                if (!message) this.messageInput.value = '';
-                
-                // Show typing indicator
-                this.showTyping();
-                
-                try {
-                    // Use AuthHelper for authenticated requests (consistency with other characters)
-                    const response = await AuthHelper.authenticatedFetch('/super_motivational_coach/chat', {
-                        method: 'POST',
-                        body: JSON.stringify({
-                            message: messageText,
-                            include_context: true,
-                            session_id: this.sessionId
-                        })
-                    });
-                    
-                    const data = await response.json();
-                    
-                    // CRITICAL FIX: Always update session ID to stay in sync with backend
-                    if (data.session_id) {
-                        const isNewSession = !this.sessionId;
-                        this.sessionId = data.session_id;
-                        this.setCookie('session_super_motivational_coach', this.sessionId);
-                        console.log(isNewSession ? `🆕 New session: ${this.sessionId}` : `🔄 Session updated: ${this.sessionId}`);
-                    }
-                    
-                    if (data.error) {
-                        this.addMessage(`❌ ${data.error}`, 'coach', true);
-                    } else {
-                        this.addMessage(data.response, 'coach', false, data);
-                        
-                        // Show follow-up suggestion if available (Smart Response feature)
-                        if (data.suggestion) {
-                            this.addSuggestion(data.suggestion);
-                        }
-                        
-                        // Add energy boost animation for motivational responses
-                        if (data.motivational_action) {
-                            document.body.classList.add('energy-boost');
-                            setTimeout(() => document.body.classList.remove('energy-boost'), 1000);
-                        }
-                        
-                        // Update stats if progress was made
-                        if (data.motivational_action === 'progress_updated' || data.motivational_action === 'goal_added') {
-                            setTimeout(() => this.loadStats(), 1000);
-                        }
-                    }
-                } catch (error) {
-                    this.addMessage(`🔥 Connection error, but don't let that stop you! Keep pushing forward! 💪`, 'coach', true);
-                } finally {
-                    this.hideTyping();
-                }
-            }
-            
-            addMessage(content, sender, isError = false, metadata = null) {
-                const messageDiv = document.createElement('div');
-                messageDiv.className = `message ${sender}`;
-                
-                const avatar = sender === 'user' ? 'U' : 'M';
-                const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                
-                let metaInfo = time;
-                if (metadata && metadata.response_metadata) {
-                    metaInfo += ` • ${metadata.response_metadata.models_used} AI models`;
-                }
-                if (metadata && metadata.motivational_action) {
-                    metaInfo += ` • ${metadata.motivational_action.replace('_', ' ')}`;
-                }
-                if (metadata && metadata.type === 'quick_reply') {
-                    metaInfo += ` • ⚡ Smart Reply`;
-                }
-                
-                messageDiv.innerHTML = `
-                    <div class="message-avatar">${avatar}</div>
-                    <div class="message-content ${isError ? 'text-danger' : ''}">
-                        <div>${content}</div>
-                        <div class="message-meta">${metaInfo}</div>
-                    </div>
-                `;
-                
-                this.chatMessages.appendChild(messageDiv);
-                this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
-            }
-            
-            addSuggestion(suggestionText) {
-                // Remove any existing suggestions first
-                const existingSuggestion = this.chatMessages.querySelector('.suggestion-prompt');
-                if (existingSuggestion) {
-                    existingSuggestion.remove();
-                }
-                
-                // Create new suggestion element
-                const suggestionDiv = document.createElement('div');
-                suggestionDiv.className = 'suggestion-prompt';
-                suggestionDiv.style.cssText = `
-                    margin: 10px 0;
-                    padding: 12px 16px;
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    border-radius: 12px;
-                    color: white;
-                    font-size: 14px;
-                    cursor: pointer;
-                    transition: all 0.3s ease;
-                    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
-                    text-align: center;
-                    animation: slideIn 0.3s ease-out;
-                `;
-                suggestionDiv.innerHTML = `
-                    <div style="opacity: 0.8; font-size: 12px; margin-bottom: 4px;">💭 Suggestion</div>
-                    <div style="font-weight: 500;">${suggestionText}</div>
-                `;
-                
-                // Click to use suggestion
-                suggestionDiv.addEventListener('click', () => {
-                    this.messageInput.value = suggestionText;
-                    this.messageInput.focus();
-                    suggestionDiv.style.transform = 'scale(0.95)';
-                    suggestionDiv.style.opacity = '0.5';
-                });
-                
-                // Hover effects
-                suggestionDiv.addEventListener('mouseenter', () => {
-                    suggestionDiv.style.transform = 'translateY(-2px)';
-                    suggestionDiv.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.5)';
-                });
-                suggestionDiv.addEventListener('mouseleave', () => {
-                    suggestionDiv.style.transform = 'translateY(0)';
-                    suggestionDiv.style.boxShadow = '0 2px 8px rgba(102, 126, 234, 0.3)';
-                });
-                
-                this.chatMessages.appendChild(suggestionDiv);
-                this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
-                
-                // Remove suggestion after user types something else
-                const clearSuggestion = () => {
-                    if (this.messageInput.value && this.messageInput.value !== suggestionText) {
-                        suggestionDiv.remove();
-                        this.messageInput.removeEventListener('input', clearSuggestion);
-                    }
-                };
-                this.messageInput.addEventListener('input', clearSuggestion);
-            }
-            
             async loadStats() {
                 try {
                     const response = await fetch('/super_motivational_coach/stats');
@@ -757,15 +574,6 @@
                 }
             }
             
-            showTyping() {
-                this.typingIndicator.style.display = 'block';
-                this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
-            }
-            
-            hideTyping() {
-                this.typingIndicator.style.display = 'none';
-            }
-            
             startPeriodicUpdates() {
                 // Update stats every 30 seconds
                 setInterval(() => this.loadStats(), 30000);
@@ -774,14 +582,12 @@
         
         // Global function for quick action buttons
         function sendQuickMessage(message) {
-            if (window.coach) {
-                window.coach.sendMessage(message);
-            }
+            ConversationBox.sendQuickMessage(message);
         }
         
         // Initialize when page loads
         document.addEventListener('DOMContentLoaded', () => {
-            window.coach = new MotivationalCoach();
+            window.motivationalCoach = new MotivationalCoach();
         });
         
         // Add some dynamic effects
