@@ -2736,10 +2736,10 @@ def save_psychological_assessment():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-# Register dynamic character routes for ALL characters with Smart Response
+# Register dynamic character routes for ALL characters with Smart Response and Database
 print("\n=== Registering Character Routes ===")
-register_character_routes(app, all_characters, process_with_smart_response)
-print("✓ Dynamic routes registered for all 8 characters with Smart Response")
+register_character_routes(app, all_characters, process_with_smart_response, integrated_db)
+print("✓ Dynamic routes registered for all 8 characters with Smart Response + Database")
 
 
 # ============================================

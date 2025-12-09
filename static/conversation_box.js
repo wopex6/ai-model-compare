@@ -18,13 +18,14 @@
 const ConversationBox = {
     // Configuration
     characterId: null,
-    sessionId: null,
+    sessionId: null,  // Now from database, not cookies
+    userId: null,  // NEW: User ID from authentication
     config: {
         inputElementId: 'userInput',
         sendButtonId: 'sendBtn',
         chatEndpoint: null,  // e.g., '/scientist/chat'
         historyEndpoint: null,  // e.g., '/scientist/history'
-        sessionCookieName: null,  // e.g., 'session_scientist'
+        sessionEndpoint: null,  // NEW: e.g., '/scientist/session'
         includeContext: true,
         errorMessage: 'I apologize, but I encountered an error. Please try again.',
         
@@ -52,14 +53,18 @@ const ConversationBox = {
             // Auto-generate endpoints if not provided
             chatEndpoint: config.chatEndpoint || `/${characterId}/chat`,
             historyEndpoint: config.historyEndpoint || `/${characterId}/history`,
-            sessionCookieName: config.sessionCookieName || `session_${characterId}`
+            sessionEndpoint: config.sessionEndpoint || `/${characterId}/session`  // NEW
         };
         
         // Set up event listeners
         this._setupEventListeners();
         
-        // Load conversation history
-        this.loadHistory();
+        // Get authenticated session from backend, then load history
+        this._getAuthenticatedSession().then(() => {
+            this.loadHistory();
+        }).catch(error => {
+            console.error('Failed to initialize session:', error);
+        });
         
         console.log(`✅ ConversationBox initialized for ${characterId}`);
     },
@@ -122,20 +127,21 @@ const ConversationBox = {
         
         try {
             // Send to backend using AuthHelper for Smart Response authentication
+            // No need to send session_id - backend gets it from user_id + character_id
             const response = await AuthHelper.authenticatedFetch(this.config.chatEndpoint, {
                 method: 'POST',
                 body: JSON.stringify({
                     message: message,
-                    include_context: this.config.includeContext,
-                    session_id: this.sessionId
+                    include_context: this.config.includeContext
                 })
             });
             
             const data = await response.json();
             
-            // Update session ID
-            if (data.session_id) {
-                this._updateSessionId(data.session_id);
+            // Session ID comes from backend (no need to update cookies)
+            if (data.session_id && !this.sessionId) {
+                this.sessionId = data.session_id;
+                console.log(`🆕 Session ID: ${this.sessionId}`);
             }
             
             // Display bot response
@@ -168,29 +174,85 @@ const ConversationBox = {
     },
     
     /**
-     * Load conversation history from backend
+     * Get authenticated session from backend (database-backed)
+     * @private
+     */
+    async _getAuthenticatedSession() {
+        try {
+            // Call backend to get session for this user+character
+            const response = await AuthHelper.authenticatedFetch(this.config.sessionEndpoint, {
+                method: 'GET'
+            });
+            
+            const data = await response.json();
+            
+            if (data.session_id) {
+                this.sessionId = data.session_id;
+                this.userId = data.user_id;
+                console.log(`✓ Session loaded: ${this.sessionId} for user ${this.userId}, character ${this.characterId}`);
+                
+                // Optional callback: session created
+                if (this.config.onSessionCreated) {
+                    this.config.onSessionCreated(this.sessionId);
+                }
+            } else {
+                console.error('Failed to get session:', data.error || 'Unknown error');
+            }
+            
+        } catch (error) {
+            console.error('Error getting authenticated session:', error);
+            // User not authenticated - session will be null
+            this.sessionId = null;
+            this.userId = null;
+        }
+    },
+    
+    /**
+     * Load conversation history from backend (database-backed)
      */
     async loadHistory() {
         try {
-            // Get session ID from cookie
-            this.sessionId = this._getCookie(this.config.sessionCookieName);
+            if (!this.sessionId) {
+                console.log('No session available, skipping history load');
+                return;
+            }
             
-            if (this.sessionId) {
-                console.log(`Loading history for session: ${this.sessionId}`);
+            console.log(`Loading history for user ${this.userId}, character ${this.characterId}`);
+            
+            // Call backend - no need to pass session_id, backend gets it from auth
+            const response = await AuthHelper.authenticatedFetch(this.config.historyEndpoint, {
+                method: 'GET'
+            });
+            
+            const data = await response.json();
+            
+            if (data.messages && data.messages.length > 0) {
+                // Clear existing messages
+                MessageHandler.messagesContainer.innerHTML = '';
                 
-                // Use MessageHandler to load and display history
-                const data = await MessageHandler.loadHistory(
-                    this.sessionId, 
-                    this.config.historyEndpoint
-                );
+                // Display each message
+                data.messages.forEach(msg => {
+                    MessageHandler.addMessage({
+                        content: msg.content,
+                        role: msg.sender_type,  // 'user' or 'assistant'
+                        timestamp: msg.timestamp,
+                        source: msg.metadata?.source,
+                        shouldScroll: false
+                    });
+                });
+                
+                // Scroll to bottom after all messages loaded
+                MessageHandler.messagesContainer.scrollTop = MessageHandler.messagesContainer.scrollHeight;
+                console.log(`✓ Loaded ${data.messages.length} messages from database`);
                 
                 // Optional callback: history loaded
-                if (this.config.onHistoryLoaded && data && data.messages) {
+                if (this.config.onHistoryLoaded) {
                     this.config.onHistoryLoaded(data.messages);
                 }
             } else {
-                console.log('No existing session found, starting new conversation');
+                console.log('No conversation history found, starting new conversation');
             }
+            
         } catch (error) {
             console.error('Error loading conversation history:', error);
         }
@@ -208,22 +270,6 @@ const ConversationBox = {
     },
     
     /**
-     * Update session ID and store in cookie
-     * @private
-     */
-    _updateSessionId(newSessionId) {
-        const isNewSession = !this.sessionId;
-        this.sessionId = newSessionId;
-        this._setCookie(this.config.sessionCookieName, newSessionId);
-        console.log(isNewSession ? `🆕 New session: ${newSessionId}` : `🔄 Session updated: ${newSessionId}`);
-        
-        // Optional callback: session created
-        if (isNewSession && this.config.onSessionCreated) {
-            this.config.onSessionCreated(newSessionId);
-        }
-    },
-    
-    /**
      * Display an error message
      * @private
      */
@@ -233,27 +279,6 @@ const ConversationBox = {
             role: 'bot',
             shouldScroll: true
         });
-    },
-    
-    /**
-     * Get cookie value
-     * @private
-     */
-    _getCookie(name) {
-        const value = `; ${document.cookie}`;
-        const parts = value.split(`; ${name}=`);
-        if (parts.length === 2) return parts.pop().split(';').shift();
-        return null;
-    },
-    
-    /**
-     * Set cookie value
-     * @private
-     */
-    _setCookie(name, value, days = 365) {
-        const expires = new Date();
-        expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
-        document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`;
     }
 };
 
