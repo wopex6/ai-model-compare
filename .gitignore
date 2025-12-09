@@ -38,6 +38,7 @@ personality_profiles/
 
 # Test files
 test_screenshots/
+screenshots_viewable/
 
 # Files with potential API keys (security)
 test_gpt_direct.py

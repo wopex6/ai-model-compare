@@ -231,7 +231,9 @@ def _register_history_endpoint(app, character_id, characters_dict):
                 return jsonify({'error': f'Character {character_id} not initialized'}), 500
             
             # Get conversation history from conversation manager
-            messages = bot.conversation_manager.get_conversation_history(session_id)
+            # CRITICAL: Use force_reload=True to ensure we get the latest messages from disk
+            # Without this, intermittent cache staleness causes messages to disappear
+            messages = bot.conversation_manager.get_conversation_history(session_id, force_reload=True)
             
             return jsonify({'messages': messages})
         except Exception as e:
