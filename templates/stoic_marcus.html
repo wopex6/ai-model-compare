@@ -174,6 +174,23 @@
             to { opacity: 1; transform: translateY(0); }
         }
         
+        /* MessageHandler creates .message.user and .message.bot */
+        .message.user {
+            background: linear-gradient(135deg, #edf2f7, #cbd5e0);
+            margin-left: auto;
+            text-align: right;
+            border-left: 4px solid #4a5568;
+            color: #2d3748;
+        }
+        
+        .message.bot, .message.assistant {
+            background: white;
+            border-left: 4px solid #718096;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            color: #2d3748;
+        }
+        
+        /* Legacy support for old class names */
         .user-message {
             background: linear-gradient(135deg, #edf2f7, #cbd5e0);
             margin-left: auto;
@@ -485,131 +502,42 @@ What challenges do you face? What wisdom do you seek?
             }
         }
         
-        function requestExercise() {
-            document.getElementById('user-input').value = "Teach me a Stoic exercise I can practice.";
-            sendMessage();
-        }
-        
-        function requestPrinciple() {
-            document.getElementById('user-input').value = "Explain a Stoic principle to me.";
-            sendMessage();
-        }
-        
-        function requestMeditation() {
-            document.getElementById('user-input').value = "Share a Stoic meditation with me.";
-            sendMessage();
-        }
-        
-        function requestGuidance() {
-            document.getElementById('user-input').value = "I need Stoic guidance on a challenge I'm facing.";
-            sendMessage();
-        }
-        
-        function handleKeyPress(event) {
-            if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                sendMessage();
-            }
-        }
-        
-        async function sendMessage() {
-            const input = document.getElementById('user-input');
-            const message = input.value.trim();
-            
-            if (!message) return;
-            
-            // Add user message to chat
-            addMessage(message, 'user');
-            input.value = '';
-            
-            // Disable input while processing
-            const sendBtn = document.getElementById('send-btn');
-            sendBtn.disabled = true;
-            input.disabled = true;
-            
-            // Show loading message
-            const loadingId = 'loading-' + Date.now();
-            addMessage('Contemplating your words...', 'assistant', loadingId);
-            
-            try {
-                // Include auth token if available (for personalized context)
-                const authToken = localStorage.getItem('authToken');
-                const headers = { 'Content-Type': 'application/json' };
-                if (authToken) {
-                    headers['Authorization'] = `Bearer ${authToken}`;
-                }
-                
-                const response = await fetch('/stoic_philosopher/chat', {
-                    method: 'POST',
-                    headers: headers,
-                    body: JSON.stringify({
-                        message: message,
-                        include_context: true
-                    })
-                });
-                
-                const data = await response.json();
-                
-                // Remove loading message
-                const loadingMsg = document.getElementById(loadingId);
-                if (loadingMsg) loadingMsg.remove();
-                
-                // Add Marcus's response
-                if (data.response) {
-                    addMessage(data.response, 'assistant');
-                    loadStats(); // Update stats after each message
-                } else if (data.error) {
-                    addMessage('Error: ' + data.error, 'assistant');
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                const loadingMsg = document.getElementById(loadingId);
-                if (loadingMsg) loadingMsg.remove();
-                addMessage('My apologies - I encountered a difficulty. Please try again.', 'assistant');
-            } finally {
-                sendBtn.disabled = false;
-                input.disabled = false;
-                input.focus();
-            }
-        }
-        
-        function addMessage(content, type, id = null) {
-            const messagesDiv = document.getElementById('chat-messages');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${type}-message`;
-            if (id) messageDiv.id = id;
-            
-            const timestamp = new Date().toLocaleTimeString();
-            const label = type === 'user' ? 'You' : 'Marcus';
-            
-            messageDiv.innerHTML = `
-                <div class="message-content">
-                    <strong>${label}:</strong> ${content}
-                </div>
-                <div class="message-timestamp">${timestamp}</div>
-            `;
-            
-            messagesDiv.appendChild(messageDiv);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        }
-        
-        // Initialize MessageHandler
+        // Initialize MessageHandler - it will handle message display
         MessageHandler.init('stoic_philosopher', {
             userColor: '#607D8B',
             botColor: '#90A4AE',
             characterDisplayName: 'Marcus',
             messageClass: 'message',
-            bubbleClass: 'message-content'
+            bubbleClass: 'message-content',
+            chatMessagesId: 'chat-messages'
         });
 
-        // Initialize ConversationBox
+        // Initialize ConversationBox - it will use MessageHandler
         ConversationBox.init('stoic_philosopher', {
             inputElementId: 'user-input',
             sendButtonId: 'send-btn',
+            chatMessagesId: 'chat-messages',
             onResponseReceived: (data) => {
                 loadStats(); // Update stats after each message
             }
         });
+
+        // Quick action button handlers
+        function requestExercise() {
+            ConversationBox.sendQuickMessage("Teach me a Stoic exercise I can practice.");
+        }
+        
+        function requestPrinciple() {
+            ConversationBox.sendQuickMessage("Explain a Stoic principle to me.");
+        }
+        
+        function requestMeditation() {
+            ConversationBox.sendQuickMessage("Share a Stoic meditation with me.");
+        }
+        
+        function requestGuidance() {
+            ConversationBox.sendQuickMessage("I need Stoic guidance on a challenge I'm facing.");
+        }
     </script>
 </body>
 </html>
