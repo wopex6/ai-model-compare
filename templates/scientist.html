@@ -477,9 +477,8 @@
                             class="input-sci" 
                             id="userInput" 
                             placeholder="Ask your scientific question..."
-                            onkeypress="handleKeyPress(event)"
                         >
-                        <button class="send-btn-sci" onclick="sendMessage()">
+                        <button class="send-btn-sci" id="sendBtn">
                             <i class="fas fa-paper-plane"></i>
                         </button>
                     </div>
@@ -534,6 +533,7 @@
     <script src="{{ url_for('static', filename='auth_helper.js') }}"></script>
     <script src="{{ url_for('static', filename='character_history.js') }}"></script>
     <script src="{{ url_for('static', filename='message_handler.js') }}"></script>
+    <script src="{{ url_for('static', filename='conversation_box.js') }}"></script>
     
     <script>
         // Initialize MessageHandler with scientist theme
@@ -544,6 +544,7 @@
             messageClass: 'message-sci',
             bubbleClass: 'message-bubble-sci'
         });
+        
         // Create stars
         const starsContainer = document.getElementById('starsContainer');
         for (let i = 0; i < 100; i++) {
@@ -558,6 +559,33 @@
         let queryCount = 0;
         let historyManager = null;  // Will be initialized on load
 
+        //  Initialize ConversationBox with scientist configuration
+        ConversationBox.init('scientist', {
+            inputElementId: 'userInput',
+            sendButtonId: 'sendBtn',
+            onMessageSent: (message) => {
+                // Update query count
+                queryCount++;
+                document.getElementById('queryCount').textContent = queryCount;
+                
+                // Add to discovery log
+                const discoveryLog = document.querySelector('.discovery-item').parentElement;
+                const newDiscovery = document.createElement('div');
+                newDiscovery.className = 'discovery-item';
+                newDiscovery.innerHTML = `
+                    <div class="discovery-time">Query ${queryCount}</div>
+                    <div class="discovery-text">${message.substring(0, 50)}...</div>
+                `;
+                discoveryLog.insertBefore(newDiscovery, discoveryLog.children[1]);
+            },
+            onHistoryLoaded: (messages) => {
+                // Update query count based on history
+                queryCount = messages.length;
+                document.getElementById('queryCount').textContent = queryCount;
+            },
+            errorMessage: 'Error in data transmission. Recalibrating...'
+        });
+
         window.addEventListener('load', async () => {
             try {
                 const response = await fetch('/scientist/daily-insight');
@@ -567,126 +595,13 @@
                 console.error('Error loading fact:', error);
             }
 
-            // Load conversation history
-            await loadConversationHistory();
+            // Conversation history loaded automatically by ConversationBox
         });
 
-        async function loadConversationHistory() {
-            try {
-                // Get session ID from cookie
-                sessionId = getCookie('session_scientist');
-                
-                if (sessionId) {
-                    console.log(`Loading history for session: ${sessionId}`);
-                    
-                    // Use unified MessageHandler to load history
-                    const data = await MessageHandler.loadHistory(sessionId, '/scientist/history');
-                    
-                    if (data && data.messages && data.messages.length > 0) {
-                        // Update query count
-                        const userMessages = data.messages.filter(m => m.role === 'user');
-                        queryCount = userMessages.length;
-                        document.getElementById('queryCount').textContent = queryCount;
-                    }
-                } else {
-                    console.log('No existing session found, starting new conversation');
-                }
-            } catch (error) {
-                console.error('Error loading conversation history:', error);
-            }
-        }
-
-        function getCookie(name) {
-            const value = `; ${document.cookie}`;
-            const parts = value.split(`; ${name}=`);
-            if (parts.length === 2) return parts.pop().split(';').shift();
-            return null;
-        }
-
-        function setCookie(name, value, days = 365) {
-            const expires = new Date();
-            expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
-            document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`;
-        }
-
-        function handleKeyPress(event) {
-            if (event.key === 'Enter') {
-                sendMessage();
-            }
-        }
-
-        function sendQuickMessage(message) {
-            document.getElementById('userInput').value = message;
-            sendMessage();
-        }
-
-        async function sendMessage() {
-            const input = document.getElementById('userInput');
-            const message = input.value.trim();
-            
-            if (!message) return;
-            
-            MessageHandler.addMessage({
-                content: message,
-                role: 'user',
-                timestamp: new Date().toISOString(),
-                shouldScroll: true
-            });
-            input.value = '';
-            
-            queryCount++;
-            document.getElementById('queryCount').textContent = queryCount;
-            
-            // Add to discovery log
-            const discoveryLog = document.querySelector('.discovery-item').parentElement;
-            const newDiscovery = document.createElement('div');
-            newDiscovery.className = 'discovery-item';
-            newDiscovery.innerHTML = `
-                <div class="discovery-time">Query ${queryCount}</div>
-                <div class="discovery-text">${message.substring(0, 50)}...</div>
-            `;
-            discoveryLog.insertBefore(newDiscovery, discoveryLog.children[1]);
-            
-            try {
-                const response = await AuthHelper.authenticatedFetch('/scientist/chat', {
-                    method: 'POST',
-                    body: JSON.stringify({ 
-                        message: message, 
-                        include_context: true,
-                        session_id: sessionId 
-                    })
-                });
-                
-                const data = await response.json();
-                
-                // CRITICAL FIX: Always update session ID to stay in sync with backend
-                if (data.session_id) {
-                    const isNewSession = !sessionId;
-                    sessionId = data.session_id;
-                    setCookie('session_scientist', sessionId);
-                    console.log(isNewSession ? `🆕 New session: ${sessionId}` : `🔄 Session updated: ${sessionId}`);
-                }
-                
-                if (data.response) {
-                    MessageHandler.addMessage({
-                        content: data.response,
-                        role: 'bot',
-                        timestamp: new Date().toISOString(),
-                        source: data.type || 'direct_ai',
-                        shouldScroll: true
-                    });
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                MessageHandler.addMessage({
-                    content: 'Error in data transmission. Recalibrating...',
-                    role: 'bot',
-                    shouldScroll: true
-                });
-            }
-        }
-
-        // addMessage() function removed - now using unified MessageHandler.addMessage()
+        // ✅ ALL CONVERSATION LOGIC NOW HANDLED BY MODULES:
+        // - ConversationBox.js: sendMessage(), loadHistory(), session management
+        // - MessageHandler.js: addMessage(), message display, timestamps
+        // - These modules are shared across ALL characters for consistency!
     </script>
 </body>
 </html>
