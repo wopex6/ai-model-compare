@@ -234,7 +234,7 @@ const ConversationBox = {
                 data.messages.forEach(msg => {
                     MessageHandler.addMessage({
                         content: msg.content,
-                        role: msg.sender_type,  // 'user' or 'assistant'
+                        role: msg.sender_type === 'assistant' ? 'bot' : msg.sender_type,  // Convert 'assistant' to 'bot'
                         timestamp: msg.timestamp,
                         source: msg.metadata?.source,
                         shouldScroll: false
