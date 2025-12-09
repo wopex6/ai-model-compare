@@ -33,7 +33,11 @@ class SmartResponseHandler:
             'critical_keywords': [
                 'should i quit', 'thinking about divorce', 'end my relationship',
                 'major life decision'
-            ]
+            ],
+            # Life coach benefits from personalized, detailed responses
+            # Quick replies feel too generic for life transformation work
+            'prefer_full_ai': True,
+            'confidence_threshold': 0.97  # Only use quick replies for VERY obvious small talk
         },
         'marcus': {
             'prefer_ai_keywords': [
@@ -97,12 +101,20 @@ class SmartResponseHandler:
         detection['confidence'] = adjusted_confidence
         detection['reasoning'].append(f"Context adjustment: {context['context_score']:+.2f}")
         
-        # Step 5: Check user preferences and decide
-        should_use_quick = self.learner.should_use_quick_reply(
-            user_id, 
-            adjusted_confidence,
-            character
-        )
+        # Step 5: Check character-specific threshold (if configured)
+        character_threshold = self._get_character_threshold(character)
+        if character_threshold is not None:
+            # Character has a specific threshold - use it
+            should_use_quick = adjusted_confidence >= character_threshold
+            if not should_use_quick:
+                detection['reasoning'].append(f"Below {character} threshold ({character_threshold:.2f})")
+        else:
+            # No character-specific threshold - use user preferences
+            should_use_quick = self.learner.should_use_quick_reply(
+                user_id, 
+                adjusted_confidence,
+                character
+            )
         
         if should_use_quick and detection['type'] == 'SMALL_TALK':
             # Generate quick reply
@@ -216,6 +228,16 @@ class SmartResponseHandler:
                     return True
         
         return False
+    
+    def _get_character_threshold(self, character: str) -> Optional[float]:
+        """Get character-specific confidence threshold if configured"""
+        character = character.lower()
+        
+        if character not in self.CHARACTER_SAFETY_RULES:
+            return None
+        
+        rules = self.CHARACTER_SAFETY_RULES[character]
+        return rules.get('confidence_threshold', None)
     
     def get_user_stats(self, user_id: int) -> Dict:
         """
