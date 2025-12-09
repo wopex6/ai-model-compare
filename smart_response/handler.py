@@ -39,6 +39,12 @@ class SmartResponseHandler:
             'prefer_full_ai': True,
             'confidence_threshold': 0.97  # Only use quick replies for VERY obvious small talk
         },
+        'zen_master': {
+            # Zen teachings require mindful, contextual responses
+            # Generic quick replies miss the depth and presence of true Zen guidance
+            'prefer_full_ai': True,
+            'confidence_threshold': 0.97  # Mindful presence requires personalized responses
+        },
         'marcus': {
             'prefer_ai_keywords': [
                 'virtue', 'ethics', 'morality', 'should i', 'right thing to do'
