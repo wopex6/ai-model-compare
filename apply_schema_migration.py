@@ -192,17 +192,45 @@ def apply_migration(db_path='databases/production_integrated_users.db', schema_f
     
     return True
 
-if __name__ == "__main__":
-    # Detect if running on PythonAnywhere or locally
-    if os.path.exists('/home'):  # Likely PythonAnywhere/Linux
-        db_path = 'databases/production_integrated_users.db'
-        # Check if running from project directory
-        if not os.path.exists('databases'):
-            db_path = os.path.expanduser('~/ai-model-compare/databases/production_integrated_users.db')
-    else:  # Windows/Local
-        db_path = 'integrated_users.db'
+def find_database():
+    """Find the database file in common locations"""
+    possible_paths = [
+        'databases/production_integrated_users.db',
+        'integrated_users.db',
+        os.path.expanduser('~/ai-model-compare/databases/production_integrated_users.db'),
+        os.path.expanduser('~/ai-model-compare/integrated_users.db'),
+        'databases/integrated_users.db',
+    ]
     
+    for path in possible_paths:
+        if os.path.exists(path):
+            return path
+    
+    return None
+
+if __name__ == "__main__":
     schema_file = 'database_schema.json'
+    
+    # Find database
+    db_path = find_database()
+    
+    if not db_path:
+        print("❌ Database not found!")
+        print()
+        print("Run this to locate your database:")
+        print("  python find_database_pythonanywhere.py")
+        print()
+        print("Common locations checked:")
+        print("  - databases/production_integrated_users.db")
+        print("  - integrated_users.db")
+        print("  - ~/ai-model-compare/databases/production_integrated_users.db")
+        print()
+        print("If no database exists:")
+        print("  1. Create folder: mkdir -p ~/ai-model-compare/databases")
+        print("  2. Upload database via Files tab to that folder")
+        print("  3. Reload your web app to create tables")
+        print()
+        exit(1)
     
     print(f"Database: {db_path}")
     print(f"Schema file: {schema_file}")
