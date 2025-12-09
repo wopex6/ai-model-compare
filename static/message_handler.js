@@ -27,7 +27,7 @@ const MessageHandler = {
             botColor: theme.botColor || '#26A69A',
             userGradient: theme.userGradient || 'linear-gradient(135deg, #00695C, #26A69A)',
             botBackground: theme.botBackground || 'rgba(38, 166, 154, 0.15)',
-            userTimestampColor: '#00E5FF',  // Bright cyan - easy to read
+            userTimestampColor: '#FFFFFF',  // White - high contrast on colored backgrounds
             botTimestampColor: '#888',      // Gray - subtle
             messageClass: theme.messageClass || 'message',  // Allow custom message class
             bubbleClass: theme.bubbleClass || 'message-bubble',  // Allow custom bubble class

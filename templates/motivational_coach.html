@@ -496,8 +496,10 @@
                 this.sendBtn = document.getElementById('sendBtn');
                 this.chatMessages = document.getElementById('chatMessages');
                 this.typingIndicator = document.getElementById('typingIndicator');
+                this.sessionId = null;
                 
                 this.initializeEventListeners();
+                this.loadConversationHistory();
                 this.loadStats();
                 this.startPeriodicUpdates();
             }
@@ -511,6 +513,54 @@
                 document.getElementById('remindersToggle').addEventListener('change', (e) => {
                     this.toggleReminders(e.target.checked);
                 });
+            }
+            
+            async loadConversationHistory() {
+                try {
+                    // Get session ID from cookie
+                    this.sessionId = this.getCookie('session_super_motivational_coach');
+                    
+                    if (this.sessionId) {
+                        console.log(`Loading history for session: ${this.sessionId}`);
+                        
+                        // Fetch conversation history from backend
+                        const response = await fetch(`/super_motivational_coach/history?session_id=${this.sessionId}`);
+                        const data = await response.json();
+                        
+                        if (data.messages && data.messages.length > 0) {
+                            console.log(`Loaded ${data.messages.length} messages from history`);
+                            
+                            // Clear welcome message
+                            this.chatMessages.innerHTML = '';
+                            
+                            // Display all messages
+                            data.messages.forEach(msg => {
+                                const sender = msg.role === 'user' ? 'user' : 'coach';
+                                this.addMessage(msg.content, sender, false);
+                            });
+                            
+                            // Scroll to bottom once
+                            this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
+                        }
+                    } else {
+                        console.log('No existing session found, starting new conversation');
+                    }
+                } catch (error) {
+                    console.error('Error loading conversation history:', error);
+                }
+            }
+            
+            getCookie(name) {
+                const value = `; ${document.cookie}`;
+                const parts = value.split(`; ${name}=`);
+                if (parts.length === 2) return parts.pop().split(';').shift();
+                return null;
+            }
+            
+            setCookie(name, value, days = 365) {
+                const expires = new Date();
+                expires.setTime(expires.getTime() + (days * 24 * 60 * 60 * 1000));
+                document.cookie = `${name}=${value};expires=${expires.toUTCString()};path=/`;
             }
             
             async sendMessage(message = null) {
@@ -530,11 +580,20 @@
                         method: 'POST',
                         body: JSON.stringify({
                             message: messageText,
-                            include_context: true
+                            include_context: true,
+                            session_id: this.sessionId
                         })
                     });
                     
                     const data = await response.json();
+                    
+                    // CRITICAL FIX: Always update session ID to stay in sync with backend
+                    if (data.session_id) {
+                        const isNewSession = !this.sessionId;
+                        this.sessionId = data.session_id;
+                        this.setCookie('session_super_motivational_coach', this.sessionId);
+                        console.log(isNewSession ? `🆕 New session: ${this.sessionId}` : `🔄 Session updated: ${this.sessionId}`);
+                    }
                     
                     if (data.error) {
                         this.addMessage(`❌ ${data.error}`, 'coach', true);
