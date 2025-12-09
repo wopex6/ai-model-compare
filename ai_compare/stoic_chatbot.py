@@ -181,18 +181,19 @@ class StoicChatbot(AIChatbot):
             return stoic_response
         
         # Enhance message with Stoic perspective
-        # CRITICAL: Save original user message BEFORE enhancing
-        # Enhanced message is for AI only, not for history display
-        if hasattr(self, 'conversation_manager') and hasattr(self, 'session_id'):
+        # CRITICAL FIX: Save original message BEFORE enhancement if needed
+        # This ensures user sees their actual message, not the enhanced version with context
+        if save_user_message and hasattr(self, 'conversation_manager') and hasattr(self, 'session_id'):
             self.conversation_manager.save_message(
                 self.session_id, "user", user_message,
                 {"personality_adapted": True}
             )
         
+        # Now enhance for AI processing
         enhanced_message = await self._enhance_with_stoic_context(user_message)
         
-        # Get base response from parent chatbot
-        # Pass save_user_message=False to prevent saving enhanced message
+        # Get base response from parent chatbot with enhanced message
+        # Pass save_user_message=False since we already saved above (or it was already saved by Smart Response)
         response_data = await super().chat(enhanced_message, include_context, save_user_message=False, message_source=message_source)
         
         # Add Stoic enhancements
