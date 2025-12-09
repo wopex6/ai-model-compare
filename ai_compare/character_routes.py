@@ -122,22 +122,24 @@ def _register_chat_endpoint(app, character_id, characters_dict, smart_response_p
             if smart_response_processor:
                 # CRITICAL FIX: Save original message, not enhanced one
                 # Smart Response adds context for AI, but user should see their original message
-                bot.conversation_manager.save_message(session_id, "user", message)
+                bot.conversation_manager.save_message(session_id, "user", message, {"source": "user"})
                 
                 def ai_function(enhanced_message):
                     # Use persistent event loop (no create/close warnings)
                     # enhanced_message includes explicit context prepended by Smart Response
-                    # Pass save_user_message=False to prevent double-saving
-                    return _run_async(bot.chat(enhanced_message, include_context, save_user_message=False))
+                    # Pass save_user_message=False to prevent double-saving user message
+                    # Pass message_source to tag where the response came from
+                    return _run_async(bot.chat(enhanced_message, include_context, save_user_message=False, message_source="smart_response"))
                 
                 try:
                     response = smart_response_processor(message, character_id, ai_function)
+                    # Note: bot.chat already saved the assistant response with source="smart_response"
                 except Exception as e:
                     print(f"❌ Error in Smart Response for {character_id}: {e}")
                     # Save error as assistant response to keep history balanced
                     error_msg = "I apologize, but I encountered an error. Please try again."
                     bot.conversation_manager.save_message(session_id, "assistant", error_msg, 
-                                                         {"error": str(e), "error_type": "smart_response_failure"})
+                                                         {"error": str(e), "error_type": "smart_response_failure", "source": "smart_response"})
                     return jsonify({'error': str(e), 'response': error_msg}), 500
             else:
                 # Fallback to direct AI if Smart Response not available

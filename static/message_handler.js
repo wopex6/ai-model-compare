@@ -1,0 +1,195 @@
+/**
+ * Unified Message Handler for All Characters
+ * Handles display and interaction with messages consistently across all character chats
+ * 
+ * Usage:
+ * 1. Include: <script src="/static/message_handler.js"></script>
+ * 2. Initialize: MessageHandler.init('character-name', {theme config})
+ * 3. Display: MessageHandler.addMessage({content, role, timestamp, source})
+ * 4. Load history: MessageHandler.loadHistory(sessionId)
+ */
+
+const MessageHandler = {
+    // Configuration
+    characterName: null,
+    theme: null,
+    messagesContainer: null,
+    
+    /**
+     * Initialize the message handler for a specific character
+     * @param {string} characterName - Character identifier (e.g., 'scientist', 'coach')
+     * @param {object} theme - Theme configuration {userColor, botColor, gradient, etc.}
+     */
+    init(characterName, theme = {}) {
+        this.characterName = characterName;
+        this.theme = {
+            userColor: theme.userColor || '#00695C',
+            botColor: theme.botColor || '#26A69A',
+            userGradient: theme.userGradient || 'linear-gradient(135deg, #00695C, #26A69A)',
+            botBackground: theme.botBackground || 'rgba(38, 166, 154, 0.15)',
+            userTimestampColor: '#00E5FF',  // Bright cyan - easy to read
+            botTimestampColor: '#888',      // Gray - subtle
+            ...theme
+        };
+        this.messagesContainer = document.getElementById('chatMessages') || document.getElementById('chat-messages');
+        
+        console.log(`✅ MessageHandler initialized for ${characterName}`);
+    },
+    
+    /**
+     * Add a message to the chat display
+     * UNIVERSAL: Works for all characters, all message types
+     * 
+     * @param {object} options - Message options
+     * @param {string} options.content - Message text content
+     * @param {string} options.role - 'user' or 'assistant' (or 'bot')
+     * @param {string} options.timestamp - ISO timestamp (optional)
+     * @param {string} options.source - 'smart_response' or 'direct_ai' (optional, for debugging)
+     * @param {boolean} options.shouldScroll - Auto-scroll to bottom (default: true)
+     * @param {object} options.metadata - Additional metadata (optional)
+     */
+    addMessage({
+        content,
+        role,
+        timestamp = null,
+        source = null,
+        shouldScroll = true,
+        metadata = {}
+    }) {
+        if (!this.messagesContainer) {
+            console.error('❌ MessageHandler: messagesContainer not found');
+            return;
+        }
+        
+        // Normalize role: 'assistant' or 'bot' → 'bot', 'user' → 'user'
+        const sender = (role === 'assistant' || role === 'bot') ? 'bot' : 'user';
+        
+        // Create message container
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${sender}`;
+        messageDiv.dataset.role = role;
+        if (source) messageDiv.dataset.source = source;
+        
+        // Create message bubble
+        const bubble = document.createElement('div');
+        bubble.className = 'message-bubble';
+        
+        // Format timestamp
+        let timeStr = '';
+        if (timestamp) {
+            const date = new Date(timestamp);
+            const hours = date.getHours().toString().padStart(2, '0');
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            const color = sender === 'user' ? this.theme.userTimestampColor : this.theme.botTimestampColor;
+            timeStr = `<span class="timestamp" style="font-size: 0.75em; color: ${color}; margin-left: 8px;">${hours}:${minutes}</span>`;
+        }
+        
+        // Add source badge if provided (for debugging/transparency)
+        let sourceBadge = '';
+        if (source && sender === 'bot') {
+            const badgeText = source === 'smart_response' ? 'SR' : 'AI';
+            const badgeTitle = source === 'smart_response' ? 'Smart Response' : 'Direct AI';
+            sourceBadge = `<span class="source-badge" style="font-size: 0.65em; opacity: 0.5; margin-left: 4px;" title="${badgeTitle}">[${badgeText}]</span>`;
+        }
+        
+        // Format message content
+        const senderLabel = sender === 'bot' ? `<strong>${this.getBotDisplayName()}:</strong>` : '<strong>You:</strong>';
+        bubble.innerHTML = `${senderLabel} ${content}${sourceBadge}${timeStr}`;
+        
+        messageDiv.appendChild(bubble);
+        this.messagesContainer.appendChild(messageDiv);
+        
+        // Debug log
+        const preview = content.substring(0, 30);
+        console.log(`✅ Added ${sender} message to DOM: "${preview}..." ${source ? `[${source}]` : ''}`);
+        
+        // Auto-scroll
+        if (shouldScroll) {
+            this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
+        }
+    },
+    
+    /**
+     * Get bot display name for current character
+     * @returns {string} Display name
+     */
+    getBotDisplayName() {
+        const names = {
+            'scientist': 'Dr. Nova',
+            'psychologist': 'Dr. Sarah',
+            'life_coach': 'Coach Jordan',
+            'business_coach': 'Coach Ryan',
+            'sage': 'Sage',
+            'stoic_marcus': 'Marcus',
+            'zen_master': 'Master Kai'
+        };
+        return names[this.characterName] || 'Assistant';
+    },
+    
+    /**
+     * Load and display conversation history
+     * UNIVERSAL: Works for all message types (Smart Response, Direct AI, etc.)
+     * 
+     * @param {string} sessionId - Session ID to load
+     * @param {string} endpoint - API endpoint (e.g., '/scientist/history')
+     * @returns {Promise<object>} History data
+     */
+    async loadHistory(sessionId, endpoint) {
+        if (!sessionId) {
+            console.log('No existing session found, starting new conversation');
+            return { messages: [] };
+        }
+        
+        try {
+            console.log(`Loading history for session: ${sessionId}`);
+            
+            const response = await fetch(`${endpoint}?session_id=${sessionId}`);
+            const data = await response.json();
+            
+            if (data.messages && data.messages.length > 0) {
+                console.log(`Loaded ${data.messages.length} messages from history`);
+                
+                // Debug: Show breakdown
+                const userMsgs = data.messages.filter(m => m.role === 'user').length;
+                const assistantMsgs = data.messages.filter(m => m.role === 'assistant').length;
+                console.log(`📊 Message breakdown: User: ${userMsgs}, Assistant: ${assistantMsgs}`);
+                
+                // Clear any welcome message
+                this.messagesContainer.innerHTML = '';
+                
+                // Display all messages using unified handler
+                data.messages.forEach((msg, index) => {
+                    const preview = msg.content.substring(0, 50);
+                    console.log(`   ${index + 1}. [${msg.role}] ${preview}...`);
+                    
+                    this.addMessage({
+                        content: msg.content,
+                        role: msg.role,
+                        timestamp: msg.timestamp || new Date().toISOString(),
+                        source: msg.metadata?.source || null,
+                        shouldScroll: false  // Don't scroll for each message
+                    });
+                });
+                
+                // Scroll to bottom once
+                this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
+            } else {
+                console.log('No messages in history');
+            }
+            
+            return data;
+        } catch (error) {
+            console.error('Error loading conversation history:', error);
+            return { messages: [] };
+        }
+    },
+    
+    /**
+     * Clear all messages from display
+     */
+    clearMessages() {
+        if (this.messagesContainer) {
+            this.messagesContainer.innerHTML = '';
+        }
+    }
+};

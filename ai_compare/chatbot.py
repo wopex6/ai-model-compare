@@ -51,7 +51,7 @@ class AIChatbot:
         # Initialize adaptive personality for this session
         self.adaptive_personality = AdaptivePersonality(self.session_id, self.personality_profiler)
     
-    async def chat(self, user_message: str, include_context: bool = True, save_user_message: bool = True) -> Dict[str, any]:
+    async def chat(self, user_message: str, include_context: bool = True, save_user_message: bool = True, message_source: str = "direct_ai") -> Dict[str, any]:
         """
         Process user message and generate personality-aware response
         
@@ -111,6 +111,7 @@ class AIChatbot:
         self.conversation_manager.save_message(
             self.session_id, "assistant", final_response,
             {
+                "source": message_source,  # Track if from smart_response or direct_ai
                 "personality_state": {
                     "character": self.personality.traits.character,
                     "mood": self.personality.traits.mood.value,
