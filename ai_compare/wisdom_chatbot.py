@@ -113,10 +113,19 @@ class WisdomChatbot(AIChatbot):
             return wisdom_response
         
         # Enhance message with Taoist perspective
+        # CRITICAL: Save original user message BEFORE enhancing
+        # Enhanced message is for AI only, not for history display
+        if hasattr(self, 'conversation_manager') and hasattr(self, 'session_id'):
+            self.conversation_manager.save_message(
+                self.session_id, "user", user_message,
+                {"personality_adapted": True}
+            )
+        
         enhanced_message = await self._enhance_with_wisdom_context(user_message)
         
         # Get base response from parent chatbot
-        response_data = await super().chat(enhanced_message, include_context)
+        # Pass save_user_message=False to prevent saving enhanced message
+        response_data = await super().chat(enhanced_message, include_context, save_user_message=False)
         
         # Add wisdom enhancements
         response_data = await self._add_wisdom_enhancements(response_data, user_message)
