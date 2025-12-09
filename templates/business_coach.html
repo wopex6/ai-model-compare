@@ -7,6 +7,8 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="/static/auth_helper.js"></script>
+    <script src="/static/message_handler.js"></script>
+    <script src="/static/conversation_box.js"></script>
     <style>
         body {
             background: #f5f7fa;
@@ -498,10 +500,32 @@
     </div>
 
     <script>
+        // Custom KPI tracking for business_coach
         let messageCount = 0;
         let sessionStartTime = Date.now();
         let productivityScore = 0;
         let insightCount = 0;
+
+        // Initialize MessageHandler with business coach theme
+        MessageHandler.init('business_coach', {
+            userColor: '#1976D2',
+            botColor: '#42A5F5',
+            characterDisplayName: 'Coach Ryan',
+            messageClass: 'message',
+            bubbleClass: 'message-bubble'
+        });
+
+        // Initialize ConversationBox with callbacks for KPI tracking
+        ConversationBox.init('business_coach', {
+            onMessageSent: (message) => {
+                messageCount++;
+                document.getElementById('actionCount').textContent = messageCount;
+            },
+            onResponseReceived: (data) => {
+                insightCount++;
+                document.getElementById('insightCount').textContent = insightCount;
+            }
+        });
 
         // Load daily insight
         window.addEventListener('load', async () => {
@@ -513,7 +537,7 @@
                 console.error('Error loading insight:', error);
             }
             
-            // Update session time and metrics
+            // Update session time and productivity metrics
             setInterval(() => {
                 const minutes = Math.floor((Date.now() - sessionStartTime) / 60000);
                 document.getElementById('sessionTime').textContent = `${minutes} min`;
@@ -526,61 +550,9 @@
             }, 30000);
         });
 
-        function handleKeyPress(event) {
-            if (event.key === 'Enter') {
-                sendMessage();
-            }
-        }
-
+        // Quick message handler using ConversationBox
         function sendQuickMessage(message) {
-            document.getElementById('userInput').value = message;
-            sendMessage();
-        }
-
-        async function sendMessage() {
-            const input = document.getElementById('userInput');
-            const message = input.value.trim();
-            
-            if (!message) return;
-            
-            addMessage(message, 'user');
-            input.value = '';
-            
-            messageCount++;
-            document.getElementById('actionCount').textContent = messageCount;
-            
-            try {
-                const response = await AuthHelper.authenticatedFetch('/business_coach/chat', {
-                    method: 'POST',
-                    body: JSON.stringify({ message: message, include_context: true })
-                });
-                
-                const data = await response.json();
-                if (data.response) {
-                    addMessage(data.response, 'bot');
-                    insightCount++;
-                    document.getElementById('insightCount').textContent = insightCount;
-                }
-            } catch (error) {
-                console.error('Error:', error);
-                addMessage('Let me recalibrate. Please try again.', 'bot');
-            }
-        }
-
-        function addMessage(text, sender) {
-            const messagesDiv = document.getElementById('chatMessages');
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${sender}`;
-            
-            const bubble = document.createElement('div');
-            bubble.className = 'message-bubble';
-            bubble.innerHTML = sender === 'bot' 
-                ? `<strong>Coach Ryan:</strong> ${text}`
-                : `<strong>You:</strong> ${text}`;
-            
-            messageDiv.appendChild(bubble);
-            messagesDiv.appendChild(messageDiv);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            ConversationBox.sendQuickMessage(message);
         }
     </script>
 </body>
