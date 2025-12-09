@@ -1,0 +1,41 @@
+[Unit]
+Description=AI Model Compare Flask Application
+Documentation=https://github.com/wopex6/ai-model-compare
+After=network.target
+
+[Service]
+Type=notify
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/ai-model-compare
+Environment="PATH=/var/www/ai-model-compare/venv/bin"
+Environment="FLASK_ENV=production"
+Environment="FLASK_DEBUG=0"
+
+# Load environment variables from .env file
+EnvironmentFile=/var/www/ai-model-compare/.env
+
+# Start Gunicorn
+ExecStart=/var/www/ai-model-compare/venv/bin/gunicorn \
+    --config /var/www/ai-model-compare/gunicorn_config.py \
+    app:app
+
+# Restart policy
+Restart=always
+RestartSec=10
+KillMode=mixed
+TimeoutStopSec=30
+
+# Security
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/ai-model-compare/databases /var/www/ai-model-compare/logs /var/www/ai-model-compare/conversations /var/www/ai-model-compare/user_profiles
+
+# Limits
+LimitNOFILE=65536
+LimitNPROC=512
+
+[Install]
+WantedBy=multi-user.target
