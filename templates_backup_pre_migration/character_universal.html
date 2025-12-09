@@ -325,20 +325,10 @@
         </div>
     </div>
 
-    <script src="{{ url_for('static', filename='message_handler.js') }}"></script>
     <script>
         const characterId = "{{ character_id }}";
         let messageCount = 0;
         let sessionId = null;
-        
-        // Initialize MessageHandler with character theme
-        MessageHandler.init('{{ character_id }}', {
-            userColor: '{{ character.theme.primary_color }}',
-            botColor: '{{ character.theme.secondary_color }}',
-            characterDisplayName: '{{ character.display_name }}',
-            messageClass: 'message',
-            bubbleClass: 'message-bubble'
-        });
 
         // Load daily insight and conversation history
         window.addEventListener('load', async () => {
@@ -363,13 +353,31 @@
                 if (sessionId) {
                     console.log(`Loading history for session: ${sessionId}`);
                     
-                    // Use unified MessageHandler to load history
-                    const data = await MessageHandler.loadHistory(sessionId, `/${characterId}/history`);
+                    // Fetch conversation history from backend
+                    const response = await fetch(`/${characterId}/history?session_id=${sessionId}`);
+                    const data = await response.json();
                     
-                    if (data && data.messages && data.messages.length > 0) {
+                    if (data.messages && data.messages.length > 0) {
+                        console.log(`Loaded ${data.messages.length} messages from history`);
+                        
+                        // Clear welcome message
+                        document.getElementById('chatMessages').innerHTML = '';
+                        
+                        // Display all messages
+                        data.messages.forEach(msg => {
+                            const sender = msg.role === 'user' ? 'user' : 'bot';
+                            const timestamp = msg.timestamp || new Date().toISOString();
+                            console.log(`📝 Loading message: [${sender}] ${msg.content.substring(0, 50)}... (${timestamp})`);
+                            addMessage(msg.content, sender, false, timestamp); // Don't scroll for each
+                        });
+                        
                         // Update message count
                         messageCount = data.messages.length;
                         document.getElementById('messageCount').textContent = messageCount;
+                        
+                        // Scroll to bottom once
+                        const messagesDiv = document.getElementById('chatMessages');
+                        messagesDiv.scrollTop = messagesDiv.scrollHeight;
                     }
                 } else {
                     console.log('No existing session found, starting new conversation');
@@ -409,12 +417,7 @@
             
             if (!message) return;
             
-            MessageHandler.addMessage({
-                content: message,
-                role: 'user',
-                timestamp: new Date().toISOString(),
-                shouldScroll: true
-            });
+            addMessage(message, 'user', true, new Date().toISOString());
             input.value = '';
             
             messageCount++;
@@ -443,36 +446,55 @@
                     const isNewSession = !sessionId;
                     sessionId = data.session_id;
                     setCookie(`session_${characterId}`, sessionId);
-                    console.log(isNewSession ? ` New session: ${sessionId}` : ` Session updated: ${sessionId}`);
+                    console.log(isNewSession ? `🆕 New session: ${sessionId}` : `🔄 Session updated: ${sessionId}`);
                 }
                 
                 if (data.response) {
-                    MessageHandler.addMessage({
-                        content: data.response,
-                        role: 'bot',
-                        timestamp: new Date().toISOString(),
-                        source: data.type || 'direct_ai',
-                        shouldScroll: true
-                    });
+                    addMessage(data.response, 'bot', true, new Date().toISOString());
                 } else if (data.error) {
-                    MessageHandler.addMessage({
-                        content: 'I apologize, but I encountered an error. Please try again.',
-                        role: 'bot',
-                        shouldScroll: true
-                    });
+                    addMessage('I apologize, but I encountered an error. Please try again.', 'bot', true, new Date().toISOString());
                 }
             } catch (error) {
                 console.error('Error:', error);
                 document.getElementById('typingIndicator').style.display = 'none';
-                MessageHandler.addMessage({
-                    content: 'I apologize, but I had trouble processing that. Please try again.',
-                    role: 'bot',
-                    shouldScroll: true
-                });
+                addMessage('I apologize, but I had trouble processing that. Please try again.', 'bot', true, new Date().toISOString());
             }
         }
 
-        // addMessage() function removed - now using unified MessageHandler.addMessage()
+        function addMessage(text, sender, shouldScroll = true, timestamp = null) {
+            const messagesDiv = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble';
+            
+            // Format timestamp
+            let timeStr = '';
+            if (timestamp) {
+                const date = new Date(timestamp);
+                const hours = date.getHours().toString().padStart(2, '0');
+                const minutes = date.getMinutes().toString().padStart(2, '0');
+                // Bright cyan for user, gray for bot
+                const color = sender === 'user' ? '#00E5FF' : '#888';
+                timeStr = `<span style="font-size: 0.75em; color: ${color}; margin-left: 8px;">${hours}:${minutes}</span>`;
+            }
+            
+            if (sender === 'bot') {
+                bubble.innerHTML = `<strong>{{ character.display_name }}:</strong> ${text}${timeStr}`;
+            } else {
+                bubble.innerHTML = `<strong>You:</strong> ${text}${timeStr}`;
+            }
+            
+            messageDiv.appendChild(bubble);
+            messagesDiv.appendChild(messageDiv);
+            
+            console.log(`✅ Added ${sender} message to DOM`);
+            
+            if (shouldScroll) {
+                messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            }
+        }
     </script>
 </body>
 </html>

@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coach Ryan - Business Strategy</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="/static/auth_helper.js"></script>
+    <style>
+        body {
+            background: #f5f7fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            min-height: 100vh;
+        }
+        
+        .business-header {
+            background: linear-gradient(135deg, #1976D2, #42A5F5);
+            color: white;
+            padding: 30px 0;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header-content {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px;
+            display: flex;
+            align-items: center;
+            gap: 30px;
+        }
+        
+        .coach-avatar {
+            width: 80px;
+            height: 80px;
+            background: white;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            color: #1976D2;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .header-text h1 {
+            margin: 0;
+            font-size: 2rem;
+            font-weight: 700;
+        }
+        
+        .header-text p {
+            margin: 5px 0 0;
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+        
+        .main-container {
+            max-width: 1400px;
+            margin: -30px auto 20px;
+            padding: 0 20px;
+        }
+        
+        /* KPI Cards */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .kpi-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s;
+        }
+        
+        .kpi-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.12);
+        }
+        
+        .kpi-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-bottom: 15px;
+        }
+        
+        .kpi-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #1976D2;
+            margin: 10px 0 5px;
+        }
+        
+        .kpi-label {
+            color: #666;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        .kpi-trend {
+            margin-top: 10px;
+            font-size: 0.85rem;
+        }
+        
+        .trend-up {
+            color: #4caf50;
+        }
+        
+        .trend-down {
+            color: #f44336;
+        }
+        
+        /* Main Grid */
+        .content-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 20px;
+        }
+        
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 25px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+        }
+        
+        .card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        
+        .card-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        /* Chat Area */
+        .chat-container {
+            display: flex;
+            flex-direction: column;
+            height: 600px;
+        }
+        
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .message {
+            margin-bottom: 15px;
+            animation: slideIn 0.3s ease;
+        }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-10px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        
+        .message.user {
+            text-align: right;
+        }
+        
+        .message-bubble {
+            display: inline-block;
+            padding: 12px 18px;
+            border-radius: 12px;
+            max-width: 80%;
+        }
+        
+        .message.user .message-bubble {
+            background: linear-gradient(135deg, #1976D2, #42A5F5);
+            color: white;
+        }
+        
+        .message.bot .message-bubble {
+            background: #e3f2fd;
+            color: #333;
+            border: 1px solid #bbdefb;
+        }
+        
+        .chat-input-area {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .chat-input {
+            flex: 1;
+            padding: 12px 18px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+        }
+        
+        .chat-input:focus {
+            outline: none;
+            border-color: #1976D2;
+        }
+        
+        .send-btn {
+            background: linear-gradient(135deg, #1976D2, #42A5F5);
+            color: white;
+            border: none;
+            padding: 12px 28px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .send-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(25, 118, 210, 0.4);
+        }
+        
+        /* Action Items */
+        .action-item {
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            border-left: 4px solid #1976D2;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .action-item:hover {
+            background: #e3f2fd;
+            transform: translateX(5px);
+        }
+        
+        .action-priority {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        
+        .priority-high {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .priority-medium {
+            background: #fff3e0;
+            color: #ef6c00;
+        }
+        
+        /* Business Insights */
+        .insight-item {
+            padding: 15px;
+            background: linear-gradient(135deg, rgba(25, 118, 210, 0.05), rgba(66, 165, 245, 0.05));
+            border-radius: 8px;
+            margin-bottom: 12px;
+            border-left: 3px solid #42A5F5;
+        }
+        
+        .insight-title {
+            font-weight: 600;
+            color: #1976D2;
+            margin-bottom: 5px;
+        }
+        
+        .insight-text {
+            font-size: 0.9rem;
+            color: #666;
+        }
+        
+        .back-button {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: white;
+            color: #1976D2;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+        
+        .back-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+        }
+        
+        @media (max-width: 1200px) {
+            .kpi-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            .content-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <a href="/chatchat" class="back-button">
+        <i class="fas fa-arrow-left"></i> Dashboard
+    </a>
+
+    <!-- Header -->
+    <div class="business-header">
+        <div class="header-content">
+            <div class="coach-avatar">
+                <i class="fas fa-briefcase"></i>
+            </div>
+            <div class="header-text">
+                <h1>Coach Ryan - Business Strategy</h1>
+                <p>Your Strategic Business Partner for Growth & Excellence</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <!-- KPI Cards -->
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <div class="kpi-icon" style="background: #e3f2fd; color: #1976D2;">
+                    <i class="fas fa-chart-line"></i>
+                </div>
+                <div class="kpi-label">Session Productivity</div>
+                <div class="kpi-value" id="productivityScore">0%</div>
+                <div class="kpi-trend trend-up">
+                    <i class="fas fa-arrow-up"></i> Improving
+                </div>
+            </div>
+            
+            <div class="kpi-card">
+                <div class="kpi-icon" style="background: #e8f5e9; color: #4caf50;">
+                    <i class="fas fa-bullseye"></i>
+                </div>
+                <div class="kpi-label">Action Items</div>
+                <div class="kpi-value" id="actionCount">0</div>
+                <div class="kpi-trend">
+                    Ready to execute
+                </div>
+            </div>
+            
+            <div class="kpi-card">
+                <div class="kpi-icon" style="background: #fff3e0; color: #ff9800;">
+                    <i class="fas fa-lightbulb"></i>
+                </div>
+                <div class="kpi-label">Insights Gained</div>
+                <div class="kpi-value" id="insightCount">0</div>
+                <div class="kpi-trend">
+                    Knowledge building
+                </div>
+            </div>
+            
+            <div class="kpi-card">
+                <div class="kpi-icon" style="background: #f3e5f5; color: #9c27b0;">
+                    <i class="fas fa-trophy"></i>
+                </div>
+                <div class="kpi-label">Focus Score</div>
+                <div class="kpi-value" id="focusScore">85%</div>
+                <div class="kpi-trend trend-up">
+                    <i class="fas fa-arrow-up"></i> Strong
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content Grid -->
+        <div class="content-grid">
+            <!-- Chat Area -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <i class="fas fa-comments"></i>
+                        Strategic Consultation
+                    </div>
+                    <span id="sessionTime" style="color: #666; font-size: 0.9rem;">
+                        <i class="far fa-clock"></i> 0 min
+                    </span>
+                </div>
+                
+                <div id="dailyStrategy" style="padding: 15px; background: linear-gradient(135deg, rgba(25, 118, 210, 0.08), rgba(66, 165, 245, 0.08)); border-radius: 8px; margin-bottom: 20px; border-left: 4px solid #1976D2;">
+                    <strong style="color: #1976D2;">Today's Strategic Insight:</strong>
+                    <p style="margin: 8px 0 0; color: #666;" id="dailyInsightText">Loading...</p>
+                </div>
+                
+                <div class="chat-container">
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="message bot">
+                            <div class="message-bubble">
+                                <strong>Coach Ryan:</strong> Welcome! I'm here to help you strategize, optimize, and achieve your business goals. What challenge shall we tackle today?
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="chat-input-area">
+                        <input 
+                            type="text" 
+                            class="chat-input" 
+                            id="userInput" 
+                            placeholder="Describe your business challenge or goal..."
+                            onkeypress="handleKeyPress(event)"
+                        >
+                        <button class="send-btn" onclick="sendMessage()">
+                            <i class="fas fa-paper-plane"></i> Send
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div>
+                <!-- Action Items -->
+                <div class="card" style="margin-bottom: 20px;">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <i class="fas fa-tasks"></i>
+                            Quick Actions
+                        </div>
+                    </div>
+                    
+                    <div class="action-item" onclick="sendQuickMessage('Help me develop a business strategy')">
+                        <strong>Business Strategy</strong>
+                        <span class="action-priority priority-high">HIGH</span>
+                        <p style="font-size: 0.85rem; color: #666; margin: 5px 0 0;">Develop winning strategy</p>
+                    </div>
+                    
+                    <div class="action-item" onclick="sendQuickMessage('How can I improve productivity?')">
+                        <strong>Productivity Boost</strong>
+                        <span class="action-priority priority-high">HIGH</span>
+                        <p style="font-size: 0.85rem; color: #666; margin: 5px 0 0;">Optimize operations</p>
+                    </div>
+                    
+                    <div class="action-item" onclick="sendQuickMessage('Guide me on leadership skills')">
+                        <strong>Leadership Development</strong>
+                        <span class="action-priority priority-medium">MED</span>
+                        <p style="font-size: 0.85rem; color: #666; margin: 5px 0 0;">Enhance leadership</p>
+                    </div>
+                    
+                    <div class="action-item" onclick="sendQuickMessage('Help with team building')">
+                        <strong>Team Building</strong>
+                        <span class="action-priority priority-medium">MED</span>
+                        <p style="font-size: 0.85rem; color: #666; margin: 5px 0 0;">Strengthen your team</p>
+                    </div>
+                </div>
+
+                <!-- Business Insights -->
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">
+                            <i class="fas fa-brain"></i>
+                            Key Insights
+                        </div>
+                    </div>
+                    
+                    <div class="insight-item">
+                        <div class="insight-title">💡 Strategy First</div>
+                        <div class="insight-text">Clear strategy drives execution. Define before you act.</div>
+                    </div>
+                    
+                    <div class="insight-item">
+                        <div class="insight-title">📊 Metrics Matter</div>
+                        <div class="insight-text">What gets measured gets managed. Track your KPIs.</div>
+                    </div>
+                    
+                    <div class="insight-item">
+                        <div class="insight-title">🎯 Focus Wins</div>
+                        <div class="insight-text">Do fewer things, but do them exceptionally well.</div>
+                    </div>
+                    
+                    <div class="insight-item">
+                        <div class="insight-title">👥 People = Power</div>
+                        <div class="insight-text">Your team is your greatest asset. Invest in them.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let messageCount = 0;
+        let sessionStartTime = Date.now();
+        let productivityScore = 0;
+        let insightCount = 0;
+
+        // Load daily insight
+        window.addEventListener('load', async () => {
+            try {
+                const response = await fetch('/business_coach/daily-insight');
+                const data = await response.json();
+                document.getElementById('dailyInsightText').textContent = data.insight || data;
+            } catch (error) {
+                console.error('Error loading insight:', error);
+            }
+            
+            // Update session time and metrics
+            setInterval(() => {
+                const minutes = Math.floor((Date.now() - sessionStartTime) / 60000);
+                document.getElementById('sessionTime').textContent = `${minutes} min`;
+                
+                // Update productivity score based on activity
+                if (messageCount > 0) {
+                    productivityScore = Math.min(100, 60 + (messageCount * 5));
+                    document.getElementById('productivityScore').textContent = productivityScore + '%';
+                }
+            }, 30000);
+        });
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        function sendQuickMessage(message) {
+            document.getElementById('userInput').value = message;
+            sendMessage();
+        }
+
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            addMessage(message, 'user');
+            input.value = '';
+            
+            messageCount++;
+            document.getElementById('actionCount').textContent = messageCount;
+            
+            try {
+                const response = await AuthHelper.authenticatedFetch('/business_coach/chat', {
+                    method: 'POST',
+                    body: JSON.stringify({ message: message, include_context: true })
+                });
+                
+                const data = await response.json();
+                if (data.response) {
+                    addMessage(data.response, 'bot');
+                    insightCount++;
+                    document.getElementById('insightCount').textContent = insightCount;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                addMessage('Let me recalibrate. Please try again.', 'bot');
+            }
+        }
+
+        function addMessage(text, sender) {
+            const messagesDiv = document.getElementById('chatMessages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${sender}`;
+            
+            const bubble = document.createElement('div');
+            bubble.className = 'message-bubble';
+            bubble.innerHTML = sender === 'bot' 
+                ? `<strong>Coach Ryan:</strong> ${text}`
+                : `<strong>You:</strong> ${text}`;
+            
+            messageDiv.appendChild(bubble);
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+    </script>
+</body>
+</html>

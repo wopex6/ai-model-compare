@@ -29,6 +29,9 @@ const MessageHandler = {
             botBackground: theme.botBackground || 'rgba(38, 166, 154, 0.15)',
             userTimestampColor: '#00E5FF',  // Bright cyan - easy to read
             botTimestampColor: '#888',      // Gray - subtle
+            messageClass: theme.messageClass || 'message',  // Allow custom message class
+            bubbleClass: theme.bubbleClass || 'message-bubble',  // Allow custom bubble class
+            characterDisplayName: theme.characterDisplayName || 'Assistant',
             ...theme
         };
         this.messagesContainer = document.getElementById('chatMessages') || document.getElementById('chat-messages');
@@ -66,13 +69,13 @@ const MessageHandler = {
         
         // Create message container
         const messageDiv = document.createElement('div');
-        messageDiv.className = `message ${sender}`;
+        messageDiv.className = `${this.theme.messageClass} ${sender}`;
         messageDiv.dataset.role = role;
         if (source) messageDiv.dataset.source = source;
         
         // Create message bubble
         const bubble = document.createElement('div');
-        bubble.className = 'message-bubble';
+        bubble.className = this.theme.bubbleClass;
         
         // Format timestamp
         let timeStr = '';
@@ -114,16 +117,8 @@ const MessageHandler = {
      * @returns {string} Display name
      */
     getBotDisplayName() {
-        const names = {
-            'scientist': 'Dr. Nova',
-            'psychologist': 'Dr. Sarah',
-            'life_coach': 'Coach Jordan',
-            'business_coach': 'Coach Ryan',
-            'sage': 'Sage',
-            'stoic_marcus': 'Marcus',
-            'zen_master': 'Master Kai'
-        };
-        return names[this.characterName] || 'Assistant';
+        // Use theme config if provided, otherwise fallback to defaults
+        return this.theme.characterDisplayName || 'Assistant';
     },
     
     /**
