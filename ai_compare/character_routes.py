@@ -133,7 +133,17 @@ def _register_chat_endpoint(app, character_id, characters_dict, smart_response_p
                 
                 try:
                     response = smart_response_processor(message, character_id, ai_function)
-                    # Note: bot.chat already saved the assistant response with source="smart_response"
+                    
+                    # CRITICAL: For quick_reply responses, Smart Response never calls ai_function
+                    # So we need to manually save the assistant response here
+                    if isinstance(response, dict) and response.get('type') == 'quick_reply':
+                        quick_reply_text = response.get('response', '')
+                        bot.conversation_manager.save_message(
+                            session_id, "assistant", quick_reply_text,
+                            {"source": "smart_response_quick_reply", "confidence": response.get('confidence', 0)}
+                        )
+                        print(f"💾 Saved quick_reply to conversation history: '{quick_reply_text[:50]}...'")
+                    # Note: For full AI responses, bot.chat already saved the assistant response
                 except Exception as e:
                     print(f"❌ Error in Smart Response for {character_id}: {e}")
                     # Save error as assistant response to keep history balanced
