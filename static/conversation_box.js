@@ -121,12 +121,9 @@ const ConversationBox = {
         }
         
         try {
-            // Send to backend
-            const response = await fetch(this.config.chatEndpoint, {
+            // Send to backend using AuthHelper for Smart Response authentication
+            const response = await AuthHelper.authenticatedFetch(this.config.chatEndpoint, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
                 body: JSON.stringify({
                     message: message,
                     include_context: this.config.includeContext,
