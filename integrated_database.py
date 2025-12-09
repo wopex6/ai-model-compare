@@ -17,6 +17,7 @@ class IntegratedDatabase:
         self.init_database()
         self.create_default_user()
         self.add_email_verification_columns()
+        self.migrate_add_character_id()  # NEW: Add character_id column
         
         # Initialize PersonalityResolver (lazy import to avoid circular dependency)
         self._resolver = None
@@ -526,7 +527,52 @@ class IntegratedDatabase:
         conn.close()
         return success
     
-    # Conversation methods
+    # ========================================
+    # DATABASE MIGRATION METHODS
+    # ========================================
+    
+    def migrate_add_character_id(self):
+        """Add character_id column to ai_conversations table for user+character tracking"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Check if column exists
+            cursor.execute("PRAGMA table_info(ai_conversations)")
+            columns = [col[1] for col in cursor.fetchall()]
+            
+            if 'character_id' not in columns:
+                print("🔧 Migrating database: Adding character_id column to ai_conversations...")
+                
+                # Add column
+                cursor.execute('ALTER TABLE ai_conversations ADD COLUMN character_id TEXT')
+                
+                # Create index for fast user+character queries
+                cursor.execute('''
+                    CREATE INDEX IF NOT EXISTS idx_conversations_user_character 
+                    ON ai_conversations(user_id, character_id)
+                ''')
+                
+                # Create index for session lookup
+                cursor.execute('''
+                    CREATE INDEX IF NOT EXISTS idx_conversations_session 
+                    ON ai_conversations(session_id)
+                ''')
+                
+                conn.commit()
+                print("✅ Migration complete: character_id column added")
+            else:
+                print("✓ character_id column already exists")
+            
+        except Exception as e:
+            print(f"❌ Migration error: {e}")
+            conn.rollback()
+        finally:
+            conn.close()
+    
+    # ========================================
+    # CONVERSATION METHODS (Original)
+    # ========================================
     def create_conversation(self, user_id: int, title: str, session_id: str = None) -> str:
         """Create a new conversation with retry logic for database locks"""
         import time
@@ -726,6 +772,91 @@ class IntegratedDatabase:
         conn.commit()
         conn.close()
         return success
+    
+    # ========================================
+    # CHARACTER-SPECIFIC CONVERSATION METHODS
+    # (Database migration - Phase 1 & 2)
+    # ========================================
+    
+    def get_or_create_character_session(self, user_id: int, character_id: str) -> str:
+        """Get existing session or create new one for user+character combination"""
+        import uuid
+        
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Check for existing session for this user+character
+            cursor.execute('''
+                SELECT session_id FROM ai_conversations
+                WHERE user_id = ? AND character_id = ?
+                ORDER BY updated_at DESC
+                LIMIT 1
+            ''', (user_id, character_id))
+            
+            result = cursor.fetchone()
+            
+            if result:
+                session_id = result[0]
+                # Update timestamp to mark as recently used
+                cursor.execute('''
+                    UPDATE ai_conversations 
+                    SET updated_at = CURRENT_TIMESTAMP
+                    WHERE session_id = ?
+                ''', (session_id,))
+                conn.commit()
+                print(f"✓ Found existing session: {session_id} for user {user_id}, character {character_id}")
+                return session_id
+            
+            # Create new session
+            session_id = str(uuid.uuid4())
+            cursor.execute('''
+                INSERT INTO ai_conversations (user_id, character_id, session_id, title)
+                VALUES (?, ?, ?, ?)
+            ''', (user_id, character_id, session_id, f"{character_id} conversation"))
+            
+            conn.commit()
+            print(f"✓ Created new session: {session_id} for user {user_id}, character {character_id}")
+            return session_id
+            
+        except Exception as e:
+            print(f"❌ Error in get_or_create_character_session: {e}")
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+    
+    def save_character_message(self, user_id: int, character_id: str, role: str, content: str, metadata: dict = None) -> bool:
+        """Save message to database for user+character (auto-creates session if needed)"""
+        try:
+            # Get or create session for this user+character
+            session_id = self.get_or_create_character_session(user_id, character_id)
+            
+            # Save message using existing add_message method
+            return self.add_message(session_id, user_id, role, content, metadata)
+            
+        except Exception as e:
+            print(f"❌ Error saving character message: {e}")
+            return False
+    
+    def get_character_messages(self, user_id: int, character_id: str, limit: int = None) -> List[Dict]:
+        """Get conversation history for user+character"""
+        try:
+            # Get session for this user+character
+            session_id = self.get_or_create_character_session(user_id, character_id)
+            
+            # Get messages using existing method
+            messages = self.get_conversation_messages(session_id, user_id)
+            
+            # Apply limit if specified
+            if limit and len(messages) > limit:
+                messages = messages[-limit:]
+            
+            return messages
+            
+        except Exception as e:
+            print(f"❌ Error getting character messages: {e}")
+            return []
     
     def get_conversation_by_session(self, session_id: str, user_id: int) -> Optional[Dict[str, Any]]:
         """Get conversation by session ID"""

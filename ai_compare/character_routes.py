@@ -36,7 +36,7 @@ def _run_async(coroutine):
     return future.result()
 
 
-def register_character_routes(app, characters_dict, smart_response_processor=None):
+def register_character_routes(app, characters_dict, smart_response_processor=None, integrated_db=None):
     """
     Dynamically register routes for all characters
     
@@ -44,6 +44,7 @@ def register_character_routes(app, characters_dict, smart_response_processor=Non
         app: Flask app instance
         characters_dict: Dict mapping character_id to chatbot instance
         smart_response_processor: Optional Smart Response processing function
+        integrated_db: IntegratedDatabase instance for user+character sessions
     """
     
     # Get all character IDs
@@ -57,10 +58,55 @@ def register_character_routes(app, characters_dict, smart_response_processor=Non
             
         # Create route functions with proper closures
         _register_character_page(app, char_id)
-        _register_chat_endpoint(app, char_id, characters_dict, smart_response_processor)
+        _register_session_endpoint(app, char_id, integrated_db)  # NEW: Session management
+        _register_chat_endpoint(app, char_id, characters_dict, smart_response_processor, integrated_db)
         _register_insight_endpoint(app, char_id, characters_dict)
         _register_stats_endpoint(app, char_id, characters_dict)
-        _register_history_endpoint(app, char_id, characters_dict)
+        _register_history_endpoint(app, char_id, characters_dict, integrated_db)  # Updated with database
+
+
+def _register_session_endpoint(app, character_id, integrated_db):
+    """Register session endpoint to get/create session for authenticated user+character"""
+    
+    def get_character_session():
+        """Get or create session for authenticated user + character"""
+        try:
+            # Import here to avoid circular dependency
+            from flask import request, jsonify
+            from app import authenticate_token
+            
+            # Get user from auth token
+            user_data = authenticate_token()
+            if not user_data:
+                return jsonify({'error': 'Authentication required'}), 401
+            
+            user_id = user_data.get('user_id')
+            if not user_id:
+                return jsonify({'error': 'Invalid user data'}), 401
+            
+            if not integrated_db:
+                return jsonify({'error': 'Database not configured'}), 500
+            
+            # Get or create session in database
+            session_id = integrated_db.get_or_create_character_session(user_id, character_id)
+            
+            return jsonify({
+                'session_id': session_id,
+                'user_id': user_id,
+                'character_id': character_id
+            })
+            
+        except Exception as e:
+            print(f"Error in {character_id} session: {e}")
+            return jsonify({'error': str(e)}), 500
+    
+    # Register route
+    app.add_url_rule(
+        f'/{character_id}/session',
+        endpoint=f'{character_id}_session',
+        view_func=get_character_session,
+        methods=['GET']
+    )
 
 
 def _register_character_page(app, character_id):
@@ -88,15 +134,16 @@ def _register_character_page(app, character_id):
     )
 
 
-def _register_chat_endpoint(app, character_id, characters_dict, smart_response_processor=None):
-    """Register chat endpoint for character with Smart Response support"""
+def _register_chat_endpoint(app, character_id, characters_dict, smart_response_processor=None, integrated_db=None):
+    """Register chat endpoint for character with Smart Response support and database integration"""
     
     def character_chat():
         try:
+            from app import authenticate_token
+            
             data = request.get_json()
             message = data.get('message', '')
             include_context = data.get('include_context', True)
-            session_id = data.get('session_id')  # Get session ID from request
             
             if not message.strip():
                 return jsonify({'error': 'Message cannot be empty'}), 400
@@ -106,23 +153,36 @@ def _register_chat_endpoint(app, character_id, characters_dict, smart_response_p
             if not bot:
                 return jsonify({'error': f'Character {character_id} not initialized'}), 500
             
-            # Create new session if not provided, or load existing session
-            if not session_id:
-                session_id = bot.conversation_manager.create_session(character_id)
-                print(f"Created new session: {session_id}")
-            else:
-                # Load the session so bot uses correct session_id
-                print(f"Loading existing session: {session_id}")
+            # DATABASE MIGRATION: Get user from auth token
+            user_data = authenticate_token()
+            if not user_data:
+                return jsonify({'error': 'Authentication required'}), 401
             
-            # CRITICAL: Set the bot's session_id to the request's session_id
-            # This ensures messages are saved to the correct session
+            user_id = user_data.get('user_id')
+            if not user_id:
+                return jsonify({'error': 'Invalid user data'}), 401
+            
+            # DATABASE MIGRATION: Get or create session for this user+character
+            if integrated_db:
+                session_id = integrated_db.get_or_create_character_session(user_id, character_id)
+                print(f"✓ Using database session: {session_id} for user {user_id}, character {character_id}")
+            else:
+                # Fallback to old system if database not available
+                session_id = bot.conversation_manager.create_session(character_id)
+                print(f"⚠️ Fallback: Using JSON session: {session_id}")
+            
+            # Set the bot's session_id
             bot.session_id = session_id
             
             # Use Smart Response if available
             if smart_response_processor:
-                # CRITICAL FIX: Save original message, not enhanced one
-                # Smart Response adds context for AI, but user should see their original message
-                bot.conversation_manager.save_message(session_id, "user", message, {"source": "user"})
+                # DATABASE MIGRATION: Save original message to database (not JSON)
+                if integrated_db:
+                    integrated_db.save_character_message(user_id, character_id, "user", message, {"source": "user"})
+                    print(f"💾 Saved user message to DATABASE for user {user_id}, character {character_id}")
+                else:
+                    # Fallback to old system
+                    bot.conversation_manager.save_message(session_id, "user", message, {"source": "user"})
                 
                 def ai_function(enhanced_message):
                     # Use persistent event loop (no create/close warnings)
@@ -138,18 +198,36 @@ def _register_chat_endpoint(app, character_id, characters_dict, smart_response_p
                     # So we need to manually save the assistant response here
                     if isinstance(response, dict) and response.get('type') == 'quick_reply':
                         quick_reply_text = response.get('response', '')
-                        bot.conversation_manager.save_message(
-                            session_id, "assistant", quick_reply_text,
-                            {"source": "smart_response_quick_reply", "confidence": response.get('confidence', 0)}
-                        )
-                        print(f"💾 Saved quick_reply to conversation history: '{quick_reply_text[:50]}...'")
+                        
+                        # DATABASE MIGRATION: Save to database
+                        if integrated_db:
+                            integrated_db.save_character_message(
+                                user_id, character_id, "assistant", quick_reply_text,
+                                {"source": "smart_response_quick_reply", "confidence": response.get('confidence', 0)}
+                            )
+                            print(f"💾 Saved quick_reply to DATABASE: '{quick_reply_text[:50]}...'")
+                        else:
+                            # Fallback
+                            bot.conversation_manager.save_message(
+                                session_id, "assistant", quick_reply_text,
+                                {"source": "smart_response_quick_reply", "confidence": response.get('confidence', 0)}
+                            )
                     # Note: For full AI responses, bot.chat already saved the assistant response
                 except Exception as e:
                     print(f"❌ Error in Smart Response for {character_id}: {e}")
                     # Save error as assistant response to keep history balanced
                     error_msg = "I apologize, but I encountered an error. Please try again."
-                    bot.conversation_manager.save_message(session_id, "assistant", error_msg, 
-                                                         {"error": str(e), "error_type": "smart_response_failure", "source": "smart_response"})
+                    
+                    # DATABASE MIGRATION: Save error to database
+                    if integrated_db:
+                        integrated_db.save_character_message(
+                            user_id, character_id, "assistant", error_msg,
+                            {"error": str(e), "error_type": "smart_response_failure", "source": "smart_response"}
+                        )
+                    else:
+                        # Fallback
+                        bot.conversation_manager.save_message(session_id, "assistant", error_msg, 
+                                                             {"error": str(e), "error_type": "smart_response_failure", "source": "smart_response"})
                     return jsonify({'error': str(e), 'response': error_msg}), 500
             else:
                 # Fallback to direct AI if Smart Response not available
@@ -226,24 +304,38 @@ def _register_stats_endpoint(app, character_id, characters_dict):
     )
 
 
-def _register_history_endpoint(app, character_id, characters_dict):
-    """Register conversation history endpoint"""
+def _register_history_endpoint(app, character_id, characters_dict, integrated_db=None):
+    """Register conversation history endpoint with database support"""
     
     def character_history():
         try:
-            session_id = request.args.get('session_id')
+            from app import authenticate_token
             
-            if not session_id:
-                return jsonify({'messages': []}), 200
+            # DATABASE MIGRATION: Get user from auth token
+            user_data = authenticate_token()
+            if not user_data:
+                return jsonify({'error': 'Authentication required'}), 401
             
-            bot = characters_dict.get(character_id)
-            if not bot:
-                return jsonify({'error': f'Character {character_id} not initialized'}), 500
+            user_id = user_data.get('user_id')
+            if not user_id:
+                return jsonify({'error': 'Invalid user data'}), 401
             
-            # Get conversation history from conversation manager
-            # CRITICAL: Use force_reload=True to ensure we get the latest messages from disk
-            # Without this, intermittent cache staleness causes messages to disappear
-            messages = bot.conversation_manager.get_conversation_history(session_id, force_reload=True)
+            # DATABASE MIGRATION: Get messages from database for this user+character
+            if integrated_db:
+                messages = integrated_db.get_character_messages(user_id, character_id)
+                print(f"✓ Loaded {len(messages)} messages from DATABASE for user {user_id}, character {character_id}")
+            else:
+                # Fallback to old system
+                session_id = request.args.get('session_id')
+                if not session_id:
+                    return jsonify({'messages': []}), 200
+                
+                bot = characters_dict.get(character_id)
+                if not bot:
+                    return jsonify({'error': f'Character {character_id} not initialized'}), 500
+                
+                messages = bot.conversation_manager.get_conversation_history(session_id, force_reload=True)
+                print(f"⚠️ Fallback: Loaded {len(messages)} messages from JSON")
             
             return jsonify({'messages': messages})
         except Exception as e:
