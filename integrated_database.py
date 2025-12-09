@@ -717,11 +717,15 @@ class IntegratedDatabase:
         messages = []
         for row in cursor.fetchall():
             metadata = json.loads(row[2]) if row[2] else {}
+            # Append 'Z' to timestamp to indicate UTC (SQLite stores in UTC but doesn't include timezone)
+            timestamp = row[3]
+            if timestamp and not timestamp.endswith('Z'):
+                timestamp = timestamp + 'Z'
             messages.append({
                 'sender_type': row[0],
                 'content': row[1],
                 'metadata': metadata,
-                'timestamp': row[3]
+                'timestamp': timestamp
             })
         
         conn.close()

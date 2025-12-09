@@ -194,25 +194,26 @@ def _register_chat_endpoint(app, character_id, characters_dict, smart_response_p
                 try:
                     response = smart_response_processor(message, character_id, ai_function)
                     
-                    # CRITICAL: For quick_reply responses, Smart Response never calls ai_function
-                    # So we need to manually save the assistant response here
-                    if isinstance(response, dict) and response.get('type') == 'quick_reply':
-                        quick_reply_text = response.get('response', '')
+                    # DATABASE MIGRATION: Save ALL bot responses to database
+                    if isinstance(response, dict) and response.get('response'):
+                        response_text = response.get('response', '')
+                        response_type = response.get('type', 'direct_ai')
+                        response_source = f"smart_response_{response_type}" if response_type == 'quick_reply' else "smart_response"
                         
-                        # DATABASE MIGRATION: Save to database
+                        # Save to database (not JSON)
                         if integrated_db:
                             integrated_db.save_character_message(
-                                user_id, character_id, "assistant", quick_reply_text,
-                                {"source": "smart_response_quick_reply", "confidence": response.get('confidence', 0)}
+                                user_id, character_id, "assistant", response_text,
+                                {"source": response_source, "confidence": response.get('confidence', 0), "type": response_type}
                             )
-                            print(f"💾 Saved quick_reply to DATABASE: '{quick_reply_text[:50]}...'")
+                            print(f"💾 Saved {response_type} to DATABASE: '{response_text[:50]}...'")
                         else:
                             # Fallback
                             bot.conversation_manager.save_message(
-                                session_id, "assistant", quick_reply_text,
-                                {"source": "smart_response_quick_reply", "confidence": response.get('confidence', 0)}
+                                session_id, "assistant", response_text,
+                                {"source": response_source, "confidence": response.get('confidence', 0)}
                             )
-                    # Note: For full AI responses, bot.chat already saved the assistant response
+                    # FIXED: Now saves ALL responses (quick_reply AND full AI) to database
                 except Exception as e:
                     print(f"❌ Error in Smart Response for {character_id}: {e}")
                     # Save error as assistant response to keep history balanced
