@@ -110,8 +110,8 @@ const ConversationBox = {
             shouldScroll: true
         });
         
-        // Clear input
-        if (inputElement && !messageText) {
+        // Clear input after sending
+        if (inputElement) {
             inputElement.value = '';
         }
         
@@ -202,10 +202,8 @@ const ConversationBox = {
      * @param {string} message - The message to send
      */
     sendQuickMessage(message) {
-        const inputElement = document.getElementById(this.config.inputElementId);
-        if (inputElement) {
-            inputElement.value = message;
-        }
+        // Send directly without setting input value (more efficient)
+        // Input will be cleared by sendMessage() after sending
         this.sendMessage(message);
     },
     
