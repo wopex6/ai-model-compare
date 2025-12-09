@@ -90,8 +90,10 @@ const MessageHandler = {
         // Add source badge if provided (for debugging/transparency)
         let sourceBadge = '';
         if (source && sender === 'bot') {
-            const badgeText = source === 'smart_response' ? 'SR' : 'AI';
-            const badgeTitle = source === 'smart_response' ? 'Smart Response' : 'Direct AI';
+            // Check if message is from Smart Response (quick_reply or smart_response)
+            const isSmartResponse = source === 'smart_response' || source === 'quick_reply' || source.includes('smart_response');
+            const badgeText = isSmartResponse ? 'SR' : 'AI';
+            const badgeTitle = isSmartResponse ? 'Smart Response' : 'Direct AI';
             sourceBadge = `<span class="source-badge" style="font-size: 0.65em; opacity: 0.5; margin-left: 4px;" title="${badgeTitle}">[${badgeText}]</span>`;
         }
         
