@@ -30,10 +30,19 @@ class MotivationalChatbot(AIChatbot):
         await self._check_reminders()
         
         # Process normal chat with motivational context
+        # CRITICAL: Save original user message BEFORE enhancing
+        # Enhanced message is for AI only, not for history display
+        if hasattr(self, 'conversation_manager') and hasattr(self, 'session_id'):
+            self.conversation_manager.save_message(
+                self.session_id, "user", user_message,
+                {"personality_adapted": True}
+            )
+        
         enhanced_message = await self._enhance_with_motivational_context(user_message)
         
         # Get base response
-        response_data = await super().chat(enhanced_message, include_context)
+        # Pass save_user_message=False to prevent saving enhanced message
+        response_data = await super().chat(enhanced_message, include_context, save_user_message=False)
         
         # Add motivational enhancements
         response_data = await self._add_motivational_enhancements(response_data, user_message)
