@@ -77,7 +77,7 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
             "icon": "fa-robot"
         })
     
-    async def chat(self, user_message: str, include_context: bool = True, save_user_message: bool = True) -> Dict:
+    async def chat(self, user_message: str, include_context: bool = True, save_user_message: bool = True, message_source: str = "direct_ai") -> Dict:
         """
         Enhanced chat with specialized knowledge
         Detects topic area and provides appropriate responses
@@ -86,6 +86,7 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
             user_message: The user's message
             include_context: Whether to include conversation history
             save_user_message: Whether to save the user message (False when Smart Response already saved it)
+            message_source: Source of the message ("smart_response" or "direct_ai")
         """
         # Detect what type of inquiry this is
         topic_area = self._detect_topic_area(user_message)
@@ -107,7 +108,7 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
         if self._knowledge_enabled:
             response = await self.chat_with_knowledge(user_message, include_context, save_user_message)
         else:
-            response = await super().chat(user_message, include_context, save_user_message)
+            response = await super().chat(user_message, include_context, save_user_message, message_source)
         
         # Add character-specific enhancement
         response = self._add_character_enhancement(response, user_message)
@@ -177,7 +178,7 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
         if self._knowledge_enabled:
             return await self.chat_with_knowledge(message)
         else:
-            return await super().chat(message)
+            return await super().chat(message, message_source="direct_ai")
     
     async def _provide_strategy(self, message: str) -> Dict:
         """Provide strategy/technique from configured strategies (CONTEXT-AWARE)"""
@@ -225,7 +226,7 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
         if self._knowledge_enabled:
             return await self.chat_with_knowledge(message)
         else:
-            return await super().chat(message, include_context=False, save_user_message=False)
+            return await super().chat(message, include_context=False, save_user_message=False, message_source="direct_ai")
     
     async def _explain_approach(self, message: str) -> Dict:
         """Explain an approach/method from configured approaches"""
@@ -262,7 +263,7 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
         if self._knowledge_enabled:
             return await self.chat_with_knowledge(message)
         else:
-            return await super().chat(message)
+            return await super().chat(message, message_source="direct_ai")
     
     async def _provide_exercise(self, message: str) -> Dict:
         """Provide an exercise from configured exercises"""
@@ -299,7 +300,7 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
         if self._knowledge_enabled:
             return await self.chat_with_knowledge(message)
         else:
-            return await super().chat(message)
+            return await super().chat(message, message_source="direct_ai")
     
     def _add_character_enhancement(self, response: Dict, user_message: str) -> Dict:
         """Add character-specific enhancements to responses"""
