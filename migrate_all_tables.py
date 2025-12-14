@@ -474,6 +474,205 @@ def migrate_all_tables():
         ''')
         print("✅ idx_messages_conversation")
         
+        # ============================================================
+        # DOMAIN CHARACTER SYSTEM (Phase 1)
+        # ============================================================
+        print("\n📦 DOMAIN CHARACTER SYSTEM")
+        print("-" * 80)
+        
+        # Domain characters configuration
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS domain_characters (
+                id TEXT PRIMARY KEY,
+                display_name TEXT NOT NULL,
+                domain TEXT NOT NULL,
+                threshold_config TEXT,
+                style_config TEXT,
+                system_prompt TEXT,
+                active INTEGER DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        print("✅ domain_characters")
+        
+        # Character interpretations (how each character sees context)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS character_interpretations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                primary_history_id INTEGER,
+                character_id TEXT NOT NULL,
+                interpretation TEXT,
+                concern_level REAL DEFAULT 0.0,
+                responded INTEGER DEFAULT 0,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (primary_history_id) REFERENCES history_primary(id)
+            )
+        ''')
+        print("✅ character_interpretations")
+        
+        # Flexible context storage
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS flexible_context (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                context_type TEXT NOT NULL,
+                context_data TEXT NOT NULL,
+                source TEXT,
+                retention_years INTEGER DEFAULT 10,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        ''')
+        print("✅ flexible_context")
+        
+        # Context interpretations per character
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS context_interpretations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                context_id INTEGER NOT NULL,
+                character_id TEXT NOT NULL,
+                interpretation TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (context_id) REFERENCES flexible_context(id) ON DELETE CASCADE
+            )
+        ''')
+        print("✅ context_interpretations")
+        
+        # ============================================================
+        # NOTIFICATION SYSTEM
+        # ============================================================
+        print("\n📦 NOTIFICATION SYSTEM")
+        print("-" * 80)
+        
+        # Notifications
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS notifications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                character_id TEXT,
+                notification_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                message TEXT NOT NULL,
+                priority TEXT DEFAULT 'medium',
+                conversation_context TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                delivered_at DATETIME,
+                acknowledged_at DATETIME,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        ''')
+        print("✅ notifications")
+        
+        # User notification preferences
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_notification_preferences (
+                user_id INTEGER PRIMARY KEY,
+                preferences TEXT NOT NULL,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        ''')
+        print("✅ user_notification_preferences")
+        
+        # ============================================================
+        # FEEDBACK SYSTEM EXTENSIONS
+        # ============================================================
+        print("\n📦 FEEDBACK SYSTEM")
+        print("-" * 80)
+        
+        # User-character preference scores
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_character_preferences (
+                user_id INTEGER NOT NULL,
+                character_id TEXT NOT NULL,
+                preference_score REAL DEFAULT 0.0,
+                interaction_count INTEGER DEFAULT 0,
+                last_interaction DATETIME,
+                PRIMARY KEY (user_id, character_id),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        ''')
+        print("✅ user_character_preferences")
+        
+        # User topic preferences
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_topic_preferences (
+                user_id INTEGER NOT NULL,
+                topic TEXT NOT NULL,
+                preference TEXT NOT NULL,
+                strength REAL DEFAULT 1.0,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, topic),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        ''')
+        print("✅ user_topic_preferences")
+        
+        # Proactive triggers
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS proactive_triggers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                trigger_type TEXT NOT NULL,
+                character_id TEXT,
+                trigger_config TEXT,
+                last_triggered DATETIME,
+                next_scheduled DATETIME,
+                active INTEGER DEFAULT 1,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        ''')
+        print("✅ proactive_triggers")
+        
+        # ============================================================
+        # DOMAIN CHARACTER INDEXES
+        # ============================================================
+        print("\n📦 DOMAIN CHARACTER INDEXES")
+        print("-" * 80)
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_char_interp_history 
+            ON character_interpretations(primary_history_id)
+        ''')
+        print("✅ idx_char_interp_history")
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_char_interp_character 
+            ON character_interpretations(character_id)
+        ''')
+        print("✅ idx_char_interp_character")
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_flex_context_user 
+            ON flexible_context(user_id, context_type)
+        ''')
+        print("✅ idx_flex_context_user")
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_flex_context_created 
+            ON flexible_context(created_at)
+        ''')
+        print("✅ idx_flex_context_created")
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_notifications_user 
+            ON notifications(user_id, created_at)
+        ''')
+        print("✅ idx_notifications_user")
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_proactive_user 
+            ON proactive_triggers(user_id, active)
+        ''')
+        print("✅ idx_proactive_user")
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_proactive_next 
+            ON proactive_triggers(next_scheduled)
+        ''')
+        print("✅ idx_proactive_next")
+        
         # Commit all changes
         conn.commit()
         
