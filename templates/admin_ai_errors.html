@@ -557,14 +557,14 @@
         // Check authentication on page load
         document.addEventListener('DOMContentLoaded', () => {
             const token = localStorage.getItem('authToken');
-            console.log('[Admin] Token exists:', !!token);
-            console.log('[Admin] Token preview:', token ? token.substring(0, 20) + '...' : 'none');
             
             if (!token) {
-                console.log('[Admin] No token, redirecting to login');
-                window.location.href = '/login?redirect=/admin/ai-errors';
+                // No token - redirect to dashboard (which handles login)
+                window.location.href = '/chatchat';
                 return;
             }
+            
+            // Token exists - load data
             loadData();
         });
 
@@ -578,26 +578,22 @@
             if (unresolved) url += `&unresolved=true`;
 
             try {
-                console.log('[Admin] Fetching:', url);
-                console.log('[Admin] Auth headers:', AuthHelper.getAuthHeaders());
                 const response = await AuthHelper.authenticatedFetch(url);
-                console.log('[Admin] Response status:', response.status);
-                const data = await response.json();
-                console.log('[Admin] Response data:', data);
-
+                
                 if (response.status === 401) {
-                    // Token expired or invalid - redirect to login
+                    // Token expired or invalid - redirect to dashboard
                     localStorage.removeItem('authToken');
-                    window.location.href = '/login?redirect=/admin/ai-errors';
+                    window.location.href = '/chatchat';
                     return;
                 }
+
+                const data = await response.json();
 
                 if (data.success) {
                     updateStats(data.stats);
                     updateProviderStatus(data.provider_status);
                     renderErrors(data.errors);
                 } else {
-                    console.error('API error:', data.error);
                     document.getElementById('errors-tbody').innerHTML = `
                         <tr><td colspan="7" class="empty-state">
                             <i class="fas fa-exclamation-circle"></i>
@@ -605,7 +601,6 @@
                         </td></tr>`;
                 }
             } catch (error) {
-                console.error('Error loading data:', error);
                 document.getElementById('errors-tbody').innerHTML = `
                     <tr><td colspan="7" class="empty-state">
                         <i class="fas fa-exclamation-circle"></i>
