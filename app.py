@@ -1415,6 +1415,11 @@ def chatchat_interface():
     """Integrated multi-user AI chatbot interface"""
     return render_template('chatchat.html')
 
+@app.route('/life-companion')
+def life_companion_interface():
+    """Domain characters life companion interface"""
+    return render_template('domain_characters.html')
+
 @app.route('/user_logon')
 def user_logon_interface():
     """User login interface - same as chatchat but without signup option"""
