@@ -162,6 +162,16 @@
             color: #d4a274;
         }
 
+        .provider-icon.google {
+            background: #4285f420;
+            color: #4285f4;
+        }
+
+        .provider-icon.grok {
+            background: #ff6b0020;
+            color: #ff6b00;
+        }
+
         .provider-info h4 {
             font-size: 1.1rem;
             margin-bottom: 4px;
@@ -189,6 +199,11 @@
         .status-badge.unhealthy {
             background: #fee2e2;
             color: #991b1b;
+        }
+
+        .status-badge.not-configured {
+            background: #f3f4f6;
+            color: #6b7280;
         }
 
         .filters {
@@ -483,6 +498,30 @@
                     </div>
                 </div>
             </div>
+            <div class="provider-card">
+                <div class="provider-icon google">
+                    <i class="fab fa-google"></i>
+                </div>
+                <div class="provider-info">
+                    <h4>Google</h4>
+                    <div class="status">
+                        <span class="status-badge" id="google-status">Loading...</span>
+                        <span id="google-failures"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="provider-card">
+                <div class="provider-icon grok">
+                    <i class="fas fa-bolt"></i>
+                </div>
+                <div class="provider-info">
+                    <h4>Grok</h4>
+                    <div class="status">
+                        <span class="status-badge" id="grok-status">Loading...</span>
+                        <span id="grok-failures"></span>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="filters">
@@ -492,6 +531,8 @@
                     <option value="">All Providers</option>
                     <option value="openai">OpenAI</option>
                     <option value="anthropic">Anthropic</option>
+                    <option value="google">Google</option>
+                    <option value="grok">Grok</option>
                 </select>
             </div>
             <div class="filter-group">
@@ -616,25 +657,34 @@
         }
 
         function updateProviderStatus(status) {
-            // OpenAI
-            const openaiStatus = document.getElementById('openai-status');
-            const openaiFailures = document.getElementById('openai-failures');
-            if (status.openai) {
-                openaiStatus.textContent = status.openai.healthy ? 'Healthy' : 'Unhealthy';
-                openaiStatus.className = `status-badge ${status.openai.healthy ? 'healthy' : 'unhealthy'}`;
-                openaiFailures.textContent = status.openai.consecutive_failures > 0 
-                    ? `(${status.openai.consecutive_failures} consecutive failures)` : '';
-            }
-
-            // Anthropic
-            const anthropicStatus = document.getElementById('anthropic-status');
-            const anthropicFailures = document.getElementById('anthropic-failures');
-            if (status.anthropic) {
-                anthropicStatus.textContent = status.anthropic.healthy ? 'Healthy' : 'Unhealthy';
-                anthropicStatus.className = `status-badge ${status.anthropic.healthy ? 'healthy' : 'unhealthy'}`;
-                anthropicFailures.textContent = status.anthropic.consecutive_failures > 0 
-                    ? `(${status.anthropic.consecutive_failures} consecutive failures)` : '';
-            }
+            const providers = ['openai', 'anthropic', 'google', 'grok'];
+            
+            providers.forEach(provider => {
+                const statusEl = document.getElementById(`${provider}-status`);
+                const failuresEl = document.getElementById(`${provider}-failures`);
+                
+                if (statusEl && status[provider]) {
+                    const info = status[provider];
+                    if (!info.available) {
+                        statusEl.textContent = 'Not Configured';
+                        statusEl.className = 'status-badge not-configured';
+                        failuresEl.textContent = '';
+                    } else if (info.healthy) {
+                        statusEl.textContent = 'Healthy';
+                        statusEl.className = 'status-badge healthy';
+                        failuresEl.textContent = info.consecutive_failures > 0 
+                            ? `(${info.consecutive_failures} consecutive failures)` : '';
+                    } else {
+                        statusEl.textContent = 'Unhealthy';
+                        statusEl.className = 'status-badge unhealthy';
+                        failuresEl.textContent = `(${info.consecutive_failures} consecutive failures)`;
+                    }
+                } else if (statusEl) {
+                    statusEl.textContent = 'Not Configured';
+                    statusEl.className = 'status-badge not-configured';
+                    if (failuresEl) failuresEl.textContent = '';
+                }
+            });
         }
 
         function renderErrors(errors) {

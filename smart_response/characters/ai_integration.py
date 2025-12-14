@@ -209,10 +209,12 @@ class DomainCharacterAI:
         self.anthropic_client = None
         self.error_log = AIProviderErrorLog(db_connection)
         
-        # Provider health tracking for smart failover
+        # Provider health tracking for smart failover (all 4 configured providers)
         self.provider_status = {
-            'openai': {'healthy': True, 'last_error': None, 'consecutive_failures': 0},
-            'anthropic': {'healthy': True, 'last_error': None, 'consecutive_failures': 0}
+            'openai': {'healthy': True, 'last_error': None, 'consecutive_failures': 0, 'available': False},
+            'anthropic': {'healthy': True, 'last_error': None, 'consecutive_failures': 0, 'available': False},
+            'google': {'healthy': True, 'last_error': None, 'consecutive_failures': 0, 'available': False},
+            'grok': {'healthy': True, 'last_error': None, 'consecutive_failures': 0, 'available': False}
         }
         
         # Initialize available AI clients
@@ -225,6 +227,7 @@ class DomainCharacterAI:
             api_key = os.environ.get('OPENAI_API_KEY')
             if api_key:
                 self.openai_client = OpenAI(api_key=api_key)
+                self.provider_status['openai']['available'] = True
                 print("✓ OpenAI client initialized for domain characters")
         
         # Anthropic
@@ -232,7 +235,20 @@ class DomainCharacterAI:
             api_key = os.environ.get('ANTHROPIC_API_KEY')
             if api_key:
                 self.anthropic_client = anthropic.Anthropic(api_key=api_key)
+                self.provider_status['anthropic']['available'] = True
                 print("✓ Anthropic client initialized for domain characters")
+        
+        # Google (check if API key exists)
+        google_key = os.environ.get('GOOGLE_API_KEY')
+        if google_key:
+            self.provider_status['google']['available'] = True
+            print("✓ Google API key configured")
+        
+        # Grok (check if API key exists)
+        grok_key = os.environ.get('GROK_API_KEY')
+        if grok_key:
+            self.provider_status['grok']['available'] = True
+            print("✓ Grok API key configured")
     
     def _get_best_provider(self) -> str:
         """Determine best provider based on health status"""
