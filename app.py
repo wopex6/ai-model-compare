@@ -3196,9 +3196,8 @@ def get_ai_provider_status():
 
 
 @app.route('/admin/ai-errors')
-@require_auth
 def admin_ai_errors_page():
-    """Admin page for viewing AI provider errors"""
+    """Admin page for viewing AI provider errors - auth handled client-side"""
     return render_template('admin_ai_errors.html')
 
 
