@@ -3,12 +3,15 @@ AI Integration for Domain Characters
 
 Connects domain characters to AI providers (OpenAI, Anthropic, etc.)
 for generating responses with character-specific personalities.
+Includes automatic failover and admin error logging.
 """
 
 import os
-from typing import Dict, Optional, Any
+import sqlite3
+from typing import Dict, Optional, Any, List, Tuple
 from datetime import datetime
 import json
+import traceback
 
 # AI Provider imports
 try:
@@ -27,6 +30,163 @@ from .base import BaseCharacter, DomainCharacter, CoordinatorCharacter, Characte
 from .configs import DOMAIN_CHARACTER_CONFIGS
 
 
+class AIProviderErrorLog:
+    """Manages AI provider error logging for admin visibility"""
+    
+    def __init__(self, db_connection: sqlite3.Connection = None):
+        self.db = db_connection
+        self._ensure_table()
+    
+    def _ensure_table(self):
+        """Create admin error log table if it doesn't exist"""
+        if not self.db:
+            return
+        try:
+            cursor = self.db.cursor()
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS ai_provider_errors (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    provider TEXT NOT NULL,
+                    error_type TEXT NOT NULL,
+                    error_message TEXT,
+                    error_code TEXT,
+                    character_id TEXT,
+                    user_id INTEGER,
+                    request_context TEXT,
+                    stack_trace TEXT,
+                    resolved INTEGER DEFAULT 0,
+                    admin_notes TEXT
+                )
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_ai_errors_timestamp 
+                ON ai_provider_errors(timestamp DESC)
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_ai_errors_provider 
+                ON ai_provider_errors(provider)
+            ''')
+            self.db.commit()
+        except Exception as e:
+            print(f"Warning: Could not create AI error log table: {e}")
+    
+    def log_error(self, provider: str, error_type: str, error_message: str,
+                  error_code: str = None, character_id: str = None,
+                  user_id: int = None, request_context: Dict = None):
+        """Log an AI provider error for admin review"""
+        if not self.db:
+            print(f"[ADMIN ALERT] AI Provider Error: {provider} - {error_type}: {error_message}")
+            return
+        
+        try:
+            cursor = self.db.cursor()
+            cursor.execute('''
+                INSERT INTO ai_provider_errors 
+                (provider, error_type, error_message, error_code, character_id, 
+                 user_id, request_context, stack_trace)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                provider,
+                error_type,
+                error_message,
+                error_code,
+                character_id,
+                user_id,
+                json.dumps(request_context) if request_context else None,
+                traceback.format_exc()
+            ))
+            self.db.commit()
+            
+            # Console notification for immediate visibility
+            print(f"[ADMIN ALERT] AI Provider Error logged: {provider} - {error_type}")
+            
+        except Exception as e:
+            print(f"Warning: Could not log AI error: {e}")
+    
+    def get_recent_errors(self, limit: int = 50, provider: str = None,
+                          unresolved_only: bool = False) -> List[Dict]:
+        """Get recent errors for admin review"""
+        if not self.db:
+            return []
+        
+        try:
+            cursor = self.db.cursor()
+            query = 'SELECT * FROM ai_provider_errors WHERE 1=1'
+            params = []
+            
+            if provider:
+                query += ' AND provider = ?'
+                params.append(provider)
+            if unresolved_only:
+                query += ' AND resolved = 0'
+            
+            query += ' ORDER BY timestamp DESC LIMIT ?'
+            params.append(limit)
+            
+            cursor.execute(query, params)
+            columns = [desc[0] for desc in cursor.description]
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        except Exception as e:
+            print(f"Error fetching AI errors: {e}")
+            return []
+    
+    def mark_resolved(self, error_id: int, admin_notes: str = None) -> bool:
+        """Mark an error as resolved"""
+        if not self.db:
+            return False
+        
+        try:
+            cursor = self.db.cursor()
+            cursor.execute('''
+                UPDATE ai_provider_errors 
+                SET resolved = 1, admin_notes = ?
+                WHERE id = ?
+            ''', (admin_notes, error_id))
+            self.db.commit()
+            return True
+        except Exception as e:
+            print(f"Error marking AI error resolved: {e}")
+            return False
+    
+    def get_error_stats(self) -> Dict:
+        """Get error statistics for admin dashboard"""
+        if not self.db:
+            return {}
+        
+        try:
+            cursor = self.db.cursor()
+            stats = {}
+            
+            # Total errors
+            cursor.execute('SELECT COUNT(*) FROM ai_provider_errors')
+            stats['total_errors'] = cursor.fetchone()[0]
+            
+            # Unresolved errors
+            cursor.execute('SELECT COUNT(*) FROM ai_provider_errors WHERE resolved = 0')
+            stats['unresolved_errors'] = cursor.fetchone()[0]
+            
+            # Errors by provider
+            cursor.execute('''
+                SELECT provider, COUNT(*) as count 
+                FROM ai_provider_errors 
+                GROUP BY provider
+            ''')
+            stats['by_provider'] = {row[0]: row[1] for row in cursor.fetchall()}
+            
+            # Errors in last 24 hours
+            cursor.execute('''
+                SELECT COUNT(*) FROM ai_provider_errors 
+                WHERE timestamp > datetime('now', '-1 day')
+            ''')
+            stats['last_24h'] = cursor.fetchone()[0]
+            
+            return stats
+        except Exception as e:
+            print(f"Error getting AI error stats: {e}")
+            return {}
+
+
 class DomainCharacterAI:
     """
     AI integration layer for domain characters.
@@ -35,16 +195,25 @@ class DomainCharacterAI:
     and style configurations.
     """
     
-    def __init__(self, ai_budget_manager=None):
+    def __init__(self, ai_budget_manager=None, db_connection: sqlite3.Connection = None):
         """
         Initialize AI integration.
         
         Args:
             ai_budget_manager: Optional AIBudgetManager for cost control
+            db_connection: Database connection for error logging
         """
         self.ai_budget = ai_budget_manager
+        self.db = db_connection
         self.openai_client = None
         self.anthropic_client = None
+        self.error_log = AIProviderErrorLog(db_connection)
+        
+        # Provider health tracking for smart failover
+        self.provider_status = {
+            'openai': {'healthy': True, 'last_error': None, 'consecutive_failures': 0},
+            'anthropic': {'healthy': True, 'last_error': None, 'consecutive_failures': 0}
+        }
         
         # Initialize available AI clients
         self._init_ai_clients()
@@ -65,23 +234,85 @@ class DomainCharacterAI:
                 self.anthropic_client = anthropic.Anthropic(api_key=api_key)
                 print("✓ Anthropic client initialized for domain characters")
     
+    def _get_best_provider(self) -> str:
+        """Determine best provider based on health status"""
+        # Prefer Anthropic if both are healthy (due to OpenAI quota issues)
+        if self.provider_status['anthropic']['healthy'] and self.anthropic_client:
+            return 'anthropic'
+        if self.provider_status['openai']['healthy'] and self.openai_client:
+            return 'openai'
+        # If both unhealthy, try the one with fewer consecutive failures
+        if self.anthropic_client and self.openai_client:
+            if self.provider_status['anthropic']['consecutive_failures'] <= \
+               self.provider_status['openai']['consecutive_failures']:
+                return 'anthropic'
+            return 'openai'
+        # Return whatever is available
+        return 'anthropic' if self.anthropic_client else 'openai'
+    
+    def _mark_provider_error(self, provider: str, error: Exception, 
+                             character_id: str = None, user_id: int = None):
+        """Mark a provider as having an error and log it"""
+        self.provider_status[provider]['consecutive_failures'] += 1
+        self.provider_status[provider]['last_error'] = datetime.now()
+        
+        # Mark as unhealthy after 3 consecutive failures
+        if self.provider_status[provider]['consecutive_failures'] >= 3:
+            self.provider_status[provider]['healthy'] = False
+            print(f"[ADMIN ALERT] {provider.upper()} marked unhealthy after 3 consecutive failures")
+        
+        # Determine error type and code
+        error_str = str(error)
+        error_type = 'unknown'
+        error_code = None
+        
+        if '429' in error_str or 'quota' in error_str.lower():
+            error_type = 'quota_exceeded'
+            error_code = '429'
+        elif '401' in error_str or 'auth' in error_str.lower():
+            error_type = 'authentication'
+            error_code = '401'
+        elif '500' in error_str or '502' in error_str or '503' in error_str:
+            error_type = 'server_error'
+            error_code = error_str[:3] if error_str[:3].isdigit() else None
+        elif 'timeout' in error_str.lower():
+            error_type = 'timeout'
+        elif 'rate' in error_str.lower():
+            error_type = 'rate_limit'
+        
+        # Log to admin error log
+        self.error_log.log_error(
+            provider=provider,
+            error_type=error_type,
+            error_message=error_str[:500],  # Truncate long messages
+            error_code=error_code,
+            character_id=character_id,
+            user_id=user_id
+        )
+    
+    def _mark_provider_success(self, provider: str):
+        """Mark a provider as successful, resetting failure count"""
+        self.provider_status[provider]['consecutive_failures'] = 0
+        self.provider_status[provider]['healthy'] = True
+    
     def generate_response(self, character: BaseCharacter, message: str, 
-                         context: Dict, provider: str = 'openai') -> CharacterResponse:
+                         context: Dict, provider: str = None) -> CharacterResponse:
         """
-        Generate AI response for a domain character.
+        Generate AI response for a domain character with automatic failover.
         
         Args:
             character: The domain character instance
             message: User's message
             context: Conversation context
-            provider: AI provider to use ('openai' or 'anthropic')
+            provider: AI provider to use (None = auto-select best)
             
         Returns:
             CharacterResponse with AI-generated content
         """
+        user_id = context.get('user_id')
+        
         # Check AI budget if available
         if self.ai_budget:
-            user_id = context.get('user_id')
             allowed, deny_reason = self.ai_budget.can_make_ai_call(
                 user_id=user_id,
                 is_admin=False,
@@ -105,74 +336,76 @@ class DomainCharacterAI:
         # Build the full system prompt with style instructions
         full_system_prompt = self._build_system_prompt(character, system_prompt, context)
         
-        # Generate response based on provider (prefer Anthropic due to OpenAI quota limits)
-        try:
-            if provider == 'anthropic' and self.anthropic_client:
-                ai_response = self._generate_anthropic(full_system_prompt, message, context)
-            elif provider == 'openai' and self.openai_client:
-                ai_response = self._generate_openai(full_system_prompt, message, context)
-            else:
-                # Fallback to available provider - try Anthropic first
-                if self.anthropic_client:
+        # Auto-select best provider if not specified
+        if provider is None:
+            provider = self._get_best_provider()
+        
+        # Try providers with automatic failover
+        providers_to_try = [provider]
+        # Add fallback provider
+        fallback = 'openai' if provider == 'anthropic' else 'anthropic'
+        if fallback not in providers_to_try:
+            providers_to_try.append(fallback)
+        
+        ai_response = None
+        used_provider = None
+        last_error = None
+        
+        for try_provider in providers_to_try:
+            try:
+                if try_provider == 'anthropic' and self.anthropic_client:
                     ai_response = self._generate_anthropic(full_system_prompt, message, context)
-                elif self.openai_client:
+                    used_provider = 'anthropic'
+                    self._mark_provider_success('anthropic')
+                    break
+                elif try_provider == 'openai' and self.openai_client:
                     ai_response = self._generate_openai(full_system_prompt, message, context)
-                else:
-                    ai_response = self._generate_fallback(character, message)
-            
-            # Log AI call if budget manager available
-            if self.ai_budget:
-                self.ai_budget.log_ai_call(
-                    call_type='domain_character',
-                    purpose=f'{character.character_id} chat',
-                    success=True,
-                    user_id=context.get('user_id'),
-                    character=character.character_id,
-                    is_background=False
-                )
-            
-            # Create character response
-            concern_level = character.analyze_context(message, context)
-            interpretation = character.interpret_context(message, context)
-            
-            return CharacterResponse(
-                character_id=character.character_id,
-                display_name=character.display_name,
-                content=ai_response,
-                concern_level=concern_level,
-                interpretation=interpretation,
-                should_display=True,
-                metadata={
-                    'provider': provider,
-                    'domain': getattr(character, 'domain', 'general'),
-                    'ai_generated': True
-                }
+                    used_provider = 'openai'
+                    self._mark_provider_success('openai')
+                    break
+            except Exception as e:
+                last_error = e
+                print(f"[AI FAILOVER] {try_provider} failed: {e}")
+                self._mark_provider_error(try_provider, e, character.character_id, user_id)
+                # Continue to try next provider
+                continue
+        
+        # If no AI response, use fallback
+        if ai_response is None:
+            if last_error:
+                print(f"[ADMIN ALERT] All AI providers failed. Using fallback response.")
+            ai_response = self._generate_fallback(character, message)
+            used_provider = 'fallback'
+        
+        # Log AI call if budget manager available
+        if self.ai_budget and used_provider != 'fallback':
+            self.ai_budget.log_ai_call(
+                call_type='domain_character',
+                purpose=f'{character.character_id} chat',
+                success=True,
+                user_id=user_id,
+                character=character.character_id,
+                is_background=False
             )
-            
-        except Exception as e:
-            print(f"Error generating AI response for {character.character_id}: {e}")
-            
-            # Log failed call
-            if self.ai_budget:
-                self.ai_budget.log_ai_call(
-                    call_type='domain_character',
-                    purpose=f'{character.character_id} chat (FAILED)',
-                    success=False,
-                    user_id=context.get('user_id'),
-                    character=character.character_id,
-                    is_background=False,
-                    error_message=str(e)
-                )
-            
-            return CharacterResponse(
-                character_id=character.character_id,
-                display_name=character.display_name,
-                content=f"I apologize, but I encountered an issue. Please try again.",
-                concern_level=0.0,
-                interpretation={},
-                should_display=True,
-                metadata={'error': str(e)}
-            )
+        
+        # Create character response
+        concern_level = character.analyze_context(message, context)
+        interpretation = character.interpret_context(message, context)
+        
+        return CharacterResponse(
+            character_id=character.character_id,
+            display_name=character.display_name,
+            content=ai_response,
+            concern_level=concern_level,
+            interpretation=interpretation,
+            should_display=True,
+            metadata={
+                'provider': used_provider,
+                'domain': getattr(character, 'domain', 'general'),
+                'ai_generated': used_provider != 'fallback',
+                'failover_used': used_provider != provider if provider else False
+            }
+        )
     
     def _build_system_prompt(self, character: BaseCharacter, 
                             base_prompt: str, context: Dict) -> str:
@@ -258,6 +491,6 @@ class DomainCharacterAI:
         return f"[{display_name}] I notice this relates to {domain}. While I'm currently limited in my responses, I'm here to listen and support you. What aspect would you like to explore further?"
 
 
-def create_ai_integration(ai_budget_manager=None) -> DomainCharacterAI:
+def create_ai_integration(ai_budget_manager=None, db_connection: sqlite3.Connection = None) -> DomainCharacterAI:
     """Create and return a DomainCharacterAI instance"""
-    return DomainCharacterAI(ai_budget_manager)
+    return DomainCharacterAI(ai_budget_manager, db_connection)

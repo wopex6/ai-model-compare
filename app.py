@@ -178,8 +178,8 @@ try:
     domain_character_manager.save_domain_characters_to_db()
     print("✓ Domain Character Manager initialized")
     
-    # Initialize Domain Character AI Integration
-    domain_character_ai = create_ai_integration(ai_budget)
+    # Initialize Domain Character AI Integration (with db for error logging)
+    domain_character_ai = create_ai_integration(ai_budget, smart_response_conn)
     print("✓ Domain Character AI Integration initialized")
 except Exception as e:
     print(f"✗ Error initializing Smart Response: {e}")
@@ -3088,6 +3088,96 @@ def get_character_history(character_id):
 
 
 print("✓ Domain Character API endpoints registered")
+
+
+# ============================================
+# ADMIN: AI PROVIDER ERROR LOG API
+# ============================================
+
+@app.route('/api/admin/ai-errors')
+@require_auth
+def get_ai_provider_errors():
+    """Get AI provider errors for admin review"""
+    try:
+        # Check if user is admin (for now, allow any authenticated user to view)
+        limit = request.args.get('limit', 50, type=int)
+        provider = request.args.get('provider')
+        unresolved_only = request.args.get('unresolved', 'false').lower() == 'true'
+        
+        if domain_character_ai and hasattr(domain_character_ai, 'error_log'):
+            errors = domain_character_ai.error_log.get_recent_errors(
+                limit=limit,
+                provider=provider,
+                unresolved_only=unresolved_only
+            )
+            stats = domain_character_ai.error_log.get_error_stats()
+            
+            return jsonify({
+                'success': True,
+                'errors': errors,
+                'stats': stats,
+                'provider_status': domain_character_ai.provider_status
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'errors': [],
+                'stats': {},
+                'provider_status': {},
+                'message': 'Error logging not initialized'
+            })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/ai-errors/<int:error_id>/resolve', methods=['POST'])
+@require_auth
+def resolve_ai_error(error_id):
+    """Mark an AI provider error as resolved"""
+    try:
+        data = request.get_json() or {}
+        admin_notes = data.get('notes', '')
+        
+        if domain_character_ai and hasattr(domain_character_ai, 'error_log'):
+            success = domain_character_ai.error_log.mark_resolved(error_id, admin_notes)
+            return jsonify({'success': success})
+        else:
+            return jsonify({'error': 'Error logging not initialized'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/ai-provider-status')
+@require_auth
+def get_ai_provider_status():
+    """Get current AI provider health status"""
+    try:
+        if domain_character_ai:
+            return jsonify({
+                'success': True,
+                'provider_status': domain_character_ai.provider_status,
+                'openai_available': domain_character_ai.openai_client is not None,
+                'anthropic_available': domain_character_ai.anthropic_client is not None
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'AI integration not initialized'
+            }), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/admin/ai-errors')
+@require_auth
+def admin_ai_errors_page():
+    """Admin page for viewing AI provider errors"""
+    return render_template('admin_ai_errors.html')
+
+
+print("✓ Admin AI Error Log API endpoints registered")
 
 
 # ============================================

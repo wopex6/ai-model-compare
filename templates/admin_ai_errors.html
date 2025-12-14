@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - AI Provider Errors</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-color: #667eea;
+            --secondary-color: #764ba2;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --bg-color: #f3f4f6;
+            --card-bg: #ffffff;
+            --text-color: #1f2937;
+            --text-muted: #6b7280;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg-color);
+            color: var(--text-color);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 30px;
+            border-radius: 16px;
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: white;
+            color: var(--primary-color);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .btn-secondary {
+            background: rgba(255,255,255,0.2);
+            color: white;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .stat-card h3 {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+        }
+
+        .stat-card .value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--text-color);
+        }
+
+        .stat-card.danger .value {
+            color: var(--danger-color);
+        }
+
+        .stat-card.warning .value {
+            color: var(--warning-color);
+        }
+
+        .stat-card.success .value {
+            color: var(--success-color);
+        }
+
+        .provider-status {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .provider-card {
+            background: var(--card-bg);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .provider-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .provider-icon.openai {
+            background: #10a37f20;
+            color: #10a37f;
+        }
+
+        .provider-icon.anthropic {
+            background: #d4a27420;
+            color: #d4a274;
+        }
+
+        .provider-info h4 {
+            font-size: 1.1rem;
+            margin-bottom: 4px;
+        }
+
+        .provider-info .status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .status-badge.healthy {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .status-badge.unhealthy {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .filters {
+            background: var(--card-bg);
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .filter-group label {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .filter-group select,
+        .filter-group input {
+            padding: 8px 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 0.9rem;
+        }
+
+        .errors-table {
+            background: var(--card-bg);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+
+        .errors-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .errors-table th,
+        .errors-table td {
+            padding: 14px 16px;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .errors-table th {
+            background: #f9fafb;
+            font-weight: 600;
+            color: var(--text-muted);
+            font-size: 0.85rem;
+            text-transform: uppercase;
+        }
+
+        .errors-table tr:hover {
+            background: #f9fafb;
+        }
+
+        .error-type {
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .error-type.quota_exceeded {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .error-type.authentication {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .error-type.server_error {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .error-type.rate_limit {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .error-type.timeout {
+            background: #e0e7ff;
+            color: #3730a3;
+        }
+
+        .error-type.unknown {
+            background: #f3f4f6;
+            color: #4b5563;
+        }
+
+        .resolved-badge {
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+        }
+
+        .resolved-badge.yes {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .resolved-badge.no {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .action-btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .action-btn:hover {
+            opacity: 0.9;
+        }
+
+        .action-btn:disabled {
+            background: #e5e7eb;
+            color: #9ca3af;
+            cursor: not-allowed;
+        }
+
+        .error-message {
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .error-message:hover {
+            white-space: normal;
+            overflow: visible;
+        }
+
+        .timestamp {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--text-muted);
+        }
+
+        .empty-state i {
+            font-size: 3rem;
+            margin-bottom: 16px;
+            color: #d1d5db;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-muted);
+        }
+
+        .loading i {
+            font-size: 2rem;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 24px;
+            border-radius: 16px;
+            max-width: 500px;
+            width: 90%;
+        }
+
+        .modal-content h3 {
+            margin-bottom: 16px;
+        }
+
+        .modal-content textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            min-height: 100px;
+            margin-bottom: 16px;
+            font-family: inherit;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+        }
+
+        .btn-cancel {
+            background: #e5e7eb;
+            color: var(--text-color);
+        }
+
+        .btn-resolve {
+            background: var(--success-color);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><i class="fas fa-exclamation-triangle"></i> AI Provider Error Log</h1>
+            <div class="header-actions">
+                <a href="/chatchat" class="btn btn-secondary">
+                    <i class="fas fa-arrow-left"></i> Back to Dashboard
+                </a>
+                <button class="btn btn-primary" onclick="loadData()">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+            </div>
+        </div>
+
+        <div class="stats-grid" id="stats-grid">
+            <div class="stat-card">
+                <h3>Total Errors</h3>
+                <div class="value" id="stat-total">-</div>
+            </div>
+            <div class="stat-card danger">
+                <h3>Unresolved</h3>
+                <div class="value" id="stat-unresolved">-</div>
+            </div>
+            <div class="stat-card warning">
+                <h3>Last 24 Hours</h3>
+                <div class="value" id="stat-24h">-</div>
+            </div>
+        </div>
+
+        <div class="provider-status" id="provider-status">
+            <div class="provider-card">
+                <div class="provider-icon openai">
+                    <i class="fas fa-brain"></i>
+                </div>
+                <div class="provider-info">
+                    <h4>OpenAI</h4>
+                    <div class="status">
+                        <span class="status-badge" id="openai-status">Loading...</span>
+                        <span id="openai-failures"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="provider-card">
+                <div class="provider-icon anthropic">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div class="provider-info">
+                    <h4>Anthropic</h4>
+                    <div class="status">
+                        <span class="status-badge" id="anthropic-status">Loading...</span>
+                        <span id="anthropic-failures"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="filters">
+            <div class="filter-group">
+                <label>Provider:</label>
+                <select id="filter-provider" onchange="loadData()">
+                    <option value="">All Providers</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>
+                    <input type="checkbox" id="filter-unresolved" onchange="loadData()">
+                    Unresolved Only
+                </label>
+            </div>
+            <div class="filter-group">
+                <label>Limit:</label>
+                <select id="filter-limit" onchange="loadData()">
+                    <option value="25">25</option>
+                    <option value="50" selected>50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="errors-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Provider</th>
+                        <th>Error Type</th>
+                        <th>Message</th>
+                        <th>Character</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="errors-tbody">
+                    <tr>
+                        <td colspan="7" class="loading">
+                            <i class="fas fa-spinner"></i>
+                            <p>Loading errors...</p>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Resolve Modal -->
+    <div class="modal" id="resolve-modal">
+        <div class="modal-content">
+            <h3><i class="fas fa-check-circle"></i> Mark as Resolved</h3>
+            <p style="margin-bottom: 16px; color: var(--text-muted);">Add notes about how this error was resolved:</p>
+            <textarea id="resolve-notes" placeholder="e.g., Upgraded API plan, rotated API key, etc."></textarea>
+            <div class="modal-actions">
+                <button class="btn btn-cancel" onclick="closeModal()">Cancel</button>
+                <button class="btn btn-resolve" onclick="confirmResolve()">
+                    <i class="fas fa-check"></i> Mark Resolved
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/auth.js"></script>
+    <script>
+        let currentErrorId = null;
+
+        async function loadData() {
+            const provider = document.getElementById('filter-provider').value;
+            const unresolved = document.getElementById('filter-unresolved').checked;
+            const limit = document.getElementById('filter-limit').value;
+
+            let url = `/api/admin/ai-errors?limit=${limit}`;
+            if (provider) url += `&provider=${provider}`;
+            if (unresolved) url += `&unresolved=true`;
+
+            try {
+                const response = await AuthHelper.authenticatedFetch(url);
+                const data = await response.json();
+
+                if (data.success) {
+                    updateStats(data.stats);
+                    updateProviderStatus(data.provider_status);
+                    renderErrors(data.errors);
+                }
+            } catch (error) {
+                console.error('Error loading data:', error);
+            }
+        }
+
+        function updateStats(stats) {
+            document.getElementById('stat-total').textContent = stats.total_errors || 0;
+            document.getElementById('stat-unresolved').textContent = stats.unresolved_errors || 0;
+            document.getElementById('stat-24h').textContent = stats.last_24h || 0;
+        }
+
+        function updateProviderStatus(status) {
+            // OpenAI
+            const openaiStatus = document.getElementById('openai-status');
+            const openaiFailures = document.getElementById('openai-failures');
+            if (status.openai) {
+                openaiStatus.textContent = status.openai.healthy ? 'Healthy' : 'Unhealthy';
+                openaiStatus.className = `status-badge ${status.openai.healthy ? 'healthy' : 'unhealthy'}`;
+                openaiFailures.textContent = status.openai.consecutive_failures > 0 
+                    ? `(${status.openai.consecutive_failures} consecutive failures)` : '';
+            }
+
+            // Anthropic
+            const anthropicStatus = document.getElementById('anthropic-status');
+            const anthropicFailures = document.getElementById('anthropic-failures');
+            if (status.anthropic) {
+                anthropicStatus.textContent = status.anthropic.healthy ? 'Healthy' : 'Unhealthy';
+                anthropicStatus.className = `status-badge ${status.anthropic.healthy ? 'healthy' : 'unhealthy'}`;
+                anthropicFailures.textContent = status.anthropic.consecutive_failures > 0 
+                    ? `(${status.anthropic.consecutive_failures} consecutive failures)` : '';
+            }
+        }
+
+        function renderErrors(errors) {
+            const tbody = document.getElementById('errors-tbody');
+
+            if (!errors || errors.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="7" class="empty-state">
+                            <i class="fas fa-check-circle"></i>
+                            <p>No errors found. All systems running smoothly!</p>
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = errors.map(error => `
+                <tr>
+                    <td class="timestamp">${formatTimestamp(error.timestamp)}</td>
+                    <td><strong>${error.provider}</strong></td>
+                    <td><span class="error-type ${error.error_type}">${error.error_type}</span></td>
+                    <td class="error-message" title="${escapeHtml(error.error_message || '')}">${escapeHtml(error.error_message || '-')}</td>
+                    <td>${error.character_id || '-'}</td>
+                    <td>
+                        <span class="resolved-badge ${error.resolved ? 'yes' : 'no'}">
+                            ${error.resolved ? 'Resolved' : 'Open'}
+                        </span>
+                    </td>
+                    <td>
+                        <button class="action-btn" onclick="resolveError(${error.id})" ${error.resolved ? 'disabled' : ''}>
+                            <i class="fas fa-check"></i> Resolve
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function formatTimestamp(ts) {
+            if (!ts) return '-';
+            const date = new Date(ts);
+            return date.toLocaleString();
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function resolveError(errorId) {
+            currentErrorId = errorId;
+            document.getElementById('resolve-notes').value = '';
+            document.getElementById('resolve-modal').classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('resolve-modal').classList.remove('active');
+            currentErrorId = null;
+        }
+
+        async function confirmResolve() {
+            if (!currentErrorId) return;
+
+            const notes = document.getElementById('resolve-notes').value;
+
+            try {
+                const response = await AuthHelper.authenticatedFetch(
+                    `/api/admin/ai-errors/${currentErrorId}/resolve`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ notes })
+                    }
+                );
+
+                const data = await response.json();
+                if (data.success) {
+                    closeModal();
+                    loadData();
+                } else {
+                    alert('Failed to resolve error: ' + (data.error || 'Unknown error'));
+                }
+            } catch (error) {
+                console.error('Error resolving:', error);
+                alert('Failed to resolve error');
+            }
+        }
+
+        // Close modal on outside click
+        document.getElementById('resolve-modal').addEventListener('click', (e) => {
+            if (e.target.classList.contains('modal')) {
+                closeModal();
+            }
+        });
+
+        // Load data on page load
+        document.addEventListener('DOMContentLoaded', loadData);
+    </script>
+</body>
+</html>
