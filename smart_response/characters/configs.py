@@ -251,11 +251,11 @@ You provide wellness guidance, not medical advice."""
         "focus_areas": ["budgeting", "saving", "investing", "financial_planning", "money_management"],
         "expertise": ["budgeting", "saving_strategies", "debt_management", "financial_goals", "money_mindset"],
         "threshold_config": {
-            "base_threshold": 0.7,
+            "base_threshold": 0.15,
             "domain_keywords": [
-                "money", "budget", "debt", "savings", "invest", "salary",
-                "expenses", "financial", "afford", "bills", "income",
-                "credit", "loan", "retirement", "wealth"
+                "money", "budget", "debt", "savings", "invest", "investor", "investment", "salary",
+                "expenses", "financial", "afford", "bills", "income", "stock", "stocks", "bond",
+                "credit", "loan", "retirement", "wealth", "portfolio", "asset", "dividend"
             ],
             "emotional_triggers": [
                 "broke", "bankruptcy", "can't pay", "debt crisis",

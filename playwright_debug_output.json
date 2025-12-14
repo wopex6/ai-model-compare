@@ -1,12 +1,12 @@
 {
   "console_logs": [
-    "[log] \ud83d\udd27 Flash Debug: Script starting at 918.9000000357628 ms",
-    "[log] \ud83d\udd27 Flash Debug: Stored scroll position for restoration: 0 0",
     "[error] Failed to load resource: the server responded with a status of 401 (UNAUTHORIZED)",
-    "[log] \ud83d\udd27 Flash Debug: DOM ready at 922.1000000238419 ms",
+    "[log] \ud83d\udd27 Flash Debug: Script starting at 938.1999999880791 ms",
+    "[log] \ud83d\udd27 Flash Debug: Stored scroll position for restoration: 0 0",
+    "[log] \ud83d\udd27 Flash Debug: DOM ready at 945.6000000238419 ms",
     "[log] \ud83d\udd27 Flash Debug: DOM ready - user not logged in",
-    "[log] \ud83d\udd27 Flash Debug: Body loaded class added at 922.8000000119209 ms",
-    "[log] \ud83d\udd27 Flash Debug: Initializing app at 922.9000000357628 ms",
+    "[log] \ud83d\udd27 Flash Debug: Body loaded class added at 946.3000000119209 ms",
+    "[log] \ud83d\udd27 Flash Debug: Initializing app at 946.4000000357628 ms",
     "[log] \ud83d\udd27 Flash Debug: Document ready state: interactive",
     "[log] \ud83d\udd27 Flash Debug: Page dimensions at init - body height: 720 window height: 720",
     "[log] \ud83d\udd0d Checking personality access for user: null",
@@ -24,7 +24,7 @@
     "[log] \u274c User does not have personality access. Role: undefined User object: null",
     "[log] \ud83d\udd27 Login Debug: Login successful, setting up user data",
     "[log] \ud83d\udd27 Login Debug: User data saved with role: administrator",
-    "[log] \ud83d\udd27 Dashboard Debug: showDashboard called at 3824.900000035763 ms",
+    "[log] \ud83d\udd27 Dashboard Debug: showDashboard called at 3931.600000023842 ms",
     "[log] \ud83d\udd27 Dashboard Debug: Body loaded class added in showDashboard",
     "[log] \ud83d\udd27 Dashboard Debug: Restoring scroll position",
     "[log] \ud83d\udd27 Dashboard Debug: Scroll restored in showDashboard",
@@ -58,18 +58,20 @@
     "[log] \ud83e\udde0 Personality Check: User has 15 traits",
     "[log] \ud83e\udde0 Personality Banner: User has traits, not showing",
     "[log] No existing session found, starting new conversation",
-    "[error] Error: TypeError: Failed to fetch\n    at Object.authenticatedFetch (http://localhost:5000/static/auth_helper.js:69:16)\n    at sendMessage (http://localhost:5000/scientist:650:51)\n    at HTMLButtonElement.onclick (http://localhost:5000/scientist:479:78)",
-    "[log] \ud83d\udd27 Flash Debug: Script starting at 654.8999999761581 ms",
+    "[log] \u2705 Added user message to DOM: \"Test message at 1765194192.161...\"",
+    "[error] Error: TypeError: Failed to fetch\n    at Object.authenticatedFetch (http://localhost:5000/static/auth_helper.js:69:16)\n    at sendMessage (http://localhost:5000/scientist:661:51)\n    at HTMLButtonElement.onclick (http://localhost:5000/scientist:482:78)",
+    "[log] \u2705 Added bot message to DOM: \"Error in data transmission. Re...\"",
+    "[log] \ud83d\udd27 Flash Debug: Script starting at 342 ms",
     "[log] \ud83d\udd27 Flash Debug: Stored scroll position for restoration: 0 0",
-    "[log] \ud83d\udd27 Flash Debug: DOM ready at 662.2999999523163 ms",
+    "[log] \ud83d\udd27 Flash Debug: DOM ready at 343.5 ms",
     "[log] \ud83d\udd27 Flash Debug: DOM ready - user logged in",
     "[log] \ud83d\udd27 Flash Debug: Login screen hidden in DOM ready",
     "[log] \ud83d\udd27 Flash Debug: Dashboard shown in DOM ready",
-    "[log] \ud83d\udd27 Flash Debug: Body loaded class added at 662.7999999523163 ms",
-    "[log] \ud83d\udd27 Flash Debug: Initializing app at 662.8999999761581 ms",
+    "[log] \ud83d\udd27 Flash Debug: Body loaded class added at 344.30000001192093 ms",
+    "[log] \ud83d\udd27 Flash Debug: Initializing app at 344.5 ms",
     "[log] \ud83d\udd27 Flash Debug: Document ready state: interactive",
     "[log] \ud83d\udd27 Flash Debug: Page dimensions at init - body height: 720 window height: 720",
-    "[log] \ud83d\udd27 Dashboard Debug: showDashboard called at 667.0999999642372 ms",
+    "[log] \ud83d\udd27 Dashboard Debug: showDashboard called at 348.5 ms",
     "[log] \ud83d\udd27 Dashboard Debug: Body loaded class added in showDashboard",
     "[log] \ud83d\udd27 Dashboard Debug: Restoring scroll position",
     "[log] \ud83d\udd27 Dashboard Debug: Scroll restored in showDashboard",
@@ -116,6 +118,11 @@
     "[log] \ud83d\udd0d Checking personality access for user: {id: 23, username: Wai Tse, role: administrator}",
     "[log] \u2705 User has personality access! Role: administrator",
     "[log] \u2705 Personality Insights button made visible",
+    "[log] No existing session found, starting new conversation",
+    "[log] No existing session found, starting new conversation",
+    "[log] No existing session found, starting new conversation",
+    "[log] No existing session found, starting new conversation",
+    "[log] No existing session found, starting new conversation",
     "[log] No existing session found, starting new conversation"
   ],
   "network_requests": [
@@ -127,7 +134,7 @@
     {
       "url": "http://localhost:5000/scientist/chat",
       "method": "POST",
-      "post_data": "{\"message\":\"Test message at 1765186407.433244\",\"include_context\":true,\"session_id\":null}"
+      "post_data": "{\"message\":\"Test message at 1765194192.161452\",\"include_context\":true,\"session_id\":null}"
     },
     {
       "url": "http://localhost:5000/chatchat",
@@ -148,5 +155,32 @@
     }
   ],
   "user_messages_count": 0,
-  "bot_messages_count": 1
+  "bot_messages_count": 1,
+  "refresh_test_results": [
+    {
+      "iteration": 1,
+      "total": 1,
+      "visible": 1
+    },
+    {
+      "iteration": 2,
+      "total": 1,
+      "visible": 1
+    },
+    {
+      "iteration": 3,
+      "total": 1,
+      "visible": 1
+    },
+    {
+      "iteration": 4,
+      "total": 1,
+      "visible": 1
+    },
+    {
+      "iteration": 5,
+      "total": 1,
+      "visible": 1
+    }
+  ]
 }
