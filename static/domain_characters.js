@@ -158,13 +158,13 @@ const DomainCharacters = {
                 // Store in local cache
                 this.conversations[characterId] = data.history;
                 
-                // Display messages
+                // Display messages with timestamps
                 data.history.forEach(msg => {
                     if (msg.user_message) {
-                        this._addMessageToDisplay(msg.user_message, 'user');
+                        this._addMessageToDisplay(msg.user_message, 'user', null, false, msg.timestamp);
                     }
                     if (msg.ai_response) {
-                        this._addMessageToDisplay(msg.ai_response, 'bot', characterId);
+                        this._addMessageToDisplay(msg.ai_response, 'bot', characterId, false, msg.timestamp);
                     }
                 });
                 
@@ -196,8 +196,13 @@ const DomainCharacters = {
     /**
      * Add a message to the display
      * @private
+     * @param {string} content - Message content
+     * @param {string} role - 'user' or 'bot'
+     * @param {string} characterId - Character ID (for bot messages)
+     * @param {boolean} isWelcome - Whether this is a welcome message
+     * @param {string} timestamp - ISO timestamp string (optional)
      */
-    _addMessageToDisplay(content, role, characterId = null, isWelcome = false) {
+    _addMessageToDisplay(content, role, characterId = null, isWelcome = false, timestamp = null) {
         const messagesContainer = document.getElementById('domain-chat-messages');
         if (!messagesContainer) return;
         
@@ -205,17 +210,34 @@ const DomainCharacters = {
         messageDiv.className = `message ${role}-message`;
         if (isWelcome) messageDiv.classList.add('welcome-message');
         
+        // Format timestamp like ConversationBox/MessageHandler
+        let timeStr = '';
+        if (timestamp) {
+            const date = new Date(timestamp);
+            const hours = date.getHours().toString().padStart(2, '0');
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            const color = role === 'user' ? '#fff' : '#888';
+            timeStr = `<span class="timestamp" style="font-size: 0.75em; color: ${color}; margin-left: 8px;">${hours}:${minutes}</span>`;
+        } else if (!isWelcome) {
+            // Add current time for new messages
+            const now = new Date();
+            const hours = now.getHours().toString().padStart(2, '0');
+            const minutes = now.getMinutes().toString().padStart(2, '0');
+            const color = role === 'user' ? '#fff' : '#888';
+            timeStr = `<span class="timestamp" style="font-size: 0.75em; color: ${color}; margin-left: 8px;">${hours}:${minutes}</span>`;
+        }
+        
         if (role === 'bot' && characterId) {
             const character = this.characters.find(c => c.id === characterId);
             const displayName = character ? character.display_name : characterId;
             
             messageDiv.innerHTML = `
-                <div class="character-attribution">${displayName}${character?.is_coordinator ? ' (Coordinator)' : ''}</div>
+                <div class="character-attribution">${displayName}${character?.is_coordinator ? ' (Coordinator)' : ''}${timeStr}</div>
                 <div class="message-content">${this._formatMessage(content)}</div>
             `;
         } else {
             messageDiv.innerHTML = `
-                <div class="message-content">${role === 'user' ? '<strong>You:</strong> ' : ''}${this._formatMessage(content)}</div>
+                <div class="message-content">${role === 'user' ? '<strong>You:</strong> ' : ''}${this._formatMessage(content)}${timeStr}</div>
             `;
         }
         

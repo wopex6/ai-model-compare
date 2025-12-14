@@ -2888,11 +2888,11 @@ def route_to_domain_characters():
             try:
                 # Get the primary response content
                 primary_response = formatted_responses[0]['content'] if formatted_responses else ''
-                # Update the history entry with the response
+                # Update the history entry with the response (correct column: assistant_response)
                 cursor = smart_response_conn.cursor()
                 cursor.execute('''
                     UPDATE history_primary 
-                    SET ai_response = ? 
+                    SET assistant_response = ? 
                     WHERE id = ?
                 ''', (primary_response, context['history_id']))
                 smart_response_conn.commit()
@@ -3038,10 +3038,11 @@ def get_character_history(character_id):
         limit = request.args.get('limit', 50, type=int)
         
         cursor = smart_response_conn.cursor()
+        # Use correct column names: 'character' not 'character_id', 'assistant_response' not 'ai_response'
         cursor.execute('''
-            SELECT id, user_message, ai_response, timestamp, metadata
+            SELECT id, user_message, assistant_response, timestamp
             FROM history_primary
-            WHERE user_id = ? AND character_id = ?
+            WHERE user_id = ? AND character = ?
             ORDER BY timestamp DESC
             LIMIT ?
         ''', (user_id, character_id, limit))
@@ -3053,8 +3054,7 @@ def get_character_history(character_id):
                 'id': row[0],
                 'user_message': row[1],
                 'ai_response': row[2],
-                'timestamp': row[3],
-                'metadata': json.loads(row[4]) if row[4] else {}
+                'timestamp': row[3]
             })
         
         # Reverse to get chronological order
