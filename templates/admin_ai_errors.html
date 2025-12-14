@@ -556,7 +556,12 @@
 
         // Check authentication on page load
         document.addEventListener('DOMContentLoaded', () => {
-            if (!AuthHelper.isAuthenticated()) {
+            const token = localStorage.getItem('authToken');
+            console.log('[Admin] Token exists:', !!token);
+            console.log('[Admin] Token preview:', token ? token.substring(0, 20) + '...' : 'none');
+            
+            if (!token) {
+                console.log('[Admin] No token, redirecting to login');
                 window.location.href = '/login?redirect=/admin/ai-errors';
                 return;
             }
@@ -573,8 +578,12 @@
             if (unresolved) url += `&unresolved=true`;
 
             try {
+                console.log('[Admin] Fetching:', url);
+                console.log('[Admin] Auth headers:', AuthHelper.getAuthHeaders());
                 const response = await AuthHelper.authenticatedFetch(url);
+                console.log('[Admin] Response status:', response.status);
                 const data = await response.json();
+                console.log('[Admin] Response data:', data);
 
                 if (response.status === 401) {
                     // Token expired or invalid - redirect to login
