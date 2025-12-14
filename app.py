@@ -2898,19 +2898,40 @@ def route_to_domain_characters():
                 smart_response_conn.commit()
                 
                 # Also store under domain-specific characters if they responded
+                # This ensures messages appear in both coordinator AND domain-specific history
+                original_char = requested_character or 'coordinator'
                 for resp in formatted_responses:
                     char_id = resp.get('character_id')
-                    # Skip if this is the same as the requested character (already stored)
-                    if char_id and char_id != (requested_character or 'coordinator'):
+                    # Store if responding character is different from original
+                    if char_id and char_id != original_char:
                         try:
+                            print(f"[CROSS-DOMAIN] Storing message under {char_id} (original: {original_char})")
                             history_system.store_interaction(
                                 user_id, char_id,
                                 message, resp.get('content', ''),
                                 'domain_routing',
-                                metadata={'cross_domain': True, 'original_character': requested_character or 'coordinator'}
+                                metadata={'cross_domain': True, 'original_character': original_char}
                             )
+                            print(f"[CROSS-DOMAIN] ✓ Successfully stored under {char_id}")
                         except Exception as cross_e:
-                            print(f"Warning: Could not store cross-domain history for {char_id}: {cross_e}")
+                            print(f"[CROSS-DOMAIN] ✗ Failed for {char_id}: {cross_e}")
+                
+                # Also update the original entry's character if a domain character responded
+                # This fixes the issue where all messages show under 'coordinator'
+                if formatted_responses and formatted_responses[0].get('character_id') != original_char:
+                    responding_char = formatted_responses[0].get('character_id')
+                    # Store a copy under the responding character as well
+                    try:
+                        cursor.execute('''
+                            UPDATE history_primary 
+                            SET character = ? 
+                            WHERE id = ?
+                        ''', (responding_char, context['history_id']))
+                        smart_response_conn.commit()
+                        print(f"[CROSS-DOMAIN] Updated original entry to {responding_char}")
+                    except Exception as update_e:
+                        print(f"[CROSS-DOMAIN] Could not update character: {update_e}")
+                        
             except Exception as e:
                 print(f"Warning: Could not update history response: {e}")
         
