@@ -33,6 +33,34 @@
             margin-bottom: 20px;
             box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
             text-align: center;
+            position: relative;
+        }
+        
+        .header-nav {
+            position: absolute;
+            top: 15px;
+            left: 20px;
+        }
+        
+        .back-to-dashboard {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            text-decoration: none;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .back-to-dashboard:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            color: white;
+            text-decoration: none;
         }
         
         .domain-header h1 {
@@ -216,6 +244,11 @@
     <div class="domain-container">
         <!-- Header -->
         <div class="domain-header">
+            <div class="header-nav">
+                <a href="/chatchat" class="back-to-dashboard">
+                    <i class="fas fa-arrow-left"></i> Back to Dashboard
+                </a>
+            </div>
             <h1><i class="fas fa-users"></i> Life Companion</h1>
             <p>Your multi-domain AI advisors - specialized guidance across all areas of life</p>
         </div>
