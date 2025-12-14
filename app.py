@@ -55,6 +55,8 @@ from smart_response.trait_inference import TraitInferenceEngine
 
 # Import Smart Response System
 from smart_response.handler import SmartResponseHandler
+# Import Domain Character System
+from smart_response.characters import CharacterManager, DOMAIN_CHARACTER_CONFIGS, create_ai_integration
 import sqlite3
 
 # Disable auto-docs in production
@@ -170,6 +172,15 @@ try:
     message_histories = {}  # {user_id_character: [{role, content, timestamp}, ...]}
     print("✓ Smart Response System with AI Budget Control initialized")
     print("✓ Frontend error logging initialized")
+    
+    # Initialize Domain Character Manager
+    domain_character_manager = CharacterManager(smart_response_conn)
+    domain_character_manager.save_domain_characters_to_db()
+    print("✓ Domain Character Manager initialized")
+    
+    # Initialize Domain Character AI Integration
+    domain_character_ai = create_ai_integration(ai_budget)
+    print("✓ Domain Character AI Integration initialized")
 except Exception as e:
     print(f"✗ Error initializing Smart Response: {e}")
     import traceback
@@ -178,6 +189,8 @@ except Exception as e:
     context_manager = None
     history_system = None
     ai_budget = None
+    domain_character_manager = None
+    domain_character_ai = None
     previous_interactions = {}
     message_histories = {}
 
@@ -2740,6 +2753,278 @@ def save_psychological_assessment():
 print("\n=== Registering Character Routes ===")
 register_character_routes(app, all_characters, process_with_smart_response, integrated_db)
 print("✓ Dynamic routes registered for all 8 characters with Smart Response + Database")
+
+
+# ============================================
+# DOMAIN CHARACTER API (Phase 1)
+# ============================================
+
+@app.route('/api/domain-characters')
+def get_domain_characters():
+    """Get list of all domain characters with their info"""
+    try:
+        if not domain_character_manager:
+            return jsonify({'error': 'Domain character system not initialized'}), 500
+        
+        characters = domain_character_manager.get_character_info()
+        return jsonify({
+            'success': True,
+            'characters': characters,
+            'total': len(characters)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/domain-characters/<character_id>')
+def get_domain_character(character_id):
+    """Get info for a specific domain character"""
+    try:
+        if not domain_character_manager:
+            return jsonify({'error': 'Domain character system not initialized'}), 500
+        
+        character = domain_character_manager.get_character(character_id)
+        if not character:
+            return jsonify({'error': f'Character {character_id} not found'}), 404
+        
+        config = DOMAIN_CHARACTER_CONFIGS.get(character_id, {})
+        return jsonify({
+            'success': True,
+            'character': {
+                'id': character_id,
+                'display_name': character.display_name,
+                'domain': config.get('domain', 'general'),
+                'description': config.get('description', ''),
+                'focus_areas': config.get('focus_areas', []),
+                'is_coordinator': character_id == 'coordinator'
+            }
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/domain-characters/route', methods=['POST'])
+@require_auth
+def route_to_domain_characters():
+    """
+    Route a message to domain characters based on threshold triggers.
+    Returns responses from characters that exceed their concern threshold.
+    """
+    try:
+        if not domain_character_manager:
+            return jsonify({'error': 'Domain character system not initialized'}), 500
+        
+        data = request.get_json()
+        message = data.get('message', '')
+        requested_character = data.get('character_id')  # Optional: specific character
+        use_ai = data.get('use_ai', True)  # Whether to use AI for responses
+        
+        if not message.strip():
+            return jsonify({'error': 'Message cannot be empty'}), 400
+        
+        user_id = request.current_user.get('user_id')
+        
+        # Build context for routing
+        context = {
+            'user_id': user_id,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        # Get history_id if we have history system
+        if history_system:
+            # Store in primary history first to get ID
+            try:
+                primary_id = history_system.store_interaction(
+                    user_id, requested_character or 'coordinator',
+                    message, '',  # Empty response for now
+                    'domain_routing',
+                    metadata={'routing': True}
+                )
+                context['history_id'] = primary_id
+            except Exception as e:
+                print(f"Warning: Could not store history: {e}")
+        
+        # Route message to characters (get which ones should respond)
+        responses = domain_character_manager.route_message(
+            message, context, requested_character
+        )
+        
+        # If AI integration available and use_ai is True, generate AI responses
+        if use_ai and domain_character_ai and responses:
+            ai_responses = []
+            for resp in responses:
+                if resp.should_display:
+                    character = domain_character_manager.get_character(resp.character_id)
+                    if character:
+                        ai_resp = domain_character_ai.generate_response(
+                            character, message, context
+                        )
+                        ai_responses.append(ai_resp)
+                    else:
+                        ai_responses.append(resp)
+                else:
+                    ai_responses.append(resp)
+            responses = ai_responses
+        
+        # Format responses for frontend
+        formatted_responses = []
+        for resp in responses:
+            formatted_responses.append({
+                'character_id': resp.character_id,
+                'display_name': resp.display_name,
+                'content': resp.content,
+                'concern_level': resp.concern_level,
+                'should_display': resp.should_display,
+                'metadata': resp.metadata
+            })
+        
+        # Update history with actual response if we stored it
+        if history_system and context.get('history_id') and formatted_responses:
+            try:
+                # Get the primary response content
+                primary_response = formatted_responses[0]['content'] if formatted_responses else ''
+                # Update the history entry with the response
+                cursor = smart_response_conn.cursor()
+                cursor.execute('''
+                    UPDATE history_primary 
+                    SET ai_response = ? 
+                    WHERE id = ?
+                ''', (primary_response, context['history_id']))
+                smart_response_conn.commit()
+            except Exception as e:
+                print(f"Warning: Could not update history response: {e}")
+        
+        return jsonify({
+            'success': True,
+            'responses': formatted_responses,
+            'responding_count': len([r for r in formatted_responses if r['should_display']]),
+            'message': message,
+            'ai_generated': use_ai and domain_character_ai is not None
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/domain-characters/analyze', methods=['POST'])
+@require_auth
+def analyze_with_domain_characters():
+    """
+    Analyze a message with all domain characters without generating responses.
+    Returns concern levels for each character.
+    """
+    try:
+        if not domain_character_manager:
+            return jsonify({'error': 'Domain character system not initialized'}), 500
+        
+        data = request.get_json()
+        message = data.get('message', '')
+        
+        if not message.strip():
+            return jsonify({'error': 'Message cannot be empty'}), 400
+        
+        user_id = request.current_user.get('user_id')
+        context = {'user_id': user_id}
+        
+        # Analyze with all domain characters
+        analysis = []
+        for char_id, character in domain_character_manager.get_domain_characters().items():
+            concern_level = character.analyze_context(message, context)
+            would_respond = character.should_respond(concern_level)
+            
+            analysis.append({
+                'character_id': char_id,
+                'display_name': character.display_name,
+                'domain': character.domain,
+                'concern_level': concern_level,
+                'would_respond': would_respond,
+                'threshold': character.threshold_config.base_threshold
+            })
+        
+        # Sort by concern level descending
+        analysis.sort(key=lambda x: x['concern_level'], reverse=True)
+        
+        return jsonify({
+            'success': True,
+            'analysis': analysis,
+            'responding_characters': [a['character_id'] for a in analysis if a['would_respond']],
+            'message': message
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/domain-characters/interpretations/<int:history_id>')
+@require_auth
+def get_character_interpretations(history_id):
+    """Get all character interpretations for a specific message"""
+    try:
+        if not domain_character_manager:
+            return jsonify({'error': 'Domain character system not initialized'}), 500
+        
+        interpretations = domain_character_manager.get_interpretations_for_message(history_id)
+        critical = domain_character_manager.get_critical_perspectives(history_id)
+        
+        return jsonify({
+            'success': True,
+            'history_id': history_id,
+            'interpretations': interpretations,
+            'critical_perspectives': critical
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/domain-characters/feedback', methods=['POST'])
+@require_auth
+def submit_character_feedback():
+    """Submit feedback for a character's response"""
+    try:
+        if not domain_character_manager:
+            return jsonify({'error': 'Domain character system not initialized'}), 500
+        
+        data = request.get_json()
+        character_id = data.get('character_id')
+        feedback = data.get('feedback')  # 'positive' or 'negative'
+        
+        if not character_id or feedback not in ['positive', 'negative']:
+            return jsonify({'error': 'Invalid character_id or feedback'}), 400
+        
+        user_id = request.current_user.get('user_id')
+        
+        # Update user preference for this character
+        domain_character_manager.update_user_preference(user_id, character_id, feedback)
+        
+        return jsonify({
+            'success': True,
+            'message': f'Feedback recorded for {character_id}'
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/domain-characters/preferences')
+@require_auth
+def get_character_preferences():
+    """Get user's preference scores for all characters"""
+    try:
+        if not domain_character_manager:
+            return jsonify({'error': 'Domain character system not initialized'}), 500
+        
+        user_id = request.current_user.get('user_id')
+        preferences = domain_character_manager.get_user_preferences(user_id)
+        
+        return jsonify({
+            'success': True,
+            'user_id': user_id,
+            'preferences': preferences
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+print("✓ Domain Character API endpoints registered")
 
 
 # ============================================

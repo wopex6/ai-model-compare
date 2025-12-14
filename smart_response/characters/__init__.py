@@ -16,6 +16,7 @@ Character Types:
 from .base import BaseCharacter, DomainCharacter, CoordinatorCharacter, CharacterResponse
 from .manager import CharacterManager
 from .configs import DOMAIN_CHARACTER_CONFIGS, PHILOSOPHY_CHARACTER_CONFIGS
+from .ai_integration import DomainCharacterAI, create_ai_integration
 
 __all__ = [
     'BaseCharacter',
@@ -23,6 +24,8 @@ __all__ = [
     'CoordinatorCharacter',
     'CharacterResponse',
     'CharacterManager',
+    'DomainCharacterAI',
+    'create_ai_integration',
     'DOMAIN_CHARACTER_CONFIGS',
     'PHILOSOPHY_CHARACTER_CONFIGS'
 ]
