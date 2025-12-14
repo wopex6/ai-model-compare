@@ -511,9 +511,13 @@ def authenticate_token():
 def require_auth(f):
     """Decorator to require authentication"""
     def decorated_function(*args, **kwargs):
+        auth_header = request.headers.get('Authorization')
+        print(f"[AUTH] Endpoint: {request.path}, Auth header present: {bool(auth_header)}")
         user_data = authenticate_token()
         if not user_data:
+            print(f"[AUTH] FAILED - no valid token for {request.path}")
             return jsonify({'error': 'Authentication required'}), 401
+        print(f"[AUTH] SUCCESS - user_id: {user_data.get('user_id')}")
         request.current_user = user_data
         return f(*args, **kwargs)
     decorated_function.__name__ = f.__name__
@@ -3123,6 +3127,7 @@ print("✓ Domain Character API endpoints registered")
 @require_auth
 def get_ai_provider_errors():
     """Get AI provider errors for admin review"""
+    print(f"[ADMIN-API] ai-errors endpoint called, user: {request.current_user}")
     try:
         # Check if user is admin (for now, allow any authenticated user to view)
         limit = request.args.get('limit', 50, type=int)
