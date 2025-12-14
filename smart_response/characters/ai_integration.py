@@ -105,18 +105,18 @@ class DomainCharacterAI:
         # Build the full system prompt with style instructions
         full_system_prompt = self._build_system_prompt(character, system_prompt, context)
         
-        # Generate response based on provider
+        # Generate response based on provider (prefer Anthropic due to OpenAI quota limits)
         try:
-            if provider == 'openai' and self.openai_client:
-                ai_response = self._generate_openai(full_system_prompt, message, context)
-            elif provider == 'anthropic' and self.anthropic_client:
+            if provider == 'anthropic' and self.anthropic_client:
                 ai_response = self._generate_anthropic(full_system_prompt, message, context)
+            elif provider == 'openai' and self.openai_client:
+                ai_response = self._generate_openai(full_system_prompt, message, context)
             else:
-                # Fallback to available provider
-                if self.openai_client:
-                    ai_response = self._generate_openai(full_system_prompt, message, context)
-                elif self.anthropic_client:
+                # Fallback to available provider - try Anthropic first
+                if self.anthropic_client:
                     ai_response = self._generate_anthropic(full_system_prompt, message, context)
+                elif self.openai_client:
+                    ai_response = self._generate_openai(full_system_prompt, message, context)
                 else:
                     ai_response = self._generate_fallback(character, message)
             

@@ -2896,6 +2896,21 @@ def route_to_domain_characters():
                     WHERE id = ?
                 ''', (primary_response, context['history_id']))
                 smart_response_conn.commit()
+                
+                # Also store under domain-specific characters if they responded
+                for resp in formatted_responses:
+                    char_id = resp.get('character_id')
+                    # Skip if this is the same as the requested character (already stored)
+                    if char_id and char_id != (requested_character or 'coordinator'):
+                        try:
+                            history_system.store_interaction(
+                                user_id, char_id,
+                                message, resp.get('content', ''),
+                                'domain_routing',
+                                metadata={'cross_domain': True, 'original_character': requested_character or 'coordinator'}
+                            )
+                        except Exception as cross_e:
+                            print(f"Warning: Could not store cross-domain history for {char_id}: {cross_e}")
             except Exception as e:
                 print(f"Warning: Could not update history response: {e}")
         
