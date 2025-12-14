@@ -626,6 +626,66 @@ def migrate_all_tables():
         print("✅ proactive_triggers")
         
         # ============================================================
+        # AI PROVIDER ERROR LOGGING
+        # ============================================================
+        print("\n📦 AI PROVIDER ERROR LOGGING")
+        print("-" * 80)
+        
+        # AI provider errors (for admin monitoring)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS ai_provider_errors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                provider TEXT NOT NULL,
+                error_type TEXT NOT NULL,
+                error_message TEXT,
+                error_code TEXT,
+                character_id TEXT,
+                user_id INTEGER,
+                request_context TEXT,
+                stack_trace TEXT,
+                resolved INTEGER DEFAULT 0,
+                admin_notes TEXT
+            )
+        ''')
+        print("✅ ai_provider_errors")
+        
+        # Frontend errors (for debugging)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS frontend_errors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                error_type TEXT,
+                error_message TEXT,
+                stack_trace TEXT,
+                url TEXT,
+                user_agent TEXT,
+                user_id INTEGER,
+                additional_context TEXT
+            )
+        ''')
+        print("✅ frontend_errors")
+        
+        # AI provider error indexes
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_ai_errors_timestamp 
+            ON ai_provider_errors(timestamp DESC)
+        ''')
+        print("✅ idx_ai_errors_timestamp")
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_ai_errors_provider 
+            ON ai_provider_errors(provider)
+        ''')
+        print("✅ idx_ai_errors_provider")
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_ai_errors_resolved 
+            ON ai_provider_errors(resolved)
+        ''')
+        print("✅ idx_ai_errors_resolved")
+        
+        # ============================================================
         # DOMAIN CHARACTER INDEXES
         # ============================================================
         print("\n📦 DOMAIN CHARACTER INDEXES")
