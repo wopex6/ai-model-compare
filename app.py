@@ -3029,6 +3029,49 @@ def get_character_preferences():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/domain-characters/history/<character_id>')
+@require_auth
+def get_character_history(character_id):
+    """Get conversation history for a specific character"""
+    try:
+        user_id = request.current_user.get('user_id')
+        limit = request.args.get('limit', 50, type=int)
+        
+        cursor = smart_response_conn.cursor()
+        cursor.execute('''
+            SELECT id, user_message, ai_response, timestamp, metadata
+            FROM history_primary
+            WHERE user_id = ? AND character_id = ?
+            ORDER BY timestamp DESC
+            LIMIT ?
+        ''', (user_id, character_id, limit))
+        
+        rows = cursor.fetchall()
+        history = []
+        for row in rows:
+            history.append({
+                'id': row[0],
+                'user_message': row[1],
+                'ai_response': row[2],
+                'timestamp': row[3],
+                'metadata': json.loads(row[4]) if row[4] else {}
+            })
+        
+        # Reverse to get chronological order
+        history.reverse()
+        
+        return jsonify({
+            'success': True,
+            'character_id': character_id,
+            'history': history,
+            'count': len(history)
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 print("✓ Domain Character API endpoints registered")
 
 

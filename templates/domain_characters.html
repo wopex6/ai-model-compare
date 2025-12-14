@@ -252,18 +252,8 @@
                     </div>
                 </div>
                 
-                <div id="chat-messages" class="chat-messages">
-                    <!-- Messages displayed here -->
-                    <div class="message bot">
-                        <div class="bubble">
-                            <div class="character-attribution">Aria (Coordinator)</div>
-                            Hello! I'm Aria, your life companion. I work with a team of specialized advisors to help you across all areas of your life. 
-                            <br><br>
-                            You can talk to me for a holistic view, or select a specific advisor from the sidebar for domain-specific guidance.
-                            <br><br>
-                            What's on your mind today?
-                        </div>
-                    </div>
+                <div id="domain-chat-messages" class="chat-messages">
+                    <!-- Messages loaded dynamically per character -->
                 </div>
                 
                 <div class="chat-input-area">
@@ -296,15 +286,35 @@
                 botBubbleClass: 'bubble'
             });
             
-            // Initialize DomainConversationBox (which initializes DomainCharacters)
-            await DomainConversationBox.init({
-                showAnalysis: false,
-                showFeedback: true,
-                domainConfig: {
-                    ui: {
-                        characterListId: 'domain-character-list',
-                        selectedCharacterId: 'selected-domain-character',
-                        analysisPanelId: 'character-analysis-panel'
+            // Initialize DomainCharacters directly (simpler approach)
+            await DomainCharacters.init({
+                ui: {
+                    characterListId: 'domain-character-list',
+                    selectedCharacterId: 'selected-domain-character',
+                    analysisPanelId: 'character-analysis-panel'
+                }
+            });
+            
+            // Load initial character (coordinator) history
+            await DomainCharacters.loadCharacterHistory('coordinator');
+            
+            // Handle send button
+            document.getElementById('sendBtn').addEventListener('click', async function() {
+                const input = document.getElementById('userInput');
+                const message = input.value.trim();
+                if (message) {
+                    input.value = '';
+                    await DomainCharacters.sendMessage(message, true);
+                }
+            });
+            
+            // Handle Enter key
+            document.getElementById('userInput').addEventListener('keypress', async function(e) {
+                if (e.key === 'Enter') {
+                    const message = this.value.trim();
+                    if (message) {
+                        this.value = '';
+                        await DomainCharacters.sendMessage(message, true);
                     }
                 }
             });
@@ -313,24 +323,7 @@
             document.getElementById('showAnalysis').addEventListener('change', function(e) {
                 const panel = document.getElementById('character-analysis-panel');
                 panel.style.display = e.target.checked ? 'block' : 'none';
-                DomainConversationBox.config.showAnalysis = e.target.checked;
             });
-            
-            // Update header when character selected
-            DomainCharacters.selectCharacter = (function(original) {
-                return function(characterId) {
-                    original.call(DomainCharacters, characterId);
-                    
-                    // Update chat header
-                    const character = DomainCharacters.getCharacter(characterId);
-                    if (character) {
-                        document.getElementById('selected-domain-character').textContent = character.display_name;
-                        document.getElementById('selected-character-domain').textContent = 
-                            character.is_coordinator ? 'Coordinator - Sees the bigger picture' : 
-                            `${character.domain.charAt(0).toUpperCase() + character.domain.slice(1)} Advisor`;
-                    }
-                };
-            })(DomainCharacters.selectCharacter);
             
             console.log('✅ Domain Characters page initialized');
         });
