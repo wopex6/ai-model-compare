@@ -69,6 +69,7 @@
             display: grid;
             grid-template-columns: 1fr 320px;
             gap: 20px;
+            height: calc(100vh - 280px);
         }
         
         .main-chat {
@@ -77,10 +78,15 @@
             overflow: hidden;
             box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
             border: 3px solid {{ character.theme.secondary_color }};
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            max-height: calc(100vh - 300px);
         }
         
         .chat-messages {
-            height: 550px;
+            flex: 1;
+            min-height: 0;
             overflow-y: auto;
             padding: 25px;
             background: linear-gradient(to bottom, #fafafa, #ffffff);
@@ -128,6 +134,7 @@
             padding: 20px;
             background: white;
             border-top: 2px solid {{ character.theme.secondary_color }};
+            flex-shrink: 0;
         }
         
         .input-group {
@@ -166,6 +173,12 @@
             display: flex;
             flex-direction: column;
             gap: 15px;
+            position: sticky;
+            top: 20px;
+            height: fit-content;
+            max-height: calc(100vh - 300px);
+            overflow-y: auto;
+            align-self: start;
         }
         
         .sidebar-card {

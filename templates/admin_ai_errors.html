@@ -576,13 +576,32 @@
                 const response = await AuthHelper.authenticatedFetch(url);
                 const data = await response.json();
 
+                if (response.status === 401) {
+                    // Token expired or invalid - redirect to login
+                    localStorage.removeItem('authToken');
+                    window.location.href = '/login?redirect=/admin/ai-errors';
+                    return;
+                }
+
                 if (data.success) {
                     updateStats(data.stats);
                     updateProviderStatus(data.provider_status);
                     renderErrors(data.errors);
+                } else {
+                    console.error('API error:', data.error);
+                    document.getElementById('errors-tbody').innerHTML = `
+                        <tr><td colspan="7" class="empty-state">
+                            <i class="fas fa-exclamation-circle"></i>
+                            <p>Error: ${data.error || 'Failed to load data'}</p>
+                        </td></tr>`;
                 }
             } catch (error) {
                 console.error('Error loading data:', error);
+                document.getElementById('errors-tbody').innerHTML = `
+                    <tr><td colspan="7" class="empty-state">
+                        <i class="fas fa-exclamation-circle"></i>
+                        <p>Network error: ${error.message}</p>
+                    </td></tr>`;
             }
         }
 
