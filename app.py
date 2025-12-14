@@ -2902,11 +2902,12 @@ def route_to_domain_characters():
                 except Exception as e:
                     print(f"Warning: Could not update history response: {e}")
             
-            # Second: Store under ALL responding domain characters
-            # This is the key fix - always create entries for domain characters
+            # Second: Store under ALL characters that should display response
+            # Key fix: Store under BOTH coordinator AND domain characters
+            stored_chars = {original_char}  # Already stored under original
             for resp in formatted_responses:
                 char_id = resp.get('character_id')
-                if char_id and char_id != original_char and resp.get('should_display'):
+                if char_id and resp.get('should_display') and char_id not in stored_chars:
                     try:
                         history_system.store_interaction(
                             user_id, char_id,
@@ -2914,9 +2915,29 @@ def route_to_domain_characters():
                             'domain_routing',
                             metadata={'cross_domain': True, 'original_character': original_char}
                         )
+                        stored_chars.add(char_id)
                         print(f"[CROSS-DOMAIN] ✓ Stored under {char_id}")
                     except Exception as cross_e:
                         print(f"[CROSS-DOMAIN] ✗ Failed for {char_id}: {cross_e}")
+            
+            # Third: If asked from coordinator but domain character responded,
+            # also store under coordinator so it appears in both places
+            for resp in formatted_responses:
+                char_id = resp.get('character_id')
+                if char_id and char_id != 'coordinator' and resp.get('should_display'):
+                    # Store under coordinator too if not already there
+                    if 'coordinator' not in stored_chars:
+                        try:
+                            history_system.store_interaction(
+                                user_id, 'coordinator',
+                                message, resp.get('content', ''),
+                                'domain_routing',
+                                metadata={'cross_domain': True, 'responding_character': char_id}
+                            )
+                            stored_chars.add('coordinator')
+                            print(f"[CROSS-DOMAIN] ✓ Also stored under coordinator")
+                        except Exception as e:
+                            print(f"[CROSS-DOMAIN] ✗ Failed for coordinator: {e}")
         
         return jsonify({
             'success': True,
