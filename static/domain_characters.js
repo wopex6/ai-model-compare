@@ -25,8 +25,12 @@ const DomainCharacters = {
         route: '/api/domain-characters/route',
         analyze: '/api/domain-characters/analyze',
         feedback: '/api/domain-characters/feedback',
-        preferences: '/api/domain-characters/preferences'
+        preferences: '/api/domain-characters/preferences',
+        history: (id) => `/api/domain-characters/history/${id}`
     },
+    
+    // Per-character conversation storage
+    conversations: {},  // { character_id: [messages] }
     
     // UI element IDs (configurable)
     ui: {
@@ -80,7 +84,8 @@ const DomainCharacters = {
      * Select a specific character
      * @param {string} characterId - Character ID to select
      */
-    selectCharacter(characterId) {
+    async selectCharacter(characterId) {
+        const previousCharacter = this.selectedCharacter;
         this.selectedCharacter = characterId;
         
         // Update UI
@@ -102,7 +107,129 @@ const DomainCharacters = {
             }
         }
         
+        // Update header display
+        this._updateCharacterHeader(characterId);
+        
+        // Load conversation history for this character
+        if (previousCharacter !== characterId) {
+            await this.loadCharacterHistory(characterId);
+        }
+        
         console.log(`✓ Selected character: ${characterId}`);
+    },
+    
+    /**
+     * Update the character header display
+     * @private
+     */
+    _updateCharacterHeader(characterId) {
+        const character = this.characters.find(c => c.id === characterId);
+        if (!character) return;
+        
+        // Use IDs from the HTML template
+        const headerName = document.getElementById('selected-domain-character');
+        const headerRole = document.getElementById('selected-character-domain');
+        
+        if (headerName) headerName.textContent = character.display_name;
+        if (headerRole) headerRole.textContent = character.is_coordinator ? 
+            'Coordinator - Sees the bigger picture' : 
+            `${character.domain.charAt(0).toUpperCase() + character.domain.slice(1).replace('_', ' ')} Advisor`;
+    },
+    
+    /**
+     * Load conversation history for a character
+     * @param {string} characterId - Character ID
+     */
+    async loadCharacterHistory(characterId) {
+        // Clear current messages
+        const messagesContainer = document.getElementById('domain-chat-messages');
+        if (messagesContainer) {
+            messagesContainer.innerHTML = '';
+        }
+        
+        // Show welcome message first
+        this._showWelcomeMessage(characterId);
+        
+        try {
+            const response = await AuthHelper.authenticatedFetch(this.endpoints.history(characterId));
+            const data = await response.json();
+            
+            if (data.success && data.history && data.history.length > 0) {
+                // Store in local cache
+                this.conversations[characterId] = data.history;
+                
+                // Display messages
+                data.history.forEach(msg => {
+                    if (msg.user_message) {
+                        this._addMessageToDisplay(msg.user_message, 'user');
+                    }
+                    if (msg.ai_response) {
+                        this._addMessageToDisplay(msg.ai_response, 'bot', characterId);
+                    }
+                });
+                
+                console.log(`✓ Loaded ${data.history.length} messages for ${characterId}`);
+            }
+        } catch (error) {
+            console.error('Failed to load character history:', error);
+        }
+    },
+    
+    /**
+     * Show welcome message for a character
+     * @private
+     */
+    _showWelcomeMessage(characterId) {
+        const character = this.characters.find(c => c.id === characterId);
+        if (!character) return;
+        
+        let welcomeMessage = '';
+        if (character.is_coordinator) {
+            welcomeMessage = `Hello! I'm ${character.display_name}, your life companion. I work with a team of specialized advisors to help you across all areas of your life.\n\nYou can talk to me for a holistic view, or select a specific advisor from the sidebar for domain-specific guidance.\n\nWhat's on your mind today?`;
+        } else {
+            welcomeMessage = `Hello! I'm ${character.display_name}, your ${character.domain.replace('_', ' ')} advisor. I'm here to help you with ${character.domain.replace('_', ' ')}-related concerns and questions.\n\nHow can I assist you today?`;
+        }
+        
+        this._addMessageToDisplay(welcomeMessage, 'bot', characterId, true);
+    },
+    
+    /**
+     * Add a message to the display
+     * @private
+     */
+    _addMessageToDisplay(content, role, characterId = null, isWelcome = false) {
+        const messagesContainer = document.getElementById('domain-chat-messages');
+        if (!messagesContainer) return;
+        
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${role}-message`;
+        if (isWelcome) messageDiv.classList.add('welcome-message');
+        
+        if (role === 'bot' && characterId) {
+            const character = this.characters.find(c => c.id === characterId);
+            const displayName = character ? character.display_name : characterId;
+            
+            messageDiv.innerHTML = `
+                <div class="character-attribution">${displayName}${character?.is_coordinator ? ' (Coordinator)' : ''}</div>
+                <div class="message-content">${this._formatMessage(content)}</div>
+            `;
+        } else {
+            messageDiv.innerHTML = `
+                <div class="message-content">${role === 'user' ? '<strong>You:</strong> ' : ''}${this._formatMessage(content)}</div>
+            `;
+        }
+        
+        messagesContainer.appendChild(messageDiv);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    },
+    
+    /**
+     * Format message content (handle newlines, etc.)
+     * @private
+     */
+    _formatMessage(content) {
+        if (!content) return '';
+        return content.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     },
     
     /**
@@ -113,6 +240,9 @@ const DomainCharacters = {
      */
     async sendMessage(message, useAi = true) {
         if (!message || !message.trim()) return null;
+        
+        // Add user message to display immediately
+        this._addMessageToDisplay(message, 'user');
         
         try {
             const response = await AuthHelper.authenticatedFetch(this.endpoints.route, {
@@ -128,13 +258,25 @@ const DomainCharacters = {
             
             if (data.success) {
                 console.log(`✓ Routed to ${data.responding_count} character(s)`);
+                
+                // Display responses
+                if (data.responses) {
+                    data.responses.forEach(resp => {
+                        if (resp.should_display) {
+                            this._addMessageToDisplay(resp.content, 'bot', resp.character_id);
+                        }
+                    });
+                }
+                
                 return data;
             } else {
                 console.error('Routing failed:', data.error);
+                this._addMessageToDisplay('Sorry, there was an error processing your message.', 'bot', this.selectedCharacter);
                 return null;
             }
         } catch (error) {
             console.error('Error routing message:', error);
+            this._addMessageToDisplay('Sorry, there was an error connecting to the server.', 'bot', this.selectedCharacter);
             return null;
         }
     },

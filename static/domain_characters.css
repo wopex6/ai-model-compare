@@ -159,6 +159,46 @@
     font-size: 0.9rem;
 }
 
+/* Per-character message styling */
+.message.user-message {
+    text-align: right;
+    margin-bottom: 15px;
+}
+
+.message.user-message .message-content {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    display: inline-block;
+    padding: 12px 18px;
+    border-radius: 18px 18px 5px 18px;
+    max-width: 70%;
+    text-align: left;
+}
+
+.message.bot-message {
+    margin-bottom: 15px;
+}
+
+.message.bot-message .message-content {
+    background: #f0f0f0;
+    display: inline-block;
+    padding: 12px 18px;
+    border-radius: 18px 18px 18px 5px;
+    max-width: 85%;
+}
+
+.message.bot-message .character-attribution {
+    color: #667eea;
+    font-weight: 600;
+    font-size: 0.85rem;
+    margin-bottom: 5px;
+}
+
+.message.welcome-message .message-content {
+    background: linear-gradient(135deg, #f0f4ff, #e8ecff);
+    border-left: 3px solid #667eea;
+}
+
 /* Feedback Buttons */
 .character-feedback {
     display: flex;
