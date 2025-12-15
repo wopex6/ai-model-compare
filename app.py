@@ -2899,12 +2899,13 @@ def route_to_domain_characters():
                     cursor = smart_response_conn.cursor()
                     cursor.execute('''
                         UPDATE history_primary 
-                        SET assistant_response = ?, character_id = ?
+                        SET assistant_response = ?, character = ?
                         WHERE id = ?
                     ''', (primary_response, responding_char, history_id))
                     smart_response_conn.commit()
+                    print(f"[HISTORY] ✓ Updated id={history_id} with response from {responding_char}")
                 except Exception as e:
-                    print(f"Warning: Could not update history response: {e}")
+                    print(f"[HISTORY] ✗ Could not update: {e}")
             
             # Add visibility entries for all relevant characters (no duplicate message storage)
             if history_id:
