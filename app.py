@@ -2883,61 +2883,59 @@ def route_to_domain_characters():
                 'metadata': resp.metadata
             })
         
-        # Store history for all responding characters
-        # This ensures messages appear in BOTH coordinator AND domain-specific pages
+        # Single Storage + Visibility Architecture
+        # Store message ONCE, then add visibility entries for all relevant characters
         if history_system and formatted_responses:
             original_char = requested_character or 'coordinator'
             primary_response = formatted_responses[0].get('content', '') if formatted_responses else ''
+            responding_char = formatted_responses[0].get('character_id') if formatted_responses else original_char
             
-            # First: Update the original entry if we have history_id
-            if context.get('history_id'):
+            # Get history_id (either from context or create new entry)
+            history_id = context.get('history_id')
+            
+            if history_id:
+                # Update existing entry with response
                 try:
                     cursor = smart_response_conn.cursor()
                     cursor.execute('''
                         UPDATE history_primary 
-                        SET assistant_response = ? 
+                        SET assistant_response = ?, character_id = ?
                         WHERE id = ?
-                    ''', (primary_response, context['history_id']))
+                    ''', (primary_response, responding_char, history_id))
                     smart_response_conn.commit()
                 except Exception as e:
                     print(f"Warning: Could not update history response: {e}")
             
-            # Second: Store under ALL characters that should display response
-            # Key fix: Store under BOTH coordinator AND domain characters
-            stored_chars = {original_char}  # Already stored under original
-            for resp in formatted_responses:
-                char_id = resp.get('character_id')
-                if char_id and resp.get('should_display') and char_id not in stored_chars:
-                    try:
-                        history_system.store_interaction(
-                            user_id, char_id,
-                            message, resp.get('content', ''),
-                            'domain_routing',
-                            metadata={'cross_domain': True, 'original_character': original_char}
-                        )
-                        stored_chars.add(char_id)
-                        print(f"[CROSS-DOMAIN] ✓ Stored under {char_id}")
-                    except Exception as cross_e:
-                        print(f"[CROSS-DOMAIN] ✗ Failed for {char_id}: {cross_e}")
-            
-            # Third: If asked from coordinator but domain character responded,
-            # also store under coordinator so it appears in both places
-            for resp in formatted_responses:
-                char_id = resp.get('character_id')
-                if char_id and char_id != 'coordinator' and resp.get('should_display'):
-                    # Store under coordinator too if not already there
-                    if 'coordinator' not in stored_chars:
-                        try:
-                            history_system.store_interaction(
-                                user_id, 'coordinator',
-                                message, resp.get('content', ''),
-                                'domain_routing',
-                                metadata={'cross_domain': True, 'responding_character': char_id}
-                            )
-                            stored_chars.add('coordinator')
-                            print(f"[CROSS-DOMAIN] ✓ Also stored under coordinator")
-                        except Exception as e:
-                            print(f"[CROSS-DOMAIN] ✗ Failed for coordinator: {e}")
+            # Add visibility entries for all relevant characters (no duplicate message storage)
+            if history_id:
+                try:
+                    cursor = smart_response_conn.cursor()
+                    visible_chars = set()
+                    
+                    # Original character (who was asked)
+                    visible_chars.add(original_char)
+                    
+                    # All responding characters
+                    for resp in formatted_responses:
+                        char_id = resp.get('character_id')
+                        if char_id and resp.get('should_display'):
+                            visible_chars.add(char_id)
+                    
+                    # Always include coordinator for cross-domain visibility
+                    visible_chars.add('coordinator')
+                    
+                    # Insert visibility entries
+                    for char_id in visible_chars:
+                        role = 'responder' if char_id == responding_char else 'viewer'
+                        cursor.execute('''
+                            INSERT OR IGNORE INTO message_visibility (history_id, character_id, role)
+                            VALUES (?, ?, ?)
+                        ''', (history_id, char_id, role))
+                    
+                    smart_response_conn.commit()
+                    print(f"[VISIBILITY] ✓ Added visibility for: {', '.join(visible_chars)}")
+                except Exception as e:
+                    print(f"[VISIBILITY] ✗ Failed: {e}")
         
         return jsonify({
             'success': True,
@@ -3072,20 +3070,24 @@ def get_character_preferences():
 @app.route('/api/domain-characters/history/<character_id>')
 @require_auth
 def get_character_history(character_id):
-    """Get conversation history for a specific character"""
+    """Get conversation history for a specific character using visibility table"""
     try:
         user_id = request.current_user.get('user_id')
         limit = request.args.get('limit', 50, type=int)
         
         cursor = smart_response_conn.cursor()
-        # Use correct column names: 'character' not 'character_id', 'assistant_response' not 'ai_response'
+        
+        # Use visibility table for cross-character history (single storage architecture)
+        # Falls back to direct character match for backward compatibility
         cursor.execute('''
-            SELECT id, user_message, assistant_response, timestamp
-            FROM history_primary
-            WHERE user_id = ? AND character = ?
-            ORDER BY timestamp DESC
+            SELECT DISTINCT hp.id, hp.user_message, hp.assistant_response, hp.timestamp, mv.role
+            FROM history_primary hp
+            LEFT JOIN message_visibility mv ON hp.id = mv.history_id AND mv.character_id = ?
+            WHERE hp.user_id = ? 
+              AND (mv.character_id = ? OR hp.character = ?)
+            ORDER BY hp.timestamp DESC
             LIMIT ?
-        ''', (user_id, character_id, limit))
+        ''', (character_id, user_id, character_id, character_id, limit))
         
         rows = cursor.fetchall()
         history = []
@@ -3094,7 +3096,8 @@ def get_character_history(character_id):
                 'id': row[0],
                 'user_message': row[1],
                 'ai_response': row[2],
-                'timestamp': row[3]
+                'timestamp': row[3],
+                'role': row[4] or 'owner'  # role from visibility or 'owner' if direct match
             })
         
         # Reverse to get chronological order

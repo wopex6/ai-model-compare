@@ -686,6 +686,39 @@ def migrate_all_tables():
         print("✅ idx_ai_errors_resolved")
         
         # ============================================================
+        # MESSAGE VISIBILITY (Single Storage Architecture)
+        # ============================================================
+        print("\n📦 MESSAGE VISIBILITY")
+        print("-" * 80)
+        
+        # Track which characters can see each message (avoids duplicate storage)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS message_visibility (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                history_id INTEGER NOT NULL,
+                character_id TEXT NOT NULL,
+                role TEXT DEFAULT 'viewer',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (history_id) REFERENCES history_primary(id)
+            )
+        ''')
+        print("✅ message_visibility")
+        
+        # Index for fast character history queries
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_visibility_character 
+            ON message_visibility(character_id, history_id)
+        ''')
+        print("✅ idx_visibility_character")
+        
+        # Index for finding all characters for a message
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_visibility_history 
+            ON message_visibility(history_id)
+        ''')
+        print("✅ idx_visibility_history")
+        
+        # ============================================================
         # DOMAIN CHARACTER INDEXES
         # ============================================================
         print("\n📦 DOMAIN CHARACTER INDEXES")
