@@ -2883,58 +2883,64 @@ def route_to_domain_characters():
                 'metadata': resp.metadata
             })
         
-        # Single Storage + Visibility Architecture
-        # Store message ONCE, then add visibility entries for all relevant characters
+        # Multi-Response Storage: Each character's response stored separately
+        # This handles cases where multiple domain characters respond to same question
         if history_system and formatted_responses:
             original_char = requested_character or 'coordinator'
-            primary_response = formatted_responses[0].get('content', '') if formatted_responses else ''
-            responding_char = formatted_responses[0].get('character_id') if formatted_responses else original_char
+            base_history_id = context.get('history_id')
             
-            # Get history_id (either from context or create new entry)
-            history_id = context.get('history_id')
+            # Get responding characters
+            responding_chars = [r for r in formatted_responses if r.get('should_display')]
             
-            if history_id:
-                # Update existing entry with response
+            if responding_chars:
+                cursor = smart_response_conn.cursor()
+                stored_ids = []
+                
+                for i, resp in enumerate(responding_chars):
+                    char_id = resp.get('character_id')
+                    response_content = resp.get('content', '')
+                    
+                    if i == 0 and base_history_id:
+                        # Update the original entry with first response
+                        try:
+                            cursor.execute('''
+                                UPDATE history_primary 
+                                SET assistant_response = ?, character = ?
+                                WHERE id = ?
+                            ''', (response_content, char_id, base_history_id))
+                            stored_ids.append((base_history_id, char_id))
+                            print(f"[HISTORY] ✓ Updated id={base_history_id} for {char_id}")
+                        except Exception as e:
+                            print(f"[HISTORY] ✗ Update failed: {e}")
+                    else:
+                        # Create separate entry for additional responses
+                        try:
+                            new_id = history_system.store_interaction(
+                                user_id, char_id,
+                                message, response_content,
+                                'domain_routing',
+                                metadata={'multi_response': True, 'original_char': original_char}
+                            )
+                            stored_ids.append((new_id, char_id))
+                            print(f"[HISTORY] ✓ Created id={new_id} for {char_id}")
+                        except Exception as e:
+                            print(f"[HISTORY] ✗ Create failed for {char_id}: {e}")
+                
+                # Add visibility: coordinator sees all responses
                 try:
-                    cursor = smart_response_conn.cursor()
-                    cursor.execute('''
-                        UPDATE history_primary 
-                        SET assistant_response = ?, character = ?
-                        WHERE id = ?
-                    ''', (primary_response, responding_char, history_id))
-                    smart_response_conn.commit()
-                    print(f"[HISTORY] ✓ Updated id={history_id} with response from {responding_char}")
-                except Exception as e:
-                    print(f"[HISTORY] ✗ Could not update: {e}")
-            
-            # Add visibility entries for all relevant characters (no duplicate message storage)
-            if history_id:
-                try:
-                    cursor = smart_response_conn.cursor()
-                    visible_chars = set()
-                    
-                    # Original character (who was asked)
-                    visible_chars.add(original_char)
-                    
-                    # All responding characters
-                    for resp in formatted_responses:
-                        char_id = resp.get('character_id')
-                        if char_id and resp.get('should_display'):
-                            visible_chars.add(char_id)
-                    
-                    # Always include coordinator for cross-domain visibility
-                    visible_chars.add('coordinator')
-                    
-                    # Insert visibility entries
-                    for char_id in visible_chars:
-                        role = 'responder' if char_id == responding_char else 'viewer'
+                    for hist_id, char_id in stored_ids:
+                        # Character sees their own response
                         cursor.execute('''
                             INSERT OR IGNORE INTO message_visibility (history_id, character_id, role)
-                            VALUES (?, ?, ?)
-                        ''', (history_id, char_id, role))
-                    
+                            VALUES (?, ?, 'responder')
+                        ''', (hist_id, char_id))
+                        # Coordinator sees all
+                        cursor.execute('''
+                            INSERT OR IGNORE INTO message_visibility (history_id, character_id, role)
+                            VALUES (?, 'coordinator', 'viewer')
+                        ''', (hist_id,))
                     smart_response_conn.commit()
-                    print(f"[VISIBILITY] ✓ Added visibility for: {', '.join(visible_chars)}")
+                    print(f"[VISIBILITY] ✓ {len(stored_ids)} responses stored")
                 except Exception as e:
                     print(f"[VISIBILITY] ✗ Failed: {e}")
         
