@@ -63,11 +63,13 @@ Remember: You see everything. You help connect the dots.""",
         "focus_areas": ["career", "productivity", "workplace", "professional_growth", "job", "business"],
         "expertise": ["career_planning", "productivity", "workplace_dynamics", "leadership", "decision_making"],
         "threshold_config": {
-            "base_threshold": 0.7,
+            "base_threshold": 0.15,
             "domain_keywords": [
                 "job", "career", "work", "boss", "promotion", "deadline", "project",
                 "colleague", "salary", "interview", "resume", "meeting", "office",
-                "productivity", "performance", "professional", "business", "client"
+                "productivity", "productive", "performance", "professional", "business", "client",
+                "efficient", "efficiency", "effective", "smart work", "time management",
+                "task", "tasks", "workload", "prioritize", "focus", "organize"
             ],
             "emotional_triggers": [
                 "stressed about work", "hate my job", "fired", "laid off",
@@ -109,7 +111,7 @@ Remember: Career is important, but it's one part of a balanced life."""
         "focus_areas": ["family", "friends", "romantic", "social", "communication", "connection"],
         "expertise": ["communication", "conflict_resolution", "emotional_intelligence", "boundaries", "intimacy"],
         "threshold_config": {
-            "base_threshold": 0.7,
+            "base_threshold": 0.15,
             "domain_keywords": [
                 "relationship", "partner", "family", "friend", "marriage", "dating",
                 "divorce", "lonely", "love", "argue", "fight", "communication",
@@ -155,7 +157,7 @@ Remember: Relationships are the foundation of a fulfilling life."""
         "focus_areas": ["emotions", "stress", "anxiety", "mindfulness", "self_care", "mental_wellness"],
         "expertise": ["emotional_regulation", "stress_management", "mindfulness", "self_compassion", "coping_strategies"],
         "threshold_config": {
-            "base_threshold": 0.6,  # Lower threshold - mental health is critical
+            "base_threshold": 0.15,
             "domain_keywords": [
                 "anxious", "depressed", "stressed", "overwhelmed", "panic",
                 "worried", "sad", "hopeless", "emotions", "feelings",
@@ -203,7 +205,7 @@ You are a companion, not a replacement for therapy."""
         "focus_areas": ["fitness", "nutrition", "sleep", "energy", "health", "wellness"],
         "expertise": ["fitness_guidance", "nutrition_basics", "sleep_hygiene", "energy_management", "healthy_habits"],
         "threshold_config": {
-            "base_threshold": 0.7,
+            "base_threshold": 0.15,
             "domain_keywords": [
                 "health", "sick", "pain", "tired", "exercise", "diet",
                 "sleep", "weight", "fitness", "energy", "gym", "nutrition",
@@ -299,7 +301,7 @@ You provide general guidance, not specific financial advice."""
         "focus_areas": ["education", "skills", "learning", "growth", "development", "knowledge"],
         "expertise": ["learning_strategies", "skill_development", "study_techniques", "curiosity", "growth_mindset"],
         "threshold_config": {
-            "base_threshold": 0.7,
+            "base_threshold": 0.15,
             "domain_keywords": [
                 "learn", "study", "course", "skill", "education", "knowledge",
                 "training", "certification", "school", "class", "book",
@@ -346,7 +348,7 @@ Remember: Everyone can learn. The key is finding the right approach."""
         "focus_areas": ["art", "hobbies", "creativity", "expression", "innovation", "play"],
         "expertise": ["creative_inspiration", "artistic_expression", "creative_blocks", "playfulness", "innovation"],
         "threshold_config": {
-            "base_threshold": 0.7,
+            "base_threshold": 0.15,
             "domain_keywords": [
                 "creative", "art", "hobby", "music", "writing", "design",
                 "craft", "inspiration", "paint", "draw", "create",
