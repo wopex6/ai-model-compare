@@ -89,6 +89,38 @@ class CharacterManager:
         
         # Rule 1: User requested specific character
         if requested_character:
+            # Special case: Coordinator should delegate to domain experts
+            if requested_character == 'coordinator':
+                # Check if any domain character should handle this
+                print(f"[ROUTING] Coordinator requested - checking if domain experts should handle...")
+                for char_id, character in self.domain_characters.items():
+                    concern_level = character.analyze_context(message, context)
+                    threshold = character.threshold_config.base_threshold
+                    print(f"[ROUTING] {char_id}: concern={concern_level:.3f}, threshold={threshold:.3f}")
+                    
+                    if character.should_respond(concern_level):
+                        print(f"[ROUTING] Delegating to {char_id} (concern {concern_level:.3f} >= threshold {threshold:.3f})")
+                        response = character.generate_response(message, context)
+                        response.concern_level = concern_level
+                        response.should_display = True
+                        responses.append(response)
+                        
+                        if history_id:
+                            character.store_interpretation(
+                                history_id,
+                                response.interpretation,
+                                concern_level,
+                                responded=True
+                            )
+                
+                # If domain experts triggered, return their responses
+                if responses:
+                    self._record_silent_observations(message, context, exclude=[r.character_id for r in responses])
+                    return responses
+                
+                # Otherwise, coordinator handles it
+                print(f"[ROUTING] No domain expert triggered - coordinator handling")
+            
             if requested_character in self.characters:
                 character = self.characters[requested_character]
                 response = character.generate_response(message, context)
@@ -112,8 +144,12 @@ class CharacterManager:
         # Rule 2: Check all domain characters for threshold triggers
         triggered_characters = []
         
+        print(f"[ROUTING] Checking {len(self.domain_characters)} domain characters for message: {message[:50]}...")
+        
         for char_id, character in self.domain_characters.items():
             concern_level = character.analyze_context(message, context)
+            threshold = character.threshold_config.base_threshold
+            print(f"[ROUTING] {char_id}: concern={concern_level:.3f}, threshold={threshold:.3f}, triggers={concern_level >= threshold}")
             
             if character.should_respond(concern_level):
                 response = character.generate_response(message, context)
