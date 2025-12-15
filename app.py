@@ -2835,7 +2835,10 @@ def route_to_domain_characters():
             'timestamp': datetime.now().isoformat()
         }
         
-        # Fetch recent conversation history for AI context (5 exchanges = 10 messages)
+        # Configurable: Number of conversation exchanges to include for AI context
+        # Can be set via environment variable AI_CONTEXT_EXCHANGES (default: 5)
+        context_exchanges = int(os.environ.get('AI_CONTEXT_EXCHANGES', 5))
+        
         target_char = requested_character or 'coordinator'
         try:
             cursor = smart_response_conn.cursor()
@@ -2848,21 +2851,26 @@ def route_to_domain_characters():
                   AND hp.assistant_response IS NOT NULL 
                   AND hp.assistant_response != ''
                 ORDER BY hp.timestamp DESC
-                LIMIT 5
-            ''', (target_char, user_id, target_char, target_char))
+                LIMIT ?
+            ''', (target_char, user_id, target_char, target_char, context_exchanges))
             
             rows = cursor.fetchall()
             message_history = []
+            history_token_estimate = 0
+            
             for row in reversed(rows):  # Chronological order
                 user_msg, ai_resp, char = row
                 if user_msg:
                     message_history.append({'role': 'user', 'content': user_msg})
+                    history_token_estimate += len(user_msg) // 4  # ~4 chars per token
                 if ai_resp:
                     message_history.append({'role': 'assistant', 'content': ai_resp})
+                    history_token_estimate += len(ai_resp) // 4
             
             if message_history:
                 context['message_history'] = message_history
-                print(f"[CONTEXT] Added {len(message_history)} history messages for AI")
+                context['history_token_estimate'] = history_token_estimate
+                print(f"[CONTEXT] Added {len(message_history)} history messages (~{history_token_estimate} tokens)")
         except Exception as e:
             print(f"Warning: Could not fetch conversation history: {e}")
         

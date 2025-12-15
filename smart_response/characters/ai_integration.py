@@ -455,15 +455,19 @@ class DomainCharacterAI:
             {"role": "user", "content": message}
         ]
         
-        # Add conversation history if available
+        # Add conversation history if available (use all provided history)
         history = context.get('message_history', [])
         if history:
-            # Insert history before the current message
-            for hist_msg in history[-6:]:  # Last 3 exchanges
+            for hist_msg in history:
                 messages.insert(-1, {
                     "role": hist_msg.get('role', 'user'),
                     "content": hist_msg.get('content', '')
                 })
+        
+        # Token estimation for monitoring
+        prompt_tokens = sum(len(m['content']) // 4 for m in messages)
+        history_tokens = context.get('history_token_estimate', 0)
+        print(f"[TOKENS] OpenAI request: ~{prompt_tokens} prompt tokens (history: ~{history_tokens})")
         
         response = self.openai_client.chat.completions.create(
             model="gpt-4o-mini",  # Cost-effective model
@@ -472,6 +476,10 @@ class DomainCharacterAI:
             temperature=0.7
         )
         
+        # Log actual token usage if available
+        if hasattr(response, 'usage') and response.usage:
+            print(f"[TOKENS] OpenAI actual: {response.usage.prompt_tokens} in, {response.usage.completion_tokens} out")
+        
         return response.choices[0].message.content
     
     def _generate_anthropic(self, system_prompt: str, message: str,
@@ -479,15 +487,20 @@ class DomainCharacterAI:
         """Generate response using Anthropic Claude"""
         messages = [{"role": "user", "content": message}]
         
-        # Add conversation history if available
+        # Add conversation history if available (use all provided history)
         history = context.get('message_history', [])
         if history:
-            for hist_msg in history[-6:]:
+            for hist_msg in history:
                 role = "user" if hist_msg.get('role') == 'user' else "assistant"
                 messages.insert(-1, {
                     "role": role,
                     "content": hist_msg.get('content', '')
                 })
+        
+        # Token estimation for monitoring
+        prompt_tokens = len(system_prompt) // 4 + sum(len(m['content']) // 4 for m in messages)
+        history_tokens = context.get('history_token_estimate', 0)
+        print(f"[TOKENS] Anthropic request: ~{prompt_tokens} prompt tokens (history: ~{history_tokens})")
         
         response = self.anthropic_client.messages.create(
             model="claude-3-haiku-20240307",  # Cost-effective model
@@ -495,6 +508,10 @@ class DomainCharacterAI:
             system=system_prompt,
             messages=messages
         )
+        
+        # Log actual token usage if available
+        if hasattr(response, 'usage') and response.usage:
+            print(f"[TOKENS] Anthropic actual: {response.usage.input_tokens} in, {response.usage.output_tokens} out")
         
         return response.content[0].text
     
