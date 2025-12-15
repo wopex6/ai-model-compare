@@ -2835,6 +2835,37 @@ def route_to_domain_characters():
             'timestamp': datetime.now().isoformat()
         }
         
+        # Fetch recent conversation history for AI context (5 exchanges = 10 messages)
+        target_char = requested_character or 'coordinator'
+        try:
+            cursor = smart_response_conn.cursor()
+            cursor.execute('''
+                SELECT hp.user_message, hp.assistant_response, hp.character
+                FROM history_primary hp
+                LEFT JOIN message_visibility mv ON hp.id = mv.history_id AND mv.character_id = ?
+                WHERE hp.user_id = ? 
+                  AND (mv.character_id = ? OR hp.character = ?)
+                  AND hp.assistant_response IS NOT NULL 
+                  AND hp.assistant_response != ''
+                ORDER BY hp.timestamp DESC
+                LIMIT 5
+            ''', (target_char, user_id, target_char, target_char))
+            
+            rows = cursor.fetchall()
+            message_history = []
+            for row in reversed(rows):  # Chronological order
+                user_msg, ai_resp, char = row
+                if user_msg:
+                    message_history.append({'role': 'user', 'content': user_msg})
+                if ai_resp:
+                    message_history.append({'role': 'assistant', 'content': ai_resp})
+            
+            if message_history:
+                context['message_history'] = message_history
+                print(f"[CONTEXT] Added {len(message_history)} history messages for AI")
+        except Exception as e:
+            print(f"Warning: Could not fetch conversation history: {e}")
+        
         # Get history_id if we have history system
         if history_system:
             # Store in primary history first to get ID
