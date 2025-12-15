@@ -163,8 +163,19 @@ const DomainCharacters = {
                     if (msg.user_message) {
                         this._addMessageToDisplay(msg.user_message, 'user', null, false, msg.timestamp);
                     }
-                    if (msg.ai_response) {
-                        this._addMessageToDisplay(msg.ai_response, 'bot', characterId, false, msg.timestamp);
+                    
+                    // Handle multi-responses (coordinator view)
+                    if (msg.responses && msg.responses.length > 0) {
+                        msg.responses.forEach(resp => {
+                            if (resp.content) {
+                                // Use actual responder character, not the viewing character
+                                this._addMessageToDisplay(resp.content, 'bot', resp.character || characterId, false, msg.timestamp);
+                            }
+                        });
+                    } else if (msg.ai_response) {
+                        // Single response - use msg.character if available (actual responder)
+                        const responder = msg.character || characterId;
+                        this._addMessageToDisplay(msg.ai_response, 'bot', responder, false, msg.timestamp);
                     }
                 });
                 
