@@ -623,7 +623,7 @@ Respond in JSON format:
 
         try:
             # Use the AI client to generate summary
-            response = self._call_ai_for_summary(summary_prompt)
+            response = self._call_ai_for_summary(summary_prompt, user_id=user_id, character_id=character_id)
             if response:
                 # Parse and store
                 try:
@@ -650,7 +650,7 @@ Respond in JSON format:
         
         return None
     
-    def _call_ai_for_summary(self, prompt: str) -> Optional[str]:
+    def _call_ai_for_summary(self, prompt: str, user_id: Optional[int] = None, character_id: Optional[str] = None) -> Optional[str]:
         """Call AI to generate summary using OpenAI (with budget control)"""
         # Try to use OpenAI for summarization
         try:
@@ -662,10 +662,11 @@ Respond in JSON format:
                 print("[SUMMARY] No OpenAI API key available")
                 return None
             
-            # Check budget if ai_client has budget manager
-            if self.ai_client and hasattr(self.ai_client, 'can_make_call'):
-                if not self.ai_client.can_make_call():
-                    print("[SUMMARY] AI budget exhausted, skipping summary")
+            # Check budget (AIBudgetManager)
+            if self.ai_client and hasattr(self.ai_client, 'can_make_ai_call'):
+                allowed, reason = self.ai_client.can_make_ai_call(user_id=user_id, is_background=True)
+                if not allowed:
+                    print(f"[SUMMARY] Skipping summary: {reason}")
                     return None
             
             client = OpenAI(api_key=api_key)
@@ -685,18 +686,44 @@ Respond in JSON format:
             if hasattr(response, 'usage') and response.usage:
                 print(f"[SUMMARY] Tokens: {response.usage.prompt_tokens} in, {response.usage.completion_tokens} out")
             
-            # Record in budget if available
-            if self.ai_client and hasattr(self.ai_client, 'record_call'):
-                self.ai_client.record_call(
+            # Log AI call (AIBudgetManager)
+            if self.ai_client and hasattr(self.ai_client, 'log_ai_call'):
+                input_tokens = 0
+                output_tokens = 0
+                if hasattr(response, 'usage') and response.usage:
+                    input_tokens = int(getattr(response.usage, 'prompt_tokens', 0) or 0)
+                    output_tokens = int(getattr(response.usage, 'completion_tokens', 0) or 0)
+                self.ai_client.log_ai_call(
+                    call_type='openai',
                     purpose='conversation_summary',
                     success=True,
-                    is_background=True
+                    user_id=user_id,
+                    character=character_id,
+                    is_background=True,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    error_message=None
                 )
             
             return result
             
         except Exception as e:
             print(f"[SUMMARY] AI call failed: {e}")
+            if self.ai_client and hasattr(self.ai_client, 'log_ai_call'):
+                try:
+                    self.ai_client.log_ai_call(
+                        call_type='openai',
+                        purpose='conversation_summary',
+                        success=False,
+                        user_id=user_id,
+                        character=character_id,
+                        is_background=True,
+                        input_tokens=0,
+                        output_tokens=0,
+                        error_message=str(e)
+                    )
+                except Exception:
+                    pass
             return None
     
     def _store_summary(self, user_id: int, character_id: str, summary: str,
