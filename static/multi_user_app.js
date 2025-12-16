@@ -2506,6 +2506,8 @@ class IntegratedAIChatbot {
                 if (dashboardTitle) {
                     if (profile.user_role === 'administrator') {
                         dashboardTitle.textContent = 'Administrator Dashboard';
+                    } else if (profile.user_role === 'developer') {
+                        dashboardTitle.textContent = 'Developer Dashboard';
                     } else if (profile.user_role === 'paid') {
                         dashboardTitle.textContent = 'User Dashboard';
                     } else {
@@ -2513,14 +2515,14 @@ class IntegratedAIChatbot {
                     }
                 }
                 
-                if (profile.user_role === 'administrator') {
-                    // Show admin tab
+                if (profile.user_role === 'administrator' || profile.user_role === 'developer') {
+                    // Show admin tab for administrators and developers
                     const adminTabBtn = document.getElementById('admin-tab-btn');
                     if (adminTabBtn) {
                         adminTabBtn.style.display = 'block';
                     }
                     
-                    // Hide "Contact Admin" button for administrators
+                    // Hide "Contact Admin" button for administrators and developers
                     const contactAdminBtn = document.getElementById('admin-chat-tab-btn');
                     if (contactAdminBtn) {
                         contactAdminBtn.style.display = 'none';

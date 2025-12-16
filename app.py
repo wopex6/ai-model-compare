@@ -535,6 +535,10 @@ def require_auth(f):
     decorated_function.__name__ = f.__name__
     return decorated_function
 
+def has_admin_access(user_role):
+    """Check if user has admin-level access (administrator or developer)"""
+    return user_role in ('administrator', 'developer')
+
 # Favicon route to prevent 404 errors
 @app.route('/favicon.ico')
 def favicon():
@@ -711,7 +715,7 @@ def get_all_users():
     try:
         # Check if user is administrator
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
+        if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
         users = integrated_db.get_all_users_stats()
@@ -726,7 +730,7 @@ def delete_user(user_id):
     try:
         # Check if user is administrator
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
+        if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
         # Don't allow deleting yourself
@@ -748,7 +752,7 @@ def restore_user(user_id):
     try:
         # Check if user is administrator
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
+        if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
         success = integrated_db.restore_user(user_id)
@@ -766,7 +770,7 @@ def change_user_role(user_id):
     try:
         # Check if user is administrator
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
+        if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
         data = request.get_json()
@@ -796,7 +800,7 @@ def permanent_delete_user(user_id):
     try:
         # Check if user is administrator
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
+        if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
         # Don't allow deleting yourself
@@ -818,7 +822,7 @@ def bulk_delete_deleted_users():
     try:
         # Check if user is administrator
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
+        if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
         deleted_count = integrated_db.bulk_delete_deleted_users()
@@ -837,7 +841,7 @@ def get_statistics():
     try:
         # Check if user is administrator
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
+        if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
         stats = integrated_db.get_usage_statistics()
@@ -1020,7 +1024,7 @@ def get_all_admin_chats():
     """Get all user-admin chats (admin only)"""
     try:
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
+        if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
         chats = integrated_db.get_all_user_admin_chats()
@@ -1034,7 +1038,7 @@ def get_user_admin_messages(user_id):
     """Get messages for a specific user (admin only)"""
     try:
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
+        if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
         messages = integrated_db.get_admin_messages(user_id)
@@ -1050,7 +1054,7 @@ def send_admin_reply(user_id):
     """Send a message to user (admin only) with optional file attachment and reply"""
     try:
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
+        if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
         data = request.get_json()
@@ -2211,7 +2215,7 @@ def reset_ai_circuit_breaker():
         
         # Admin only
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
+        if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
         # Reset circuit breaker
@@ -3377,7 +3381,7 @@ def get_user_context():
     try:
         # Admin only
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
+        if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
         # Allow admin to query any user's context
@@ -3460,7 +3464,7 @@ def update_user_context(context_id):
     try:
         # Admin only
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
+        if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
         data = request.json
@@ -3529,7 +3533,7 @@ def delete_user_context(context_id):
     try:
         # Admin only
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
+        if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
         conn = sqlite3.connect('integrated_users.db')
@@ -3584,7 +3588,7 @@ def get_pattern_suggestions():
     """Get pending pattern suggestions"""
     try:
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
+        if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
         from smart_response.pattern_expander import PatternExpander
@@ -3607,7 +3611,7 @@ def run_pattern_analysis():
     """Manually trigger pattern analysis"""
     try:
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
+        if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
         data = request.json or {}
@@ -3634,7 +3638,7 @@ def approve_pattern(pattern_id):
     """Approve a pattern suggestion"""
     try:
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
+        if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
         data = request.json or {}
@@ -3659,7 +3663,7 @@ def reject_pattern(pattern_id):
     """Reject a pattern suggestion"""
     try:
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
+        if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
         data = request.json or {}
@@ -3684,7 +3688,7 @@ def run_archival_maintenance():
     """Manually trigger archival maintenance"""
     try:
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
+        if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
         from smart_response.context_archival import ContextArchival
@@ -3706,7 +3710,7 @@ def get_archival_stats():
     """Get archival statistics"""
     try:
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
+        if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
         from smart_response.context_archival import ContextArchival
@@ -3754,7 +3758,7 @@ def get_ai_usage_summary():
     """Get summary statistics for AI usage"""
     try:
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
+        if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
         conn = sqlite3.connect('integrated_users.db')
@@ -3803,7 +3807,7 @@ def get_daily_ai_usage():
     """Get today's AI usage by user"""
     try:
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
+        if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
         sort_by = request.args.get('sort', 'calls_desc')
@@ -3865,7 +3869,7 @@ def get_monthly_ai_usage():
     """Get this month's AI usage by user"""
     try:
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
+        if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
         sort_by = request.args.get('sort', 'calls_desc')
