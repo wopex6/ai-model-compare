@@ -139,11 +139,14 @@ try:
     from smart_response.conversation_context import ConversationContextManager
     from smart_response.dual_layer_history import DualLayerHistorySystem
     from smart_response.ai_budget_manager import AIBudgetManager
+    from smart_response.user_context_manager import create_user_context_manager
     smart_response_conn = sqlite3.connect('integrated_users.db', check_same_thread=False)
     smart_handler = SmartResponseHandler(smart_response_conn)
     context_manager = ConversationContextManager(smart_response_conn)
     history_system = DualLayerHistorySystem(smart_response_conn)
     ai_budget = AIBudgetManager(smart_response_conn)
+    user_context_mgr = create_user_context_manager(smart_response_conn, ai_budget)
+    print("✓ User Context Manager initialized (preferences, goals, language learning)")
     
     # Initialize frontend error logging table
     cursor = smart_response_conn.cursor()
@@ -189,6 +192,7 @@ except Exception as e:
     context_manager = None
     history_system = None
     ai_budget = None
+    user_context_mgr = None
     domain_character_manager = None
     domain_character_ai = None
     previous_interactions = {}
@@ -2835,9 +2839,33 @@ def route_to_domain_characters():
             'timestamp': datetime.now().isoformat()
         }
         
+        # Process message through user context manager (extracts preferences, goals, language patterns)
+        # This runs on EVERY message (cheap, rule-based extraction)
+        if user_context_mgr:
+            try:
+                user_context = user_context_mgr.process_message(
+                    user_id, message, requested_character or 'coordinator'
+                )
+                # Merge user context into main context
+                context.update(user_context)
+                
+                # Format user context for AI prompt
+                user_context_prompt = user_context_mgr.format_context_for_prompt(user_context)
+                if user_context_prompt:
+                    context['user_profile'] = user_context_prompt
+                    print(f"[USER_CONTEXT] Added user profile for AI")
+                
+                # Check if user references past - may need more history
+                if user_context.get('references_past'):
+                    print(f"[USER_CONTEXT] User references past conversation - expanding context")
+            except Exception as e:
+                print(f"Warning: User context processing failed: {e}")
+        
         # Configurable: Number of conversation exchanges to include for AI context
         # Can be set via environment variable AI_CONTEXT_EXCHANGES (default: 5)
-        context_exchanges = int(os.environ.get('AI_CONTEXT_EXCHANGES', 5))
+        # Expand if user references past conversation
+        base_exchanges = int(os.environ.get('AI_CONTEXT_EXCHANGES', 5))
+        context_exchanges = base_exchanges * 2 if context.get('references_past') else base_exchanges
         
         target_char = requested_character or 'coordinator'
         try:
@@ -2982,6 +3010,32 @@ def route_to_domain_characters():
                     print(f"[VISIBILITY] ✓ {len(stored_ids)} responses stored")
                 except Exception as e:
                     print(f"[VISIBILITY] ✗ Failed: {e}")
+        
+        # AI Summarization (throttled - only when needed)
+        # Triggers: every 8 messages, user references past, or summary is stale
+        if user_context_mgr and context.get('needs_summary_refresh'):
+            try:
+                # Fetch recent messages for summary
+                cursor = smart_response_conn.cursor()
+                cursor.execute('''
+                    SELECT user_message, assistant_response
+                    FROM history_primary
+                    WHERE user_id = ? AND character = ?
+                    ORDER BY timestamp DESC LIMIT 15
+                ''', (user_id, requested_character or 'coordinator'))
+                recent_msgs = [{'user_message': r[0], 'assistant_response': r[1]} for r in cursor.fetchall()]
+                
+                if recent_msgs and len(recent_msgs) >= 3:
+                    # Generate summary (uses AI - counts against budget)
+                    summary = user_context_mgr.generate_summary(
+                        user_id, requested_character or 'coordinator',
+                        list(reversed(recent_msgs)),
+                        context.get('history_id')
+                    )
+                    if summary:
+                        print(f"[SUMMARY] ✓ Generated conversation summary")
+            except Exception as e:
+                print(f"[SUMMARY] ✗ Failed: {e}")
         
         return jsonify({
             'success': True,
