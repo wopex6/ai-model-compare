@@ -1,22 +1,30 @@
 # AI Life Companion - Architecture Overview
-
+ 
 > Technical architecture for the multi-character coordinator system
-
-**Last Updated:** December 14, 2025  
-**Version:** 1.0
+ 
+**Last Updated:** December 16, 2025  
+**Version:** 1.1
 
 ---
 
 ## Table of Contents
-
+ 
 1. [System Architecture](#system-architecture)
 2. [Character System](#character-system)
 3. [Context Engine](#context-engine)
-4. [Threshold & Activation System](#threshold--activation-system)
-5. [Notification System](#notification-system)
-6. [Feedback Loop System](#feedback-loop-system)
-7. [Database Schema](#database-schema)
-8. [Implementation Guide](#implementation-guide)
+4. [User Context & Personalization Layer](#user-context--personalization-layer)
+5. [Prompt Construction, Context Window, and Token Monitoring](#prompt-construction-context-window-and-token-monitoring)
+6. [AI Summarization (Throttled)](#ai-summarization-throttled)
+7. [Proactive Clarification System](#proactive-clarification-system)
+8. [Character Trait System (12D Matching)](#character-trait-system-12d-matching)
+9. [Roles & Privileges (Admin vs Developer)](#roles--privileges-admin-vs-developer)
+10. [Developer Analytics APIs](#developer-analytics-apis)
+11. [Threshold & Activation System](#threshold--activation-system)
+12. [Notification System](#notification-system)
+13. [Feedback Loop System](#feedback-loop-system)
+14. [Database Schema](#database-schema)
+15. [Testing Guide (How to Feel It Working)](#testing-guide-how-to-feel-it-working)
+16. [Implementation Guide](#implementation-guide)
 
 ---
 
@@ -564,6 +572,236 @@ class ContextEngine:
         ''', (context_id, character_id, json.dumps(interpretation), datetime.now()))
         self.db.commit()
 ```
+
+---
+
+## User Context & Personalization Layer
+
+The system includes a dedicated user context management subsystem designed to:
+
+- **Always-on extraction (rule-based)** on every user message (low cost, deterministic)
+- **Throttled AI summarization** for deeper, compact context (higher cost, controlled)
+- **User language learning** (capture and re-use user phrasing/tone preferences)
+- **Engagement tracking** (signals and lightweight metrics)
+
+### Key Files
+
+- `smart_response/user_context_manager.py`
+- `app.py` (integration in `/api/domain-characters/route`)
+- `smart_response/characters/ai_integration.py` (system prompt injection)
+- `smart_response/ai_budget_manager.py` (budget gating + usage logging)
+
+### Runtime Integration (Current Wiring)
+
+In `app.py`, the `/api/domain-characters/route` endpoint runs this pipeline:
+
+- Store the raw user message first to create a stable `history_id`.
+- Call `user_context_mgr.process_message(..., message_id=history_id)`.
+- Merge returned fields into the shared `context` dict.
+- Set `context['user_profile']` to `user_context_mgr.format_context_for_prompt(...)`.
+
+Observable runtime logs:
+
+- `[USER_CONTEXT] Added user profile for AI`
+- `[USER_CONTEXT] User references past conversation - expanding context`
+
+### What Gets Extracted (Rule-Based)
+
+- preferences
+- goals
+- emotions
+- stable user facts (e.g., name preference)
+- language patterns (greeting, sign-off, emphasis words, message length)
+- references to past conversation
+
+### Prompt-Level Personalization (“Mirror User Language”)
+
+The formatted user profile includes explicit instructions to mirror:
+
+- greeting style
+- brevity/detailed preference
+- sign-off style
+- emphasis words
+
+---
+
+## Prompt Construction, Context Window, and Token Monitoring
+
+### Configurable History Window
+
+The number of prior exchanges included for AI context is controlled by:
+
+- `AI_CONTEXT_EXCHANGES` (default `5`)
+
+When the user references past conversation, the system expands the window:
+
+- `context_exchanges = base_exchanges * 2`
+
+### Token Estimation Logging
+
+The system estimates history tokens with:
+
+- `len(text) // 4` (approximate)
+
+Logged as:
+
+- `[CONTEXT] Added N history messages (~X tokens)`
+
+---
+
+## AI Summarization (Throttled)
+
+The system generates a compact conversation summary using AI, but only when needed.
+
+### Trigger Policy
+
+A summary refresh can be requested when:
+
+- message count crosses a threshold (default policy: every ~8 user messages)
+- the user references past conversation
+- the existing summary is stale
+
+### Budget Control & Logging
+
+Summarization is treated as a **background AI call** and is budget-gated via `AIBudgetManager`.
+
+The system logs summary calls to `ai_usage_log` with:
+
+- `purpose = 'conversation_summary'`
+- `is_background = 1`
+
+Summaries are stored per `(user_id, character_id)` in `conversation_summaries`.
+
+---
+
+## Proactive Clarification System
+
+The proactive clarification subsystem detects uncertainty and suggests up to **2** clarifying questions.
+
+Key file:
+
+- `smart_response/proactive_clarification.py`
+
+Database tables:
+
+- `clarification_history`
+- `context_gaps`
+
+### Runtime Integration Status
+
+This system is **initialized in `app.py`** but is not yet injected into the assistant response pipeline.
+
+Current state:
+
+- Implemented: confidence scoring, question generation (max 2), DB persistence, formatting
+- Available for manual testing: `python demo_features.py`
+
+---
+
+## Character Trait System (12D Matching)
+
+The trait system provides a continuous “trait space” for matching situations to characters.
+
+Key file:
+
+- `smart_response/character_traits.py`
+
+Tables:
+
+- `character_library`
+- `character_usage_outcomes`
+- `situation_analysis_cache`
+
+### Runtime Integration Status
+
+This system is **initialized in `app.py`** but is not yet used to override routing in the main chat flow.
+
+Current state:
+
+- Implemented: situation analysis + matching + effectiveness learning tables
+- Available for manual testing: `python demo_features.py`
+
+---
+
+## Roles & Privileges (Admin vs Developer)
+
+The `users.user_role` field controls access.
+
+Roles include:
+
+- `guest`
+- `user`
+- `paid`
+- `administrator`
+- `developer`
+
+Admin can change user roles via:
+
+- `POST /api/admin/users/<user_id>/role`
+
+Developer-only endpoints require `user_role == 'developer'`.
+
+---
+
+## Developer Analytics APIs
+
+Developer-only endpoints provide deeper observability and research tools.
+
+Endpoints:
+
+- `GET /api/developer/metrics`
+- `GET /api/developer/ai-calls`
+- `GET /api/developer/user-context`
+- `GET /api/developer/character-effectiveness`
+- `GET /api/developer/clarification-stats`
+- `GET /api/developer/export/<table>`
+- `POST /api/developer/query` (SELECT-only)
+- `GET /api/developer/debug`
+- `POST /api/developer/health-snapshot`
+- `GET /api/developer/health-history`
+- `GET /api/developer/access-log`
+
+All developer access is recorded in `developer_access_log`.
+
+---
+
+## Testing Guide (How to Feel It Working)
+
+### A. Live UI Test (User Context + Summaries + Token Logs)
+
+Send a signal-rich message (example):
+
+- call me Alex
+- I prefer brief answers
+- I'm feeling stressed about work
+- my goal is to save money
+
+Expected logs:
+
+- `[USER_CONTEXT] Added user profile for AI`
+- `[CONTEXT] Added ... history messages (~... tokens)`
+- `[SUMMARY] Generated conversation summary` (after summary triggers)
+
+Expected DB writes:
+
+- `user_context`
+- `user_language_patterns`
+- `user_engagement`
+- `conversation_summaries`
+- `ai_usage_log` (summary purpose)
+
+### B. Scripted Demo (All New Systems)
+
+Run:
+
+- `python demo_features.py`
+
+This demonstrates:
+
+- language extraction + prompt mirroring output
+- clarification confidence + up to 2 questions
+- 12D trait matching
+- developer analytics metrics gathering
 
 ---
 
@@ -1279,6 +1517,160 @@ ON proactive_triggers(user_id, active);
 
 CREATE INDEX IF NOT EXISTS idx_proactive_next 
 ON proactive_triggers(next_scheduled);
+
+-- ============================================================
+-- USER CONTEXT (PERSONALIZATION LAYER)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS user_context (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    fact_type TEXT NOT NULL,
+    content TEXT NOT NULL,
+    priority TEXT DEFAULT 'normal',
+    confidence REAL DEFAULT 0.7,
+    source_phrase TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    is_active INTEGER DEFAULT 1,
+    expires_at DATETIME,
+    UNIQUE(user_id, fact_type, content)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_context_user ON user_context(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_user_context_active ON user_context(user_id, is_active);
+
+CREATE TABLE IF NOT EXISTS user_language_patterns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    pattern_type TEXT NOT NULL,
+    user_phrase TEXT NOT NULL,
+    frequency INTEGER DEFAULT 1,
+    first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+    last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, pattern_type, user_phrase)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_language_user ON user_language_patterns(user_id);
+
+CREATE TABLE IF NOT EXISTS conversation_summaries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    character_id TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    topics TEXT,
+    goals_mentioned TEXT,
+    emotional_arc TEXT,
+    message_count INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    is_stale INTEGER DEFAULT 0,
+    UNIQUE(user_id, character_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_conv_summary_user ON conversation_summaries(user_id, character_id);
+
+CREATE TABLE IF NOT EXISTS user_engagement (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    character_id TEXT NOT NULL,
+    session_date DATE DEFAULT CURRENT_DATE,
+    message_count INTEGER DEFAULT 0,
+    avg_response_length REAL,
+    positive_signals INTEGER DEFAULT 0,
+    negative_signals INTEGER DEFAULT 0,
+    topics_discussed TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, character_id, session_date)
+);
+
+-- ============================================================
+-- PROACTIVE CLARIFICATION SYSTEM
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS clarification_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    character_id TEXT NOT NULL,
+    question_asked TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    context_gap TEXT,
+    user_response TEXT,
+    was_helpful BOOLEAN,
+    asked_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    responded_at DATETIME
+);
+
+CREATE TABLE IF NOT EXISTS context_gaps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    character_id TEXT NOT NULL,
+    gap_type TEXT NOT NULL,
+    gap_description TEXT,
+    resolved BOOLEAN DEFAULT 0,
+    detected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    resolved_at DATETIME
+);
+
+-- ============================================================
+-- CHARACTER TRAIT SYSTEM (12D)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS character_library (
+    character_id TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    traits_json TEXT NOT NULL,
+    domain TEXT DEFAULT 'general',
+    description TEXT,
+    philosophical_lens TEXT,
+    effectiveness_score REAL DEFAULT 0.5,
+    usage_count INTEGER DEFAULT 0,
+    is_base BOOLEAN DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS character_usage_outcomes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    character_id TEXT NOT NULL,
+    situation_json TEXT,
+    conversation_length INTEGER,
+    user_satisfaction REAL,
+    goal_achieved BOOLEAN,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS situation_analysis_cache (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    character_id TEXT NOT NULL,
+    analysis_json TEXT NOT NULL,
+    matched_character TEXT,
+    match_score REAL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================================
+-- DEVELOPER ANALYTICS
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS developer_access_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    action TEXT NOT NULL,
+    endpoint TEXT,
+    parameters TEXT,
+    result_summary TEXT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS system_health_snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    metrics_json TEXT NOT NULL,
+    snapshot_time DATETIME DEFAULT CURRENT_TIMESTAMP
+);
 ```
 
 ---
@@ -1363,6 +1755,7 @@ smart_response/
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | Dec 14, 2025 | Initial architecture document |
+| 1.1 | Dec 16, 2025 | Added user context personalization layer, throttled summaries, configurable history window + token estimation, proactive clarification system, 12D character trait matching, developer role + analytics APIs |
 
 ---
 
