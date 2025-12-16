@@ -777,7 +777,7 @@ def change_user_role(user_id):
         new_role = data.get('role')
         
         # Validate role
-        valid_roles = ['guest', 'user', 'paid', 'administrator', 'developer']
+        valid_roles = ['guest', 'user', 'paid', 'master', 'administrator', 'developer']
         if new_role not in valid_roles:
             return jsonify({'error': 'Invalid role'}), 400
         
