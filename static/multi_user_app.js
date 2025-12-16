@@ -454,8 +454,30 @@ class IntegratedAIChatbot {
 
         // Dashboard navigation
         document.querySelectorAll('.nav-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => this.switchTab(e.target.dataset.tab));
+            btn.addEventListener('click', (e) => {
+                this.switchTab(e.target.dataset.tab);
+                // Close mobile menu after selecting a tab
+                const navMenu = document.getElementById('nav-menu');
+                if (navMenu) navMenu.classList.remove('open');
+            });
         });
+
+        // Mobile hamburger menu toggle
+        const hamburgerBtn = document.getElementById('hamburger-btn');
+        if (hamburgerBtn) {
+            hamburgerBtn.addEventListener('click', () => {
+                const navMenu = document.getElementById('nav-menu');
+                if (navMenu) {
+                    navMenu.classList.toggle('open');
+                    // Update icon
+                    const icon = hamburgerBtn.querySelector('i');
+                    if (icon) {
+                        icon.classList.toggle('fa-bars');
+                        icon.classList.toggle('fa-times');
+                    }
+                }
+            });
+        }
 
         document.getElementById('logout-btn').addEventListener('click', () => this.handleLogout());
 
@@ -2589,6 +2611,7 @@ class IntegratedAIChatbot {
                             <option value="user" ${user.role === 'user' ? 'selected' : ''}>User</option>
                             <option value="paid" ${user.role === 'paid' ? 'selected' : ''}>Paid</option>
                             <option value="administrator" ${user.role === 'administrator' ? 'selected' : ''}>Administrator</option>
+                            <option value="developer" ${user.role === 'developer' ? 'selected' : ''}>Developer</option>
                         </select>
                     </td>
                     <td>${user.total_messages}</td>
