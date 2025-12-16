@@ -977,6 +977,7 @@ class IntegratedDatabase:
         conn = self.get_connection()
         cursor = conn.cursor()
         
+        # Get last active from multiple sources: messages (most accurate), ai_conversations, message_usage
         cursor.execute('''
             SELECT 
                 u.id,
@@ -986,7 +987,15 @@ class IntegratedDatabase:
                 u.created_at,
                 COALESCE(SUM(mu.message_count), 0) as total_messages,
                 COUNT(DISTINCT c.id) as total_conversations,
-                MAX(mu.date) as last_active,
+                (SELECT MAX(last_ts) FROM (
+                    SELECT MAX(m.timestamp) as last_ts FROM messages m 
+                    JOIN ai_conversations ac ON m.conversation_id = ac.id 
+                    WHERE ac.user_id = u.id
+                    UNION ALL
+                    SELECT MAX(ac2.updated_at) FROM ai_conversations ac2 WHERE ac2.user_id = u.id
+                    UNION ALL
+                    SELECT MAX(mu2.date) FROM message_usage mu2 WHERE mu2.user_id = u.id
+                )) as last_active,
                 COALESCE(u.is_deleted, 0) as is_deleted
             FROM users u
             LEFT JOIN message_usage mu ON u.id = mu.user_id
