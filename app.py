@@ -140,13 +140,22 @@ try:
     from smart_response.dual_layer_history import DualLayerHistorySystem
     from smart_response.ai_budget_manager import AIBudgetManager
     from smart_response.user_context_manager import create_user_context_manager
+    from smart_response.proactive_clarification import create_clarification_system
+    from smart_response.character_traits import create_character_trait_system
+    from smart_response.developer_analytics import create_developer_analytics
     smart_response_conn = sqlite3.connect('integrated_users.db', check_same_thread=False)
     smart_handler = SmartResponseHandler(smart_response_conn)
     context_manager = ConversationContextManager(smart_response_conn)
     history_system = DualLayerHistorySystem(smart_response_conn)
     ai_budget = AIBudgetManager(smart_response_conn)
     user_context_mgr = create_user_context_manager(smart_response_conn, ai_budget)
+    clarification_system = create_clarification_system(smart_response_conn)
+    character_trait_system = create_character_trait_system(smart_response_conn)
+    developer_analytics = create_developer_analytics(smart_response_conn)
     print("✓ User Context Manager initialized (preferences, goals, language learning)")
+    print("✓ Proactive Clarification System initialized")
+    print("✓ Character Trait System initialized (12D trait-space matching)")
+    print("✓ Developer Analytics initialized")
     
     # Initialize frontend error logging table
     cursor = smart_response_conn.cursor()
@@ -193,6 +202,9 @@ except Exception as e:
     history_system = None
     ai_budget = None
     user_context_mgr = None
+    clarification_system = None
+    character_trait_system = None
+    developer_analytics = None
     domain_character_manager = None
     domain_character_ai = None
     previous_interactions = {}
@@ -761,7 +773,7 @@ def change_user_role(user_id):
         new_role = data.get('role')
         
         # Validate role
-        valid_roles = ['guest', 'user', 'paid', 'administrator']
+        valid_roles = ['guest', 'user', 'paid', 'administrator', 'developer']
         if new_role not in valid_roles:
             return jsonify({'error': 'Invalid role'}), 400
         
@@ -3949,6 +3961,259 @@ def get_monthly_ai_usage():
         print(f"❌ Error in get_monthly_ai_usage: {str(e)}")
         import traceback
         traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+# =============================================================================
+# DEVELOPER API ENDPOINTS (developer role only - beyond admin)
+# =============================================================================
+
+def require_developer(f):
+    """Decorator to require developer role"""
+    from functools import wraps
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not hasattr(request, 'current_user') or not request.current_user:
+            return jsonify({'error': 'Authentication required'}), 401
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'developer':
+            return jsonify({'error': 'Developer access required'}), 403
+        return f(*args, **kwargs)
+    return decorated
+
+@app.route('/api/developer/metrics', methods=['GET'])
+@require_auth
+@require_developer
+def get_developer_metrics():
+    """Get comprehensive system metrics (developer only)"""
+    try:
+        if not developer_analytics:
+            return jsonify({'error': 'Developer analytics not initialized'}), 500
+        
+        developer_analytics.log_access(
+            request.current_user['user_id'], 'get_metrics', '/api/developer/metrics'
+        )
+        metrics = developer_analytics.get_system_metrics()
+        return jsonify(metrics)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/developer/ai-calls', methods=['GET'])
+@require_auth
+@require_developer
+def get_developer_ai_calls():
+    """Get detailed AI call logs (developer only)"""
+    try:
+        if not developer_analytics:
+            return jsonify({'error': 'Developer analytics not initialized'}), 500
+        
+        limit = request.args.get('limit', 100, type=int)
+        filters = {}
+        if request.args.get('date_from'):
+            filters['date_from'] = request.args.get('date_from')
+        if request.args.get('date_to'):
+            filters['date_to'] = request.args.get('date_to')
+        if request.args.get('call_type'):
+            filters['call_type'] = request.args.get('call_type')
+        if request.args.get('user_id'):
+            filters['user_id'] = request.args.get('user_id', type=int)
+        
+        developer_analytics.log_access(
+            request.current_user['user_id'], 'get_ai_calls', '/api/developer/ai-calls',
+            {'limit': limit, 'filters': filters}
+        )
+        calls = developer_analytics.get_ai_call_details(limit, filters if filters else None)
+        return jsonify(calls)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/developer/user-context', methods=['GET'])
+@require_auth
+@require_developer
+def get_developer_user_context():
+    """Get user context analysis (developer only)"""
+    try:
+        if not developer_analytics:
+            return jsonify({'error': 'Developer analytics not initialized'}), 500
+        
+        user_id = request.args.get('user_id', type=int)
+        developer_analytics.log_access(
+            request.current_user['user_id'], 'get_user_context', '/api/developer/user-context',
+            {'target_user_id': user_id}
+        )
+        analysis = developer_analytics.get_user_context_analysis(user_id)
+        return jsonify(analysis)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/developer/character-effectiveness', methods=['GET'])
+@require_auth
+@require_developer
+def get_developer_character_effectiveness():
+    """Get character effectiveness scores (developer only)"""
+    try:
+        if not developer_analytics:
+            return jsonify({'error': 'Developer analytics not initialized'}), 500
+        
+        developer_analytics.log_access(
+            request.current_user['user_id'], 'get_character_effectiveness', 
+            '/api/developer/character-effectiveness'
+        )
+        effectiveness = developer_analytics.get_character_effectiveness()
+        return jsonify(effectiveness)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/developer/clarification-stats', methods=['GET'])
+@require_auth
+@require_developer
+def get_developer_clarification_stats():
+    """Get clarification system effectiveness (developer only)"""
+    try:
+        if not developer_analytics:
+            return jsonify({'error': 'Developer analytics not initialized'}), 500
+        
+        developer_analytics.log_access(
+            request.current_user['user_id'], 'get_clarification_stats',
+            '/api/developer/clarification-stats'
+        )
+        stats = developer_analytics.get_clarification_effectiveness()
+        return jsonify(stats)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/developer/export/<table>', methods=['GET'])
+@require_auth
+@require_developer
+def export_developer_data(table):
+    """Export table data for analysis (developer only)"""
+    try:
+        if not developer_analytics:
+            return jsonify({'error': 'Developer analytics not initialized'}), 500
+        
+        format_type = request.args.get('format', 'json')
+        limit = request.args.get('limit', type=int)
+        
+        developer_analytics.log_access(
+            request.current_user['user_id'], 'export_data',
+            f'/api/developer/export/{table}',
+            {'format': format_type, 'limit': limit}
+        )
+        
+        filters = {'limit': limit} if limit else None
+        data = developer_analytics.export_data(table, format_type, filters)
+        
+        if format_type == 'csv':
+            from flask import Response
+            return Response(data, mimetype='text/csv',
+                          headers={'Content-Disposition': f'attachment; filename={table}.csv'})
+        return jsonify(data)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/developer/query', methods=['POST'])
+@require_auth
+@require_developer
+def run_developer_query():
+    """Run custom SELECT query (developer only - DANGEROUS)"""
+    try:
+        if not developer_analytics:
+            return jsonify({'error': 'Developer analytics not initialized'}), 500
+        
+        data = request.get_json()
+        query = data.get('query', '')
+        params = tuple(data.get('params', []))
+        
+        developer_analytics.log_access(
+            request.current_user['user_id'], 'custom_query',
+            '/api/developer/query',
+            {'query': query[:200]}  # Log first 200 chars
+        )
+        
+        result = developer_analytics.run_custom_query(query, params if params else None)
+        return jsonify(result)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/developer/debug', methods=['GET'])
+@require_auth
+@require_developer
+def get_developer_debug():
+    """Get debug information (developer only)"""
+    try:
+        if not developer_analytics:
+            return jsonify({'error': 'Developer analytics not initialized'}), 500
+        
+        component = request.args.get('component', 'all')
+        developer_analytics.log_access(
+            request.current_user['user_id'], 'get_debug',
+            '/api/developer/debug', {'component': component}
+        )
+        debug_info = developer_analytics.get_debug_info(component)
+        return jsonify(debug_info)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/developer/health-snapshot', methods=['POST'])
+@require_auth
+@require_developer
+def take_health_snapshot():
+    """Take a health snapshot (developer only)"""
+    try:
+        if not developer_analytics:
+            return jsonify({'error': 'Developer analytics not initialized'}), 500
+        
+        developer_analytics.log_access(
+            request.current_user['user_id'], 'take_snapshot',
+            '/api/developer/health-snapshot'
+        )
+        snapshot_id = developer_analytics.take_health_snapshot()
+        return jsonify({'success': True, 'snapshot_id': snapshot_id})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/developer/health-history', methods=['GET'])
+@require_auth
+@require_developer
+def get_health_history():
+    """Get health snapshot history (developer only)"""
+    try:
+        if not developer_analytics:
+            return jsonify({'error': 'Developer analytics not initialized'}), 500
+        
+        days = request.args.get('days', 7, type=int)
+        developer_analytics.log_access(
+            request.current_user['user_id'], 'get_health_history',
+            '/api/developer/health-history', {'days': days}
+        )
+        history = developer_analytics.get_health_history(days)
+        return jsonify(history)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/developer/access-log', methods=['GET'])
+@require_auth
+@require_developer
+def get_developer_access_log():
+    """Get developer access audit log (developer only)"""
+    try:
+        cursor = smart_response_conn.cursor()
+        cursor.execute('''
+            SELECT id, user_id, action, endpoint, parameters, result_summary, timestamp
+            FROM developer_access_log
+            ORDER BY timestamp DESC LIMIT 100
+        ''')
+        logs = [
+            {'id': r[0], 'user_id': r[1], 'action': r[2], 'endpoint': r[3],
+             'parameters': r[4], 'result_summary': r[5], 'timestamp': r[6]}
+            for r in cursor.fetchall()
+        ]
+        return jsonify(logs)
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
