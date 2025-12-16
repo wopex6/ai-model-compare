@@ -37,10 +37,10 @@
     "ai_compare\\user_profile_manager.py": "ba541700b0809395afa6046e650a7d80",
     "ai_compare\\wisdom_chatbot.py": "f301c62c04a4d0cba9cc8004ebee4c7c",
     "ai_compare\\__init__.py": "d41d8cd98f00b204e9800998ecf8427e",
-    "app.py": "c340e912f5b8b9605f78d70c08156264",
+    "app.py": "01c7ae35cdd2a52c003b4ba701197e5f",
     "requirements.txt": "a0c0ba845255584721907b0ff0aabe84",
     ".env": "598ed9df8f31de62af8949518c2e77af"
   },
-  "last_update": "2025-12-16T19:20:12.849698",
-  "update_count": 434
+  "last_update": "2025-12-16T19:58:47.239355",
+  "update_count": 2
 }

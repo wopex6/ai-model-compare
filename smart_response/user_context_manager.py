@@ -790,18 +790,36 @@ Respond in JSON format:
                 for f in critical_facts[:5]:
                     parts.append(f"- {f['type']}: {f['content']}")
         
-        # User's communication style
+        # User's communication style with MIRRORING instructions
         if context.get('user_language'):
             lang = context['user_language']
-            style_parts = []
+            mirror_instructions = []
+            
+            # Greeting mirroring
             if lang.get('greeting'):
-                style_parts.append(f"greets with '{lang['greeting']}'")
-            if lang.get('preferred_length') == 'brief' or lang.get('preferred_length') == 'very_brief':
-                style_parts.append("prefers brief responses")
-            elif lang.get('preferred_length') == 'detailed':
-                style_parts.append("appreciates detailed responses")
-            if style_parts:
-                parts.append(f"User style: {', '.join(style_parts)}")
+                greeting = lang['greeting']
+                mirror_instructions.append(f"Mirror their greeting style (they use '{greeting}')")
+            
+            # Response length
+            pref_len = lang.get('preferred_length', 'moderate')
+            if pref_len in ('brief', 'very_brief'):
+                mirror_instructions.append("Keep responses concise - they prefer brevity")
+            elif pref_len == 'detailed':
+                mirror_instructions.append("Provide thorough responses - they appreciate detail")
+            
+            # Sign-off mirroring
+            if lang.get('sign_off'):
+                mirror_instructions.append(f"End responses like they do ('{lang['sign_off']}')")
+            
+            # Emphasis words
+            if lang.get('emphasis_words'):
+                words = lang['emphasis_words'][:3]
+                mirror_instructions.append(f"Use their emphasis style: {', '.join(words)}")
+            
+            if mirror_instructions:
+                parts.append("Communication style (mirror their language):")
+                for instr in mirror_instructions:
+                    parts.append(f"- {instr}")
         
         # Conversation summary
         if context.get('conversation_summary'):
