@@ -2612,6 +2612,7 @@ class IntegratedAIChatbot {
                             <option value="guest" ${user.role === 'guest' ? 'selected' : ''}>Guest</option>
                             <option value="user" ${user.role === 'user' ? 'selected' : ''}>User</option>
                             <option value="paid" ${user.role === 'paid' ? 'selected' : ''}>Paid</option>
+                            <option value="master" ${user.role === 'master' ? 'selected' : ''}>Master</option>
                             <option value="administrator" ${user.role === 'administrator' ? 'selected' : ''}>Administrator</option>
                             <option value="developer" ${user.role === 'developer' ? 'selected' : ''}>Developer</option>
                         </select>
