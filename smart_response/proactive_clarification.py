@@ -346,8 +346,8 @@ class ProactiveClarificationSystem:
         importance_order = {ImportanceLevel.CRITICAL: 0, ImportanceLevel.HIGH: 1, ImportanceLevel.NORMAL: 2}
         filtered.sort(key=lambda q: importance_order.get(q.importance, 3))
         
-        # Return max 1 question (to not overwhelm user)
-        return filtered[:1]
+        # Return max 2 questions
+        return filtered[:2]
     
     def record_question_asked(self, user_id: int, character_id: str, 
                              question: ClarificationQuestion):
@@ -381,19 +381,27 @@ class ProactiveClarificationSystem:
         if not questions:
             return ""
         
-        q = questions[0]  # Only use first question
-        
         # Adapt formality based on user language
-        prefix = ""
-        if user_language:
-            if user_language.get('preferred_length') in ('brief', 'very_brief'):
+        is_brief = user_language and user_language.get('preferred_length') in ('brief', 'very_brief')
+        
+        if len(questions) == 1:
+            q = questions[0]
+            if is_brief:
                 prefix = "Quick question: "
             else:
                 prefix = "To help me give you the best response, "
+            return f"\n\n{prefix}{q.question}"
         else:
-            prefix = "Just to clarify: "
-        
-        return f"\n\n{prefix}{q.question}"
+            # Multiple questions
+            if is_brief:
+                prefix = "Quick questions:"
+            else:
+                prefix = "A couple of things that would help me assist you better:"
+            
+            formatted = [f"\n\n{prefix}"]
+            for i, q in enumerate(questions[:2], 1):
+                formatted.append(f"\n{i}. {q.question}")
+            return "".join(formatted)
     
     def get_pending_clarifications(self, user_id: int, character_id: str) -> List[Dict]:
         """Get clarification questions that haven't been answered"""
