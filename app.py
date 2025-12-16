@@ -2838,13 +2838,27 @@ def route_to_domain_characters():
             'user_id': user_id,
             'timestamp': datetime.now().isoformat()
         }
+
+        # Get history_id if we have history system (store user message first so we have a stable ID)
+        if history_system:
+            try:
+                primary_id = history_system.store_interaction(
+                    user_id, requested_character or 'coordinator',
+                    message, '',  # Empty response for now
+                    'domain_routing',
+                    metadata={'routing': True}
+                )
+                context['history_id'] = primary_id
+            except Exception as e:
+                print(f"Warning: Could not store history: {e}")
         
         # Process message through user context manager (extracts preferences, goals, language patterns)
         # This runs on EVERY message (cheap, rule-based extraction)
         if user_context_mgr:
             try:
                 user_context = user_context_mgr.process_message(
-                    user_id, message, requested_character or 'coordinator'
+                    user_id, message, requested_character or 'coordinator',
+                    message_id=context.get('history_id')
                 )
                 # Merge user context into main context
                 context.update(user_context)
@@ -2901,20 +2915,6 @@ def route_to_domain_characters():
                 print(f"[CONTEXT] Added {len(message_history)} history messages (~{history_token_estimate} tokens)")
         except Exception as e:
             print(f"Warning: Could not fetch conversation history: {e}")
-        
-        # Get history_id if we have history system
-        if history_system:
-            # Store in primary history first to get ID
-            try:
-                primary_id = history_system.store_interaction(
-                    user_id, requested_character or 'coordinator',
-                    message, '',  # Empty response for now
-                    'domain_routing',
-                    metadata={'routing': True}
-                )
-                context['history_id'] = primary_id
-            except Exception as e:
-                print(f"Warning: Could not store history: {e}")
         
         # Route message to characters (get which ones should respond)
         responses = domain_character_manager.route_message(
@@ -3017,18 +3017,24 @@ def route_to_domain_characters():
             try:
                 # Fetch recent messages for summary
                 cursor = smart_response_conn.cursor()
+                target_char = requested_character or 'coordinator'
                 cursor.execute('''
-                    SELECT user_message, assistant_response
-                    FROM history_primary
-                    WHERE user_id = ? AND character = ?
-                    ORDER BY timestamp DESC LIMIT 15
-                ''', (user_id, requested_character or 'coordinator'))
+                    SELECT hp.user_message, hp.assistant_response
+                    FROM history_primary hp
+                    LEFT JOIN message_visibility mv ON hp.id = mv.history_id AND mv.character_id = ?
+                    WHERE hp.user_id = ?
+                      AND (mv.character_id = ? OR hp.character = ?)
+                      AND hp.assistant_response IS NOT NULL
+                      AND hp.assistant_response != ''
+                    ORDER BY hp.timestamp DESC
+                    LIMIT 15
+                ''', (target_char, user_id, target_char, target_char))
                 recent_msgs = [{'user_message': r[0], 'assistant_response': r[1]} for r in cursor.fetchall()]
                 
                 if recent_msgs and len(recent_msgs) >= 3:
                     # Generate summary (uses AI - counts against budget)
                     summary = user_context_mgr.generate_summary(
-                        user_id, requested_character or 'coordinator',
+                        user_id, target_char,
                         list(reversed(recent_msgs)),
                         context.get('history_id')
                     )

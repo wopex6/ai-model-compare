@@ -439,7 +439,11 @@ class DomainCharacterAI:
         
         # Context information (if available)
         if context.get('user_profile'):
-            parts.append(f"\nUser context: {json.dumps(context['user_profile'])}")
+            user_profile = context.get('user_profile')
+            if isinstance(user_profile, str):
+                parts.append(f"\nUser context:\n{user_profile}")
+            else:
+                parts.append(f"\nUser context: {json.dumps(user_profile)}")
         
         # Recent conversation summary
         if context.get('conversation_summary'):
