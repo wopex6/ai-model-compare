@@ -8,6 +8,9 @@
  * - Coordinator synthesis
  * - Character feedback
  * - Character selection UI
+ * - Session management (like ConversationBox)
+ * - Callbacks system (like ConversationBox)
+ * - Quick messages (like ConversationBox)
  * 
  * Uses existing ConversationBox module - no code duplication
  */
@@ -18,6 +21,10 @@ const DomainCharacters = {
     selectedCharacter: null,
     coordinatorId: 'coordinator',
     
+    // Session management (like ConversationBox)
+    sessionId: null,
+    userId: null,
+    
     // API endpoints (no hardcoding)
     endpoints: {
         list: '/api/domain-characters',
@@ -26,7 +33,8 @@ const DomainCharacters = {
         analyze: '/api/domain-characters/analyze',
         feedback: '/api/domain-characters/feedback',
         preferences: '/api/domain-characters/preferences',
-        history: (id) => `/api/domain-characters/history/${id}`
+        history: (id) => `/api/domain-characters/history/${id}`,
+        session: '/api/domain-characters/session'  // NEW: session endpoint
     },
     
     // Per-character conversation storage
@@ -38,6 +46,16 @@ const DomainCharacters = {
         selectedCharacterId: 'selected-domain-character',
         analysisPanelId: 'character-analysis-panel',
         feedbackContainerId: 'character-feedback-container'
+    },
+    
+    // Callbacks (like ConversationBox)
+    callbacks: {
+        onMessageSent: null,      // Called after user message sent: (message) => {}
+        onResponseReceived: null, // Called after bot response: (data) => {}
+        onError: null,            // Called on error: (error) => {}
+        onSessionCreated: null,   // Called when session created: (sessionId) => {}
+        onHistoryLoaded: null,    // Called after history loaded: (messages) => {}
+        onCharacterChanged: null  // Called when character switched: (characterId) => {}
     },
     
     /**
@@ -52,6 +70,12 @@ const DomainCharacters = {
         if (config.ui) {
             this.ui = { ...this.ui, ...config.ui };
         }
+        if (config.callbacks) {
+            this.callbacks = { ...this.callbacks, ...config.callbacks };
+        }
+        
+        // Get authenticated session (like ConversationBox)
+        await this._getAuthenticatedSession();
         
         // Load characters
         await this.loadCharacters();
@@ -60,6 +84,39 @@ const DomainCharacters = {
         this.selectedCharacter = this.coordinatorId;
         
         console.log('✅ DomainCharacters initialized');
+    },
+    
+    /**
+     * Get authenticated session from backend (like ConversationBox)
+     * @private
+     */
+    async _getAuthenticatedSession() {
+        try {
+            const response = await AuthHelper.authenticatedFetch(this.endpoints.session, {
+                method: 'GET'
+            });
+            
+            const data = await response.json();
+            
+            if (data.session_id) {
+                this.sessionId = data.session_id;
+                this.userId = data.user_id;
+                console.log(`✓ Domain session loaded: ${this.sessionId} for user ${this.userId}`);
+                
+                // Callback: session created
+                if (this.callbacks.onSessionCreated) {
+                    this.callbacks.onSessionCreated(this.sessionId);
+                }
+            } else if (data.user_id) {
+                // Session not required for domain characters, just user auth
+                this.userId = data.user_id;
+                console.log(`✓ User authenticated: ${this.userId}`);
+            }
+        } catch (error) {
+            console.error('Error getting authenticated session:', error);
+            this.sessionId = null;
+            this.userId = null;
+        }
     },
     
     /**
@@ -113,6 +170,11 @@ const DomainCharacters = {
         // Load conversation history for this character
         if (previousCharacter !== characterId) {
             await this.loadCharacterHistory(characterId);
+            
+            // Callback: character changed
+            if (this.callbacks.onCharacterChanged) {
+                this.callbacks.onCharacterChanged(characterId);
+            }
         }
         
         console.log(`✓ Selected character: ${characterId}`);
@@ -180,6 +242,11 @@ const DomainCharacters = {
                 });
                 
                 console.log(`✓ Loaded ${data.history.length} messages for ${characterId}`);
+                
+                // Callback: history loaded (like ConversationBox)
+                if (this.callbacks.onHistoryLoaded) {
+                    this.callbacks.onHistoryLoaded(data.history);
+                }
             }
         } catch (error) {
             console.error('Failed to load character history:', error);
@@ -205,7 +272,7 @@ const DomainCharacters = {
     },
     
     /**
-     * Add a message to the display
+     * Add a message to the display using MessageHandler (shared module)
      * @private
      * @param {string} content - Message content
      * @param {string} role - 'user' or 'bot'
@@ -214,6 +281,47 @@ const DomainCharacters = {
      * @param {string} timestamp - ISO timestamp string (optional)
      */
     _addMessageToDisplay(content, role, characterId = null, isWelcome = false, timestamp = null) {
+        // Get character display name for bot messages
+        let displayName = null;
+        if (role === 'bot' && characterId) {
+            const character = this.characters.find(c => c.id === characterId);
+            displayName = character ? character.display_name : characterId;
+            if (character?.is_coordinator) {
+                displayName += ' (Coordinator)';
+            }
+        }
+        
+        // Use MessageHandler for consistent display (shared with AI Characters)
+        if (typeof MessageHandler !== 'undefined' && MessageHandler.messagesContainer) {
+            // Temporarily update character name for this message
+            const originalName = MessageHandler.theme?.characterDisplayName;
+            if (displayName) {
+                MessageHandler.theme.characterDisplayName = displayName;
+            }
+            
+            MessageHandler.addMessage({
+                content: content,
+                role: role,
+                timestamp: timestamp || (isWelcome ? null : new Date().toISOString()),
+                shouldScroll: true,
+                metadata: { isWelcome, characterId }
+            });
+            
+            // Restore original name
+            if (displayName && originalName) {
+                MessageHandler.theme.characterDisplayName = originalName;
+            }
+        } else {
+            // Fallback: direct DOM manipulation if MessageHandler not available
+            this._addMessageToDisplayFallback(content, role, displayName, isWelcome, timestamp);
+        }
+    },
+    
+    /**
+     * Fallback message display (if MessageHandler not available)
+     * @private
+     */
+    _addMessageToDisplayFallback(content, role, displayName, isWelcome, timestamp) {
         const messagesContainer = document.getElementById('domain-chat-messages');
         if (!messagesContainer) return;
         
@@ -221,48 +329,29 @@ const DomainCharacters = {
         messageDiv.className = `message ${role}-message`;
         if (isWelcome) messageDiv.classList.add('welcome-message');
         
-        // Format timestamp like ConversationBox/MessageHandler
         let timeStr = '';
         if (timestamp) {
             const date = new Date(timestamp);
             const hours = date.getHours().toString().padStart(2, '0');
             const minutes = date.getMinutes().toString().padStart(2, '0');
-            const color = role === 'user' ? '#fff' : '#888';
-            timeStr = `<span class="timestamp" style="font-size: 0.75em; color: ${color}; margin-left: 8px;">${hours}:${minutes}</span>`;
-        } else if (!isWelcome) {
-            // Add current time for new messages
-            const now = new Date();
-            const hours = now.getHours().toString().padStart(2, '0');
-            const minutes = now.getMinutes().toString().padStart(2, '0');
-            const color = role === 'user' ? '#fff' : '#888';
-            timeStr = `<span class="timestamp" style="font-size: 0.75em; color: ${color}; margin-left: 8px;">${hours}:${minutes}</span>`;
+            timeStr = `<span class="timestamp" style="font-size: 0.75em; color: ${role === 'user' ? '#fff' : '#888'}; margin-left: 8px;">${hours}:${minutes}</span>`;
         }
         
-        if (role === 'bot' && characterId) {
-            const character = this.characters.find(c => c.id === characterId);
-            const displayName = character ? character.display_name : characterId;
-            
+        const formattedContent = content.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        
+        if (role === 'bot' && displayName) {
             messageDiv.innerHTML = `
-                <div class="character-attribution">${displayName}${character?.is_coordinator ? ' (Coordinator)' : ''}${timeStr}</div>
-                <div class="message-content">${this._formatMessage(content)}</div>
+                <div class="character-attribution">${displayName}${timeStr}</div>
+                <div class="message-content">${formattedContent}</div>
             `;
         } else {
             messageDiv.innerHTML = `
-                <div class="message-content">${role === 'user' ? '<strong>You:</strong> ' : ''}${this._formatMessage(content)}${timeStr}</div>
+                <div class="message-content">${role === 'user' ? '<strong>You:</strong> ' : ''}${formattedContent}${timeStr}</div>
             `;
         }
         
         messagesContainer.appendChild(messageDiv);
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    },
-    
-    /**
-     * Format message content (handle newlines, etc.)
-     * @private
-     */
-    _formatMessage(content) {
-        if (!content) return '';
-        return content.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     },
     
     /**
@@ -276,6 +365,11 @@ const DomainCharacters = {
         
         // Add user message to display immediately
         this._addMessageToDisplay(message, 'user');
+        
+        // Callback: message sent (like ConversationBox)
+        if (this.callbacks.onMessageSent) {
+            this.callbacks.onMessageSent(message);
+        }
         
         try {
             const response = await AuthHelper.authenticatedFetch(this.endpoints.route, {
@@ -301,17 +395,44 @@ const DomainCharacters = {
                     });
                 }
                 
+                // Callback: response received (like ConversationBox)
+                if (this.callbacks.onResponseReceived) {
+                    this.callbacks.onResponseReceived(data);
+                }
+                
                 return data;
             } else {
                 console.error('Routing failed:', data.error);
-                this._addMessageToDisplay('Sorry, there was an error processing your message.', 'bot', this.selectedCharacter);
+                this._displayError('Sorry, there was an error processing your message.');
                 return null;
             }
         } catch (error) {
             console.error('Error routing message:', error);
-            this._addMessageToDisplay('Sorry, there was an error connecting to the server.', 'bot', this.selectedCharacter);
+            this._displayError('Sorry, there was an error connecting to the server.');
+            
+            // Callback: error (like ConversationBox)
+            if (this.callbacks.onError) {
+                this.callbacks.onError(error);
+            }
+            
             return null;
         }
+    },
+    
+    /**
+     * Send a quick/preset message (like ConversationBox)
+     * @param {string} message - The message to send
+     */
+    sendQuickMessage(message) {
+        this.sendMessage(message, true);
+    },
+    
+    /**
+     * Display an error message (unified with ConversationBox pattern)
+     * @private
+     */
+    _displayError(errorText) {
+        this._addMessageToDisplay(errorText, 'bot', this.selectedCharacter);
     },
     
     /**
