@@ -13,6 +13,8 @@
  * - Session management
  * - Error handling
  * - Customizable per character
+ * - Conversation search
+ * - Auto-scroll to latest messages
  */
 
 const ConversationBox = {
@@ -20,6 +22,8 @@ const ConversationBox = {
     characterId: null,
     sessionId: null,  // Now from database, not cookies
     userId: null,  // NEW: User ID from authentication
+    searchVisible: false,  // Search bar visibility state
+    allMessages: [],  // Store all messages for search
     config: {
         inputElementId: 'userInput',
         sendButtonId: 'sendBtn',
@@ -28,6 +32,7 @@ const ConversationBox = {
         sessionEndpoint: null,  // NEW: e.g., '/scientist/session'
         includeContext: true,
         errorMessage: 'I apologize, but I encountered an error. Please try again.',
+        enableSearch: true,  // Enable search functionality
         
         // Optional UI callbacks
         onMessageSent: null,  // Called after user message sent: (message) => {}
@@ -58,6 +63,11 @@ const ConversationBox = {
         
         // Set up event listeners
         this._setupEventListeners();
+        
+        // Create search UI if enabled
+        if (this.config.enableSearch) {
+            this._createSearchUI();
+        }
         
         // Get authenticated session from backend, then load history
         this._getAuthenticatedSession().then(() => {
@@ -279,6 +289,300 @@ const ConversationBox = {
             role: 'bot',
             shouldScroll: true
         });
+    },
+    
+    /**
+     * Create search UI elements
+     * @private
+     */
+    _createSearchUI() {
+        const messagesContainer = MessageHandler.messagesContainer;
+        if (!messagesContainer) return;
+        
+        // Find or create container for search bar (insert before messages container)
+        const chatContainer = messagesContainer.parentElement;
+        if (!chatContainer) return;
+        
+        // Create search bar container
+        const searchBar = document.createElement('div');
+        searchBar.id = 'conversation-search-bar';
+        searchBar.className = 'conversation-search-bar';
+        searchBar.style.cssText = `
+            display: none;
+            padding: 10px 15px;
+            background: #f5f5f5;
+            border-bottom: 1px solid #ddd;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        `;
+        searchBar.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <input type="text" id="conversation-search-input" placeholder="Search messages..." 
+                    style="flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 20px; outline: none; font-size: 14px;">
+                <span id="search-results-count" style="font-size: 12px; color: #666; min-width: 60px;"></span>
+                <button id="search-prev-btn" style="padding: 5px 10px; border: none; background: #e0e0e0; border-radius: 4px; cursor: pointer;" title="Previous">▲</button>
+                <button id="search-next-btn" style="padding: 5px 10px; border: none; background: #e0e0e0; border-radius: 4px; cursor: pointer;" title="Next">▼</button>
+                <button id="search-close-btn" style="padding: 5px 10px; border: none; background: #e0e0e0; border-radius: 4px; cursor: pointer;" title="Close">✕</button>
+            </div>
+        `;
+        
+        // Insert search bar at the top of chat container
+        chatContainer.insertBefore(searchBar, messagesContainer);
+        
+        // Create search toggle button (floating)
+        const searchToggle = document.createElement('button');
+        searchToggle.id = 'search-toggle-btn';
+        searchToggle.innerHTML = '🔍';
+        searchToggle.title = 'Search conversations (Ctrl+F)';
+        searchToggle.style.cssText = `
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 8px 12px;
+            border: none;
+            background: rgba(255,255,255,0.9);
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 16px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            z-index: 99;
+            transition: all 0.2s;
+        `;
+        searchToggle.addEventListener('mouseenter', () => {
+            searchToggle.style.background = 'rgba(255,255,255,1)';
+            searchToggle.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+        });
+        searchToggle.addEventListener('mouseleave', () => {
+            searchToggle.style.background = 'rgba(255,255,255,0.9)';
+            searchToggle.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+        });
+        
+        // Make chat container position relative for absolute positioning
+        chatContainer.style.position = 'relative';
+        chatContainer.appendChild(searchToggle);
+        
+        // Set up search event listeners
+        this._setupSearchListeners();
+    },
+    
+    /**
+     * Set up search event listeners
+     * @private
+     */
+    _setupSearchListeners() {
+        const searchInput = document.getElementById('conversation-search-input');
+        const searchBar = document.getElementById('conversation-search-bar');
+        const searchToggle = document.getElementById('search-toggle-btn');
+        const prevBtn = document.getElementById('search-prev-btn');
+        const nextBtn = document.getElementById('search-next-btn');
+        const closeBtn = document.getElementById('search-close-btn');
+        
+        if (!searchInput || !searchBar || !searchToggle) return;
+        
+        // Toggle search bar
+        searchToggle.addEventListener('click', () => this.toggleSearch());
+        
+        // Close search
+        closeBtn?.addEventListener('click', () => this.closeSearch());
+        
+        // Search on input
+        searchInput.addEventListener('input', (e) => this.performSearch(e.target.value));
+        
+        // Navigate results
+        prevBtn?.addEventListener('click', () => this.navigateSearch(-1));
+        nextBtn?.addEventListener('click', () => this.navigateSearch(1));
+        
+        // Enter key navigates to next result
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.navigateSearch(e.shiftKey ? -1 : 1);
+            } else if (e.key === 'Escape') {
+                this.closeSearch();
+            }
+        });
+        
+        // Ctrl+F to open search
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+                // Only intercept if we're on a character page with ConversationBox
+                if (this.characterId && MessageHandler.messagesContainer) {
+                    e.preventDefault();
+                    this.toggleSearch(true);
+                }
+            }
+        });
+    },
+    
+    /**
+     * Toggle search bar visibility
+     * @param {boolean} forceOpen - Force open if true
+     */
+    toggleSearch(forceOpen = false) {
+        const searchBar = document.getElementById('conversation-search-bar');
+        const searchInput = document.getElementById('conversation-search-input');
+        
+        if (!searchBar) return;
+        
+        this.searchVisible = forceOpen || !this.searchVisible;
+        searchBar.style.display = this.searchVisible ? 'block' : 'none';
+        
+        if (this.searchVisible && searchInput) {
+            searchInput.focus();
+            searchInput.select();
+        } else {
+            this.clearSearchHighlights();
+        }
+    },
+    
+    /**
+     * Close search bar
+     */
+    closeSearch() {
+        const searchBar = document.getElementById('conversation-search-bar');
+        const searchInput = document.getElementById('conversation-search-input');
+        
+        if (searchBar) {
+            searchBar.style.display = 'none';
+            this.searchVisible = false;
+        }
+        if (searchInput) {
+            searchInput.value = '';
+        }
+        this.clearSearchHighlights();
+        this.searchResults = [];
+        this.currentSearchIndex = -1;
+    },
+    
+    // Search state
+    searchResults: [],
+    currentSearchIndex: -1,
+    
+    /**
+     * Perform search in messages
+     * @param {string} query - Search query
+     */
+    performSearch(query) {
+        this.clearSearchHighlights();
+        this.searchResults = [];
+        this.currentSearchIndex = -1;
+        
+        const resultsCount = document.getElementById('search-results-count');
+        
+        if (!query || query.length < 2) {
+            if (resultsCount) resultsCount.textContent = '';
+            return;
+        }
+        
+        const messages = MessageHandler.messagesContainer?.querySelectorAll('.message-bubble, .message-content');
+        if (!messages) return;
+        
+        const queryLower = query.toLowerCase();
+        
+        messages.forEach((bubble, index) => {
+            const text = bubble.textContent.toLowerCase();
+            if (text.includes(queryLower)) {
+                this.searchResults.push(bubble);
+                this._highlightText(bubble, query);
+            }
+        });
+        
+        if (resultsCount) {
+            resultsCount.textContent = this.searchResults.length > 0 
+                ? `${this.searchResults.length} found` 
+                : 'No results';
+        }
+        
+        // Navigate to first result
+        if (this.searchResults.length > 0) {
+            this.navigateSearch(1);
+        }
+    },
+    
+    /**
+     * Highlight search text in element
+     * @private
+     */
+    _highlightText(element, query) {
+        // Store original HTML if not already stored
+        if (!element.dataset.originalHtml) {
+            element.dataset.originalHtml = element.innerHTML;
+        }
+        
+        const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+        element.innerHTML = element.dataset.originalHtml.replace(regex, 
+            '<mark style="background: #ffeb3b; padding: 0 2px; border-radius: 2px;">$1</mark>');
+    },
+    
+    /**
+     * Clear all search highlights
+     */
+    clearSearchHighlights() {
+        const messages = MessageHandler.messagesContainer?.querySelectorAll('.message-bubble, .message-content');
+        if (!messages) return;
+        
+        messages.forEach(bubble => {
+            if (bubble.dataset.originalHtml) {
+                bubble.innerHTML = bubble.dataset.originalHtml;
+                delete bubble.dataset.originalHtml;
+            }
+            bubble.style.outline = '';
+        });
+    },
+    
+    /**
+     * Navigate through search results
+     * @param {number} direction - 1 for next, -1 for previous
+     */
+    navigateSearch(direction) {
+        if (this.searchResults.length === 0) return;
+        
+        // Remove current highlight
+        if (this.currentSearchIndex >= 0 && this.searchResults[this.currentSearchIndex]) {
+            this.searchResults[this.currentSearchIndex].style.outline = '';
+        }
+        
+        // Calculate new index
+        this.currentSearchIndex += direction;
+        if (this.currentSearchIndex >= this.searchResults.length) {
+            this.currentSearchIndex = 0;
+        } else if (this.currentSearchIndex < 0) {
+            this.currentSearchIndex = this.searchResults.length - 1;
+        }
+        
+        // Highlight and scroll to current result
+        const current = this.searchResults[this.currentSearchIndex];
+        if (current) {
+            current.style.outline = '2px solid #ff9800';
+            current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        
+        // Update count display
+        const resultsCount = document.getElementById('search-results-count');
+        if (resultsCount) {
+            resultsCount.textContent = `${this.currentSearchIndex + 1}/${this.searchResults.length}`;
+        }
+    },
+    
+    /**
+     * Scroll to bottom of messages (latest messages)
+     */
+    scrollToBottom() {
+        if (MessageHandler.messagesContainer) {
+            MessageHandler.messagesContainer.scrollTop = MessageHandler.messagesContainer.scrollHeight;
+        }
+    },
+    
+    /**
+     * Initialize search UI only (for pages that don't use full ConversationBox.init)
+     * Call this after MessageHandler.init() to add search to any chat interface
+     */
+    initSearchOnly() {
+        if (this.config.enableSearch) {
+            this._createSearchUI();
+        }
+        console.log('✅ ConversationBox search initialized (standalone)');
     }
 };
 

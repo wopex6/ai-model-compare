@@ -2801,6 +2801,28 @@ def get_domain_characters():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/domain-characters/session')
+@require_auth
+def get_domain_session():
+    """Get session info for domain characters (like ConversationBox session endpoints)"""
+    try:
+        user_id = get_current_user_id()
+        if not user_id:
+            return jsonify({'error': 'Not authenticated'}), 401
+        
+        # Domain characters don't need a specific session_id like single characters
+        # They use user_id + character_id for history lookup
+        # But we return user_id for consistency with ConversationBox pattern
+        return jsonify({
+            'success': True,
+            'user_id': user_id,
+            'session_id': None,  # Domain uses per-character history, not single session
+            'message': 'Domain characters use per-character conversation tracking'
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/domain-characters/<character_id>')
 def get_domain_character(character_id):
     """Get info for a specific domain character"""

@@ -320,12 +320,12 @@
     <script>
         // Initialize when DOM is ready
         document.addEventListener('DOMContentLoaded', async function() {
-            // Initialize MessageHandler first
-            MessageHandler.init({
-                containerId: 'chat-messages',
-                userBubbleClass: 'bubble',
-                botBubbleClass: 'bubble'
+            // Initialize MessageHandler first (use domain-chat-messages container)
+            MessageHandler.init('domain-characters', {
+                characterDisplayName: 'Aria'
             });
+            // Override container since domain uses different ID
+            MessageHandler.messagesContainer = document.getElementById('domain-chat-messages');
             
             // Initialize DomainCharacters directly (simpler approach)
             await DomainCharacters.init({
@@ -338,6 +338,9 @@
             
             // Load initial character (coordinator) history
             await DomainCharacters.loadCharacterHistory('coordinator');
+            
+            // Initialize search functionality (uses ConversationBox search UI)
+            ConversationBox.initSearchOnly();
             
             // Handle send button
             document.getElementById('sendBtn').addEventListener('click', async function() {
