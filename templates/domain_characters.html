@@ -194,16 +194,20 @@
             gap: 10px;
         }
         
-        .input-group input {
+        .input-group input,
+        .input-group textarea {
             flex: 1;
             padding: 12px 18px;
             border: 2px solid #e0e0e0;
+            font-family: inherit;
+            font-size: inherit;
             border-radius: 25px;
             font-size: 1rem;
             transition: border-color 0.2s;
         }
         
-        .input-group input:focus {
+        .input-group input:focus,
+        .input-group textarea:focus {
             outline: none;
             border-color: var(--primary-color);
         }
@@ -299,7 +303,7 @@
                 
                 <div class="chat-input-area">
                     <div class="input-group">
-                        <input type="text" id="userInput" placeholder="Type your message..." autocomplete="off">
+                        <textarea id="userInput" placeholder="Type your message... (Shift+Enter to send)" autocomplete="off" rows="1"></textarea>
                         <button id="sendBtn"><i class="fas fa-paper-plane"></i> Send</button>
                     </div>
                     <div class="analysis-toggle">
@@ -348,18 +352,19 @@
                 const message = input.value.trim();
                 if (message) {
                     input.value = '';
+                    input.style.height = '40px'; // Reset height after send
                     await DomainCharacters.sendMessage(message, true);
                 }
             });
             
-            // Handle Enter key
-            document.getElementById('userInput').addEventListener('keypress', async function(e) {
-                if (e.key === 'Enter') {
-                    const message = this.value.trim();
-                    if (message) {
-                        this.value = '';
-                        await DomainCharacters.sendMessage(message, true);
-                    }
+            // Setup multi-line input (Enter=newline, Shift+Enter=send, max 6 lines)
+            const userInput = document.getElementById('userInput');
+            MessageHandler.setupMultiLineInput(async () => {
+                const message = userInput.value.trim();
+                if (message) {
+                    userInput.value = '';
+                    userInput.style.height = '40px'; // Reset height after send
+                    await DomainCharacters.sendMessage(message, true);
                 }
             });
             
