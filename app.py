@@ -4280,4 +4280,4 @@ if __name__ == '__main__':
             print(f"  - {profile['name']} ({profile['completion']}% complete, {profile['total_conversations']} conversations)")
     print("=" * 35)
     
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5050)
