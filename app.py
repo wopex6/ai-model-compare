@@ -2811,7 +2811,7 @@ def get_domain_characters():
 def get_domain_session():
     """Get session info for domain characters (like ConversationBox session endpoints)"""
     try:
-        user_id = get_current_user_id()
+        user_id = request.current_user['user_id']
         if not user_id:
             return jsonify({'error': 'Not authenticated'}), 401
         
