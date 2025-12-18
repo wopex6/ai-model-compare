@@ -209,9 +209,6 @@ const DomainCharacters = {
             messagesContainer.innerHTML = '';
         }
         
-        // Show welcome message first
-        this._showWelcomeMessage(characterId);
-        
         try {
             const response = await AuthHelper.authenticatedFetch(this.endpoints.history(characterId));
             const data = await response.json();
@@ -247,9 +244,14 @@ const DomainCharacters = {
                 if (this.callbacks.onHistoryLoaded) {
                     this.callbacks.onHistoryLoaded(data.history);
                 }
+            } else {
+                // No history - show welcome message
+                this._showWelcomeMessage(characterId);
             }
         } catch (error) {
             console.error('Failed to load character history:', error);
+            // On error, still show welcome message
+            this._showWelcomeMessage(characterId);
         }
     },
     
