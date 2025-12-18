@@ -396,7 +396,7 @@ class IntegratedDatabase:
                 'avatar_url': profile[3] or '',
                 'birth_date': profile[4] or '',
                 'location': profile[5] or '',
-                'preferences': prefs,
+                'preferences': prefs.get('user_preferences', {}),
                 'personal_info': prefs.get('personal_info', {}),
                 'privacy_settings': prefs.get('privacy_settings', {}),
                 'profile_completion': 50 if prefs.get('personal_info') else 0,
