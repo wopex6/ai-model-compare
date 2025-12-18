@@ -3226,18 +3226,27 @@ def get_character_history(character_id):
         
         cursor = smart_response_conn.cursor()
         
-        # Use visibility table for cross-character history
-        # Include character info to identify who responded
-        cursor.execute('''
-            SELECT DISTINCT hp.id, hp.user_message, hp.assistant_response, hp.timestamp, 
-                   hp.character, mv.role
-            FROM history_primary hp
-            LEFT JOIN message_visibility mv ON hp.id = mv.history_id AND mv.character_id = ?
-            WHERE hp.user_id = ? 
-              AND (mv.character_id = ? OR hp.character = ?)
-            ORDER BY hp.timestamp DESC
-            LIMIT ?
-        ''', (character_id, user_id, character_id, character_id, limit))
+        # Get messages for this character - use simple query without visibility table duplicates
+        # For coordinator: get recent messages across all characters
+        if character_id == 'coordinator':
+            cursor.execute('''
+                SELECT hp.id, hp.user_message, hp.assistant_response, hp.timestamp, 
+                       hp.character
+                FROM history_primary hp
+                WHERE hp.user_id = ?
+                ORDER BY hp.timestamp DESC
+                LIMIT ?
+            ''', (user_id, limit))
+        else:
+            # For specific character: only their responses
+            cursor.execute('''
+                SELECT hp.id, hp.user_message, hp.assistant_response, hp.timestamp, 
+                       hp.character
+                FROM history_primary hp
+                WHERE hp.user_id = ? AND hp.character = ?
+                ORDER BY hp.timestamp DESC
+                LIMIT ?
+            ''', (user_id, character_id, limit))
         
         rows = cursor.fetchall()
         
@@ -3247,7 +3256,7 @@ def get_character_history(character_id):
             seen_messages = {}  # user_message -> entry with responses list
             
             for row in rows:
-                msg_id, user_msg, ai_resp, timestamp, resp_char, role = row
+                msg_id, user_msg, ai_resp, timestamp, resp_char = row
                 
                 # Check if we've seen this exact question recently
                 key = user_msg.strip()[:100]  # Use first 100 chars as key
@@ -3266,7 +3275,7 @@ def get_character_history(character_id):
                         'ai_response': ai_resp,
                         'timestamp': timestamp,
                         'character': resp_char,
-                        'role': role or 'owner',
+                        'role': 'owner',
                         'responses': [{
                             'character': resp_char,
                             'content': ai_resp
@@ -3286,7 +3295,7 @@ def get_character_history(character_id):
                     'ai_response': row[2],
                     'timestamp': row[3],
                     'character': row[4],
-                    'role': row[5] or 'owner'
+                    'role': 'owner'
                 })
             history.reverse()
         
