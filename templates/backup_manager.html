@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Database Backup Manager</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        h1 {
+            color: #4ecdc4;
+            font-size: 1.8rem;
+        }
+        
+        h1 i {
+            margin-right: 10px;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #4ecdc4, #44a08d);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(78, 205, 196, 0.4);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #e74c3c, #c0392b);
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: rgba(255,255,255,0.1);
+            color: #e0e0e0;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .status-card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .status-card h3 {
+            color: #4ecdc4;
+            margin-bottom: 15px;
+            font-size: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        
+        .status-item:last-child {
+            border-bottom: none;
+        }
+        
+        .status-label {
+            color: #888;
+        }
+        
+        .status-value {
+            font-weight: 500;
+        }
+        
+        .status-value.good {
+            color: #4ecdc4;
+        }
+        
+        .status-value.warning {
+            color: #f39c12;
+        }
+        
+        .status-value.danger {
+            color: #e74c3c;
+        }
+        
+        .section {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .section h2 {
+            color: #4ecdc4;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        th {
+            color: #888;
+            font-weight: 500;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+        }
+        
+        tr:hover {
+            background: rgba(255,255,255,0.03);
+        }
+        
+        .db-name {
+            font-family: monospace;
+            color: #4ecdc4;
+        }
+        
+        .age-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+        }
+        
+        .age-badge.recent {
+            background: rgba(78, 205, 196, 0.2);
+            color: #4ecdc4;
+        }
+        
+        .age-badge.old {
+            background: rgba(243, 156, 18, 0.2);
+            color: #f39c12;
+        }
+        
+        .age-badge.very-old {
+            background: rgba(231, 76, 60, 0.2);
+            color: #e74c3c;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #888;
+        }
+        
+        .loading i {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        .alert {
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .alert-success {
+            background: rgba(78, 205, 196, 0.2);
+            border: 1px solid rgba(78, 205, 196, 0.3);
+            color: #4ecdc4;
+        }
+        
+        .alert-error {
+            background: rgba(231, 76, 60, 0.2);
+            border: 1px solid rgba(231, 76, 60, 0.3);
+            color: #e74c3c;
+        }
+        
+        .alert-info {
+            background: rgba(52, 152, 219, 0.2);
+            border: 1px solid rgba(52, 152, 219, 0.3);
+            color: #3498db;
+        }
+        
+        .backup-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        .scheduler-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .scheduler-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        .scheduler-dot.running {
+            background: #4ecdc4;
+        }
+        
+        .scheduler-dot.stopped {
+            background: #e74c3c;
+            animation: none;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .back-link {
+            color: #888;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .back-link:hover {
+            color: #4ecdc4;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/chatchat" class="back-link">
+            <i class="fas fa-arrow-left"></i> Back to Chat
+        </a>
+        
+        <header>
+            <h1><i class="fas fa-database"></i> Database Backup Manager</h1>
+            <div class="backup-actions">
+                <button class="btn btn-primary" onclick="runBackup()">
+                    <i class="fas fa-download"></i> Backup Now
+                </button>
+                <button class="btn btn-secondary" onclick="loadStatus()">
+                    <i class="fas fa-sync-alt"></i> Refresh
+                </button>
+            </div>
+        </header>
+        
+        <div id="alert-container"></div>
+        
+        <div class="status-grid">
+            <div class="status-card">
+                <h3><i class="fas fa-info-circle"></i> Overview</h3>
+                <div id="overview-content">
+                    <div class="loading">
+                        <i class="fas fa-spinner"></i>
+                        <p>Loading...</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="status-card">
+                <h3><i class="fas fa-clock"></i> Scheduler</h3>
+                <div id="scheduler-content">
+                    <div class="loading">
+                        <i class="fas fa-spinner"></i>
+                        <p>Loading...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2><i class="fas fa-server"></i> Database Status</h2>
+            <div id="database-status">
+                <div class="loading">
+                    <i class="fas fa-spinner"></i>
+                    <p>Loading database status...</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2><i class="fas fa-history"></i> Recent Backups</h2>
+            <div id="backup-list">
+                <div class="loading">
+                    <i class="fas fa-spinner"></i>
+                    <p>Loading backup list...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const token = localStorage.getItem('auth_token');
+        
+        if (!token) {
+            window.location.href = '/login';
+        }
+        
+        async function apiCall(endpoint, options = {}) {
+            const response = await fetch(endpoint, {
+                ...options,
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                    ...options.headers
+                }
+            });
+            return response.json();
+        }
+        
+        function showAlert(message, type = 'info') {
+            const container = document.getElementById('alert-container');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type}`;
+            alert.innerHTML = `
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'}"></i>
+                ${message}
+            `;
+            container.appendChild(alert);
+            setTimeout(() => alert.remove(), 5000);
+        }
+        
+        function getAgeBadge(hours) {
+            if (hours === null) return '<span class="age-badge very-old">Never</span>';
+            if (hours < 6) return `<span class="age-badge recent">${hours.toFixed(1)}h ago</span>`;
+            if (hours < 24) return `<span class="age-badge old">${hours.toFixed(1)}h ago</span>`;
+            return `<span class="age-badge very-old">${(hours/24).toFixed(1)}d ago</span>`;
+        }
+        
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        async function loadStatus() {
+            try {
+                const data = await apiCall('/api/admin/backup/status');
+                
+                if (data.error) {
+                    showAlert(data.error, 'error');
+                    return;
+                }
+                
+                // Overview
+                document.getElementById('overview-content').innerHTML = `
+                    <div class="status-item">
+                        <span class="status-label">Backup Directory</span>
+                        <span class="status-value">${data.backup_dir}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Total Backup Size</span>
+                        <span class="status-value">${data.total_backup_size_mb} MB</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Last Backup</span>
+                        <span class="status-value">${data.last_backup ? new Date(data.last_backup).toLocaleString() : 'Never'}</span>
+                    </div>
+                `;
+                
+                // Scheduler
+                document.getElementById('scheduler-content').innerHTML = `
+                    <div class="status-item">
+                        <span class="status-label">Status</span>
+                        <span class="scheduler-status">
+                            <span class="scheduler-dot ${data.scheduler_running ? 'running' : 'stopped'}"></span>
+                            <span class="status-value ${data.scheduler_running ? 'good' : 'danger'}">
+                                ${data.scheduler_running ? 'Running' : 'Stopped'}
+                            </span>
+                        </span>
+                    </div>
+                    <div class="status-item">
+                        <span class="status-label">Interval</span>
+                        <span class="status-value">Every 4 hours</span>
+                    </div>
+                `;
+                
+                // Database status table
+                let tableHtml = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Database</th>
+                                <th>Backups</th>
+                                <th>Latest Backup</th>
+                                <th>Size</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                for (const [dbName, info] of Object.entries(data.databases)) {
+                    tableHtml += `
+                        <tr>
+                            <td class="db-name">${dbName}</td>
+                            <td>${info.backup_count}</td>
+                            <td>${getAgeBadge(info.latest_backup_age_hours)}</td>
+                            <td>${info.total_size_mb} MB</td>
+                        </tr>
+                    `;
+                }
+                
+                tableHtml += '</tbody></table>';
+                document.getElementById('database-status').innerHTML = tableHtml;
+                
+            } catch (error) {
+                showAlert('Failed to load status: ' + error.message, 'error');
+            }
+        }
+        
+        async function loadBackupList() {
+            try {
+                const data = await apiCall('/api/admin/backup/list');
+                
+                if (data.error) {
+                    showAlert(data.error, 'error');
+                    return;
+                }
+                
+                if (data.backups.length === 0) {
+                    document.getElementById('backup-list').innerHTML = '<p style="color:#888">No backups found</p>';
+                    return;
+                }
+                
+                let tableHtml = `
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Database</th>
+                                <th>Filename</th>
+                                <th>Size</th>
+                                <th>Age</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                // Show first 20 backups
+                for (const backup of data.backups.slice(0, 20)) {
+                    tableHtml += `
+                        <tr>
+                            <td class="db-name">${backup.database}</td>
+                            <td>${backup.filename}</td>
+                            <td>${formatBytes(backup.size_bytes)}</td>
+                            <td>${getAgeBadge(backup.age_hours)}</td>
+                            <td>
+                                <button class="btn btn-secondary" onclick="downloadBackup('${backup.path}')" style="padding:5px 10px;font-size:0.8rem">
+                                    <i class="fas fa-download"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }
+                
+                tableHtml += '</tbody></table>';
+                
+                if (data.count > 20) {
+                    tableHtml += `<p style="color:#888;margin-top:10px">Showing 20 of ${data.count} backups</p>`;
+                }
+                
+                document.getElementById('backup-list').innerHTML = tableHtml;
+                
+            } catch (error) {
+                showAlert('Failed to load backup list: ' + error.message, 'error');
+            }
+        }
+        
+        async function runBackup() {
+            try {
+                showAlert('Starting backup...', 'info');
+                const data = await apiCall('/api/admin/backup/run', {
+                    method: 'POST',
+                    body: JSON.stringify({ reason: 'manual' })
+                });
+                
+                if (data.success) {
+                    showAlert(data.message, 'success');
+                    loadStatus();
+                    loadBackupList();
+                } else {
+                    showAlert(data.error || 'Backup failed', 'error');
+                }
+            } catch (error) {
+                showAlert('Backup failed: ' + error.message, 'error');
+            }
+        }
+        
+        function downloadBackup(path) {
+            window.open(`/api/admin/backup/download/${path}?token=${token}`, '_blank');
+        }
+        
+        // Initial load
+        loadStatus();
+        loadBackupList();
+        
+        // Auto-refresh every 60 seconds
+        setInterval(() => {
+            loadStatus();
+            loadBackupList();
+        }, 60000);
+    </script>
+</body>
+</html>

@@ -48,6 +48,7 @@ from ai_compare.character_configs import CHARACTER_CONFIGS
 
 # Import the integrated database system
 from integrated_database import IntegratedDatabase
+from database_backup import BackupManager
 from email_service import EmailService
 
 # Import Personality Systems
@@ -93,6 +94,13 @@ integrated_db = IntegratedDatabase()
 email_service = EmailService()
 ai_compare = AICompare()
 chatbot = AIChatbot()
+
+# Initialize backup system
+backup_manager = BackupManager()
+# Backup on startup
+backup_manager.backup_all(reason="startup")
+# Start automatic backup scheduler (every 4 hours)
+backup_manager.start_scheduler()
 
 # Initialize Trait Inference Engine
 trait_inference = TraitInferenceEngine(integrated_db)
@@ -143,6 +151,7 @@ try:
     from smart_response.proactive_clarification import create_clarification_system
     from smart_response.character_traits import create_character_trait_system
     from smart_response.developer_analytics import create_developer_analytics
+    from smart_response.personality_context_integrator import create_personality_integrator
     smart_response_conn = sqlite3.connect('integrated_users.db', check_same_thread=False)
     smart_handler = SmartResponseHandler(smart_response_conn)
     context_manager = ConversationContextManager(smart_response_conn)
@@ -152,10 +161,12 @@ try:
     clarification_system = create_clarification_system(smart_response_conn)
     character_trait_system = create_character_trait_system(smart_response_conn)
     developer_analytics = create_developer_analytics(smart_response_conn)
+    personality_integrator = create_personality_integrator(smart_response_conn, integrated_db)
     print("✓ User Context Manager initialized (preferences, goals, language learning)")
     print("✓ Proactive Clarification System initialized")
     print("✓ Character Trait System initialized (12D trait-space matching)")
     print("✓ Developer Analytics initialized")
+    print("✓ Personality Context Integrator initialized (Big5 + profile → conversations)")
     
     # Initialize frontend error logging table
     cursor = smart_response_conn.cursor()
@@ -205,6 +216,7 @@ except Exception as e:
     clarification_system = None
     character_trait_system = None
     developer_analytics = None
+    personality_integrator = None
     domain_character_manager = None
     domain_character_ai = None
     previous_interactions = {}
@@ -1122,8 +1134,12 @@ def update_profile():
     """Update user profile"""
     try:
         profile_data = request.get_json()
-        success = integrated_db.update_user_profile(request.current_user['user_id'], profile_data)
+        user_id = request.current_user['user_id']
+        success = integrated_db.update_user_profile(user_id, profile_data)
         if success:
+            # Invalidate personality cache so profile changes take effect
+            if personality_integrator:
+                personality_integrator.invalidate_cache(user_id)
             return jsonify({'success': True, 'message': 'Profile updated successfully'})
         else:
             return jsonify({'error': 'Failed to update profile'}), 500
@@ -1182,6 +1198,11 @@ def update_comprehensive_preferences():
         
         # Save to database using integrated_db
         success = integrated_db.update_user_profile(user_id, {'preferences': data})
+        
+        # Invalidate personality cache so preference/goal changes take effect
+        if success and personality_integrator:
+            personality_integrator.invalidate_cache(user_id)
+        
         return jsonify({'success': success})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -2755,6 +2776,11 @@ def save_psychological_assessment():
         
         user_profile_manager.update_preferences(user_id, psychological_attributes)
         
+        # Invalidate personality context cache so new assessment takes effect immediately
+        if personality_integrator:
+            personality_integrator.invalidate_cache(user_id)
+            print(f"[PERSONALITY] Cache invalidated for user {user_id} after assessment")
+        
         # Build response with comparison if available
         response_data = {
             'success': True,
@@ -2882,18 +2908,13 @@ def route_to_domain_characters():
             'timestamp': datetime.now().isoformat()
         }
 
-        # Get history_id if we have history system (store user message first so we have a stable ID)
-        if history_system:
-            try:
-                primary_id = history_system.store_interaction(
-                    user_id, requested_character or 'coordinator',
-                    message, '',  # Empty response for now
-                    'domain_routing',
-                    metadata={'routing': True}
-                )
-                context['history_id'] = primary_id
-            except Exception as e:
-                print(f"Warning: Could not store history: {e}")
+        # Store user message using centralized integrated_db (same as regular characters)
+        target_character = requested_character or 'coordinator'
+        try:
+            integrated_db.save_character_message(user_id, target_character, 'user', message)
+            print(f"[HISTORY] ✓ Saved user message for {target_character}")
+        except Exception as e:
+            print(f"Warning: Could not store user message: {e}")
         
         # Process message through user context manager (extracts preferences, goals, language patterns)
         # This runs on EVERY message (cheap, rule-based extraction)
@@ -2917,6 +2938,36 @@ def route_to_domain_characters():
                     print(f"[USER_CONTEXT] User references past conversation - expanding context")
             except Exception as e:
                 print(f"Warning: User context processing failed: {e}")
+        
+        # PERSONALITY INTEGRATION: Add Big5 traits, goals, profile to AI context
+        # This adapts thresholds dynamically based on conversation state
+        if personality_integrator:
+            try:
+                # Analyze current message for conversation state
+                conversation_state = personality_integrator.get_conversation_state_from_message(message)
+                
+                # Get personality context with adaptive thresholds
+                personality_context = personality_integrator.get_personality_context(
+                    user_id, conversation_state
+                )
+                
+                # Format for AI prompt and add to context
+                personality_prompt = personality_integrator.format_for_prompt(personality_context)
+                if personality_prompt:
+                    # Combine with existing user_profile if present
+                    existing_profile = context.get('user_profile', '')
+                    if existing_profile:
+                        context['user_profile'] = f"{existing_profile}\n\n{personality_prompt}"
+                    else:
+                        context['user_profile'] = personality_prompt
+                    
+                    print(f"[PERSONALITY] Added personality context (source: {personality_context.trait_source}, confidence: {personality_context.trait_confidence:.0%})")
+                    
+                    # Log if significant change detected
+                    if personality_context.change_detected:
+                        print(f"[PERSONALITY] Change detected: {personality_context.change_summary}")
+            except Exception as e:
+                print(f"Warning: Personality integration failed: {e}")
         
         # Configurable: Number of conversation exchanges to include for AI context
         # Can be set via environment variable AI_CONTEXT_EXCHANGES (default: 5)
@@ -2993,48 +3044,34 @@ def route_to_domain_characters():
                 'metadata': resp.metadata
             })
         
-        # Multi-Response Storage: Each character's response stored separately
-        # This handles cases where multiple domain characters respond to same question
-        if history_system and formatted_responses:
-            original_char = requested_character or 'coordinator'
-            base_history_id = context.get('history_id')
+        # Store AI responses using centralized integrated_db (same as regular characters)
+        responding_chars = [r for r in formatted_responses if r.get('should_display')]
+        
+        for resp in responding_chars:
+            char_id = resp.get('character_id')
+            response_content = resp.get('content', '')
+            display_name = resp.get('display_name', char_id)
             
-            # Get responding characters
-            responding_chars = [r for r in formatted_responses if r.get('should_display')]
-            
-            if responding_chars:
-                cursor = smart_response_conn.cursor()
-                stored_ids = []
+            try:
+                # If routed from coordinator, ALSO save user message to domain character's history
+                # This ensures the original question appears when viewing that character's chat
+                if target_character == 'coordinator' and char_id != 'coordinator':
+                    integrated_db.save_character_message(user_id, char_id, 'user', message)
+                    print(f"[HISTORY] ✓ Saved routed user message to {char_id}")
                 
-                for i, resp in enumerate(responding_chars):
-                    char_id = resp.get('character_id')
-                    response_content = resp.get('content', '')
-                    
-                    if i == 0 and base_history_id:
-                        # Update the original entry with first response
-                        try:
-                            cursor.execute('''
-                                UPDATE history_primary 
-                                SET assistant_response = ?, character = ?
-                                WHERE id = ?
-                            ''', (response_content, char_id, base_history_id))
-                            stored_ids.append((base_history_id, char_id))
-                            print(f"[HISTORY] ✓ Updated id={base_history_id} for {char_id}")
-                        except Exception as e:
-                            print(f"[HISTORY] ✗ Update failed: {e}")
-                    else:
-                        # Create separate entry for additional responses
-                        try:
-                            new_id = history_system.store_interaction(
-                                user_id, char_id,
-                                message, response_content,
-                                'domain_routing',
-                                metadata={'multi_response': True, 'original_char': original_char}
-                            )
-                            stored_ids.append((new_id, char_id))
-                            print(f"[HISTORY] ✓ Created id={new_id} for {char_id}")
-                        except Exception as e:
-                            print(f"[HISTORY] ✗ Create failed for {char_id}: {e}")
+                # Save to the specific character's history
+                integrated_db.save_character_message(user_id, char_id, 'assistant', response_content)
+                print(f"[HISTORY] ✓ Saved AI response for {char_id}")
+                
+                # ALSO save to coordinator's history if user was talking to coordinator
+                # This ensures coordinator view shows complete conversation
+                if target_character == 'coordinator' and char_id != 'coordinator':
+                    # Include character attribution in coordinator's view
+                    attributed_response = f"[{display_name}] {response_content}"
+                    integrated_db.save_character_message(user_id, 'coordinator', 'assistant', attributed_response)
+                    print(f"[HISTORY] ✓ Also saved to coordinator view")
+            except Exception as e:
+                print(f"[HISTORY] ✗ Failed to save response for {char_id}: {e}")
                 
                 # Add visibility: coordinator sees all responses
                 try:
@@ -3053,6 +3090,19 @@ def route_to_domain_characters():
                     print(f"[VISIBILITY] ✓ {len(stored_ids)} responses stored")
                 except Exception as e:
                     print(f"[VISIBILITY] ✗ Failed: {e}")
+        
+        # CONTINUOUS TRAIT REFINEMENT: Analyze conversation to update inferred personality
+        # Runs periodically (not every message) to refine Big5 traits from conversation patterns
+        if trait_inference:
+            try:
+                inference_result = trait_inference.run_inference_if_needed(user_id)
+                if inference_result:
+                    print(f"[TRAIT_INFERENCE] ✓ Updated traits for user {user_id} (confidence: {inference_result['confidence']:.0%})")
+                    # Invalidate personality cache so new inferred traits take effect
+                    if personality_integrator:
+                        personality_integrator.invalidate_cache(user_id)
+            except Exception as e:
+                print(f"[TRAIT_INFERENCE] ⚠️ Failed: {e}")
         
         # AI Summarization (throttled - only when needed)
         # Triggers: every 8 messages, user references past, or summary is stale
@@ -3219,91 +3269,57 @@ def get_character_preferences():
 @app.route('/api/domain-characters/history/<character_id>')
 @require_auth
 def get_character_history(character_id):
-    """Get conversation history for a specific character using visibility table"""
+    """Get conversation history for a specific character - uses centralized integrated_db"""
     try:
         user_id = request.current_user.get('user_id')
         limit = request.args.get('limit', 50, type=int)
         
-        cursor = smart_response_conn.cursor()
+        # Use centralized integrated_db.get_character_messages() - same as regular characters
+        # This ensures consistency across all character types
+        messages = integrated_db.get_character_messages(user_id, character_id, limit)
         
-        # Get messages for this character - use simple query without visibility table duplicates
-        # For coordinator: get recent messages across all characters
-        if character_id == 'coordinator':
-            cursor.execute('''
-                SELECT hp.id, hp.user_message, hp.assistant_response, hp.timestamp, 
-                       hp.character
-                FROM history_primary hp
-                WHERE hp.user_id = ?
-                ORDER BY hp.timestamp DESC
-                LIMIT ?
-            ''', (user_id, limit))
-        else:
-            # For specific character: only their responses
-            cursor.execute('''
-                SELECT hp.id, hp.user_message, hp.assistant_response, hp.timestamp, 
-                       hp.character
-                FROM history_primary hp
-                WHERE hp.user_id = ? AND hp.character = ?
-                ORDER BY hp.timestamp DESC
-                LIMIT ?
-            ''', (user_id, character_id, limit))
+        # Convert to history format expected by frontend
+        history = []
+        for msg in messages:
+            history.append({
+                'id': msg.get('id'),
+                'user_message': msg.get('content') if msg.get('sender_type') == 'user' else '',
+                'ai_response': msg.get('content') if msg.get('sender_type') == 'assistant' else '',
+                'timestamp': msg.get('timestamp'),
+                'character': character_id,
+                'role': 'owner'
+            })
         
-        rows = cursor.fetchall()
-        
-        # For coordinator: group responses by same question (timestamp within 5 sec)
-        if character_id == 'coordinator':
-            history = []
-            seen_messages = {}  # user_message -> entry with responses list
+        # Group consecutive user/assistant messages into pairs
+        paired_history = []
+        i = 0
+        while i < len(history):
+            entry = {'id': None, 'user_message': '', 'ai_response': '', 'timestamp': '', 'character': character_id}
             
-            for row in rows:
-                msg_id, user_msg, ai_resp, timestamp, resp_char = row
-                
-                # Check if we've seen this exact question recently
-                key = user_msg.strip()[:100]  # Use first 100 chars as key
-                
-                if key in seen_messages:
-                    # Add as additional response to existing entry
-                    seen_messages[key]['responses'].append({
-                        'character': resp_char,
-                        'content': ai_resp
-                    })
-                else:
-                    # New entry
-                    entry = {
-                        'id': msg_id,
-                        'user_message': user_msg,
-                        'ai_response': ai_resp,
-                        'timestamp': timestamp,
-                        'character': resp_char,
-                        'role': 'owner',
-                        'responses': [{
-                            'character': resp_char,
-                            'content': ai_resp
-                        }]
-                    }
-                    seen_messages[key] = entry
-                    history.append(entry)
+            # Get user message
+            if i < len(history) and history[i].get('user_message'):
+                entry['user_message'] = history[i]['user_message']
+                entry['timestamp'] = history[i]['timestamp']
+                entry['id'] = history[i]['id']
+                i += 1
             
-            history.reverse()
-        else:
-            # For specific character: show only their responses
-            history = []
-            for row in rows:
-                history.append({
-                    'id': row[0],
-                    'user_message': row[1],
-                    'ai_response': row[2],
-                    'timestamp': row[3],
-                    'character': row[4],
-                    'role': 'owner'
-                })
-            history.reverse()
+            # Get assistant response
+            if i < len(history) and history[i].get('ai_response'):
+                entry['ai_response'] = history[i]['ai_response']
+                if not entry['timestamp']:
+                    entry['timestamp'] = history[i]['timestamp']
+                if not entry['id']:
+                    entry['id'] = history[i]['id']
+                i += 1
+            
+            if entry['user_message'] or entry['ai_response']:
+                paired_history.append(entry)
         
         return jsonify({
             'success': True,
             'character_id': character_id,
-            'history': history,
-            'count': len(history)
+            'history': paired_history,
+            'count': len(paired_history)
         })
     except Exception as e:
         import traceback
@@ -3759,6 +3775,135 @@ def get_archival_stats():
         })
     except Exception as e:
         print(f"❌ Error getting archival stats: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================
+# DATABASE BACKUP SYSTEM (ADMIN ONLY)
+# ============================================
+
+@app.route('/admin/backup-manager')
+def backup_manager_page():
+    """Database Backup Manager Dashboard (Admin Only)"""
+    return render_template('backup_manager.html')
+
+
+@app.route('/api/admin/backup/status')
+@require_auth
+def get_backup_status():
+    """Get current backup status for all databases"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        status = backup_manager.get_backup_status()
+        return jsonify({'success': True, **status})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/backup/list')
+@require_auth
+def list_backups():
+    """List all available backups"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        db_name = request.args.get('database')  # Optional filter
+        backups = backup_manager.list_backups(db_name)
+        return jsonify({'success': True, 'backups': backups, 'count': len(backups)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/backup/run', methods=['POST'])
+@require_auth
+def run_backup():
+    """Manually trigger a backup of all databases"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        data = request.get_json() or {}
+        reason = data.get('reason', 'manual')
+        db_name = data.get('database')  # Optional: backup specific database
+        
+        if db_name:
+            result = backup_manager.backup_database(db_name, reason)
+            results = [result]
+        else:
+            results = backup_manager.backup_all(reason=reason)
+        
+        success_count = sum(1 for r in results if r['success'])
+        return jsonify({
+            'success': True,
+            'message': f'Backed up {success_count}/{len(results)} databases',
+            'results': results
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/backup/restore', methods=['POST'])
+@require_auth
+def restore_backup():
+    """Restore a database from backup (DANGEROUS - requires confirmation)"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if user_role != 'administrator':
+            return jsonify({'error': 'Administrator access required for restore'}), 403
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body required'}), 400
+        
+        db_name = data.get('database')
+        backup_file = data.get('backup_file')  # Optional: specific backup
+        confirm = data.get('confirm')
+        
+        if not db_name:
+            return jsonify({'error': 'Database name required'}), 400
+        
+        if confirm != 'RESTORE':
+            return jsonify({'error': 'Confirmation required: set confirm="RESTORE"'}), 400
+        
+        result = backup_manager.restore_database(db_name, backup_file)
+        
+        if result['success']:
+            return jsonify({'success': True, 'message': f'Restored {db_name}', 'result': result})
+        else:
+            return jsonify({'success': False, 'error': result['error']}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/backup/download/<path:backup_path>')
+@require_auth
+def download_backup(backup_path):
+    """Download a specific backup file"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        # Security: ensure path is within backup directory
+        full_path = Path(backup_manager.backup_dir) / backup_path
+        if not str(full_path.resolve()).startswith(str(backup_manager.backup_dir.resolve())):
+            return jsonify({'error': 'Invalid backup path'}), 400
+        
+        if not full_path.exists():
+            return jsonify({'error': 'Backup not found'}), 404
+        
+        return send_file(
+            full_path,
+            as_attachment=True,
+            download_name=full_path.name
+        )
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 

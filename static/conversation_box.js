@@ -92,12 +92,32 @@ const ConversationBox = {
             return;
         }
         
-        // Enter key to send
-        inputElement.addEventListener('keypress', (event) => {
-            if (event.key === 'Enter') {
+        // Configure textarea for multi-line input (max 6 lines)
+        inputElement.style.resize = 'none';
+        inputElement.style.overflow = 'hidden';
+        inputElement.style.minHeight = '40px';
+        inputElement.style.maxHeight = '144px'; // ~6 lines at 24px line height
+        inputElement.rows = 1;
+        
+        // Auto-expand textarea as user types (up to 6 lines)
+        inputElement.addEventListener('input', () => {
+            inputElement.style.height = 'auto';
+            const maxHeight = 144; // 6 lines
+            inputElement.style.height = Math.min(inputElement.scrollHeight, maxHeight) + 'px';
+            if (inputElement.scrollHeight > maxHeight) {
+                inputElement.style.overflow = 'auto';
+            } else {
+                inputElement.style.overflow = 'hidden';
+            }
+        });
+        
+        // Enter = newline, Shift+Enter = send message
+        inputElement.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter' && event.shiftKey) {
                 event.preventDefault();
                 this.sendMessage();
             }
+            // Plain Enter allows newline (default behavior)
         });
         
         // Send button click

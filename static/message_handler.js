@@ -201,5 +201,60 @@ const MessageHandler = {
         if (this.messagesContainer) {
             this.messagesContainer.innerHTML = '';
         }
+    },
+    
+    /**
+     * Setup textarea for multi-line input (max 6 lines)
+     * Enter = newline, Shift+Enter = send
+     * Call this once - applies to userInput element
+     * 
+     * @param {function} sendCallback - Function to call when sending (e.g., sendMessage)
+     * @param {string} inputId - Input element ID (default: 'userInput')
+     */
+    setupMultiLineInput(sendCallback, inputId = 'userInput') {
+        const input = document.getElementById(inputId);
+        if (!input) return;
+        
+        // Configure for multi-line (max 6 lines)
+        input.style.resize = 'none';
+        input.style.overflow = 'hidden';
+        input.style.minHeight = '40px';
+        input.style.maxHeight = '144px'; // ~6 lines
+        input.style.lineHeight = '24px';
+        if (input.tagName === 'TEXTAREA') {
+            input.rows = 1;
+        }
+        
+        // Remove any inline onkeypress handler
+        input.removeAttribute('onkeypress');
+        
+        // Auto-expand as user types
+        input.addEventListener('input', () => {
+            input.style.height = 'auto';
+            const maxHeight = 144;
+            input.style.height = Math.min(input.scrollHeight, maxHeight) + 'px';
+            input.style.overflow = input.scrollHeight > maxHeight ? 'auto' : 'hidden';
+        });
+        
+        // Enter = newline, Shift+Enter = send
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.shiftKey) {
+                e.preventDefault();
+                if (sendCallback) sendCallback();
+            }
+            // Plain Enter = newline (default)
+        });
+        
+        console.log('✅ Multi-line input configured (Enter=newline, Shift+Enter=send)');
     }
 };
+
+// Auto-setup multi-line input on page load (finds userInput and sendMessage automatically)
+document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => {
+        const input = document.getElementById('userInput');
+        if (input && typeof sendMessage === 'function') {
+            MessageHandler.setupMultiLineInput(sendMessage);
+        }
+    }, 100); // Small delay to ensure sendMessage is defined
+});
