@@ -1134,16 +1134,21 @@ def update_profile():
 @app.route('/api/user/comprehensive-profile')
 @require_auth
 def get_comprehensive_profile():
-    """Get comprehensive profile from original system"""
+    """Get comprehensive profile from database"""
     try:
-        # Load comprehensive profile for Wai Tse (for now, we'll map to the known profile)
-        if request.current_user['username'] == 'Wai Tse':
-            profile_id = 'eb049813-e28a-4ae6-8c7b-fa80250d0e51'
-            comprehensive_profile = user_profile_manager.load_user_profile(profile_id)
-            if comprehensive_profile:
-                return jsonify(comprehensive_profile)
+        user_id = request.current_user['user_id']
         
-        # For other users, return basic profile structure
+        # Load from database
+        profile = integrated_db.get_user_profile(user_id)
+        if profile:
+            return jsonify({
+                'personal_info': profile.get('personal_info', {}),
+                'preferences': profile.get('preferences', {}),
+                'privacy_settings': profile.get('privacy_settings', {}),
+                'metadata': {'profile_completion': profile.get('profile_completion', 0)}
+            })
+        
+        # Return empty structure if no profile exists
         return jsonify({
             'personal_info': {},
             'preferences': {},
