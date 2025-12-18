@@ -388,6 +388,7 @@ class IntegratedDatabase:
         conn.close()
         
         if profile:
+            prefs = json.loads(profile[6]) if profile[6] else {}
             return {
                 'first_name': profile[0] or '',
                 'last_name': profile[1] or '',
@@ -395,7 +396,10 @@ class IntegratedDatabase:
                 'avatar_url': profile[3] or '',
                 'birth_date': profile[4] or '',
                 'location': profile[5] or '',
-                'preferences': json.loads(profile[6]) if profile[6] else {},
+                'preferences': prefs,
+                'personal_info': prefs.get('personal_info', {}),
+                'privacy_settings': prefs.get('privacy_settings', {}),
+                'profile_completion': 50 if prefs.get('personal_info') else 0,
                 'user_role': profile[7] or 'guest',
                 'email': profile[8] or '',
                 'username': profile[9] or ''
@@ -436,22 +440,45 @@ class IntegratedDatabase:
         return None
     
     def update_user_profile(self, user_id: int, profile_data: Dict[str, Any]) -> bool:
-        """Update user profile"""
+        """Update user profile - handles both direct fields and nested objects (personal_info, preferences, privacy_settings)"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
+        # Get existing preferences to merge with
+        cursor.execute('SELECT preferences FROM user_profiles WHERE user_id = ?', (user_id,))
+        row = cursor.fetchone()
+        existing_prefs = json.loads(row[0]) if row and row[0] else {}
+        
+        # Handle nested objects - store in preferences JSON
+        if 'personal_info' in profile_data:
+            existing_prefs['personal_info'] = profile_data['personal_info']
+        if 'preferences' in profile_data:
+            existing_prefs['user_preferences'] = profile_data['preferences']
+        if 'privacy_settings' in profile_data:
+            existing_prefs['privacy_settings'] = profile_data['privacy_settings']
+        
+        # Also extract specific fields for the dedicated columns
+        personal_info = profile_data.get('personal_info', {})
+        
         cursor.execute('''
             UPDATE user_profiles SET
-                first_name = ?, last_name = ?, bio = ?, avatar_url = ?,
-                birth_date = ?, location = ?, updated_at = CURRENT_TIMESTAMP
+                first_name = COALESCE(NULLIF(?, ''), first_name),
+                last_name = COALESCE(NULLIF(?, ''), last_name),
+                bio = COALESCE(NULLIF(?, ''), bio),
+                avatar_url = COALESCE(NULLIF(?, ''), avatar_url),
+                birth_date = COALESCE(NULLIF(?, ''), birth_date),
+                location = COALESCE(NULLIF(?, ''), location),
+                preferences = ?,
+                updated_at = CURRENT_TIMESTAMP
             WHERE user_id = ?
         ''', (
-            profile_data.get('first_name', ''),
+            personal_info.get('name', profile_data.get('first_name', '')),
             profile_data.get('last_name', ''),
-            profile_data.get('bio', ''),
+            personal_info.get('bio', profile_data.get('bio', '')),
             profile_data.get('avatar_url', ''),
-            profile_data.get('birth_date', ''),
-            profile_data.get('location', ''),
+            personal_info.get('age', profile_data.get('birth_date', '')),
+            personal_info.get('location', profile_data.get('location', '')),
+            json.dumps(existing_prefs),
             user_id
         ))
         
