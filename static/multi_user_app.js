@@ -1237,6 +1237,120 @@ class IntegratedAIChatbot {
         }
     }
 
+    async handlePersonalInfoUpdate(e) {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const data = {
+            name: formData.get('name'),
+            education: formData.get('education'),
+            age: formData.get('age'),
+            location: formData.get('location'),
+            occupation: formData.get('occupation'),
+            interests: formData.get('interests'),
+            bio: formData.get('bio')
+        };
+        
+        try {
+            const response = await this.apiCall('/api/user/comprehensive-profile/personal', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            
+            if (response.ok) {
+                this.showNotification('Personal info updated successfully', 'success');
+            } else {
+                this.showNotification('Failed to update personal info', 'error');
+            }
+        } catch (error) {
+            console.error('Error updating personal info:', error);
+            this.showNotification('Error updating personal info', 'error');
+        }
+    }
+
+    async handlePreferencesUpdate(e) {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const data = {
+            communication_style: formData.get('communication_style'),
+            language_preference: formData.get('language_preference'),
+            personality_type: formData.get('personality_type'),
+            learning_style: formData.get('learning_style'),
+            response_length: formData.get('response_length'),
+            topics_of_interest: formData.get('topics_of_interest')
+        };
+        
+        try {
+            const response = await this.apiCall('/api/user/profile', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ preferences: data })
+            });
+            
+            if (response.ok) {
+                this.showNotification('Preferences updated successfully', 'success');
+            } else {
+                this.showNotification('Failed to update preferences', 'error');
+            }
+        } catch (error) {
+            console.error('Error updating preferences:', error);
+            this.showNotification('Error updating preferences', 'error');
+        }
+    }
+
+    async handlePrivacyUpdate(e) {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const data = {
+            data_sharing: formData.get('data_sharing') === 'on',
+            analytics: formData.get('analytics') === 'on',
+            marketing: formData.get('marketing') === 'on'
+        };
+        
+        try {
+            const response = await this.apiCall('/api/user/profile', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ privacy_settings: data })
+            });
+            
+            if (response.ok) {
+                this.showNotification('Privacy settings updated successfully', 'success');
+            } else {
+                this.showNotification('Failed to update privacy settings', 'error');
+            }
+        } catch (error) {
+            console.error('Error updating privacy settings:', error);
+            this.showNotification('Error updating privacy settings', 'error');
+        }
+    }
+
+    showNotification(message, type = 'info') {
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.className = `notification notification-${type}`;
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 25px;
+            border-radius: 8px;
+            background: ${type === 'success' ? '#4caf50' : type === 'error' ? '#f44336' : '#2196f3'};
+            color: white;
+            font-weight: 500;
+            z-index: 10000;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            animation: slideIn 0.3s ease;
+        `;
+        notification.textContent = message;
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            notification.style.animation = 'fadeOut 0.3s ease';
+            setTimeout(() => notification.remove(), 300);
+        }, 3000);
+    }
+
     switchProfilePage(page) {
         // Update navigation
         document.querySelectorAll('.profile-nav-btn').forEach(btn => btn.classList.remove('active'));
