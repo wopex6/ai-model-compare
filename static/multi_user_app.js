@@ -1198,7 +1198,7 @@ class IntegratedAIChatbot {
         if (ageEl) ageEl.value = personalInfo.age || '';
         if (locationEl) locationEl.value = personalInfo.location || '';
         if (occupationEl) occupationEl.value = personalInfo.occupation || '';
-        if (interestsEl) interestsEl.value = Array.isArray(personalInfo.interests) ? personalInfo.interests.join(', ') : '';
+        if (interestsEl) interestsEl.value = Array.isArray(personalInfo.interests) ? personalInfo.interests.join(', ') : (personalInfo.interests || '');
         if (bioEl) bioEl.value = personalInfo.bio || '';
     }
 
