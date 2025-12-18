@@ -245,7 +245,9 @@
             const totalQuestions = parseInt(questionData.progress.split('/')[1]);
             const showBackButton = currentNum > 1;
             const selectedOption = questionData.selected_option;
-            const progressPercent = (currentNum / totalQuestions) * 100;
+            // Progress = completed questions (current - 1), not current question
+            const completedQuestions = currentNum - 1;
+            const progressPercent = (completedQuestions / totalQuestions) * 100;
             
             // Get trait section info
             const trait = getTraitSection(currentNum);
