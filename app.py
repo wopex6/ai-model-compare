@@ -1159,11 +1159,11 @@ def update_comprehensive_personal():
     """Update comprehensive profile personal info"""
     try:
         data = request.get_json()
-        if request.current_user['username'] == 'Wai Tse':
-            profile_id = 'eb049813-e28a-4ae6-8c7b-fa80250d0e51'
-            success = user_profile_manager.update_personal_info(profile_id, data)
-            return jsonify({'success': success})
-        return jsonify({'success': False, 'error': 'Profile not found'}), 404
+        user_id = request.current_user['user_id']
+        
+        # Save to database using integrated_db
+        success = integrated_db.update_user_profile(user_id, {'personal_info': data})
+        return jsonify({'success': success})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1173,11 +1173,11 @@ def update_comprehensive_preferences():
     """Update comprehensive profile preferences"""
     try:
         data = request.get_json()
-        if request.current_user['username'] == 'Wai Tse':
-            profile_id = 'eb049813-e28a-4ae6-8c7b-fa80250d0e51'
-            success = user_profile_manager.update_preferences(profile_id, data)
-            return jsonify({'success': success})
-        return jsonify({'success': False, 'error': 'Profile not found'}), 404
+        user_id = request.current_user['user_id']
+        
+        # Save to database using integrated_db
+        success = integrated_db.update_user_profile(user_id, {'preferences': data})
+        return jsonify({'success': success})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1187,11 +1187,11 @@ def update_comprehensive_privacy():
     """Update comprehensive profile privacy settings"""
     try:
         data = request.get_json()
-        if request.current_user['username'] == 'Wai Tse':
-            profile_id = 'eb049813-e28a-4ae6-8c7b-fa80250d0e51'
-            success = user_profile_manager.update_privacy_settings(profile_id, data)
-            return jsonify({'success': success})
-        return jsonify({'success': False, 'error': 'Profile not found'}), 404
+        user_id = request.current_user['user_id']
+        
+        # Save to database using integrated_db
+        success = integrated_db.update_user_profile(user_id, {'privacy_settings': data})
+        return jsonify({'success': success})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
