@@ -1214,8 +1214,8 @@ class IntegratedAIChatbot {
         if (langEl) langEl.value = preferences.language_preference || 'en';
         if (personalityEl) personalityEl.value = preferences.personality_type || '';
         if (learningEl) learningEl.value = preferences.learning_style || 'mixed';
-        if (topicsEl) topicsEl.value = Array.isArray(preferences.topics_of_interest) ? preferences.topics_of_interest.join(', ') : '';
-        if (goalsEl) goalsEl.value = Array.isArray(preferences.goals) ? preferences.goals.join(', ') : '';
+        if (topicsEl) topicsEl.value = Array.isArray(preferences.topics_of_interest) ? preferences.topics_of_interest.join(', ') : (preferences.topics_of_interest || '');
+        if (goalsEl) goalsEl.value = Array.isArray(preferences.goals) ? preferences.goals.join(', ') : (preferences.goals || '');
     }
 
     loadPrivacySettings(privacySettings) {
@@ -1272,8 +1272,8 @@ class IntegratedAIChatbot {
             language_preference: formData.get('language_preference'),
             personality_type: formData.get('personality_type'),
             learning_style: formData.get('learning_style'),
-            response_length: formData.get('response_length'),
-            topics_of_interest: formData.get('topics_of_interest')
+            topics_of_interest: formData.get('topics_of_interest'),
+            goals: formData.get('goals')
         };
         
         try {
@@ -1296,6 +1296,7 @@ class IntegratedAIChatbot {
         const data = {
             data_sharing: formData.get('data_sharing') === 'on',
             analytics: formData.get('analytics') === 'on',
+            personalization: formData.get('personalization') === 'on',
             marketing: formData.get('marketing') === 'on'
         };
         
