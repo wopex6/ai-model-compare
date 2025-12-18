@@ -1251,11 +1251,7 @@ class IntegratedAIChatbot {
         };
         
         try {
-            const response = await this.apiCall('/api/user/comprehensive-profile/personal', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data)
-            });
+            const response = await this.apiCall('/api/user/comprehensive-profile/personal', 'PUT', data);
             
             if (response.ok) {
                 this.showNotification('Personal info updated successfully', 'success');
@@ -1281,11 +1277,7 @@ class IntegratedAIChatbot {
         };
         
         try {
-            const response = await this.apiCall('/api/user/profile', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ preferences: data })
-            });
+            const response = await this.apiCall('/api/user/profile', 'PUT', { preferences: data });
             
             if (response.ok) {
                 this.showNotification('Preferences updated successfully', 'success');
@@ -1308,11 +1300,7 @@ class IntegratedAIChatbot {
         };
         
         try {
-            const response = await this.apiCall('/api/user/profile', {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ privacy_settings: data })
-            });
+            const response = await this.apiCall('/api/user/profile', 'PUT', { privacy_settings: data });
             
             if (response.ok) {
                 this.showNotification('Privacy settings updated successfully', 'success');
