@@ -332,9 +332,22 @@ const DomainCharacters = {
         let timeStr = '';
         if (timestamp) {
             const date = new Date(timestamp);
+            const today = new Date();
+            const isToday = date.toDateString() === today.toDateString();
+            
             const hours = date.getHours().toString().padStart(2, '0');
             const minutes = date.getMinutes().toString().padStart(2, '0');
-            timeStr = `<span class="timestamp" style="font-size: 0.75em; color: ${role === 'user' ? '#fff' : '#888'}; margin-left: 8px;">${hours}:${minutes}</span>`;
+            const timeOnly = `${hours}:${minutes}`;
+            
+            // Show date for non-today messages
+            let displayTime = timeOnly;
+            if (!isToday) {
+                const day = date.getDate().toString().padStart(2, '0');
+                const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                displayTime = `${day}/${month} ${timeOnly}`;
+            }
+            
+            timeStr = `<span class="timestamp" style="font-size: 0.75em; color: ${role === 'user' ? '#fff' : '#888'}; margin-left: 8px;">${displayTime}</span>`;
         }
         
         const formattedContent = content.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');

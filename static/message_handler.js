@@ -77,14 +77,27 @@ const MessageHandler = {
         const bubble = document.createElement('div');
         bubble.className = this.theme.bubbleClass;
         
-        // Format timestamp
+        // Format timestamp - show date for non-today messages
         let timeStr = '';
         if (timestamp) {
             const date = new Date(timestamp);
+            const today = new Date();
+            const isToday = date.toDateString() === today.toDateString();
+            
             const hours = date.getHours().toString().padStart(2, '0');
             const minutes = date.getMinutes().toString().padStart(2, '0');
+            const timeOnly = `${hours}:${minutes}`;
+            
+            // Show date for non-today messages
+            let displayTime = timeOnly;
+            if (!isToday) {
+                const day = date.getDate().toString().padStart(2, '0');
+                const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                displayTime = `${day}/${month} ${timeOnly}`;
+            }
+            
             const color = sender === 'user' ? this.theme.userTimestampColor : this.theme.botTimestampColor;
-            timeStr = `<span class="timestamp" style="font-size: 0.75em; color: ${color}; margin-left: 8px;">${hours}:${minutes}</span>`;
+            timeStr = `<span class="timestamp" style="font-size: 0.75em; color: ${color}; margin-left: 8px;">${displayTime}</span>`;
         }
         
         // Add source badge if provided (for debugging/transparency)

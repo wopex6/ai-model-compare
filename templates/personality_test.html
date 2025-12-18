@@ -144,7 +144,7 @@
                             </div>
                             <div style="text-align: center;">
                                 <div style="font-size: 2rem;">❓</div>
-                                <div style="font-weight: bold; color: #667eea;">44 questions</div>
+                                <div style="font-weight: bold; color: #667eea;">49 questions</div>
                                 <div style="font-size: 0.85rem; color: #888;">Easy to answer</div>
                             </div>
                             <div style="text-align: center;">
@@ -232,12 +232,9 @@
         }
 
         function getTraitSection(questionNum) {
-            // Big 5 personality traits mapping (44 questions total)
-            if (questionNum <= 9) return { name: 'Openness', icon: '🎨', color: '#9c27b0', desc: 'Creativity & Curiosity' };
-            if (questionNum <= 18) return { name: 'Conscientiousness', icon: '📋', color: '#2196f3', desc: 'Organization & Discipline' };
-            if (questionNum <= 27) return { name: 'Extraversion', icon: '🎉', color: '#ff9800', desc: 'Social Energy' };
-            if (questionNum <= 36) return { name: 'Agreeableness', icon: '🤝', color: '#4caf50', desc: 'Cooperation & Kindness' };
-            return { name: 'Neuroticism', icon: '🧘', color: '#f44336', desc: 'Emotional Stability' };
+            // Questions are shuffled, so we don't show trait info to prevent bias
+            // Return neutral styling for all questions
+            return { name: '', icon: '💭', color: '#667eea', desc: '' };
         }
         
         function displayQuestion(questionData) {
@@ -255,26 +252,19 @@
             
             const html = `
                 <div class="question-card" style="max-width: 800px;">
-                    <!-- Trait Section Header -->
-                    <div style="background: ${trait.color}; color: white; padding: 15px 20px; border-radius: 10px; margin-bottom: 20px; text-align: center;">
-                        <div style="font-size: 2.5rem; margin-bottom: 5px;">${trait.icon}</div>
-                        <div style="font-size: 1.3rem; font-weight: bold;">${trait.name}</div>
-                        <div style="font-size: 0.9rem; opacity: 0.9;">${trait.desc}</div>
-                    </div>
-                    
                     <!-- Progress Bar -->
                     <div style="margin-bottom: 20px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <span style="font-weight: bold; color: #333;">Question ${currentNum} of ${totalQuestions}</span>
-                            <span style="font-weight: bold; color: ${trait.color};">${Math.round(progressPercent)}% Complete</span>
+                            <span style="font-weight: bold; color: #667eea;">${Math.round(progressPercent)}% Complete</span>
                         </div>
                         <div class="progress">
-                            <div class="progress-bar" style="width: ${progressPercent}%; background: ${trait.color};"></div>
+                            <div class="progress-bar" style="width: ${progressPercent}%; background: linear-gradient(90deg, #667eea, #764ba2);"></div>
                         </div>
                     </div>
                     
                     <!-- Question -->
-                    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid ${trait.color};">
+                    <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px; border-left: 4px solid #667eea;">
                         <h3 style="color: #333; font-size: 1.3rem; margin: 0;">${questionData.question}</h3>
                     </div>
                     
