@@ -755,15 +755,28 @@ class PersonalityProfiler:
     def record_response(self, user_id: str, question_id: str, option_id: int) -> bool:
         """Record user's response to a question"""
         if user_id not in self.assessment_sessions:
-            return False
+            print(f"❌ record_response: No session for user '{user_id}'. Active sessions: {list(self.assessment_sessions.keys())}")
+            # Try to reload sessions from disk
+            self._load_active_sessions()
+            if user_id not in self.assessment_sessions:
+                print(f"❌ Still no session after reload for user '{user_id}'")
+                return False
         
         session = self.assessment_sessions[user_id]
+        
+        # Check if assessment is complete
+        if session["current_question"] >= len(session["questions"]):
+            print(f"❌ record_response: Assessment already complete for user '{user_id}'")
+            return False
+        
         question = session["questions"][session["current_question"]]
         
         if question.question_id != question_id:
+            print(f"❌ record_response: Question ID mismatch. Expected '{question.question_id}', got '{question_id}'")
             return False
         
         if option_id >= len(question.options):
+            print(f"❌ record_response: Invalid option_id {option_id} (max: {len(question.options)-1})")
             return False
         
         session["responses"][question_id] = {
