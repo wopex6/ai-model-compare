@@ -1396,3 +1396,309 @@ body {
 .btn-success:hover {
     background: #27ae60;
 }
+
+/* ============================================
+   MOBILE RESPONSIVE STYLES
+   ============================================ */
+
+/* Tablet and below */
+@media (max-width: 992px) {
+    .dashboard-layout {
+        flex-direction: column;
+    }
+    
+    .chat-layout {
+        flex-direction: column;
+    }
+    
+    .chat-sidebar {
+        width: 100%;
+        max-height: 200px;
+        border-right: none;
+        border-bottom: 1px solid #eee;
+    }
+}
+
+/* Mobile phones */
+@media (max-width: 767px) {
+    /* Navigation */
+    .main-nav {
+        flex-wrap: wrap;
+        padding: 10px;
+        gap: 10px;
+    }
+    
+    .nav-brand h2 {
+        font-size: 1.2rem;
+    }
+    
+    .hamburger-btn {
+        display: block !important;
+    }
+    
+    .nav-menu {
+        display: none;
+        width: 100%;
+        flex-direction: column;
+        gap: 5px;
+        order: 3;
+    }
+    
+    .nav-menu.active {
+        display: flex;
+    }
+    
+    .nav-btn {
+        width: 100%;
+        text-align: left;
+        padding: 12px 15px;
+    }
+    
+    .nav-user {
+        flex: 1;
+        justify-content: flex-end;
+    }
+    
+    .nav-user .user-info span {
+        display: none;
+    }
+    
+    #logout-btn {
+        padding: 8px 12px;
+        font-size: 0.85rem;
+    }
+    
+    /* Auth cards */
+    .auth-card {
+        padding: 25px;
+        margin: 10px;
+    }
+    
+    .auth-card h1 {
+        font-size: 1.5rem;
+        margin-bottom: 20px;
+    }
+    
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+    
+    /* Main content */
+    .main-content {
+        padding: 10px;
+    }
+    
+    .content-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    
+    .content-header h2 {
+        font-size: 1.3rem;
+    }
+    
+    /* Chat layout */
+    .chat-layout {
+        height: calc(100vh - 200px);
+        height: calc(100dvh - 200px);
+    }
+    
+    .chat-sidebar {
+        max-height: 150px;
+        overflow-y: auto;
+    }
+    
+    .chat-main {
+        flex: 1;
+        min-height: 300px;
+    }
+    
+    /* Personality controls */
+    .personality-controls {
+        padding: 10px;
+    }
+    
+    .personality-controls h6 {
+        font-size: 0.85rem;
+    }
+    
+    .personality-preset {
+        padding: 6px 10px;
+        font-size: 0.8rem;
+    }
+    
+    /* Messages */
+    .messages-container {
+        padding: 10px;
+    }
+    
+    .message-bubble {
+        max-width: 90%;
+        padding: 10px 14px;
+        font-size: 0.95rem;
+    }
+    
+    /* Input area */
+    .input-area {
+        padding: 10px;
+        padding-bottom: calc(10px + env(safe-area-inset-bottom));
+    }
+    
+    .input-area textarea {
+        font-size: 16px; /* Prevents iOS zoom */
+        padding: 10px 14px;
+    }
+    
+    .input-area button {
+        padding: 10px 16px;
+    }
+    
+    /* Notification banners */
+    .notification-banner {
+        padding: 10px;
+    }
+    
+    .notification-banner .banner-content {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+    
+    .notification-banner .banner-text {
+        font-size: 0.85rem;
+    }
+    
+    .notification-banner .btn {
+        width: 100%;
+    }
+    
+    /* Tabs content */
+    .tab-content {
+        padding: 10px;
+    }
+    
+    /* Cards */
+    .card {
+        padding: 15px;
+        margin-bottom: 10px;
+    }
+    
+    /* Tables - horizontal scroll */
+    .table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    
+    .admin-table {
+        min-width: 600px;
+    }
+    
+    /* Profile section */
+    .profile-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    /* Settings */
+    .settings-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    /* AI Characters grid */
+    .characters-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    /* Modal adjustments */
+    .modal-content {
+        margin: 10px;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    
+    .modal-header,
+    .modal-body,
+    .modal-footer {
+        padding: 15px;
+    }
+}
+
+/* Small phones (iPhone SE, 375px) */
+@media (max-width: 375px) {
+    .nav-brand h2 {
+        font-size: 1rem;
+    }
+    
+    .auth-card {
+        padding: 20px 15px;
+    }
+    
+    .auth-card h1 {
+        font-size: 1.3rem;
+    }
+    
+    .btn {
+        padding: 10px 16px;
+        font-size: 0.85rem;
+    }
+    
+    .content-header h2 {
+        font-size: 1.1rem;
+    }
+    
+    .personality-preset {
+        padding: 5px 8px;
+        font-size: 0.75rem;
+    }
+}
+
+/* Landscape mode on phones */
+@media (max-height: 500px) and (orientation: landscape) {
+    .main-nav {
+        padding: 5px 10px;
+    }
+    
+    .nav-brand h2 {
+        font-size: 1rem;
+    }
+    
+    .chat-layout {
+        height: calc(100vh - 100px);
+        height: calc(100dvh - 100px);
+    }
+    
+    .chat-sidebar {
+        display: none;
+    }
+    
+    .notification-banner {
+        display: none;
+    }
+}
+
+/* Touch device optimizations */
+@media (hover: none) and (pointer: coarse) {
+    .btn:hover,
+    .nav-btn:hover,
+    .personality-preset:hover {
+        transform: none;
+    }
+    
+    .btn:active,
+    .nav-btn:active,
+    .personality-preset:active {
+        transform: scale(0.98);
+        opacity: 0.9;
+    }
+}
+
+/* Safe area support (iPhone notch, gesture bar) */
+@supports (padding: env(safe-area-inset-bottom)) {
+    .input-area {
+        padding-bottom: calc(10px + env(safe-area-inset-bottom));
+    }
+    
+    .main-nav {
+        padding-top: calc(10px + env(safe-area-inset-top));
+    }
+}

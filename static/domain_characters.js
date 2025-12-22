@@ -239,6 +239,19 @@ const DomainCharacters = {
                 });
                 
                 console.log(`✓ Loaded ${data.history.length} messages for ${characterId}`);
+                console.log(`MessageHandler.highlightsEnabled = ${MessageHandler.highlightsEnabled}`);
+                
+                // Apply stored highlights after messages are loaded
+                console.log('About to check if highlights enabled...');
+                if (MessageHandler.highlightsEnabled) {
+                    console.log('Attempting to apply stored highlights...');
+                    setTimeout(() => {
+                        console.log('Calling MessageHandler.applyStoredHighlights()');
+                        MessageHandler.applyStoredHighlights();
+                    }, 500);  // Increased delay to ensure DOM is ready
+                } else {
+                    console.log('Highlights NOT enabled - skipping applyStoredHighlights');
+                }
                 
                 // Callback: history loaded (like ConversationBox)
                 if (this.callbacks.onHistoryLoaded) {
@@ -333,23 +346,43 @@ const DomainCharacters = {
         
         let timeStr = '';
         if (timestamp) {
-            const date = new Date(timestamp);
-            const today = new Date();
-            const isToday = date.toDateString() === today.toDateString();
-            
-            const hours = date.getHours().toString().padStart(2, '0');
-            const minutes = date.getMinutes().toString().padStart(2, '0');
-            const timeOnly = `${hours}:${minutes}`;
-            
-            // Show date for non-today messages
-            let displayTime = timeOnly;
-            if (!isToday) {
-                const day = date.getDate().toString().padStart(2, '0');
-                const month = (date.getMonth() + 1).toString().padStart(2, '0');
-                displayTime = `${day}/${month} ${timeOnly}`;
+            // Handle different timestamp formats (ISO with T, or space-separated from SQLite)
+            // Database stores UTC, so append 'Z' to indicate UTC timezone
+            let normalizedTimestamp = timestamp;
+            if (typeof timestamp === 'string') {
+                normalizedTimestamp = timestamp.replace('Z', '').replace('+00:00', '');
+                if (!normalizedTimestamp.includes('T')) {
+                    normalizedTimestamp = normalizedTimestamp.replace(' ', 'T');
+                }
+                normalizedTimestamp = normalizedTimestamp + 'Z';
             }
             
-            timeStr = `<span class="timestamp" style="font-size: 0.75em; color: ${role === 'user' ? '#fff' : '#888'}; margin-left: 8px;">${displayTime}</span>`;
+            const date = new Date(normalizedTimestamp);
+            
+            if (!isNaN(date.getTime())) {
+                const today = new Date();
+                const yesterday = new Date(today);
+                yesterday.setDate(yesterday.getDate() - 1);
+                
+                const isToday = date.toDateString() === today.toDateString();
+                const isYesterday = date.toDateString() === yesterday.toDateString();
+                
+                const hours = date.getHours().toString().padStart(2, '0');
+                const minutes = date.getMinutes().toString().padStart(2, '0');
+                const timeOnly = `${hours}:${minutes}`;
+                
+                // Show "yesterday" or date for non-today messages
+                let displayTime = timeOnly;
+                if (isYesterday) {
+                    displayTime = `yesterday ${timeOnly}`;
+                } else if (!isToday) {
+                    const day = date.getDate().toString().padStart(2, '0');
+                    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                    displayTime = `${day}/${month} ${timeOnly}`;
+                }
+                
+                timeStr = `<span class="timestamp" style="font-size: 0.75em; color: ${role === 'user' ? '#fff' : '#888'}; margin-left: 8px;">${displayTime}</span>`;
+            }
         }
         
         const formattedContent = content.replace(/\n/g, '<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
@@ -378,8 +411,13 @@ const DomainCharacters = {
     async sendMessage(message, useAi = true) {
         if (!message || !message.trim()) return null;
         
-        // Add user message to display immediately
-        this._addMessageToDisplay(message, 'user');
+        // Add user message to display immediately with timestamp
+        this._addMessageToDisplay(message, 'user', null, false, new Date().toISOString());
+        
+        // Track user activity for greeting system
+        if (typeof GreetingHandler !== 'undefined' && GreetingHandler.updateUserActivity) {
+            GreetingHandler.updateUserActivity('message_sent');
+        }
         
         // Callback: message sent (like ConversationBox)
         if (this.callbacks.onMessageSent) {

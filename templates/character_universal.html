@@ -352,6 +352,9 @@
             messageClass: 'message',
             bubbleClass: 'message-bubble'
         });
+        
+        // Enable text highlighting for this character
+        MessageHandler.enableHighlights('{{ character_id }}');
 
         // Load daily insight and conversation history
         window.addEventListener('load', async () => {

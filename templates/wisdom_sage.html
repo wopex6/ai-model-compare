@@ -513,6 +513,9 @@
             messageClass: 'message',
             bubbleClass: 'message-content'
         });
+        
+        // Enable text highlighting
+        MessageHandler.enableHighlights('wisdom_sage');
 
         // Initialize ConversationBox with reflection prompt handling
         ConversationBox.init('wisdom_sage', {

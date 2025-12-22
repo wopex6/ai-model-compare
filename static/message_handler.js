@@ -69,7 +69,8 @@ const MessageHandler = {
         
         // Create message container
         const messageDiv = document.createElement('div');
-        messageDiv.className = `${this.theme.messageClass} ${sender}`;
+        // Use "user-message" or "bot-message" class format to match domain_characters.css
+        messageDiv.className = `${this.theme.messageClass} ${sender}-message`;
         messageDiv.dataset.role = role;
         if (source) messageDiv.dataset.source = source;
         
@@ -77,27 +78,51 @@ const MessageHandler = {
         const bubble = document.createElement('div');
         bubble.className = this.theme.bubbleClass;
         
-        // Format timestamp - show date for non-today messages
+        // Format timestamp - show "yesterday" or date for non-today messages
         let timeStr = '';
         if (timestamp) {
-            const date = new Date(timestamp);
-            const today = new Date();
-            const isToday = date.toDateString() === today.toDateString();
-            
-            const hours = date.getHours().toString().padStart(2, '0');
-            const minutes = date.getMinutes().toString().padStart(2, '0');
-            const timeOnly = `${hours}:${minutes}`;
-            
-            // Show date for non-today messages
-            let displayTime = timeOnly;
-            if (!isToday) {
-                const day = date.getDate().toString().padStart(2, '0');
-                const month = (date.getMonth() + 1).toString().padStart(2, '0');
-                displayTime = `${day}/${month} ${timeOnly}`;
+            // Handle different timestamp formats (ISO with T, or space-separated from SQLite)
+            // Database stores UTC, so append 'Z' to indicate UTC timezone
+            let normalizedTimestamp = timestamp;
+            if (typeof timestamp === 'string') {
+                // Remove any existing timezone indicator first
+                normalizedTimestamp = timestamp.replace('Z', '').replace('+00:00', '');
+                // Convert space to T for ISO format
+                if (!normalizedTimestamp.includes('T')) {
+                    normalizedTimestamp = normalizedTimestamp.replace(' ', 'T');
+                }
+                // Append Z to indicate UTC - JavaScript will convert to local time
+                normalizedTimestamp = normalizedTimestamp + 'Z';
             }
             
-            const color = sender === 'user' ? this.theme.userTimestampColor : this.theme.botTimestampColor;
-            timeStr = `<span class="timestamp" style="font-size: 0.75em; color: ${color}; margin-left: 8px;">${displayTime}</span>`;
+            const date = new Date(normalizedTimestamp);
+            
+            // Validate the date is valid
+            if (!isNaN(date.getTime())) {
+                const today = new Date();
+                const yesterday = new Date(today);
+                yesterday.setDate(yesterday.getDate() - 1);
+                
+                const isToday = date.toDateString() === today.toDateString();
+                const isYesterday = date.toDateString() === yesterday.toDateString();
+                
+                const hours = date.getHours().toString().padStart(2, '0');
+                const minutes = date.getMinutes().toString().padStart(2, '0');
+                const timeOnly = `${hours}:${minutes}`;
+                
+                // Show "yesterday" or date for non-today messages
+                let displayTime = timeOnly;
+                if (isYesterday) {
+                    displayTime = `yesterday ${timeOnly}`;
+                } else if (!isToday) {
+                    const day = date.getDate().toString().padStart(2, '0');
+                    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                    displayTime = `${day}/${month} ${timeOnly}`;
+                }
+                
+                const color = sender === 'user' ? (this.theme.userTimestampColor || '#fff') : (this.theme.botTimestampColor || '#888');
+                timeStr = `<span class="timestamp" style="font-size: 0.75em; color: ${color}; margin-left: 8px;">${displayTime}</span>`;
+            }
         }
         
         // Add source badge if provided (for debugging/transparency)
@@ -112,14 +137,35 @@ const MessageHandler = {
         
         // Format message content
         const senderLabel = sender === 'bot' ? `<strong>${this.getBotDisplayName()}:</strong>` : '<strong>You:</strong>';
-        bubble.innerHTML = `${senderLabel} ${content}${sourceBadge}${timeStr}`;
+        
+        // Add pin button (WhatsApp-style)
+        const pinButton = `<button class="pin-btn" title="Pin message" onclick="MessageHandler.pinMessage(this)" 
+            data-content="${content.replace(/"/g, '&quot;').replace(/'/g, '&#39;')}" 
+            data-role="${role}" 
+            data-timestamp="${timestamp || ''}"
+            style="opacity: 0; position: absolute; right: 5px; top: 5px; background: none; border: none; cursor: pointer; font-size: 14px; transition: opacity 0.2s;">📌</button>`;
+        
+        bubble.innerHTML = `${pinButton}${senderLabel} ${content}${sourceBadge}${timeStr}`;
+        bubble.style.position = 'relative';
+        
+        // Show pin button on hover
+        bubble.addEventListener('mouseenter', () => {
+            const btn = bubble.querySelector('.pin-btn');
+            if (btn) btn.style.opacity = '1';
+        });
+        bubble.addEventListener('mouseleave', () => {
+            const btn = bubble.querySelector('.pin-btn');
+            if (btn) btn.style.opacity = '0';
+        });
         
         messageDiv.appendChild(bubble);
         this.messagesContainer.appendChild(messageDiv);
         
         // Debug log
         const preview = content.substring(0, 30);
-        console.log(`✅ Added ${sender} message to DOM: "${preview}..." ${source ? `[${source}]` : ''}`);
+        console.log(`✅ Added ${sender} message to DOM: "${preview}..." ${source ? `[${source}]` : ''} timestamp=${timestamp ? 'YES' : 'NO'}: ${timestamp}`);
+        console.log(`   timeStr generated: "${timeStr.substring(0, 80)}..."`);
+        console.log(`   Full bubble HTML: "${bubble.innerHTML.substring(0, 150)}..."`);
         
         // Auto-scroll
         if (shouldScroll) {
@@ -180,6 +226,11 @@ const MessageHandler = {
                         shouldScroll: false  // Don't scroll for each message
                     });
                 });
+                
+                // Load and apply highlights after messages are displayed
+                if (this.highlightsEnabled) {
+                    this.applyStoredHighlights();
+                }
                 
                 // Scroll to bottom once
                 this.messagesContainer.scrollTop = this.messagesContainer.scrollHeight;
@@ -246,6 +297,960 @@ const MessageHandler = {
         });
         
         console.log('✅ Multi-line input configured (Enter=newline, Shift+Enter=send)');
+    },
+    
+    // ==================== CONVERSATION HIGHLIGHTS ====================
+    
+    highlightsEnabled: false,
+    currentCharacterId: null,
+    
+    /**
+     * Enable text highlighting on messages
+     * Users can select text and save it as a highlight
+     */
+    enableHighlights(characterId = null) {
+        this.highlightsEnabled = true;
+        this.currentCharacterId = characterId;
+        
+        // Add highlight styles if not already added
+        if (!document.getElementById('highlight-styles')) {
+            const styles = document.createElement('style');
+            styles.id = 'highlight-styles';
+            styles.textContent = `
+                .message-content {
+                    user-select: text;
+                    cursor: text;
+                }
+                .highlight-popup {
+                    position: fixed;
+                    background: #333;
+                    color: white;
+                    padding: 8px 12px;
+                    border-radius: 6px;
+                    font-size: 13px;
+                    z-index: 10000;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+                    display: none;
+                }
+                .highlight-popup button {
+                    background: #4CAF50;
+                    color: white;
+                    border: none;
+                    padding: 4px 10px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    margin-left: 8px;
+                    font-size: 12px;
+                }
+                .highlight-popup button:hover {
+                    background: #45a049;
+                }
+                .saved-highlight {
+                    background: linear-gradient(to bottom, rgba(76, 175, 80, 0.4), rgba(76, 175, 80, 0.2));
+                    padding: 2px 4px;
+                    border-radius: 3px;
+                    border-bottom: 2px solid rgba(76, 175, 80, 0.6);
+                }
+                .saved-highlight-yellow {
+                    background: linear-gradient(to bottom, rgba(255, 235, 59, 0.4), rgba(255, 235, 59, 0.2));
+                    border-bottom-color: rgba(255, 235, 59, 0.6);
+                }
+                .saved-highlight-blue {
+                    background: linear-gradient(to bottom, rgba(33, 150, 243, 0.3), rgba(33, 150, 243, 0.15));
+                    border-bottom-color: rgba(33, 150, 243, 0.6);
+                }
+                .saved-highlight-pink {
+                    background: linear-gradient(to bottom, rgba(233, 30, 99, 0.3), rgba(233, 30, 99, 0.15));
+                    border-bottom-color: rgba(233, 30, 99, 0.6);
+                }
+                .highlights-panel {
+                    position: fixed;
+                    right: 20px;
+                    top: 80px;
+                    width: 320px;
+                    max-height: 70vh;
+                    background: white;
+                    border-radius: 12px;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+                    z-index: 9999;
+                    display: none;
+                    overflow: hidden;
+                }
+                .highlights-panel-header {
+                    background: linear-gradient(135deg, #667eea, #764ba2);
+                    color: white;
+                    padding: 15px;
+                    font-weight: 600;
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                }
+                .highlights-panel-content {
+                    max-height: calc(70vh - 60px);
+                    overflow-y: auto;
+                    padding: 10px;
+                }
+                .highlight-item {
+                    background: #f8f9fa;
+                    border-left: 4px solid #ffc107;
+                    padding: 12px;
+                    margin-bottom: 10px;
+                    border-radius: 0 8px 8px 0;
+                    position: relative;
+                }
+                .highlight-item .highlight-text {
+                    font-style: italic;
+                    color: #333;
+                    margin-bottom: 8px;
+                }
+                .highlight-item .highlight-meta {
+                    font-size: 11px;
+                    color: #666;
+                }
+                .highlight-item .highlight-delete {
+                    position: absolute;
+                    top: 8px;
+                    right: 8px;
+                    background: none;
+                    border: none;
+                    color: #999;
+                    cursor: pointer;
+                    font-size: 16px;
+                }
+                .highlight-item .highlight-delete:hover {
+                    color: #e74c3c;
+                }
+                .highlights-toggle {
+                    position: fixed;
+                    right: 20px;
+                    top: 80px;
+                    background: linear-gradient(135deg, #667eea, #764ba2);
+                    color: white;
+                    border: none;
+                    padding: 10px 15px;
+                    border-radius: 20px;
+                    cursor: pointer;
+                    z-index: 9998;
+                    font-size: 13px;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+                }
+                .highlights-toggle:hover {
+                    transform: scale(1.05);
+                }
+            `;
+            document.head.appendChild(styles);
+        }
+        
+        // Create highlight popup with color options
+        if (!document.getElementById('highlight-popup')) {
+            const popup = document.createElement('div');
+            popup.id = 'highlight-popup';
+            popup.className = 'highlight-popup';
+            popup.innerHTML = `
+                <span style="margin-right:8px;">Highlight:</span>
+                <button onclick="MessageHandler.saveSelectedHighlight('green')" style="background:#4CAF50;" title="Green">
+                    <i class="fas fa-bookmark"></i>
+                </button>
+                <button onclick="MessageHandler.saveSelectedHighlight('yellow')" style="background:#FFC107;color:#333;" title="Yellow">
+                    <i class="fas fa-bookmark"></i>
+                </button>
+                <button onclick="MessageHandler.saveSelectedHighlight('blue')" style="background:#2196F3;" title="Blue">
+                    <i class="fas fa-bookmark"></i>
+                </button>
+                <button onclick="MessageHandler.saveSelectedHighlight('pink')" style="background:#E91E63;" title="Pink">
+                    <i class="fas fa-bookmark"></i>
+                </button>
+            `;
+            document.body.appendChild(popup);
+        }
+        
+        // Create highlights panel
+        if (!document.getElementById('highlights-panel')) {
+            const panel = document.createElement('div');
+            panel.id = 'highlights-panel';
+            panel.className = 'highlights-panel';
+            panel.innerHTML = `
+                <div class="highlights-panel-header">
+                    <span><i class="fas fa-bookmark"></i> My Highlights</span>
+                    <button onclick="MessageHandler.toggleHighlightsPanel()" style="background:none;border:none;color:white;cursor:pointer;font-size:18px;">&times;</button>
+                </div>
+                <div class="highlights-panel-content" id="highlights-list">
+                    <p style="text-align:center;color:#888;padding:20px;">Loading...</p>
+                </div>
+            `;
+            document.body.appendChild(panel);
+        }
+        
+        // Skip floating toggle button if header button exists (Life Companion page)
+        // The header already has highlightsBtn
+        
+        // Listen for text selection
+        document.addEventListener('mouseup', (e) => this._handleTextSelection(e));
+        
+        console.log('✅ Highlights enabled');
+    },
+    
+    _handleTextSelection(e) {
+        if (!this.highlightsEnabled) return;
+        
+        const selection = window.getSelection();
+        const selectedText = selection.toString().trim();
+        const popup = document.getElementById('highlight-popup');
+        
+        if (selectedText.length > 3) {
+            // Check if selection is within a message (support various message class patterns)
+            const range = selection.getRangeAt(0);
+            const messageEl = range.commonAncestorContainer.closest ? 
+                range.commonAncestorContainer.closest('.message, .message-bubble, .message-content, .message-life, .message-sci, [class*="message"]') :
+                range.commonAncestorContainer.parentElement?.closest('.message, .message-bubble, .message-content, .message-life, .message-sci, [class*="message"]');
+            
+            if (messageEl) {
+                // Store selection data including element reference for highlighting
+                this._pendingHighlight = {
+                    text: selectedText,
+                    fullMessage: messageEl.textContent,
+                    role: messageEl.classList.contains('user') || messageEl.closest('.user') ? 'user' : 'assistant',
+                    messageElement: messageEl
+                };
+                
+                // Position and show popup near selection
+                const rect = range.getBoundingClientRect();
+                popup.style.left = `${rect.left + rect.width/2 - 60}px`;
+                popup.style.top = `${rect.bottom + 10}px`;
+                popup.style.display = 'block';
+                return;
+            }
+        }
+        
+        // Hide popup if click is not on popup itself
+        if (!e.target.closest('.highlight-popup')) {
+            popup.style.display = 'none';
+        }
+    },
+    
+    async saveSelectedHighlight(color = 'green') {
+        if (!this._pendingHighlight) return;
+        
+        const popup = document.getElementById('highlight-popup');
+        popup.style.display = 'none';
+        
+        // Get the current selection and apply highlight BEFORE async call
+        const selection = window.getSelection();
+        const textToHighlight = this._pendingHighlight.text;
+        const messageEl = this._pendingHighlight.messageElement;
+        
+        // Apply visual highlight immediately
+        let highlightApplied = false;
+        if (selection.rangeCount > 0) {
+            try {
+                const range = selection.getRangeAt(0);
+                highlightApplied = this._applyHighlightToRange(range, color, 'pending');
+            } catch (e) {
+                console.log('Could not apply highlight directly, will try text search');
+            }
+        }
+        
+        // If direct highlight failed, try finding and highlighting the text in the message
+        if (!highlightApplied && messageEl && textToHighlight) {
+            this._highlightTextInElement(messageEl, textToHighlight, color, 'pending');
+        }
+        
+        // Clear selection
+        window.getSelection().removeAllRanges();
+        
+        // Save to database
+        try {
+            const response = await AuthHelper.authenticatedFetch('/api/user/highlights', {
+                method: 'POST',
+                body: JSON.stringify({
+                    highlighted_text: textToHighlight,
+                    full_message: this._pendingHighlight.fullMessage,
+                    message_role: this._pendingHighlight.role,
+                    character_id: this.currentCharacterId,
+                    color: color
+                })
+            });
+            
+            const data = await response.json();
+            if (data.success) {
+                // Update pending highlight with actual ID
+                const pendingSpan = document.querySelector('.saved-highlight[data-highlight-id="pending"]');
+                if (pendingSpan) {
+                    pendingSpan.dataset.highlightId = data.highlight_id;
+                }
+                this._showToast('Highlight saved!');
+            } else {
+                // Remove the visual highlight if save failed
+                const pendingSpan = document.querySelector('.saved-highlight[data-highlight-id="pending"]');
+                if (pendingSpan) {
+                    pendingSpan.outerHTML = pendingSpan.innerHTML;
+                }
+                this._showToast('Failed to save highlight', 'error');
+            }
+        } catch (error) {
+            console.error('Error saving highlight:', error);
+            this._showToast('Error saving highlight', 'error');
+        }
+        
+        this._pendingHighlight = null;
+    },
+    
+    _applyHighlightToRange(range, color, highlightId) {
+        try {
+            const span = document.createElement('span');
+            span.className = `saved-highlight${color !== 'green' ? ` saved-highlight-${color}` : ''}`;
+            span.dataset.highlightId = highlightId;
+            range.surroundContents(span);
+            return true;
+        } catch (e) {
+            // If surroundContents fails (selection spans multiple elements), use alternative method
+            try {
+                const contents = range.extractContents();
+                const span = document.createElement('span');
+                span.className = `saved-highlight${color !== 'green' ? ` saved-highlight-${color}` : ''}`;
+                span.dataset.highlightId = highlightId;
+                span.appendChild(contents);
+                range.insertNode(span);
+                return true;
+            } catch (e2) {
+                console.error('Failed to apply highlight:', e2);
+                return false;
+            }
+        }
+    },
+    
+    _highlightTextInElement(element, text, color, highlightId) {
+        // Find and highlight text within an element using TreeWalker
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+        let node;
+        let textNodes = [];
+        
+        // Collect all text nodes
+        while (node = walker.nextNode()) {
+            textNodes.push(node);
+        }
+        
+        // Try to find the text in the combined text content
+        const fullText = textNodes.map(n => n.textContent).join('');
+        let idx = fullText.indexOf(text);
+        let searchLength = text.length;
+        
+        // If not found with exact text, try normalized version
+        if (idx < 0) {
+            const normalizeText = (t) => t.replace(/\s+/g, ' ').trim();
+            const normalizedFull = normalizeText(fullText);
+            const normalizedSearch = normalizeText(text);
+            const normalizedIdx = normalizedFull.indexOf(normalizedSearch);
+            
+            if (normalizedIdx >= 0) {
+                // Map normalized position back to original text position
+                let origPos = 0;
+                let normPos = 0;
+                
+                // Scan through original text, building normalized version until we reach normalizedIdx
+                while (normPos < normalizedIdx && origPos < fullText.length) {
+                    const char = fullText[origPos];
+                    if (char.match(/\s/)) {
+                        // Skip consecutive whitespace in original
+                        while (origPos < fullText.length && fullText[origPos].match(/\s/)) {
+                            origPos++;
+                        }
+                        normPos++; // One space in normalized
+                    } else {
+                        origPos++;
+                        normPos++;
+                    }
+                }
+                
+                idx = origPos;
+                
+                // Calculate the actual length in original text
+                normPos = 0;
+                let origEndPos = origPos;
+                while (normPos < normalizedSearch.length && origEndPos < fullText.length) {
+                    const char = fullText[origEndPos];
+                    if (char.match(/\s/)) {
+                        while (origEndPos < fullText.length && fullText[origEndPos].match(/\s/)) {
+                            origEndPos++;
+                        }
+                        normPos++;
+                    } else {
+                        origEndPos++;
+                        normPos++;
+                    }
+                }
+                searchLength = origEndPos - origPos;
+            }
+        }
+        
+        if (idx >= 0) {
+            // Find which text node(s) contain this text
+            let currentPos = 0;
+            for (let i = 0; i < textNodes.length; i++) {
+                const nodeText = textNodes[i].textContent;
+                const nodeStart = currentPos;
+                const nodeEnd = currentPos + nodeText.length;
+                
+                // Check if this node contains the start of our text
+                if (idx >= nodeStart && idx < nodeEnd) {
+                    const startOffset = idx - nodeStart;
+                    const endOffset = Math.min(startOffset + searchLength, nodeText.length);
+                    
+                    try {
+                        const range = document.createRange();
+                        range.setStart(textNodes[i], startOffset);
+                        
+                        // Check if text spans multiple nodes
+                        if (idx + searchLength <= nodeEnd) {
+                            // Text is within this single node
+                            range.setEnd(textNodes[i], endOffset);
+                        } else {
+                            // Text spans multiple nodes - just highlight what we can in this node
+                            range.setEnd(textNodes[i], nodeText.length);
+                        }
+                        
+                        this._applyHighlightToRange(range, color, highlightId);
+                        return true;
+                    } catch (e) {
+                        console.error('Error creating range:', e);
+                    }
+                }
+                
+                currentPos = nodeEnd;
+            }
+        }
+        
+        return false;
+    },
+    
+    _highlightTextInElementNormalized(element, normalizedText, color, highlightId) {
+        // Fallback: try to find and highlight using normalized text matching
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+        let node;
+        const normalizeText = (t) => t.replace(/\s+/g, ' ').trim();
+        
+        while (node = walker.nextNode()) {
+            const normalized = normalizeText(node.textContent);
+            if (normalized.includes(normalizedText)) {
+                try {
+                    const range = document.createRange();
+                    range.selectNodeContents(node);
+                    this._applyHighlightToRange(range, color, highlightId);
+                    return true;
+                } catch (e) {
+                    console.error('Error in normalized highlight:', e);
+                }
+            }
+        }
+        return false;
+    },
+    
+    async toggleHighlightsPanel() {
+        const panel = document.getElementById('highlights-panel');
+        const isVisible = panel.style.display === 'block';
+        
+        if (isVisible) {
+            panel.style.display = 'none';
+        } else {
+            panel.style.display = 'block';
+            await this.loadHighlights();
+        }
+    },
+    
+    async loadHighlights() {
+        const list = document.getElementById('highlights-list');
+        if (!list) return;
+        
+        try {
+            const url = this.currentCharacterId ? 
+                `/api/user/highlights?character_id=${this.currentCharacterId}` : 
+                '/api/user/highlights';
+            
+            const response = await AuthHelper.authenticatedFetch(url);
+            
+            // Check if authentication failed
+            if (response.status === 401) {
+                list.innerHTML = `
+                    <p style="text-align:center;color:#e74c3c;padding:20px;">
+                        Session expired.<br>
+                        <small>Please <a href="/login" style="color:#3498db;">log in</a> again to view highlights.</small>
+                    </p>
+                `;
+                return;
+            }
+            
+            const data = await response.json();
+            
+            if (data.highlights && data.highlights.length > 0) {
+                list.innerHTML = data.highlights.map(h => `
+                    <div class="highlight-item" data-id="${h.id}">
+                        <button class="highlight-delete" onclick="MessageHandler.deleteHighlight(${h.id})">&times;</button>
+                        <div class="highlight-text">"${this._escapeHtml(h.highlighted_text)}"</div>
+                        <div class="highlight-meta">
+                            ${h.character_id ? `<strong>${h.character_id}</strong> · ` : ''}
+                            ${h.message_role || 'message'} · 
+                            ${new Date(h.created_at).toLocaleDateString()}
+                        </div>
+                    </div>
+                `).join('');
+            } else {
+                list.innerHTML = `
+                    <p style="text-align:center;color:#888;padding:20px;">
+                        No highlights yet.<br>
+                        <small>Select text in messages to save highlights.</small>
+                    </p>
+                `;
+            }
+        } catch (error) {
+            console.error('Error loading highlights:', error);
+            list.innerHTML = `
+                <p style="text-align:center;color:#e74c3c;padding:20px;">
+                    Error loading highlights.<br>
+                    <small>Please refresh the page.</small>
+                </p>
+            `;
+        }
+    },
+    
+    async deleteHighlight(highlightId) {
+        if (!confirm('Delete this highlight?')) return;
+        
+        try {
+            const response = await AuthHelper.authenticatedFetch(`/api/user/highlights/${highlightId}`, {
+                method: 'DELETE'
+            });
+            
+            const data = await response.json();
+            if (data.success) {
+                // Remove from DOM
+                const item = document.querySelector(`.highlight-item[data-id="${highlightId}"]`);
+                if (item) item.remove();
+                this._showToast('Highlight deleted');
+            }
+        } catch (error) {
+            console.error('Error deleting highlight:', error);
+        }
+    },
+    
+    _escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    },
+    
+    _showToast(message, type = 'success') {
+        const toast = document.createElement('div');
+        toast.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: ${type === 'error' ? '#e74c3c' : '#4CAF50'};
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            z-index: 10001;
+            font-size: 14px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        `;
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        
+        setTimeout(() => toast.remove(), 2500);
+    },
+    
+    async applyStoredHighlights() {
+        if (!this.currentCharacterId) {
+            console.log('⚠️ Cannot apply highlights: currentCharacterId not set');
+            return;
+        }
+        
+        try {
+            const url = `/api/user/highlights?character_id=${this.currentCharacterId}`;
+            console.log(`Fetching highlights from: ${url}`);
+            const response = await AuthHelper.authenticatedFetch(url);
+            
+            // Check if authentication failed
+            if (response.status === 401) {
+                console.log('⚠️ Session expired - cannot apply highlights');
+                return;
+            }
+            
+            const data = await response.json();
+            
+            console.log('Highlights API response:', data);
+            
+            if (data.highlights && data.highlights.length > 0) {
+                console.log(`Applying ${data.highlights.length} stored highlights for ${this.currentCharacterId}`);
+                
+                // Get all message elements - try multiple selectors
+                const messages = this.messagesContainer.querySelectorAll('.message, .message-bubble, .message-content, [class*="message"]');
+                console.log(`Found ${messages.length} message elements to search`);
+                
+                let appliedCount = 0;
+                data.highlights.forEach((highlight, idx) => {
+                    console.log(`  Highlight ${idx + 1}: "${highlight.highlighted_text.substring(0, 50)}..." (color: ${highlight.color})`);
+                    
+                    // Find the message containing this highlight text
+                    let found = false;
+                    for (let i = 0; i < messages.length; i++) {
+                        const messageEl = messages[i];
+                        const messageText = messageEl.textContent;
+                        
+                        // Normalize both texts for comparison (remove extra whitespace, normalize line breaks)
+                        const normalizeText = (text) => text.replace(/\s+/g, ' ').trim();
+                        const normalizedHighlight = normalizeText(highlight.highlighted_text);
+                        const normalizedMessage = normalizeText(messageText);
+                        
+                        if (normalizedMessage.includes(normalizedHighlight)) {
+                            console.log(`    ✓ Found in message element ${i}`);
+                            // Apply highlight using the original (non-normalized) text
+                            const success = this._highlightTextInElement(messageEl, highlight.highlighted_text, highlight.color || 'green', highlight.id);
+                            if (success) {
+                                appliedCount++;
+                                found = true;
+                                break;
+                            } else {
+                                console.log(`    ✗ _highlightTextInElement failed - trying with normalized text`);
+                                // Try again with normalized text
+                                const success2 = this._highlightTextInElementNormalized(messageEl, normalizedHighlight, highlight.color || 'green', highlight.id);
+                                if (success2) {
+                                    appliedCount++;
+                                    found = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if (!found) {
+                        console.log(`    ✗ Text not found in any of ${messages.length} messages`);
+                    }
+                });
+                
+                console.log(`✅ Applied ${appliedCount}/${data.highlights.length} stored highlights`);
+            } else {
+                console.log('No highlights to apply');
+            }
+        } catch (error) {
+            console.error('Error applying stored highlights:', error);
+        }
+    },
+    
+    // ==================== PINNED MESSAGES (WhatsApp-style) ====================
+    
+    /**
+     * Pin a message
+     * @param {HTMLElement} button - The pin button clicked
+     */
+    async pinMessage(button) {
+        const content = button.dataset.content;
+        const role = button.dataset.role;
+        const timestamp = button.dataset.timestamp;
+        
+        try {
+            const response = await AuthHelper.authenticatedFetch('/api/user/pinned-messages', {
+                method: 'POST',
+                body: JSON.stringify({
+                    content: content,
+                    role: role,
+                    timestamp: timestamp,
+                    character_id: this.characterName || 'coordinator'
+                })
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // Visual feedback
+                button.textContent = '📍';
+                button.title = 'Pinned!';
+                button.style.opacity = '1';
+                setTimeout(() => {
+                    button.textContent = '📌';
+                    button.title = 'Pin message';
+                    button.style.opacity = '0';
+                }, 1500);
+                
+                // Refresh pinned messages panel if visible
+                this.loadPinnedMessages();
+                
+                console.log('📌 Message pinned successfully');
+            } else {
+                alert(data.error || 'Failed to pin message');
+            }
+        } catch (error) {
+            console.error('Error pinning message:', error);
+            alert('Failed to pin message');
+        }
+    },
+    
+    /**
+     * Load and display pinned messages
+     */
+    async loadPinnedMessages() {
+        const panel = document.getElementById('pinned-messages-panel');
+        if (!panel) return;
+        
+        try {
+            // Use currentCharacterId (matches what's used when saving) or fetch all if not set
+            const characterId = this.currentCharacterId || this.characterName;
+            // For domain-characters page, fetch all pinned messages (no filter)
+            const url = characterId === 'domain-characters' 
+                ? '/api/user/pinned-messages' 
+                : `/api/user/pinned-messages?character_id=${characterId}`;
+            const response = await AuthHelper.authenticatedFetch(url);
+            const data = await response.json();
+            
+            if (data.success && data.pinned_messages) {
+                this.renderPinnedMessages(data.pinned_messages);
+            }
+        } catch (error) {
+            console.error('Error loading pinned messages:', error);
+        }
+    },
+    
+    /**
+     * Render pinned messages in the panel
+     * @param {Array} pinnedMessages - Array of pinned message objects
+     */
+    renderPinnedMessages(pinnedMessages) {
+        const panel = document.getElementById('pinned-messages-panel');
+        const content = document.getElementById('pinned-messages-content');
+        if (!content) return;
+        
+        if (pinnedMessages.length === 0) {
+            content.innerHTML = '<p style="color: #888; text-align: center; padding: 10px;">No pinned messages yet.<br>Hover over a message and click 📌 to pin it.</p>';
+            return;
+        }
+        
+        content.innerHTML = pinnedMessages.map(pin => {
+            const isLong = pin.content.length > 150;
+            const shortContent = isLong ? pin.content.substring(0, 150) + '...' : pin.content;
+            const fullContent = pin.content.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            
+            return `
+            <div class="pinned-message" data-pin-id="${pin.id}" style="background: ${pin.role === 'user' ? 'linear-gradient(135deg, #667eea22, #764ba222)' : '#f5f5f5'}; padding: 10px; margin-bottom: 8px; border-radius: 8px; position: relative; border-left: 3px solid ${pin.role === 'user' ? '#667eea' : '#26a69a'};">
+                <button onclick="MessageHandler.unpinMessage(${pin.id})" style="position: absolute; right: 5px; top: 5px; background: none; border: none; cursor: pointer; font-size: 12px; opacity: 0.6;" title="Unpin">✕</button>
+                <div style="font-size: 0.75em; color: #888; margin-bottom: 4px;">
+                    ${pin.role === 'user' ? 'You' : 'Bot'} • ${this.formatPinTimestamp(pin.timestamp)}
+                </div>
+                <div class="pin-content-short" style="font-size: 0.9em; line-height: 1.4;">${shortContent}</div>
+                ${isLong ? `
+                    <div class="pin-content-full" style="display: none; font-size: 0.9em; line-height: 1.4; white-space: pre-wrap; max-height: 200px; overflow-y: auto; padding-bottom: 30px;">${fullContent}</div>
+                    <button class="expand-pin-btn" onclick="MessageHandler.togglePinExpand(this)" style="background: none; border: none; color: #667eea; cursor: pointer; font-size: 0.8em; padding: 4px 0; margin-top: 4px;">▼ Show more</button>
+                    <button class="collapse-pin-btn" onclick="MessageHandler.togglePinExpand(this)" style="display: none; position: sticky; bottom: 0; left: 0; right: 0; width: 100%; background: linear-gradient(transparent, ${pin.role === 'user' ? '#f0f0ff' : '#f5f5f5'} 30%); border: none; color: #667eea; cursor: pointer; font-size: 0.8em; padding: 8px 0 4px; margin-top: -24px;">▲ Show less</button>
+                ` : ''}
+                ${pin.note ? `<div style="font-size: 0.75em; color: #667eea; margin-top: 4px; font-style: italic;">📝 ${pin.note}</div>` : ''}
+            </div>
+        `}).join('');
+    },
+    
+    /**
+     * Toggle expand/collapse for a pinned message
+     * @param {HTMLElement} button - The expand button clicked
+     */
+    togglePinExpand(button) {
+        const container = button.closest('.pinned-message');
+        const shortContent = container.querySelector('.pin-content-short');
+        const fullContent = container.querySelector('.pin-content-full');
+        const expandBtn = container.querySelector('.expand-pin-btn');
+        const collapseBtn = container.querySelector('.collapse-pin-btn');
+        
+        if (fullContent.style.display === 'none') {
+            // Expand
+            shortContent.style.display = 'none';
+            fullContent.style.display = 'block';
+            if (expandBtn) expandBtn.style.display = 'none';
+            if (collapseBtn) collapseBtn.style.display = 'block';
+        } else {
+            // Collapse
+            shortContent.style.display = 'block';
+            fullContent.style.display = 'none';
+            if (expandBtn) expandBtn.style.display = 'block';
+            if (collapseBtn) collapseBtn.style.display = 'none';
+        }
+    },
+    
+    /**
+     * Format timestamp for pinned message display
+     * @param {string} timestamp - ISO timestamp string
+     * @returns {string} Formatted timestamp
+     */
+    formatPinTimestamp(timestamp) {
+        if (!timestamp) return '';
+        try {
+            let normalizedTimestamp = timestamp;
+            if (typeof timestamp === 'string') {
+                normalizedTimestamp = timestamp.replace('Z', '').replace('+00:00', '');
+                if (!normalizedTimestamp.includes('T')) {
+                    normalizedTimestamp = normalizedTimestamp.replace(' ', 'T');
+                }
+                normalizedTimestamp = normalizedTimestamp + 'Z';
+            }
+            const date = new Date(normalizedTimestamp);
+            if (isNaN(date.getTime())) return '';
+            
+            const today = new Date();
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            
+            const hours = date.getHours().toString().padStart(2, '0');
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            
+            if (date.toDateString() === today.toDateString()) {
+                return `${hours}:${minutes}`;
+            } else if (date.toDateString() === yesterday.toDateString()) {
+                return `yesterday ${hours}:${minutes}`;
+            } else {
+                const day = date.getDate().toString().padStart(2, '0');
+                const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                return `${day}/${month} ${hours}:${minutes}`;
+            }
+        } catch (e) {
+            return '';
+        }
+    },
+    
+    /**
+     * Unpin a message
+     * @param {number} pinId - The pin ID to remove
+     */
+    async unpinMessage(pinId) {
+        try {
+            const response = await AuthHelper.authenticatedFetch(`/api/user/pinned-messages/${pinId}`, {
+                method: 'DELETE'
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // Remove from UI
+                const pinElement = document.querySelector(`[data-pin-id="${pinId}"]`);
+                if (pinElement) {
+                    pinElement.style.opacity = '0';
+                    pinElement.style.transform = 'translateX(100%)';
+                    setTimeout(() => pinElement.remove(), 300);
+                }
+                
+                // Refresh panel
+                setTimeout(() => this.loadPinnedMessages(), 350);
+                
+                console.log('📌 Message unpinned');
+            }
+        } catch (error) {
+            console.error('Error unpinning message:', error);
+        }
+    },
+    
+    /**
+     * Toggle pinned messages panel visibility
+     */
+    togglePinnedPanel() {
+        const panel = document.getElementById('pinned-messages-panel');
+        const highlightsPanel = document.getElementById('highlights-panel');
+        const pinnedBtn = document.getElementById('pinnedBtn');
+        
+        if (!panel) return;
+        
+        const isVisible = panel.style.display !== 'none';
+        
+        // Close other panels first
+        if (highlightsPanel) highlightsPanel.style.display = 'none';
+        document.getElementById('highlightsBtn')?.classList.remove('active');
+        
+        panel.style.display = isVisible ? 'none' : 'block';
+        pinnedBtn?.classList.toggle('active', !isVisible);
+        
+        if (!isVisible) {
+            this.loadPinnedMessages();
+        }
+    },
+    
+    /**
+     * Toggle highlights panel visibility
+     */
+    toggleHighlightsPanel() {
+        const panel = document.getElementById('highlights-panel');
+        const pinnedPanel = document.getElementById('pinned-messages-panel');
+        const highlightsBtn = document.getElementById('highlightsBtn');
+        
+        if (!panel) return;
+        
+        const isVisible = panel.style.display !== 'none';
+        
+        // Close other panels first
+        if (pinnedPanel) pinnedPanel.style.display = 'none';
+        document.getElementById('pinnedBtn')?.classList.remove('active');
+        
+        panel.style.display = isVisible ? 'none' : 'block';
+        highlightsBtn?.classList.toggle('active', !isVisible);
+        
+        if (!isVisible) {
+            this.loadHighlightsPanel();
+        }
+    },
+    
+    /**
+     * Load and display highlights in panel
+     */
+    async loadHighlightsPanel() {
+        const content = document.getElementById('highlights-content');
+        if (!content) return;
+        
+        try {
+            // Use currentCharacterId (matches what's used when saving) or fetch all if not set
+            const characterId = this.currentCharacterId || this.characterName;
+            // For domain-characters page, fetch all highlights (no filter)
+            const url = characterId === 'domain-characters' 
+                ? '/api/user/highlights' 
+                : `/api/user/highlights?character_id=${characterId}`;
+            const response = await AuthHelper.authenticatedFetch(url);
+            const data = await response.json();
+            
+            if (data.highlights && data.highlights.length > 0) {
+                content.innerHTML = data.highlights.map(h => `
+                    <div class="panel-item" data-highlight-id="${h.id}">
+                        <button onclick="MessageHandler.deleteHighlightFromPanel(${h.id})" 
+                            style="position: absolute; right: 5px; top: 5px; background: none; border: none; cursor: pointer; font-size: 12px; opacity: 0.6;" title="Remove">✕</button>
+                        <div style="font-size: 0.75em; color: #888; margin-bottom: 4px;">
+                            ${h.message_role === 'user' ? 'You' : 'Bot'} • ${this.formatPinTimestamp(h.created_at)}
+                        </div>
+                        <div style="font-size: 0.9em; line-height: 1.4; background: ${h.color === 'green' ? '#c8e6c9' : h.color === 'yellow' ? '#fff9c4' : '#ffcdd2'}; padding: 4px 8px; border-radius: 4px; display: inline-block;">
+                            ${h.highlighted_text.length > 100 ? h.highlighted_text.substring(0, 100) + '...' : h.highlighted_text}
+                        </div>
+                        ${h.note ? `<div style="font-size: 0.75em; color: #667eea; margin-top: 4px; font-style: italic;">📝 ${h.note}</div>` : ''}
+                    </div>
+                `).join('');
+            } else {
+                content.innerHTML = '<p class="panel-empty">No highlights yet.<br>Select text in messages and click "Highlight" to save.</p>';
+            }
+        } catch (error) {
+            console.error('Error loading highlights:', error);
+            content.innerHTML = '<p class="panel-empty">Error loading highlights</p>';
+        }
+    },
+    
+    /**
+     * Delete highlight from panel
+     */
+    async deleteHighlightFromPanel(highlightId) {
+        try {
+            const response = await AuthHelper.authenticatedFetch(`/api/user/highlights/${highlightId}`, {
+                method: 'DELETE'
+            });
+            
+            if (response.ok) {
+                const el = document.querySelector(`[data-highlight-id="${highlightId}"]`);
+                if (el) {
+                    el.style.opacity = '0';
+                    el.style.transform = 'translateX(100%)';
+                    setTimeout(() => el.remove(), 300);
+                }
+                setTimeout(() => this.loadHighlightsPanel(), 350);
+            }
+        } catch (error) {
+            console.error('Error deleting highlight:', error);
+        }
     }
 };
 

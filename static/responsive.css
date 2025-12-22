@@ -1,0 +1,418 @@
+/* ============================================
+   RESPONSIVE DESIGN - Mobile First Approach
+   Supports: iPhone SE (375px) to tablets (768px+)
+   ============================================ */
+
+/* CSS Variables for breakpoints */
+:root {
+    --mobile-small: 375px;   /* iPhone SE, small Android */
+    --mobile-medium: 390px;  /* iPhone 12/13/14 */
+    --mobile-large: 428px;   /* iPhone 12/13/14 Pro Max */
+    --tablet: 768px;         /* iPad Mini, tablets */
+    --desktop: 1024px;       /* Desktop */
+}
+
+/* ============================================
+   BASE MOBILE STYLES (Applied to all sizes)
+   ============================================ */
+
+/* Ensure proper viewport handling */
+html {
+    -webkit-text-size-adjust: 100%;
+    -ms-text-size-adjust: 100%;
+}
+
+body {
+    -webkit-tap-highlight-color: transparent;
+    overflow-x: hidden;
+}
+
+/* Touch-friendly tap targets (minimum 44px) */
+button, 
+.btn,
+a.btn,
+input[type="submit"],
+input[type="button"],
+.clickable,
+.nav-link,
+.character-card {
+    min-height: 44px;
+    min-width: 44px;
+}
+
+/* Prevent zoom on input focus (iOS) */
+input, textarea, select {
+    font-size: 16px !important;
+}
+
+/* ============================================
+   MOBILE NAVIGATION - Hamburger Menu
+   ============================================ */
+
+.mobile-menu-toggle {
+    display: none;
+    background: none;
+    border: none;
+    font-size: 24px;
+    padding: 10px;
+    cursor: pointer;
+    z-index: 1001;
+}
+
+.mobile-menu-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+}
+
+.mobile-menu-overlay.active {
+    display: block;
+}
+
+/* ============================================
+   CHAT LAYOUT - Mobile Optimized
+   ============================================ */
+
+.chat-container-mobile {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh; /* Dynamic viewport height for mobile browsers */
+}
+
+.chat-messages-mobile {
+    flex: 1;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    padding: 10px;
+    padding-bottom: 80px; /* Space for fixed input */
+}
+
+.chat-input-fixed {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    padding: 10px 15px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom)); /* iOS safe area */
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+    z-index: 100;
+}
+
+/* ============================================
+   RESPONSIVE TYPOGRAPHY
+   ============================================ */
+
+.responsive-title {
+    font-size: clamp(1.25rem, 4vw, 2rem);
+    line-height: 1.2;
+}
+
+.responsive-subtitle {
+    font-size: clamp(0.875rem, 2.5vw, 1.1rem);
+    line-height: 1.4;
+}
+
+.responsive-text {
+    font-size: clamp(0.875rem, 2vw, 1rem);
+    line-height: 1.5;
+}
+
+/* ============================================
+   RESPONSIVE GRID HELPERS
+   ============================================ */
+
+.mobile-stack {
+    display: flex;
+    flex-direction: column;
+}
+
+.mobile-hidden {
+    display: none !important;
+}
+
+.desktop-hidden {
+    display: block !important;
+}
+
+/* ============================================
+   MOBILE BREAKPOINT (< 768px)
+   ============================================ */
+
+@media screen and (max-width: 767px) {
+    /* Show mobile menu toggle */
+    .mobile-menu-toggle {
+        display: block;
+    }
+    
+    /* Hide desktop sidebar, show as slide-out */
+    .sidebar-desktop {
+        position: fixed;
+        left: -280px;
+        top: 0;
+        bottom: 0;
+        width: 280px;
+        z-index: 1000;
+        transition: left 0.3s ease;
+        background: white;
+        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.2);
+    }
+    
+    .sidebar-desktop.open {
+        left: 0;
+    }
+    
+    /* Full-width containers */
+    .container,
+    .main-content {
+        padding-left: 10px;
+        padding-right: 10px;
+        max-width: 100%;
+    }
+    
+    /* Stack grid layouts */
+    .grid-2-col,
+    .grid-3-col {
+        grid-template-columns: 1fr !important;
+    }
+    
+    /* Adjust card layouts */
+    .card,
+    .panel {
+        margin: 10px 0;
+        border-radius: 12px;
+    }
+    
+    /* Mobile-friendly buttons */
+    .btn-group-mobile {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    
+    .btn-group-mobile .btn {
+        width: 100%;
+        justify-content: center;
+    }
+    
+    /* Hide elements on mobile */
+    .mobile-hidden {
+        display: none !important;
+    }
+    
+    .desktop-hidden {
+        display: block !important;
+    }
+    
+    /* Adjust modals for mobile */
+    .modal-content {
+        margin: 10px;
+        max-height: 90vh;
+        border-radius: 16px;
+    }
+    
+    /* Full-width inputs on mobile */
+    input[type="text"],
+    input[type="email"],
+    input[type="password"],
+    textarea,
+    select {
+        width: 100%;
+        box-sizing: border-box;
+    }
+}
+
+/* ============================================
+   SMALL MOBILE (iPhone SE, 375px)
+   ============================================ */
+
+@media screen and (max-width: 375px) {
+    .responsive-title {
+        font-size: 1.1rem;
+    }
+    
+    .card,
+    .panel {
+        padding: 12px;
+    }
+    
+    .btn {
+        padding: 10px 16px;
+        font-size: 0.9rem;
+    }
+}
+
+/* ============================================
+   TABLET (768px - 1023px)
+   ============================================ */
+
+@media screen and (min-width: 768px) and (max-width: 1023px) {
+    .sidebar-desktop {
+        width: 220px;
+    }
+    
+    .mobile-hidden {
+        display: block !important;
+    }
+    
+    .desktop-hidden {
+        display: none !important;
+    }
+    
+    .mobile-menu-toggle {
+        display: none;
+    }
+}
+
+/* ============================================
+   DESKTOP (1024px+)
+   ============================================ */
+
+@media screen and (min-width: 1024px) {
+    .mobile-hidden {
+        display: block !important;
+    }
+    
+    .desktop-hidden {
+        display: none !important;
+    }
+    
+    .mobile-menu-toggle {
+        display: none;
+    }
+    
+    .sidebar-desktop {
+        position: relative;
+        left: 0;
+    }
+}
+
+/* ============================================
+   SAFE AREAS (iPhone notch, gesture bar)
+   ============================================ */
+
+@supports (padding: env(safe-area-inset-bottom)) {
+    .chat-input-fixed {
+        padding-bottom: calc(10px + env(safe-area-inset-bottom));
+    }
+    
+    .bottom-nav {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+    
+    .header-fixed {
+        padding-top: env(safe-area-inset-top);
+    }
+}
+
+/* ============================================
+   TOUCH INTERACTIONS
+   ============================================ */
+
+@media (hover: none) and (pointer: coarse) {
+    /* Touch device - remove hover states that might stick */
+    .btn:hover,
+    .card:hover,
+    .clickable:hover {
+        transform: none;
+    }
+    
+    /* Active states for touch */
+    .btn:active,
+    .card:active,
+    .clickable:active {
+        transform: scale(0.98);
+        opacity: 0.9;
+    }
+}
+
+/* ============================================
+   LANDSCAPE MODE ADJUSTMENTS
+   ============================================ */
+
+@media screen and (max-height: 500px) and (orientation: landscape) {
+    .chat-input-fixed {
+        padding: 8px 15px;
+    }
+    
+    .header-fixed {
+        padding: 8px 15px;
+    }
+    
+    .chat-messages-mobile {
+        padding-bottom: 60px;
+    }
+}
+
+/* ============================================
+   PWA - Standalone Mode
+   ============================================ */
+
+@media (display-mode: standalone) {
+    /* When running as installed PWA */
+    .install-prompt {
+        display: none !important;
+    }
+    
+    body {
+        /* Prevent overscroll bounce */
+        overscroll-behavior: none;
+    }
+}
+
+/* ============================================
+   SCROLLBAR STYLING (Touch-friendly)
+   ============================================ */
+
+@media screen and (max-width: 767px) {
+    /* Thin scrollbars on mobile */
+    ::-webkit-scrollbar {
+        width: 4px;
+        height: 4px;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: transparent;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 4px;
+    }
+}
+
+/* ============================================
+   UTILITY CLASSES FOR RESPONSIVE
+   ============================================ */
+
+/* Spacing utilities */
+.p-mobile-sm { padding: 8px; }
+.p-mobile-md { padding: 12px; }
+.p-mobile-lg { padding: 16px; }
+
+.m-mobile-sm { margin: 8px; }
+.m-mobile-md { margin: 12px; }
+.m-mobile-lg { margin: 16px; }
+
+/* Flex utilities */
+.flex-mobile-col {
+    display: flex;
+    flex-direction: column;
+}
+
+.flex-mobile-center {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Gap utilities */
+.gap-mobile-sm { gap: 8px; }
+.gap-mobile-md { gap: 12px; }
+.gap-mobile-lg { gap: 16px; }
