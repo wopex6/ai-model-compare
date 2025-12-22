@@ -542,6 +542,9 @@
             messageClass: 'message',
             bubbleClass: 'message-bubble'
         });
+        
+        // Enable text highlighting
+        MessageHandler.enableHighlights('zen_master');
 
         // Initialize ConversationBox with moment count tracking
         ConversationBox.init('zen_master', {

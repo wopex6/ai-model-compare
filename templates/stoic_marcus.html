@@ -511,6 +511,9 @@ What challenges do you face? What wisdom do you seek?
             bubbleClass: 'message-content',
             chatMessagesId: 'chat-messages'
         });
+        
+        // Enable text highlighting
+        MessageHandler.enableHighlights('stoic_philosopher');
 
         // Initialize ConversationBox - it will use MessageHandler
         ConversationBox.init('stoic_philosopher', {

@@ -7,6 +7,12 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <link href="{{ url_for('static', filename='domain_characters.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='responsive.css') }}" rel="stylesheet">
+    <!-- PWA Support -->
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <meta name="theme-color" content="#667eea">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <style>
         :root {
             --primary-color: #667eea;
@@ -76,19 +82,19 @@
         .chat-section {
             display: grid;
             grid-template-columns: 280px 1fr;
-            gap: 20px;
-            height: calc(100vh - 200px);
+            gap: 15px;
+            height: calc(100vh - 80px);
         }
         
         .characters-sidebar {
             background: rgba(255, 255, 255, 0.98);
-            border-radius: 20px;
-            padding: 20px;
+            border-radius: 16px;
+            padding: 15px;
             box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
             position: sticky;
-            top: 20px;
+            top: 10px;
             height: fit-content;
-            max-height: calc(100vh - 220px);
+            max-height: calc(100vh - 100px);
             overflow-y: auto;
             align-self: start;
         }
@@ -103,13 +109,13 @@
         
         .main-chat {
             background: rgba(255, 255, 255, 0.98);
-            border-radius: 20px;
+            border-radius: 16px;
             overflow: hidden;
             box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
             display: flex;
             flex-direction: column;
-            height: calc(100vh - 220px);
-            max-height: calc(100vh - 220px);
+            height: calc(100vh - 100px);
+            max-height: calc(100vh - 100px);
         }
         
         .chat-header {
@@ -241,28 +247,354 @@
             color: #666;
         }
         
+        /* Header Action Buttons */
+        .header-action-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            padding: 8px 14px;
+            border-radius: 20px;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.85rem;
+            transition: background 0.2s, transform 0.2s;
+        }
+        
+        .header-action-btn:hover {
+            background: rgba(255, 255, 255, 0.35);
+            transform: translateY(-1px);
+        }
+        
+        .header-action-btn.active {
+            background: rgba(255, 255, 255, 0.4);
+        }
+        
+        /* Action Panels (Pinned, Highlights) */
+        .action-panel {
+            background: white;
+            border-bottom: 1px solid #eee;
+            padding: 15px;
+            max-height: 250px;
+            overflow-y: auto;
+        }
+        
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .panel-header h4 {
+            margin: 0;
+            font-size: 0.95rem;
+            color: #333;
+        }
+        
+        .panel-close {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            opacity: 0.6;
+            transition: opacity 0.2s;
+        }
+        
+        .panel-close:hover {
+            opacity: 1;
+        }
+        
+        .panel-empty {
+            color: #888;
+            text-align: center;
+            padding: 10px;
+            margin: 0;
+        }
+        
+        .panel-item {
+            background: #f5f5f5;
+            padding: 10px;
+            margin-bottom: 8px;
+            border-radius: 8px;
+            position: relative;
+            border-left: 3px solid #667eea;
+        }
+        
+        .panel-item.user-item {
+            background: linear-gradient(135deg, #667eea22, #764ba222);
+        }
+        
+        /* ============ MOBILE RESPONSIVE ============ */
+        
+        /* Tablet and below */
         @media (max-width: 992px) {
             .chat-section {
-                grid-template-columns: 1fr;
+                display: flex;
+                flex-direction: column;
+                height: calc(100vh - 70px);
             }
             
             .characters-sidebar {
-                max-height: none;
+                max-height: 150px;
+                overflow-y: auto;
+                position: relative;
+                top: 0;
+                flex-shrink: 0;
+            }
+            
+            .header-actions {
+                flex-wrap: wrap;
+            }
+            
+            .main-chat {
+                flex: 1;
+                min-height: 0;
+            }
+        }
+        
+        /* Mobile phones */
+        @media (max-width: 767px) {
+            .domain-container {
+                padding: 10px;
+                display: flex;
+                flex-direction: column;
+                height: 100vh;
+                height: 100dvh;
+            }
+            
+            .domain-header {
+                padding: 10px 15px;
+                border-radius: 12px;
+                margin-bottom: 8px;
+                flex-shrink: 0;
+            }
+            
+            .domain-header h1 {
+                font-size: 1.2rem;
+                margin: 0;
+            }
+            
+            .domain-header p {
+                display: none; /* Hide subtitle on mobile */
+            }
+            
+            .header-nav {
+                position: relative;
+                top: 0;
+                left: 0;
+                margin-bottom: 5px;
+            }
+            
+            .back-to-dashboard {
+                font-size: 0.8rem;
+                padding: 5px 10px;
+            }
+            
+            .chat-section {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                flex: 1;
+                min-height: 0;
+            }
+            
+            /* Sidebar becomes compact horizontal bar */
+            .characters-sidebar {
+                padding: 6px 10px;
+                border-radius: 10px;
+                max-height: 70px;
+                overflow: hidden;
+                flex-shrink: 0;
+                order: 1;
+            }
+            
+            .sidebar-title {
+                font-size: 0.8rem;
+                margin-bottom: 6px;
+                padding-bottom: 4px;
+            }
+            
+            .domain-character-list {
+                display: flex !important;
+                flex-direction: row !important;
+                flex-wrap: nowrap !important;
+                gap: 8px;
+                overflow-x: auto;
+                overflow-y: hidden;
+                padding-bottom: 4px;
+                -webkit-overflow-scrolling: touch;
+                scrollbar-width: none;
+            }
+            
+            .domain-character-list::-webkit-scrollbar {
+                display: none;
+            }
+            
+            /* Character cards as compact pills */
+            .domain-character-list .character-card,
+            .domain-character-list > div {
+                flex-shrink: 0 !important;
+                min-width: auto !important;
+                width: auto !important;
+                padding: 6px 12px !important;
+                font-size: 0.75rem !important;
+                border-radius: 20px !important;
+                white-space: nowrap;
+            }
+            
+            /* Main chat takes remaining space */
+            .main-chat {
+                border-radius: 12px;
+                flex: 1;
+                min-height: 300px;
+                order: 2;
+                display: flex;
+                flex-direction: column;
+            }
+            
+            .chat-header {
+                padding: 10px 15px;
+                gap: 10px;
+            }
+            
+            .chat-header .avatar {
+                width: 40px;
+                height: 40px;
+                font-size: 18px;
+            }
+            
+            .chat-header .info h3 {
+                font-size: 1rem;
+            }
+            
+            .chat-header .info p {
+                font-size: 0.75rem;
+            }
+            
+            .header-actions {
+                gap: 5px;
+            }
+            
+            .header-action-btn {
+                padding: 6px 10px;
+                font-size: 0.75rem;
+            }
+            
+            .header-action-btn span {
+                font-size: 14px;
+            }
+            
+            /* Action panels */
+            .action-panel {
+                max-height: 200px;
+                padding: 10px;
+            }
+            
+            .panel-header h4 {
+                font-size: 0.85rem;
+            }
+            
+            /* Chat messages */
+            .chat-messages {
+                padding: 10px;
+            }
+            
+            /* Chat input */
+            .chat-input-area {
+                padding: 10px;
+                padding-bottom: calc(10px + env(safe-area-inset-bottom));
+            }
+            
+            .input-group {
+                gap: 8px;
+            }
+            
+            .input-group textarea {
+                padding: 10px 14px;
+                font-size: 16px; /* Prevents iOS zoom */
+                border-radius: 20px;
+            }
+            
+            .input-group button {
+                padding: 10px 18px;
+                border-radius: 20px;
+                font-size: 0.9rem;
+            }
+            
+            .analysis-toggle {
+                margin-top: 10px;
+            }
+            
+            .analysis-toggle label {
+                font-size: 0.8rem;
+            }
+        }
+        
+        /* Small phones (iPhone SE, etc) */
+        @media (max-width: 375px) {
+            .domain-header h1 {
+                font-size: 1.1rem;
+            }
+            
+            .chat-header .info h3 {
+                font-size: 0.9rem;
+            }
+            
+            .header-action-btn {
+                padding: 5px 8px;
+                font-size: 0.7rem;
+            }
+            
+            /* Hide text on very small screens */
+            .header-action-btn span:not(:first-child) {
+                display: none;
+            }
+            
+            .main-chat {
+                height: calc(100vh - 290px);
+                height: calc(100dvh - 290px);
+            }
+        }
+        
+        /* Landscape mode on phones */
+        @media (max-height: 500px) and (orientation: landscape) {
+            .domain-header {
+                padding: 10px;
+            }
+            
+            .domain-header h1 {
+                font-size: 1rem;
+            }
+            
+            .characters-sidebar {
+                display: none; /* Hide sidebar in landscape */
+            }
+            
+            .main-chat {
+                height: calc(100vh - 80px);
+                height: calc(100dvh - 80px);
+            }
+            
+            .chat-header {
+                padding: 8px 12px;
+            }
+            
+            .chat-input-area {
+                padding: 8px;
             }
         }
     </style>
 </head>
 <body>
     <div class="domain-container">
-        <!-- Header -->
-        <div class="domain-header">
-            <div class="header-nav">
-                <a href="/chatchat" class="back-to-dashboard">
-                    <i class="fas fa-arrow-left"></i> Back to Dashboard
-                </a>
-            </div>
-            <h1><i class="fas fa-users"></i> Life Companion</h1>
-            <p>Your multi-domain AI advisors - specialized guidance across all areas of life</p>
+        <!-- Header (compact) -->
+        <div class="domain-header" style="padding: 8px 15px; display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+            <a href="/chatchat" class="back-to-dashboard" style="font-size: 0.85rem; padding: 5px 10px;">
+                <i class="fas fa-arrow-left"></i> Dashboard
+            </a>
+            <h1 style="font-size: 1.1rem; margin: 0;"><i class="fas fa-users"></i> Life Companion</h1>
         </div>
         
         <!-- Chat Section -->
@@ -295,6 +627,47 @@
                         <h3 id="selected-domain-character">Aria</h3>
                         <p id="selected-character-domain">Coordinator - Sees the bigger picture</p>
                     </div>
+                    <!-- Action Buttons Group (icons only) -->
+                    <div class="header-actions" style="margin-left: auto; display: flex; gap: 6px; align-items: center;">
+                        <button id="pinnedBtn" onclick="MessageHandler.togglePinnedPanel()" 
+                            class="header-action-btn" title="View pinned messages" style="padding: 6px 10px; font-size: 16px;">
+                            📌
+                        </button>
+                        <button id="highlightsBtn" onclick="MessageHandler.toggleHighlightsPanel()" 
+                            class="header-action-btn" title="View saved highlights" style="padding: 6px 10px; font-size: 16px;">
+                            🖍️
+                        </button>
+                        <button id="searchBtn" onclick="ConversationBox.toggleSearch()" 
+                            class="header-action-btn" title="Search messages" style="padding: 6px 10px; font-size: 16px;">
+                            🔍
+                        </button>
+                        <label id="analysisBtn" class="header-action-btn" title="Show AI character analysis" 
+                            style="padding: 6px 10px; font-size: 14px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
+                            <input type="checkbox" id="showAnalysis" style="margin: 0; cursor: pointer;"> 📊
+                        </label>
+                    </div>
+                </div>
+                
+                <!-- Pinned Messages Panel -->
+                <div id="pinned-messages-panel" class="action-panel" style="display: none;">
+                    <div class="panel-header">
+                        <h4>📌 Pinned Messages</h4>
+                        <button onclick="MessageHandler.togglePinnedPanel()" class="panel-close">✕</button>
+                    </div>
+                    <div id="pinned-messages-content" class="panel-content">
+                        <p class="panel-empty">Loading pinned messages...</p>
+                    </div>
+                </div>
+                
+                <!-- Highlights Panel -->
+                <div id="highlights-panel" class="action-panel" style="display: none;">
+                    <div class="panel-header">
+                        <h4>🖍️ Saved Highlights</h4>
+                        <button onclick="MessageHandler.toggleHighlightsPanel()" class="panel-close">✕</button>
+                    </div>
+                    <div id="highlights-content" class="panel-content">
+                        <p class="panel-empty">Loading highlights...</p>
+                    </div>
                 </div>
                 
                 <div id="domain-chat-messages" class="chat-messages">
@@ -302,14 +675,9 @@
                 </div>
                 
                 <div class="chat-input-area">
-                    <div class="input-group">
-                        <textarea id="userInput" placeholder="Type your message... (Shift+Enter to send)" autocomplete="off" rows="1"></textarea>
+                    <div class="input-group" style="display: flex; gap: 8px; align-items: flex-end;">
+                        <textarea id="userInput" placeholder="Type your message... (Shift+Enter to send)" autocomplete="off" rows="1" style="flex: 1;"></textarea>
                         <button id="sendBtn"><i class="fas fa-paper-plane"></i> Send</button>
-                    </div>
-                    <div class="analysis-toggle">
-                        <label>
-                            <input type="checkbox" id="showAnalysis"> Show character analysis
-                        </label>
                     </div>
                 </div>
             </div>
@@ -317,19 +685,26 @@
     </div>
     
     <!-- Scripts -->
+    <script src="{{ url_for('static', filename='pwa-register.js') }}"></script>
     <script src="{{ url_for('static', filename='auth_helper.js') }}"></script>
     <script src="{{ url_for('static', filename='message_handler.js') }}"></script>
     <script src="{{ url_for('static', filename='conversation_box.js') }}"></script>
     <script src="{{ url_for('static', filename='domain_characters.js') }}"></script>
+    <script src="{{ url_for('static', filename='greeting_handler.js') }}"></script>
     <script>
         // Initialize when DOM is ready
         document.addEventListener('DOMContentLoaded', async function() {
             // Initialize MessageHandler first (use domain-chat-messages container)
             MessageHandler.init('domain-characters', {
-                characterDisplayName: 'Aria'
+                characterDisplayName: 'Aria',
+                messageClass: 'message',
+                bubbleClass: 'message-content'
             });
             // Override container since domain uses different ID
             MessageHandler.messagesContainer = document.getElementById('domain-chat-messages');
+            
+            // Enable text highlighting BEFORE loading history
+            MessageHandler.enableHighlights('coordinator');
             
             // Initialize DomainCharacters directly (simpler approach)
             await DomainCharacters.init({
@@ -373,6 +748,13 @@
                 const panel = document.getElementById('character-analysis-panel');
                 panel.style.display = e.target.checked ? 'block' : 'none';
             });
+            
+            // Update character ID when switching characters
+            const originalSelectChar = DomainCharacters.selectCharacter;
+            DomainCharacters.selectCharacter = async function(charId) {
+                await originalSelectChar.call(DomainCharacters, charId);
+                MessageHandler.currentCharacterId = charId;
+            };
             
             console.log('✅ Domain Characters page initialized');
         });

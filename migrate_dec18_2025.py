@@ -167,6 +167,30 @@ def run_migration(db_path, do_backup=True):
     else:
         print("  ⏭️ personality_cache already exists")
     
+    # 7. Create conversation highlights table for saving important parts
+    if not table_exists(cursor, 'conversation_highlights'):
+        print("Creating table: conversation_highlights")
+        cursor.execute('''
+            CREATE TABLE conversation_highlights (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                character_id TEXT,
+                message_id INTEGER,
+                highlighted_text TEXT NOT NULL,
+                full_message TEXT,
+                message_role TEXT,
+                note TEXT,
+                color TEXT DEFAULT 'green',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        ''')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_highlights_user ON conversation_highlights(user_id, created_at DESC)')
+        changes_made += 1
+        print("  ✅ Created conversation_highlights")
+    else:
+        print("  ⏭️ conversation_highlights already exists")
+    
     conn.commit()
     conn.close()
     

@@ -48,6 +48,7 @@ from ai_compare.character_configs import CHARACTER_CONFIGS
 
 # Import the integrated database system
 from integrated_database import IntegratedDatabase
+from automated_greeting_system import AutomatedGreetingSystem
 from database_backup import BackupManager
 from email_service import EmailService
 
@@ -91,6 +92,7 @@ CORS(app, supports_credentials=True)
 
 # Initialize integrated database
 integrated_db = IntegratedDatabase()
+greeting_system = AutomatedGreetingSystem(integrated_db)
 email_service = EmailService()
 ai_compare = AICompare()
 chatbot = AIChatbot()
@@ -101,6 +103,11 @@ backup_manager = BackupManager()
 backup_manager.backup_all(reason="startup")
 # Start automatic backup scheduler (every 4 hours)
 backup_manager.start_scheduler()
+
+# Initialize and start greeting scheduler
+from greeting_scheduler import GreetingScheduler
+greeting_scheduler = GreetingScheduler(check_interval_seconds=60)  # Check every minute
+greeting_scheduler.start()
 
 # Initialize Trait Inference Engine
 trait_inference = TraitInferenceEngine(integrated_db)
@@ -1356,6 +1363,84 @@ def get_message_usage():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# ==================== CONVERSATION HIGHLIGHTS ====================
+
+@app.route('/api/user/highlights', methods=['GET'])
+@require_auth
+def get_highlights():
+    """Get user's saved highlights"""
+    try:
+        user_id = request.current_user['user_id']
+        character_id = request.args.get('character_id')
+        limit = request.args.get('limit', 50, type=int)
+        
+        highlights = integrated_db.get_highlights(user_id, character_id, limit)
+        return jsonify({'highlights': highlights})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/user/highlights', methods=['POST'])
+@require_auth
+def save_highlight():
+    """Save a highlighted portion of conversation"""
+    try:
+        user_id = request.current_user['user_id']
+        data = request.get_json()
+        
+        highlighted_text = data.get('highlighted_text')
+        if not highlighted_text or not highlighted_text.strip():
+            return jsonify({'error': 'Highlighted text is required'}), 400
+        
+        highlight_id = integrated_db.save_highlight(
+            user_id=user_id,
+            highlighted_text=highlighted_text.strip(),
+            character_id=data.get('character_id'),
+            message_id=data.get('message_id'),
+            full_message=data.get('full_message'),
+            message_role=data.get('message_role'),
+            note=data.get('note'),
+            color=data.get('color', 'green')
+        )
+        
+        if highlight_id:
+            return jsonify({'success': True, 'highlight_id': highlight_id})
+        else:
+            return jsonify({'error': 'Failed to save highlight'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/user/highlights/<int:highlight_id>', methods=['PUT'])
+@require_auth
+def update_highlight(highlight_id):
+    """Update a highlight's note"""
+    try:
+        user_id = request.current_user['user_id']
+        data = request.get_json()
+        note = data.get('note', '')
+        
+        success = integrated_db.update_highlight_note(highlight_id, user_id, note)
+        if success:
+            return jsonify({'success': True})
+        else:
+            return jsonify({'error': 'Highlight not found or unauthorized'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/user/highlights/<int:highlight_id>', methods=['DELETE'])
+@require_auth
+def delete_highlight(highlight_id):
+    """Delete a highlight"""
+    try:
+        user_id = request.current_user['user_id']
+        
+        success = integrated_db.delete_highlight(highlight_id, user_id)
+        if success:
+            return jsonify({'success': True})
+        else:
+            return jsonify({'error': 'Highlight not found or unauthorized'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/user/conversations/<session_id>/messages')
 @require_auth
 def get_conversation_messages(session_id):
@@ -1363,6 +1448,208 @@ def get_conversation_messages(session_id):
     try:
         messages = integrated_db.get_conversation_messages(session_id, request.current_user['user_id'])
         return jsonify(messages)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ==================== PINNED MESSAGES (WhatsApp-style) ====================
+
+@app.route('/api/user/pinned-messages', methods=['GET'])
+@require_auth
+def get_pinned_messages():
+    """Get user's pinned messages"""
+    try:
+        user_id = request.current_user['user_id']
+        character_id = request.args.get('character_id')
+        
+        conn = integrated_db.get_connection()
+        cursor = conn.cursor()
+        
+        if character_id:
+            cursor.execute('''
+                SELECT id, message_id, character_id, message_content, message_role, 
+                       message_timestamp, pin_note, pinned_at, display_order
+                FROM pinned_messages
+                WHERE user_id = ? AND character_id = ?
+                ORDER BY display_order ASC, pinned_at DESC
+            ''', (user_id, character_id))
+        else:
+            cursor.execute('''
+                SELECT id, message_id, character_id, message_content, message_role, 
+                       message_timestamp, pin_note, pinned_at, display_order
+                FROM pinned_messages
+                WHERE user_id = ?
+                ORDER BY display_order ASC, pinned_at DESC
+            ''', (user_id,))
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        pinned = []
+        for row in rows:
+            pinned.append({
+                'id': row[0],
+                'message_id': row[1],
+                'character_id': row[2],
+                'content': row[3],
+                'role': row[4],
+                'timestamp': row[5],
+                'note': row[6],
+                'pinned_at': row[7],
+                'display_order': row[8]
+            })
+        
+        return jsonify({'success': True, 'pinned_messages': pinned, 'count': len(pinned)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/user/pinned-messages', methods=['POST'])
+@require_auth
+def pin_message():
+    """Pin a message"""
+    conn = None
+    try:
+        user_id = request.current_user['user_id']
+        data = request.json
+        
+        message_id = data.get('message_id')
+        character_id = data.get('character_id', 'coordinator')
+        message_content = data.get('content')
+        message_role = data.get('role', 'assistant')
+        message_timestamp = data.get('timestamp')
+        pin_note = data.get('note', '')
+        
+        if not message_content:
+            return jsonify({'error': 'Message content is required'}), 400
+        
+        conn = integrated_db.get_connection()
+        cursor = conn.cursor()
+        
+        # Get current max display_order
+        cursor.execute('''
+            SELECT COALESCE(MAX(display_order), 0) + 1 FROM pinned_messages WHERE user_id = ?
+        ''', (user_id,))
+        next_order = cursor.fetchone()[0]
+        
+        cursor.execute('''
+            INSERT INTO pinned_messages 
+            (user_id, message_id, character_id, message_content, message_role, message_timestamp, pin_note, display_order)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (user_id, message_id or 0, character_id, message_content, message_role, message_timestamp, pin_note, next_order))
+        
+        pin_id = cursor.lastrowid
+        conn.commit()
+        
+        return jsonify({'success': True, 'pin_id': pin_id})
+    except Exception as e:
+        if 'UNIQUE constraint failed' in str(e):
+            return jsonify({'error': 'Message already pinned'}), 409
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/user/pinned-messages/<int:pin_id>', methods=['PUT'])
+@require_auth
+def update_pinned_message(pin_id):
+    """Update a pinned message's note or order"""
+    conn = None
+    try:
+        user_id = request.current_user['user_id']
+        data = request.json
+        
+        conn = integrated_db.get_connection()
+        cursor = conn.cursor()
+        
+        updates = []
+        params = []
+        
+        if 'note' in data:
+            updates.append('pin_note = ?')
+            params.append(data['note'])
+        if 'display_order' in data:
+            updates.append('display_order = ?')
+            params.append(data['display_order'])
+        
+        if updates:
+            params.extend([pin_id, user_id])
+            cursor.execute(f'''
+                UPDATE pinned_messages SET {', '.join(updates)}
+                WHERE id = ? AND user_id = ?
+            ''', params)
+            conn.commit()
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/user/pinned-messages/<int:pin_id>', methods=['DELETE'])
+@require_auth
+def unpin_message(pin_id):
+    """Unpin a message"""
+    conn = None
+    try:
+        user_id = request.current_user['user_id']
+        
+        conn = integrated_db.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            DELETE FROM pinned_messages WHERE id = ? AND user_id = ?
+        ''', (pin_id, user_id))
+        
+        deleted = cursor.rowcount > 0
+        conn.commit()
+        
+        if deleted:
+            return jsonify({'success': True})
+        else:
+            return jsonify({'error': 'Pin not found or unauthorized'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/greetings/check', methods=['POST'])
+@require_auth
+def check_greetings():
+    """Check and send any pending automated greetings"""
+    try:
+        user_id = request.current_user['user_id']
+        sent_greetings = greeting_system.check_and_send_greetings(user_id)
+        return jsonify({'success': True, 'greetings': sent_greetings})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/greetings/pending')
+@require_auth
+def get_pending_greetings():
+    """Get pending greetings for the user"""
+    try:
+        user_id = request.current_user['user_id']
+        since_param = request.args.get('since')
+        since = datetime.fromisoformat(since_param) if since_param else None
+        
+        greetings = greeting_system.get_pending_greetings(user_id, since)
+        return jsonify({'success': True, 'greetings': greetings})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/greetings/activity', methods=['POST'])
+@require_auth
+def update_user_activity():
+    """Update user activity timestamp"""
+    try:
+        user_id = request.current_user['user_id']
+        data = request.get_json()
+        activity_type = data.get('activity_type', 'message_sent')
+        metadata = data.get('metadata', {})
+        
+        greeting_system.update_user_activity(user_id, activity_type, metadata)
+        return jsonify({'success': True})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1377,6 +1664,10 @@ def add_conversation_message(session_id):
         
         if not all([sender_type, content]):
             return jsonify({'error': 'Sender type and content are required'}), 400
+        
+        # Update user activity when they send a message
+        user_id = request.current_user['user_id']
+        greeting_system.update_user_activity(user_id, 'message_sent', {'session_id': session_id})
         
         # Check message limit for user messages
         if sender_type == 'user':
@@ -1460,6 +1751,11 @@ def index():
 def chatchat_interface():
     """Integrated multi-user AI chatbot interface"""
     return render_template('chatchat.html')
+
+@app.route('/login')
+def login_page():
+    """Login-only page (no signup option)"""
+    return render_template('chatchat.html', login_only=True)
 
 @app.route('/life-companion')
 def life_companion_interface():

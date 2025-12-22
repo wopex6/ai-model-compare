@@ -156,6 +156,100 @@ class IntegratedDatabase:
             )
         ''')
         
+        # Conversation highlights table for saving important parts
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS conversation_highlights (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                character_id TEXT,
+                message_id INTEGER,
+                highlighted_text TEXT NOT NULL,
+                full_message TEXT,
+                message_role TEXT,
+                note TEXT,
+                color TEXT DEFAULT 'green',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_highlights_user 
+            ON conversation_highlights(user_id, created_at DESC)
+        ''')
+        
+        # Automated greetings table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS automated_greetings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                greeting_type TEXT NOT NULL,
+                greeting_message TEXT NOT NULL,
+                sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                triggered_by TEXT,
+                context_data TEXT,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_greetings_user_sent 
+            ON automated_greetings(user_id, sent_at DESC)
+        ''')
+        
+        # Pinned messages table (like WhatsApp pin feature)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS pinned_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                message_id INTEGER,
+                character_id TEXT,
+                message_content TEXT NOT NULL,
+                message_role TEXT NOT NULL,
+                message_timestamp TEXT,
+                pin_note TEXT,
+                pinned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                display_order INTEGER DEFAULT 0,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_pinned_messages_user 
+            ON pinned_messages(user_id, display_order, pinned_at DESC)
+        ''')
+        
+        # User activity tracking table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_activity_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                activity_type TEXT NOT NULL,
+                last_activity_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                metadata TEXT,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_activity_user_time 
+            ON user_activity_log(user_id, last_activity_at DESC)
+        ''')
+        
+        # User greeting preferences table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_greeting_preferences (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL UNIQUE,
+                enabled BOOLEAN DEFAULT 1,
+                preferred_time_hour INTEGER DEFAULT 9,
+                inactivity_minutes INTEGER DEFAULT 10,
+                last_daily_greeting DATETIME,
+                last_inactivity_greeting DATETIME,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        ''')
+        
         conn.commit()
         conn.close()
     
@@ -1980,6 +2074,115 @@ class IntegratedDatabase:
             return cursor.rowcount > 0
         except Exception as e:
             print(f"Error deleting admin message: {e}")
+            return False
+        finally:
+            conn.close()
+    
+    # ==================== CONVERSATION HIGHLIGHTS ====================
+    
+    def save_highlight(self, user_id: int, highlighted_text: str, character_id: str = None,
+                       message_id: int = None, full_message: str = None, 
+                       message_role: str = None, note: str = None, color: str = 'green') -> Optional[int]:
+        """Save a highlighted portion of conversation text"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                INSERT INTO conversation_highlights 
+                (user_id, character_id, message_id, highlighted_text, full_message, message_role, note, color)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (user_id, character_id, message_id, highlighted_text, full_message, message_role, note, color))
+            
+            conn.commit()
+            highlight_id = cursor.lastrowid
+            print(f"✓ Saved highlight #{highlight_id} for user {user_id}")
+            return highlight_id
+        except Exception as e:
+            print(f"Error saving highlight: {e}")
+            return None
+        finally:
+            conn.close()
+    
+    def get_highlights(self, user_id: int, character_id: str = None, limit: int = 50) -> List[Dict]:
+        """Get user's saved highlights, optionally filtered by character"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            if character_id:
+                cursor.execute('''
+                    SELECT id, character_id, message_id, highlighted_text, full_message, 
+                           message_role, note, color, created_at
+                    FROM conversation_highlights
+                    WHERE user_id = ? AND character_id = ?
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                ''', (user_id, character_id, limit))
+            else:
+                cursor.execute('''
+                    SELECT id, character_id, message_id, highlighted_text, full_message, 
+                           message_role, note, color, created_at
+                    FROM conversation_highlights
+                    WHERE user_id = ?
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                ''', (user_id, limit))
+            
+            rows = cursor.fetchall()
+            highlights = []
+            for row in rows:
+                highlights.append({
+                    'id': row[0],
+                    'character_id': row[1],
+                    'message_id': row[2],
+                    'highlighted_text': row[3],
+                    'full_message': row[4],
+                    'message_role': row[5],
+                    'note': row[6],
+                    'color': row[7],
+                    'created_at': row[8]
+                })
+            return highlights
+        except Exception as e:
+            print(f"Error getting highlights: {e}")
+            return []
+        finally:
+            conn.close()
+    
+    def update_highlight_note(self, highlight_id: int, user_id: int, note: str) -> bool:
+        """Update the note on a highlight"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                UPDATE conversation_highlights
+                SET note = ?
+                WHERE id = ? AND user_id = ?
+            ''', (note, highlight_id, user_id))
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception as e:
+            print(f"Error updating highlight note: {e}")
+            return False
+        finally:
+            conn.close()
+    
+    def delete_highlight(self, highlight_id: int, user_id: int) -> bool:
+        """Delete a highlight"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                DELETE FROM conversation_highlights
+                WHERE id = ? AND user_id = ?
+            ''', (highlight_id, user_id))
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception as e:
+            print(f"Error deleting highlight: {e}")
             return False
         finally:
             conn.close()

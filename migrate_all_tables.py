@@ -719,6 +719,100 @@ def migrate_all_tables():
         print("✅ idx_visibility_history")
         
         # ============================================================
+        # CONVERSATION HIGHLIGHTS & PINNED MESSAGES
+        # ============================================================
+        print("\n📦 CONVERSATION HIGHLIGHTS & PINNED MESSAGES")
+        print("-" * 80)
+        
+        # Conversation highlights (save important parts)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS conversation_highlights (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                character_id TEXT,
+                message_id INTEGER,
+                highlighted_text TEXT NOT NULL,
+                full_message TEXT,
+                message_role TEXT,
+                note TEXT,
+                color TEXT DEFAULT 'green',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        ''')
+        print("✅ conversation_highlights")
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_highlights_user 
+            ON conversation_highlights(user_id, created_at DESC)
+        ''')
+        print("✅ idx_highlights_user")
+        
+        # Pinned messages (like WhatsApp pin feature)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS pinned_messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                message_id INTEGER,
+                character_id TEXT,
+                message_content TEXT NOT NULL,
+                message_role TEXT NOT NULL,
+                message_timestamp TEXT,
+                pin_note TEXT,
+                pinned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                display_order INTEGER DEFAULT 0,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        ''')
+        print("✅ pinned_messages")
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_pinned_messages_user 
+            ON pinned_messages(user_id, display_order, pinned_at DESC)
+        ''')
+        print("✅ idx_pinned_messages_user")
+        
+        # Automated greetings
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS automated_greetings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                greeting_type TEXT NOT NULL,
+                greeting_message TEXT NOT NULL,
+                sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                triggered_by TEXT,
+                context_data TEXT,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        ''')
+        print("✅ automated_greetings")
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_greetings_user_sent 
+            ON automated_greetings(user_id, sent_at DESC)
+        ''')
+        print("✅ idx_greetings_user_sent")
+        
+        # User activity tracking
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_activity_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                activity_type TEXT NOT NULL,
+                last_activity_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                metadata TEXT,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        ''')
+        print("✅ user_activity_log")
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_activity_user_time 
+            ON user_activity_log(user_id, last_activity_at DESC)
+        ''')
+        print("✅ idx_activity_user_time")
+        
+        # ============================================================
         # DOMAIN CHARACTER INDEXES
         # ============================================================
         print("\n📦 DOMAIN CHARACTER INDEXES")

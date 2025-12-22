@@ -271,6 +271,11 @@ const ConversationBox = {
                     });
                 });
                 
+                // Apply stored highlights after messages are loaded
+                if (MessageHandler.highlightsEnabled) {
+                    setTimeout(() => MessageHandler.applyStoredHighlights(), 100);
+                }
+                
                 // Scroll to bottom after all messages loaded
                 MessageHandler.messagesContainer.scrollTop = MessageHandler.messagesContainer.scrollHeight;
                 console.log(`✓ Loaded ${data.messages.length} messages from database`);
@@ -350,37 +355,40 @@ const ConversationBox = {
         // Insert search bar at the top of chat container
         chatContainer.insertBefore(searchBar, messagesContainer);
         
-        // Create search toggle button (floating)
-        const searchToggle = document.createElement('button');
-        searchToggle.id = 'search-toggle-btn';
-        searchToggle.innerHTML = '🔍';
-        searchToggle.title = 'Search conversations (Ctrl+F)';
-        searchToggle.style.cssText = `
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            padding: 8px 12px;
-            border: none;
-            background: rgba(255,255,255,0.9);
-            border-radius: 20px;
-            cursor: pointer;
-            font-size: 16px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            z-index: 99;
-            transition: all 0.2s;
-        `;
-        searchToggle.addEventListener('mouseenter', () => {
-            searchToggle.style.background = 'rgba(255,255,255,1)';
-            searchToggle.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
-        });
-        searchToggle.addEventListener('mouseleave', () => {
-            searchToggle.style.background = 'rgba(255,255,255,0.9)';
-            searchToggle.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
-        });
-        
-        // Make chat container position relative for absolute positioning
-        chatContainer.style.position = 'relative';
-        chatContainer.appendChild(searchToggle);
+        // Create search toggle button (floating) - only if no header search button exists
+        const headerSearchBtn = document.getElementById('searchBtn');
+        if (!headerSearchBtn) {
+            const searchToggle = document.createElement('button');
+            searchToggle.id = 'search-toggle-btn';
+            searchToggle.innerHTML = '🔍';
+            searchToggle.title = 'Search conversations (Ctrl+F)';
+            searchToggle.style.cssText = `
+                position: absolute;
+                top: 60px;
+                right: 15px;
+                padding: 8px 12px;
+                border: none;
+                background: rgba(255,255,255,0.9);
+                border-radius: 20px;
+                cursor: pointer;
+                font-size: 14px;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+                z-index: 99;
+                transition: all 0.2s;
+            `;
+            searchToggle.addEventListener('mouseenter', () => {
+                searchToggle.style.background = 'rgba(255,255,255,1)';
+                searchToggle.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+            });
+            searchToggle.addEventListener('mouseleave', () => {
+                searchToggle.style.background = 'rgba(255,255,255,0.9)';
+                searchToggle.style.boxShadow = '0 2px 5px rgba(0,0,0,0.1)';
+            });
+            
+            // Make chat container position relative for absolute positioning
+            chatContainer.style.position = 'relative';
+            chatContainer.appendChild(searchToggle);
+        }
         
         // Set up search event listeners
         this._setupSearchListeners();
