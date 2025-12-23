@@ -50,6 +50,7 @@ gpt.py
 # Database backups
 *.db.backup_*
 *.sqlite.backup_*
+backups/backup_log.json
 
 # Debug and test files
 *_test.py
