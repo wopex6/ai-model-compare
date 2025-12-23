@@ -743,7 +743,12 @@ class IntegratedAIChatbot {
             if (response.ok) {
                 console.log('🔧 Login Debug: Login successful, setting up user data');
                 this.authToken = result.token;
-                localStorage.setItem('authToken', this.authToken);
+                // Use AuthHelper to trigger callbacks (e.g., reload history after re-auth)
+                if (typeof AuthHelper !== 'undefined' && AuthHelper.setAuthToken) {
+                    AuthHelper.setAuthToken(this.authToken);
+                } else {
+                    localStorage.setItem('authToken', this.authToken);
+                }
                 this.currentUser = { 
                     id: result.user_id, 
                     username: result.username,
@@ -786,7 +791,12 @@ class IntegratedAIChatbot {
 
             if (response.ok) {
                 this.authToken = result.token;
-                localStorage.setItem('authToken', this.authToken);
+                // Use AuthHelper to trigger callbacks (e.g., reload history after re-auth)
+                if (typeof AuthHelper !== 'undefined' && AuthHelper.setAuthToken) {
+                    AuthHelper.setAuthToken(this.authToken);
+                } else {
+                    localStorage.setItem('authToken', this.authToken);
+                }
                 this.currentUser = { 
                     id: result.user_id, 
                     username: result.username,

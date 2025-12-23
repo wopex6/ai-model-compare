@@ -718,6 +718,13 @@
             // Load initial character (coordinator) history
             await DomainCharacters.loadCharacterHistory('coordinator');
             
+            // Register callback to reload history after re-authentication
+            AuthHelper.onAuthenticated(async () => {
+                console.log('🔄 Re-authenticated, reloading conversation history...');
+                const currentChar = DomainCharacters.selectedCharacter || 'coordinator';
+                await DomainCharacters.loadCharacterHistory(currentChar);
+            });
+            
             // Initialize search functionality (uses ConversationBox search UI)
             ConversationBox.initSearchOnly();
             
