@@ -98,11 +98,36 @@ const AuthHelper = {
     },
 
     /**
+     * Callbacks to run after successful authentication
+     */
+    _onAuthCallbacks: [],
+
+    /**
+     * Register a callback to run after authentication
+     * @param {function} callback - Function to call after auth
+     */
+    onAuthenticated(callback) {
+        if (typeof callback === 'function') {
+            this._onAuthCallbacks.push(callback);
+        }
+    },
+
+    /**
      * Store auth token (called after login)
      * @param {string} token - JWT token
      */
     setAuthToken(token) {
         localStorage.setItem('authToken', token);
+        
+        // Run all registered callbacks
+        console.log(`🔐 Token set, running ${this._onAuthCallbacks.length} auth callbacks`);
+        this._onAuthCallbacks.forEach(cb => {
+            try {
+                cb();
+            } catch (e) {
+                console.error('Auth callback error:', e);
+            }
+        });
     },
 
     /**
