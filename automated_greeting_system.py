@@ -7,6 +7,7 @@ Generates personalized greeting messages for users based on:
 - Inactivity period (e.g., 10 minutes for development)
 - Recent conversation context
 - Varied message templates to avoid repetition
+- AI-powered context-aware prompts (reinforces suggestions, dives deeper)
 
 Author: AI Life Companion Team
 Date: December 2025
@@ -15,17 +16,25 @@ Date: December 2025
 import random
 import json
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Callable
 from integrated_database import IntegratedDatabase
 
 
 class AutomatedGreetingSystem:
     """
-    Manages automated greetings for users based on activity patterns and preferences
+    Manages automated greetings for users based on activity patterns and preferences.
+    
+    Now enhanced with AI-powered context prompts that:
+    - Reinforce previous suggestions
+    - Dive deeper into discussed topics
+    - Track user feedback direction and preferences
+    - Skip bot greetings when counting meaningful exchanges
     """
     
-    def __init__(self, db: IntegratedDatabase):
+    def __init__(self, db: IntegratedDatabase, ai_call_func: Callable = None):
         self.db = db
+        self.ai_call_func = ai_call_func  # Function to call AI (injected to avoid circular imports)
+        self._context_prompt_generator = None
         
         # Greeting templates for variety
         self.daily_greeting_templates = [
@@ -58,6 +67,18 @@ class AutomatedGreetingSystem:
             "Still working on {topic}? Let me know if you need any guidance! 🚀",
             "Any breakthroughs with {topic}? I'm here to help! ✨",
         ]
+    
+    @property
+    def context_prompt_generator(self):
+        """Lazy-load the context prompt generator"""
+        if self._context_prompt_generator is None:
+            try:
+                from smart_response.ai_context_prompts import AIContextPromptGenerator
+                conn = self.db.get_connection()
+                self._context_prompt_generator = AIContextPromptGenerator(conn)
+            except Exception as e:
+                print(f"Warning: Could not initialize AIContextPromptGenerator: {e}")
+        return self._context_prompt_generator
     
     def get_time_of_day(self, hour: int = None) -> str:
         """Get time of day greeting based on hour"""
@@ -152,14 +173,27 @@ class AutomatedGreetingSystem:
         
         return greeting
     
-    def generate_inactivity_greeting(self, user_id: int) -> str:
+    def generate_inactivity_greeting(self, user_id: int, use_ai: bool = True) -> str:
         """Generate a context-aware inactivity check-in message.
-        Prioritizes asking questions related to recent conversation context.
-        Only falls back to general greeting when no context is available.
+        
+        Now enhanced with AI-powered prompts that:
+        - Reinforce previous suggestions
+        - Dive deeper into discussed topics
+        - Track user feedback and preferences
+        
+        Args:
+            user_id: User ID
+            use_ai: Whether to try AI-generated prompt (respects budget)
         """
         name = self.get_user_first_name(user_id)
         
-        # Always try to get recent context first
+        # Try AI-powered context prompt first (if enabled and has sufficient history)
+        if use_ai and self.ai_call_func and self.context_prompt_generator:
+            ai_prompt = self.generate_ai_context_prompt(user_id, name)
+            if ai_prompt:
+                return ai_prompt
+        
+        # Fallback: Template-based context-aware greeting
         context = self.get_recent_conversation_context(user_id)
         
         if context:
@@ -178,6 +212,138 @@ class AutomatedGreetingSystem:
             # No context available - use general greeting
             template = random.choice(self.inactivity_greeting_templates)
             return template.format(name=name)
+    
+    def generate_ai_context_prompt(self, user_id: int, user_name: str, 
+                                    character_id: str = 'coordinator') -> Optional[str]:
+        """
+        Generate an AI-powered context-aware prompt.
+        
+        This uses AI to create meaningful follow-ups that:
+        - Reference specific topics from conversation history
+        - Reinforce or follow up on previous suggestions
+        - Guide users toward constructive action
+        
+        Returns None if AI should not be used (insufficient context, budget, etc.)
+        """
+        if not self.context_prompt_generator or not self.ai_call_func:
+            return None
+        
+        try:
+            # Build the prompt request
+            request = self.context_prompt_generator.build_ai_prompt_request(
+                user_id, user_name, character_id
+            )
+            
+            if not request.get('should_use_ai'):
+                print(f"⏭️ Skipping AI prompt: {request.get('reason', 'unknown')}")
+                return None
+            
+            # Call AI to generate the prompt
+            ai_response = self.ai_call_func(
+                system_prompt=request['system_prompt'],
+                user_message=f"Generate a follow-up message for {user_name}.\n\n{request['context']}",
+                purpose='context_prompt_generation',
+                character='coordinator'
+            )
+            
+            if ai_response and ai_response.get('success'):
+                generated_prompt = ai_response.get('response', '').strip()
+                
+                # Track the suggestion for future follow-up
+                if generated_prompt and len(generated_prompt) > 10:
+                    self.context_prompt_generator.track_suggestion(
+                        user_id=user_id,
+                        character_id=character_id,
+                        suggestion_type='ai_context_prompt',
+                        suggestion_text=generated_prompt,
+                        context_summary=f"Generated after {request.get('meaningful_exchanges', 0)} meaningful exchanges"
+                    )
+                    
+                    print(f"✅ AI generated context prompt for user {user_id}")
+                    return generated_prompt
+            
+            return None
+            
+        except Exception as e:
+            print(f"❌ Error generating AI context prompt: {e}")
+            return None
+    
+    def process_user_response_feedback(self, user_id: int, character_id: str,
+                                        user_message: str, previous_prompt: str = None):
+        """
+        Analyze user's response to track feedback direction and preferences.
+        
+        Called after user responds to a greeting/prompt to:
+        - Track engagement level
+        - Update topic interest scores
+        - Learn user preferences
+        """
+        if not self.context_prompt_generator:
+            return
+        
+        try:
+            # Analyze sentiment
+            sentiment = self.context_prompt_generator.analyze_user_response_sentiment(user_message)
+            
+            # Extract topics from the response
+            topics = self._extract_topics_from_message(user_message)
+            
+            # Track feedback for each topic
+            for topic in topics:
+                direction = 'interested' if sentiment in ['positive', 'engaged'] else \
+                           'disengaged' if sentiment in ['negative', 'disengaged'] else 'neutral'
+                strength = 0.7 if sentiment in ['positive', 'negative'] else 0.5
+                
+                self.context_prompt_generator.track_feedback(
+                    user_id=user_id,
+                    character_id=character_id,
+                    topic=topic,
+                    direction=direction,
+                    strength=strength
+                )
+                
+                # Update theme interest
+                interest_delta = 0.1 if direction == 'interested' else \
+                                -0.1 if direction == 'disengaged' else 0
+                self.context_prompt_generator.update_theme(
+                    user_id=user_id,
+                    character_id=character_id,
+                    theme=topic,
+                    interest_delta=interest_delta
+                )
+            
+            print(f"📊 Tracked feedback for user {user_id}: {sentiment}, topics: {topics}")
+            
+        except Exception as e:
+            print(f"Warning: Error processing user feedback: {e}")
+    
+    def _extract_topics_from_message(self, message: str) -> List[str]:
+        """Extract topic keywords from a message"""
+        topic_keywords = {
+            'goals': ['goal', 'target', 'objective', 'aim', 'achieve'],
+            'motivation': ['motivat', 'inspire', 'energy', 'drive', 'momentum'],
+            'challenges': ['challenge', 'difficulty', 'problem', 'struggle', 'obstacle'],
+            'progress': ['progress', 'improvement', 'better', 'growing', 'advancing'],
+            'emotions': ['feel', 'emotion', 'mood', 'anxious', 'happy', 'sad', 'stressed'],
+            'relationships': ['relationship', 'friend', 'family', 'partner', 'colleague'],
+            'work': ['work', 'job', 'career', 'profession', 'project', 'business'],
+            'health': ['health', 'fitness', 'exercise', 'diet', 'sleep', 'energy'],
+            'mindfulness': ['meditation', 'mindful', 'peace', 'zen', 'calm', 'breathing'],
+            'learning': ['learn', 'study', 'skill', 'knowledge', 'understand', 'grow'],
+            'decisions': ['decide', 'choice', 'option', 'uncertain', 'direction'],
+            'time': ['time', 'schedule', 'busy', 'priority', 'balance'],
+        }
+        
+        message_lower = message.lower()
+        detected = []
+        
+        for topic, keywords in topic_keywords.items():
+            for keyword in keywords:
+                if keyword in message_lower:
+                    detected.append(topic)
+                    break
+        
+        return list(set(detected))
     
     def update_user_activity(self, user_id: int, activity_type: str = 'message_sent', metadata: dict = None):
         """Track user activity for inactivity detection"""

@@ -311,6 +311,46 @@ class DomainCharacterAI:
         self.provider_status[provider]['consecutive_failures'] = 0
         self.provider_status[provider]['healthy'] = True
     
+    def call_ai_direct(self, system_prompt: str, user_message: str, 
+                       character_id: str = 'coordinator') -> Optional[str]:
+        """
+        Direct AI call without needing a character object.
+        Used for generating context-aware prompts, greetings, etc.
+        
+        Args:
+            system_prompt: System instructions for the AI
+            user_message: The user message/request
+            character_id: Optional character ID for logging
+            
+        Returns:
+            AI-generated response string, or None on failure
+        """
+        # Auto-select best provider
+        provider = self._get_best_provider()
+        
+        # Try providers with automatic failover
+        providers_to_try = [provider]
+        fallback = 'openai' if provider == 'anthropic' else 'anthropic'
+        if fallback not in providers_to_try:
+            providers_to_try.append(fallback)
+        
+        for try_provider in providers_to_try:
+            try:
+                if try_provider == 'anthropic' and self.anthropic_client:
+                    response = self._generate_anthropic(system_prompt, user_message, {})
+                    self._mark_provider_success('anthropic')
+                    return response
+                elif try_provider == 'openai' and self.openai_client:
+                    response = self._generate_openai(system_prompt, user_message, {})
+                    self._mark_provider_success('openai')
+                    return response
+            except Exception as e:
+                print(f"[AI DIRECT] {try_provider} failed: {e}")
+                self._mark_provider_error(try_provider, e, character_id, None)
+                continue
+        
+        return None
+    
     def generate_response(self, character: BaseCharacter, message: str, 
                          context: Dict, provider: str = None) -> CharacterResponse:
         """

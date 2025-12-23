@@ -813,6 +813,83 @@ def migrate_all_tables():
         print("✅ idx_activity_user_time")
         
         # ============================================================
+        # AI CONTEXT PROMPTS & FEEDBACK TRACKING
+        # ============================================================
+        print("\n📦 AI CONTEXT PROMPTS & FEEDBACK TRACKING")
+        print("-" * 80)
+        
+        # Track AI suggestions made to users
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS ai_suggestions_tracking (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                character_id TEXT NOT NULL,
+                suggestion_type TEXT NOT NULL,
+                suggestion_text TEXT NOT NULL,
+                context_summary TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                followed_up BOOLEAN DEFAULT 0,
+                user_response TEXT,
+                response_sentiment TEXT,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        ''')
+        print("✅ ai_suggestions_tracking")
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_suggestions_user 
+            ON ai_suggestions_tracking(user_id, created_at DESC)
+        ''')
+        print("✅ idx_suggestions_user")
+        
+        # Track user feedback patterns and preferences
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_feedback_tracking (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                character_id TEXT,
+                topic TEXT NOT NULL,
+                feedback_direction TEXT NOT NULL,
+                feedback_strength REAL DEFAULT 0.5,
+                occurrence_count INTEGER DEFAULT 1,
+                last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+                notes TEXT,
+                UNIQUE(user_id, character_id, topic),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        ''')
+        print("✅ user_feedback_tracking")
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_feedback_user 
+            ON user_feedback_tracking(user_id, topic)
+        ''')
+        print("✅ idx_feedback_user")
+        
+        # Track conversation themes for deeper engagement
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS conversation_themes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                character_id TEXT,
+                theme TEXT NOT NULL,
+                depth_level INTEGER DEFAULT 1,
+                last_explored DATETIME DEFAULT CURRENT_TIMESTAMP,
+                exploration_notes TEXT,
+                user_interest_score REAL DEFAULT 0.5,
+                UNIQUE(user_id, character_id, theme),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            )
+        ''')
+        print("✅ conversation_themes")
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_themes_user 
+            ON conversation_themes(user_id, user_interest_score DESC)
+        ''')
+        print("✅ idx_themes_user")
+        
+        # ============================================================
         # DOMAIN CHARACTER INDEXES
         # ============================================================
         print("\n📦 DOMAIN CHARACTER INDEXES")

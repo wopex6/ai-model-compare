@@ -92,7 +92,45 @@ CORS(app, supports_credentials=True)
 
 # Initialize integrated database
 integrated_db = IntegratedDatabase()
-greeting_system = AutomatedGreetingSystem(integrated_db)
+
+# AI call wrapper function for greeting system (initialized later after ai_budget is available)
+def greeting_ai_call(system_prompt: str, user_message: str, purpose: str = 'greeting', character: str = 'coordinator'):
+    """Wrapper function to call AI for context-aware greeting generation"""
+    try:
+        if not domain_character_ai:
+            return None
+        
+        # Check budget before AI call
+        if ai_budget:
+            allowed, reason = ai_budget.can_make_ai_call(user_id=None, is_admin=False, is_background=True)
+            if not allowed:
+                print(f"⏭️ AI greeting call denied: {reason}")
+                return None
+        
+        # Use domain character AI to generate response
+        response = domain_character_ai.call_ai_direct(
+            system_prompt=system_prompt,
+            user_message=user_message,
+            character_id=character
+        )
+        
+        if response:
+            # Log successful call
+            if ai_budget:
+                ai_budget.log_ai_call(
+                    call_type='context_prompt',
+                    purpose=purpose,
+                    success=True,
+                    character=character,
+                    is_background=True
+                )
+            return {'success': True, 'response': response}
+        return None
+    except Exception as e:
+        print(f"❌ Error in greeting AI call: {e}")
+        return None
+
+greeting_system = AutomatedGreetingSystem(integrated_db, ai_call_func=greeting_ai_call)
 email_service = EmailService()
 ai_compare = AICompare()
 chatbot = AIChatbot()
@@ -1649,6 +1687,73 @@ def update_user_activity():
         metadata = data.get('metadata', {})
         
         greeting_system.update_user_activity(user_id, activity_type, metadata)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/greetings/ai-prompt', methods=['POST'])
+@require_auth
+def generate_ai_context_prompt():
+    """
+    Generate an AI-powered context-aware prompt for the user.
+    Uses conversation history to create meaningful follow-ups that:
+    - Reinforce previous suggestions
+    - Dive deeper into discussed topics
+    - Track user feedback and preferences
+    """
+    try:
+        user_id = request.current_user['user_id']
+        data = request.get_json() or {}
+        character_id = data.get('character_id', 'coordinator')
+        
+        # Get user's first name
+        profile = integrated_db.get_user_profile(user_id)
+        user_name = 'there'
+        if profile and profile.get('first_name'):
+            user_name = profile['first_name'].split()[0]
+        
+        # Try AI-generated prompt
+        ai_prompt = greeting_system.generate_ai_context_prompt(user_id, user_name, character_id)
+        
+        if ai_prompt:
+            return jsonify({
+                'success': True,
+                'prompt': ai_prompt,
+                'type': 'ai_generated'
+            })
+        else:
+            # Fallback to template-based
+            fallback = greeting_system.generate_inactivity_greeting(user_id, use_ai=False)
+            return jsonify({
+                'success': True,
+                'prompt': fallback,
+                'type': 'template'
+            })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/greetings/feedback', methods=['POST'])
+@require_auth
+def track_greeting_feedback():
+    """
+    Track user's response to a greeting/prompt for learning preferences.
+    Called after user responds to track engagement and topic interest.
+    """
+    try:
+        user_id = request.current_user['user_id']
+        data = request.get_json()
+        user_message = data.get('user_message', '')
+        character_id = data.get('character_id', 'coordinator')
+        previous_prompt = data.get('previous_prompt')
+        
+        if user_message:
+            greeting_system.process_user_response_feedback(
+                user_id=user_id,
+                character_id=character_id,
+                user_message=user_message,
+                previous_prompt=previous_prompt
+            )
+        
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
