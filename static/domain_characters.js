@@ -211,6 +211,14 @@ const DomainCharacters = {
         
         try {
             const response = await AuthHelper.authenticatedFetch(this.endpoints.history(characterId));
+            
+            // Check for 401 - session expired
+            if (response.status === 401) {
+                console.warn('⚠️ Session expired - showing login prompt');
+                this._showLoginPrompt(characterId);
+                return;
+            }
+            
             const data = await response.json();
             
             if (data.success && data.history && data.history.length > 0) {
@@ -284,6 +292,41 @@ const DomainCharacters = {
         }
         
         this._addMessageToDisplay(welcomeMessage, 'bot', characterId, true);
+    },
+    
+    /**
+     * Show login prompt when session has expired
+     * @private
+     */
+    _showLoginPrompt(characterId) {
+        const messagesContainer = document.getElementById('domain-chat-messages');
+        if (!messagesContainer) return;
+        
+        // Create login prompt message
+        const loginPrompt = document.createElement('div');
+        loginPrompt.className = 'message bot-message session-expired-prompt';
+        loginPrompt.innerHTML = `
+            <div class="message-content" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-align: center; padding: 20px;">
+                <div style="font-size: 24px; margin-bottom: 10px;">🔐</div>
+                <div style="font-weight: bold; margin-bottom: 10px;">Session Expired</div>
+                <div style="margin-bottom: 15px; opacity: 0.9;">Your session has expired. Please log in again to continue your conversation.</div>
+                <button onclick="window.location.href='/'" style="background: white; color: #667eea; border: none; padding: 10px 24px; border-radius: 20px; font-weight: bold; cursor: pointer; transition: transform 0.2s;">
+                    Log In
+                </button>
+            </div>
+        `;
+        messagesContainer.appendChild(loginPrompt);
+        
+        // Also disable the input
+        const input = document.getElementById('userInput');
+        const sendBtn = document.getElementById('sendBtn');
+        if (input) {
+            input.disabled = true;
+            input.placeholder = 'Please log in to continue...';
+        }
+        if (sendBtn) {
+            sendBtn.disabled = true;
+        }
     },
     
     /**
