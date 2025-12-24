@@ -220,6 +220,7 @@ const DomainCharacters = {
             }
             
             const data = await response.json();
+            console.log(`📜 History API response for ${characterId}:`, data);
             
             if (data.success && data.history && data.history.length > 0) {
                 // Store in local cache
