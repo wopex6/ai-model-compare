@@ -59,6 +59,8 @@ from smart_response.trait_inference import TraitInferenceEngine
 from smart_response.handler import SmartResponseHandler
 # Import Domain Character System
 from smart_response.characters import CharacterManager, DOMAIN_CHARACTER_CONFIGS, create_ai_integration
+# Import User Personalization System
+from smart_response.user_personalization import UserPersonalization
 import sqlite3
 
 # Disable auto-docs in production
@@ -92,6 +94,10 @@ CORS(app, supports_credentials=True)
 
 # Initialize integrated database
 integrated_db = IntegratedDatabase()
+
+# Initialize user personalization system (per-user adaptive parameters)
+user_personalization = UserPersonalization(integrated_db.get_connection())
+print("✓ User personalization system initialized")
 
 # AI call wrapper function for greeting system (initialized later after ai_budget is available)
 def greeting_ai_call(system_prompt: str, user_message: str, purpose: str = 'greeting', character: str = 'coordinator'):
@@ -1817,6 +1823,156 @@ def extract_themes_from_history():
     except Exception as e:
         import traceback
         traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+# ============================================
+# USER PERSONALIZATION API
+# ============================================
+
+@app.route('/api/user/personalization', methods=['GET'])
+@require_auth
+def get_user_personalization():
+    """Get user's personalized parameters"""
+    try:
+        user_id = request.current_user['user_id']
+        params = user_personalization.get_user_parameters(user_id)
+        return jsonify({
+            'success': True,
+            'user_id': user_id,
+            'parameters': params
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/user/personalization', methods=['PUT'])
+@require_auth
+def update_user_personalization():
+    """Update user's personalized parameters"""
+    try:
+        user_id = request.current_user['user_id']
+        data = request.get_json() or {}
+        updates = data.get('parameters', {})
+        reason = data.get('reason', 'User update')
+        
+        if not updates:
+            return jsonify({'error': 'No parameters provided'}), 400
+        
+        user_personalization.update_parameters(user_id, updates, reason)
+        
+        return jsonify({
+            'success': True,
+            'user_id': user_id,
+            'updated': True
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/user/personalization/parameter', methods=['PUT'])
+@require_auth
+def set_user_parameter():
+    """Set a specific parameter by path"""
+    try:
+        user_id = request.current_user['user_id']
+        data = request.get_json() or {}
+        path = data.get('path')
+        value = data.get('value')
+        reason = data.get('reason', 'User update')
+        
+        if not path:
+            return jsonify({'error': 'Parameter path required'}), 400
+        
+        user_personalization.set_parameter(user_id, path, value, reason)
+        
+        return jsonify({
+            'success': True,
+            'path': path,
+            'value': value
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/user/personalization/history', methods=['GET'])
+@require_auth
+def get_personalization_history():
+    """Get history of parameter changes"""
+    try:
+        user_id = request.current_user['user_id']
+        path = request.args.get('path')
+        limit = int(request.args.get('limit', 20))
+        
+        history = user_personalization.get_parameter_history(user_id, path, limit)
+        
+        return jsonify({
+            'success': True,
+            'history': history
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/user/personalization/signal', methods=['POST'])
+@require_auth
+def record_interaction_signal():
+    """Record an interaction signal for adaptive learning"""
+    try:
+        user_id = request.current_user['user_id']
+        data = request.get_json() or {}
+        signal_type = data.get('signal_type')
+        signal_value = data.get('signal_value')
+        context = data.get('context')
+        
+        if not signal_type:
+            return jsonify({'error': 'Signal type required'}), 400
+        
+        user_personalization.record_signal(user_id, signal_type, signal_value, context)
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/user/personalization/adapt', methods=['POST'])
+@require_auth
+def trigger_adaptation():
+    """Trigger adaptive learning from recorded signals"""
+    try:
+        user_id = request.current_user['user_id']
+        result = user_personalization.process_signals_and_adapt(user_id)
+        return jsonify({
+            'success': True,
+            **result
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/user/personalization/reset', methods=['POST'])
+@require_auth
+def reset_personalization():
+    """Reset parameters to defaults"""
+    try:
+        user_id = request.current_user['user_id']
+        data = request.get_json() or {}
+        category = data.get('category')  # Optional: reset only one category
+        
+        user_personalization.reset_to_defaults(user_id, category)
+        
+        return jsonify({
+            'success': True,
+            'reset': category or 'all'
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/user/personalization/export', methods=['GET'])
+@require_auth
+def export_personalization():
+    """Export complete personalization profile"""
+    try:
+        user_id = request.current_user['user_id']
+        profile = user_personalization.export_user_profile(user_id)
+        return jsonify({
+            'success': True,
+            **profile
+        })
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/greetings/debug-context', methods=['GET'])
