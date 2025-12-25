@@ -1787,6 +1787,38 @@ def cleanup_old_greetings():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/greetings/extract-themes', methods=['POST'])
+@require_auth
+def extract_themes_from_history():
+    """
+    Extract themes from user's conversation history.
+    Useful for initializing themes for existing users.
+    """
+    try:
+        user_id = request.current_user['user_id']
+        data = request.get_json() or {}
+        character_id = data.get('character_id')  # None = all characters
+        limit = data.get('limit', 50)
+        
+        if not greeting_system.context_prompt_generator:
+            return jsonify({'error': 'Context prompt generator not available'}), 500
+        
+        result = greeting_system.context_prompt_generator.bulk_extract_themes_from_history(
+            user_id=user_id,
+            character_id=character_id,
+            limit=limit
+        )
+        
+        return jsonify({
+            'success': True,
+            'user_id': user_id,
+            **result
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/greetings/debug-context', methods=['GET'])
 @require_auth
 def debug_context_prompts():
@@ -3438,6 +3470,17 @@ def route_to_domain_characters():
         try:
             integrated_db.save_character_message(user_id, target_character, 'user', message)
             print(f"[HISTORY] ✓ Saved user message for {target_character}")
+            
+            # Extract and store themes from user message (for context-aware prompts)
+            if greeting_system and greeting_system.context_prompt_generator:
+                try:
+                    themes = greeting_system.context_prompt_generator.extract_and_store_themes(
+                        user_id, target_character, message, is_user_message=True
+                    )
+                    if themes:
+                        print(f"[THEMES] ✓ Extracted themes: {[t['theme'] for t in themes]}")
+                except Exception as te:
+                    print(f"[THEMES] Theme extraction error: {te}")
         except Exception as e:
             print(f"Warning: Could not store user message: {e}")
         
