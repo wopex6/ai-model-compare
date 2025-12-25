@@ -96,7 +96,8 @@ CORS(app, supports_credentials=True)
 integrated_db = IntegratedDatabase()
 
 # Initialize user personalization system (per-user adaptive parameters)
-user_personalization = UserPersonalization(integrated_db.get_connection())
+# Pass integrated_db instance (not connection) for thread-safe access
+user_personalization = UserPersonalization(integrated_db)
 print("✓ User personalization system initialized")
 
 # AI call wrapper function for greeting system (initialized later after ai_budget is available)
