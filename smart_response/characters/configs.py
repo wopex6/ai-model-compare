@@ -205,15 +205,17 @@ You are a companion, not a replacement for therapy."""
         "focus_areas": ["fitness", "nutrition", "sleep", "energy", "health", "wellness"],
         "expertise": ["fitness_guidance", "nutrition_basics", "sleep_hygiene", "energy_management", "healthy_habits"],
         "threshold_config": {
-            "base_threshold": 0.15,
+            "base_threshold": 0.25,  # Raised from 0.15 to reduce false positives
             "domain_keywords": [
+                # Removed ambiguous terms: "body" (request body), "rest" (REST API), "energy"
                 "health", "sick", "pain", "tired", "exercise", "diet",
-                "sleep", "weight", "fitness", "energy", "gym", "nutrition",
-                "eating", "body", "workout", "rest", "fatigue"
+                "sleep", "weight", "fitness", "gym", "nutrition",
+                "eating", "workout", "fatigue", "wellness", "physical",
+                "muscle", "cardio", "stretching", "hydration"
             ],
             "emotional_triggers": [
                 "chronic pain", "can't sleep", "exhausted", "health crisis",
-                "always tired", "body image", "eating disorder"
+                "always tired", "body image", "eating disorder", "feeling sick"
             ],
             "urgency_multiplier": 1.1,
             "user_preference_weight": 0.2
