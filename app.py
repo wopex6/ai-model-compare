@@ -147,6 +147,10 @@ from greeting_scheduler import GreetingScheduler
 greeting_scheduler = GreetingScheduler(check_interval_seconds=60)  # Check every minute
 greeting_scheduler.start()
 
+# Run greeting cleanup on startup (removes old non-context greetings)
+print("🧹 Running greeting cleanup on startup...")
+greeting_system.cleanup_old_greetings(days_to_keep=7)
+
 # Initialize Trait Inference Engine
 trait_inference = TraitInferenceEngine(integrated_db)
 
