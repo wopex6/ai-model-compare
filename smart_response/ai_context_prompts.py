@@ -113,25 +113,16 @@ class AIContextPromptGenerator:
         """
         cursor = self.db.cursor()
         
-        # Get recent messages
-        if character_id:
-            cursor.execute('''
-                SELECT m.id, m.sender_type, m.content, m.metadata, m.timestamp
-                FROM messages m
-                JOIN ai_conversations c ON m.conversation_id = c.id
-                WHERE c.user_id = ? AND c.character_id = ?
-                ORDER BY m.timestamp DESC
-                LIMIT ?
-            ''', (user_id, character_id, limit * 2))  # Get extra to filter
-        else:
-            cursor.execute('''
-                SELECT m.id, m.sender_type, m.content, m.metadata, m.timestamp
-                FROM messages m
-                JOIN ai_conversations c ON m.conversation_id = c.id
-                WHERE c.user_id = ?
-                ORDER BY m.timestamp DESC
-                LIMIT ?
-            ''', (user_id, limit * 2))
+        # Get recent messages from ALL conversations for this user
+        # (not just coordinator - user might talk to other characters)
+        cursor.execute('''
+            SELECT m.id, m.sender_type, m.content, m.metadata, m.timestamp
+            FROM messages m
+            JOIN ai_conversations c ON m.conversation_id = c.id
+            WHERE c.user_id = ?
+            ORDER BY m.timestamp DESC
+            LIMIT ?
+        ''', (user_id, limit * 2))  # Get extra to filter
         
         rows = cursor.fetchall()
         meaningful_messages = []
@@ -245,10 +236,12 @@ class AIContextPromptGenerator:
         context = self.get_conversation_context_for_ai(user_id, character_id)
         
         # If not enough meaningful exchanges, don't use AI (save budget)
-        if not context['has_sufficient_context']:
+        # Threshold: 3 meaningful exchanges (lowered from 5 for better responsiveness)
+        min_exchanges = 3
+        if context['meaningful_exchange_count'] < min_exchanges:
             return {
                 'should_use_ai': False,
-                'reason': 'Insufficient conversation history',
+                'reason': f'Need {min_exchanges}+ meaningful exchanges (have {context["meaningful_exchange_count"]})',
                 'fallback_type': 'simple_greeting'
             }
         
