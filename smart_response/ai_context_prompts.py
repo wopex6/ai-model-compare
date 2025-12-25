@@ -107,30 +107,54 @@ class AIContextPromptGenerator:
                                       limit: int = 20) -> Tuple[int, List[Dict]]:
         """
         Get count of MEANINGFUL messages, excluding bot greetings.
+        Prioritizes USER messages since they represent real engagement.
         
         Returns:
             Tuple of (count, list of meaningful messages)
         """
         cursor = self.db.cursor()
         
-        # Get recent messages from ALL conversations for this user
-        # (not just coordinator - user might talk to other characters)
+        # First, get USER messages (these are always meaningful)
         cursor.execute('''
             SELECT m.id, m.sender_type, m.content, m.metadata, m.timestamp
             FROM messages m
             JOIN ai_conversations c ON m.conversation_id = c.id
-            WHERE c.user_id = ?
+            WHERE c.user_id = ? AND m.sender_type = 'user'
             ORDER BY m.timestamp DESC
             LIMIT ?
-        ''', (user_id, limit * 2))  # Get extra to filter
+        ''', (user_id, limit))
         
-        rows = cursor.fetchall()
+        user_messages = cursor.fetchall()
+        
+        # Then get assistant responses (excluding greetings)
+        cursor.execute('''
+            SELECT m.id, m.sender_type, m.content, m.metadata, m.timestamp
+            FROM messages m
+            JOIN ai_conversations c ON m.conversation_id = c.id
+            WHERE c.user_id = ? AND m.sender_type = 'assistant'
+            ORDER BY m.timestamp DESC
+            LIMIT ?
+        ''', (user_id, limit * 3))  # Get more to filter
+        
+        assistant_messages = cursor.fetchall()
+        
         meaningful_messages = []
         
-        for row in rows:
+        # Add all user messages (always meaningful)
+        for row in user_messages:
+            msg_id, sender_type, content, metadata, timestamp = row
+            meaningful_messages.append({
+                'id': msg_id,
+                'sender': sender_type,
+                'content': content,
+                'timestamp': timestamp
+            })
+        
+        # Filter assistant messages to exclude greetings
+        for row in assistant_messages:
             msg_id, sender_type, content, metadata, timestamp = row
             
-            # Skip automated greetings
+            # Skip automated greetings (marked in metadata)
             if metadata:
                 try:
                     meta = json.loads(metadata)
@@ -139,19 +163,22 @@ class AIContextPromptGenerator:
                 except:
                     pass
             
-            # Skip very short bot responses that are likely greetings
-            if sender_type == 'assistant':
-                content_lower = content.lower().strip()
-                # Skip generic greetings
-                greeting_patterns = [
-                    'hey there', 'hi there', 'hello!', 'good morning',
-                    'good afternoon', 'good evening', 'welcome back',
-                    'how are you', "how's it going", 'checking in',
-                    'just checking', "i'm here if you need"
-                ]
-                is_greeting = any(content_lower.startswith(p) for p in greeting_patterns)
-                if is_greeting and len(content) < 100:
-                    continue
+            # Skip messages that look like inactivity/greeting patterns
+            content_lower = content.lower().strip()
+            greeting_patterns = [
+                'hey there', 'hi there', 'hello!', 'good morning',
+                'good afternoon', 'good evening', 'welcome back',
+                'how are you', "how's it going", 'checking in',
+                'just checking', "i'm here if you need", 'hey ', 'hi ',
+                'still working on that', 'still there?', 'noticed you',
+                'take your time', "i'm ready to help", 'everything okay'
+            ]
+            is_greeting = any(content_lower.startswith(p) for p in greeting_patterns)
+            # Also check for emoji-heavy short messages (likely greetings)
+            emoji_heavy = content.count('💭') + content.count('🤔') + content.count('🛠️') > 0 and len(content) < 80
+            
+            if (is_greeting and len(content) < 120) or emoji_heavy:
+                continue
             
             meaningful_messages.append({
                 'id': msg_id,
@@ -163,7 +190,10 @@ class AIContextPromptGenerator:
             if len(meaningful_messages) >= limit:
                 break
         
-        return len(meaningful_messages), meaningful_messages
+        # Sort by timestamp descending
+        meaningful_messages.sort(key=lambda x: x['timestamp'] or '', reverse=True)
+        
+        return len(meaningful_messages), meaningful_messages[:limit]
     
     def get_conversation_context_for_ai(self, user_id: int, character_id: str = 'coordinator') -> Dict:
         """
