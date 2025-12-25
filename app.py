@@ -149,9 +149,9 @@ backup_manager.backup_all(reason="startup")
 # Start automatic backup scheduler (every 4 hours)
 backup_manager.start_scheduler()
 
-# Initialize and start greeting scheduler
+# Initialize and start greeting scheduler (pass greeting_system with AI call func)
 from greeting_scheduler import GreetingScheduler
-greeting_scheduler = GreetingScheduler(check_interval_seconds=60)  # Check every minute
+greeting_scheduler = GreetingScheduler(check_interval_seconds=60, greeting_system=greeting_system)
 greeting_scheduler.start()
 
 # Run greeting cleanup on startup (removes old non-context greetings)

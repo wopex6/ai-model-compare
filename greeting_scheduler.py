@@ -21,15 +21,17 @@ class GreetingScheduler:
     Background scheduler that checks for greeting triggers
     """
     
-    def __init__(self, check_interval_seconds: int = 60):
+    def __init__(self, check_interval_seconds: int = 60, greeting_system=None):
         """
         Initialize scheduler
         
         Args:
             check_interval_seconds: How often to check for greeting triggers (default: 60 seconds)
+            greeting_system: Optional AutomatedGreetingSystem instance (with AI call func)
         """
         self.db = IntegratedDatabase()
-        self.greeting_system = AutomatedGreetingSystem(self.db)
+        # Use provided greeting_system (which has AI call func) or create basic one
+        self.greeting_system = greeting_system or AutomatedGreetingSystem(self.db)
         self.check_interval = check_interval_seconds
         self.running = False
         self.thread = None
