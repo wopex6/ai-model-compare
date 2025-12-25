@@ -1819,6 +1819,40 @@ def debug_context_prompts():
         context = debug_generator.get_conversation_context_for_ai(user_id, 'coordinator')
         prompt_request = debug_generator.build_ai_prompt_request(user_id, user_name, 'coordinator')
         
+        # DEBUG: Check raw database counts
+        cursor = conn.cursor()
+        
+        # Count conversations for this user
+        cursor.execute('SELECT COUNT(*) FROM ai_conversations WHERE user_id = ?', (user_id,))
+        conv_count = cursor.fetchone()[0]
+        
+        # Count messages for this user
+        cursor.execute('''
+            SELECT COUNT(*) FROM messages m
+            JOIN ai_conversations c ON m.conversation_id = c.id
+            WHERE c.user_id = ?
+        ''', (user_id,))
+        msg_count = cursor.fetchone()[0]
+        
+        # Get sample conversations
+        cursor.execute('''
+            SELECT id, session_id, title, character_id FROM ai_conversations 
+            WHERE user_id = ? LIMIT 5
+        ''', (user_id,))
+        sample_convs = [{'id': r[0], 'session_id': r[1], 'title': r[2], 'character_id': r[3]} 
+                        for r in cursor.fetchall()]
+        
+        # Get sample messages
+        cursor.execute('''
+            SELECT m.id, m.sender_type, substr(m.content, 1, 50) as content_preview
+            FROM messages m
+            JOIN ai_conversations c ON m.conversation_id = c.id
+            WHERE c.user_id = ?
+            ORDER BY m.timestamp DESC
+            LIMIT 5
+        ''', (user_id,))
+        sample_msgs = [{'id': r[0], 'sender': r[1], 'preview': r[2]} for r in cursor.fetchall()]
+        
         conn.close()
         
         return jsonify({
@@ -1834,7 +1868,14 @@ def debug_context_prompts():
             'should_use_ai': prompt_request.get('should_use_ai', False),
             'skip_reason': prompt_request.get('reason') if not prompt_request.get('should_use_ai') else None,
             'ai_call_func_available': greeting_system.ai_call_func is not None,
-            'context_prompt_generator_available': greeting_system.context_prompt_generator is not None
+            'context_prompt_generator_available': greeting_system.context_prompt_generator is not None,
+            # DEBUG info
+            'debug': {
+                'raw_conversation_count': conv_count,
+                'raw_message_count': msg_count,
+                'sample_conversations': sample_convs,
+                'sample_messages': sample_msgs
+            }
         })
     except Exception as e:
         import traceback
