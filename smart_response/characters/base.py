@@ -175,9 +175,37 @@ class BaseCharacter(ABC):
         """
         pass
     
-    def should_respond(self, concern_level: float) -> bool:
-        """Determine if character should respond based on threshold"""
-        return concern_level >= self.threshold_config.base_threshold
+    def should_respond(self, concern_level: float, user_id: int = None) -> bool:
+        """
+        Determine if character should respond based on threshold.
+        Uses personalized threshold if available, otherwise falls back to default.
+        """
+        threshold = self.get_threshold_for_user(user_id)
+        return concern_level >= threshold
+    
+    def get_threshold_for_user(self, user_id: int = None) -> float:
+        """Get the threshold for this character, personalized if user_id provided"""
+        if not user_id or not self.db:
+            return self.threshold_config.base_threshold
+        
+        try:
+            cursor = self.db.cursor()
+            cursor.execute('''
+                SELECT parameters FROM user_personalization WHERE user_id = ?
+            ''', (user_id,))
+            row = cursor.fetchone()
+            
+            if row:
+                import json
+                params = json.loads(row[0])
+                routing = params.get('routing', {})
+                threshold_key = f'{self.character_id}_threshold'
+                if threshold_key in routing:
+                    return routing[threshold_key]
+        except Exception:
+            pass
+        
+        return self.threshold_config.base_threshold
     
     def calculate_concern_level(self, message: str, context: Dict) -> float:
         """

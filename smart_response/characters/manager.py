@@ -93,12 +93,13 @@ class CharacterManager:
             if requested_character == 'coordinator':
                 # Check if any domain character should handle this
                 print(f"[ROUTING] Coordinator requested - checking if domain experts should handle...")
+                user_id = context.get('user_id')
                 for char_id, character in self.domain_characters.items():
                     concern_level = character.analyze_context(message, context)
-                    threshold = character.threshold_config.base_threshold
-                    print(f"[ROUTING] {char_id}: concern={concern_level:.3f}, threshold={threshold:.3f}")
+                    threshold = character.get_threshold_for_user(user_id)
+                    print(f"[ROUTING] {char_id}: concern={concern_level:.3f}, threshold={threshold:.3f} (user={user_id})")
                     
-                    if character.should_respond(concern_level):
+                    if character.should_respond(concern_level, user_id):
                         print(f"[ROUTING] Delegating to {char_id} (concern {concern_level:.3f} >= threshold {threshold:.3f})")
                         response = character.generate_response(message, context)
                         response.concern_level = concern_level
@@ -146,12 +147,13 @@ class CharacterManager:
         
         print(f"[ROUTING] Checking {len(self.domain_characters)} domain characters for message: {message[:50]}...")
         
+        user_id = context.get('user_id')
         for char_id, character in self.domain_characters.items():
             concern_level = character.analyze_context(message, context)
-            threshold = character.threshold_config.base_threshold
-            print(f"[ROUTING] {char_id}: concern={concern_level:.3f}, threshold={threshold:.3f}, triggers={concern_level >= threshold}")
+            threshold = character.get_threshold_for_user(user_id)
+            print(f"[ROUTING] {char_id}: concern={concern_level:.3f}, threshold={threshold:.3f} (user={user_id}), triggers={concern_level >= threshold}")
             
-            if character.should_respond(concern_level):
+            if character.should_respond(concern_level, user_id):
                 response = character.generate_response(message, context)
                 response.concern_level = concern_level
                 response.should_display = True
