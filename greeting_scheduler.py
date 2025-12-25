@@ -33,6 +33,8 @@ class GreetingScheduler:
         self.check_interval = check_interval_seconds
         self.running = False
         self.thread = None
+        self.last_cleanup = None
+        self.cleanup_interval_hours = 6  # Run cleanup every 6 hours
     
     def _check_all_users(self):
         """Check all eligible users for greeting triggers"""
@@ -67,6 +69,23 @@ class GreetingScheduler:
         except Exception as e:
             print(f"❌ Error in greeting scheduler: {e}")
     
+    def _maybe_run_cleanup(self):
+        """Run cleanup if enough time has passed since last cleanup"""
+        from datetime import timedelta
+        
+        current_time = datetime.now()
+        
+        # Run cleanup if never run or if interval has passed
+        if self.last_cleanup is None or \
+           (current_time - self.last_cleanup) > timedelta(hours=self.cleanup_interval_hours):
+            try:
+                deleted = self.greeting_system.cleanup_old_greetings(days_to_keep=7)
+                self.last_cleanup = current_time
+                if deleted > 0:
+                    print(f"🧹 Periodic cleanup: removed {deleted} old greetings")
+            except Exception as e:
+                print(f"❌ Error in periodic cleanup: {e}")
+    
     def _run(self):
         """Main scheduler loop"""
         print(f"🚀 Greeting scheduler started (checking every {self.check_interval}s)")
@@ -77,6 +96,9 @@ class GreetingScheduler:
                 print(f"🔍 Checking greetings at {current_time.strftime('%Y-%m-%d %H:%M:%S')}")
                 
                 self._check_all_users()
+                
+                # Run periodic cleanup (every 6 hours)
+                self._maybe_run_cleanup()
                 
                 # Sleep until next check
                 time.sleep(self.check_interval)
