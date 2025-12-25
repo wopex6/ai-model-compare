@@ -5349,6 +5349,106 @@
       "size_bytes": 4096,
       "hash": "c5fbe16449b59f75722a2c1584108147",
       "error": null
+    },
+    {
+      "database": "integrated_chat.db",
+      "timestamp": "2025-12-25T21:08:31.290992",
+      "reason": "startup",
+      "success": true,
+      "backup_file": "backups\\integrated_chat.db\\integrated_chat.db.20251225_210831.bak",
+      "size_bytes": 4096,
+      "hash": "c5fbe16449b59f75722a2c1584108147",
+      "error": null
+    },
+    {
+      "database": "integrated_database.db",
+      "timestamp": "2025-12-25T21:08:31.328884",
+      "reason": "startup",
+      "success": true,
+      "backup_file": "backups\\integrated_database.db\\integrated_database.db.20251225_210831.bak",
+      "size_bytes": 4096,
+      "hash": "c5fbe16449b59f75722a2c1584108147",
+      "error": null
+    },
+    {
+      "database": "integrated_users.db",
+      "timestamp": "2025-12-25T21:08:31.366019",
+      "reason": "startup",
+      "success": true,
+      "backup_file": "backups\\integrated_users.db\\integrated_users.db.20251225_210831.bak",
+      "size_bytes": 1368064,
+      "hash": "5e7159e62aa56bf2bba52f74576d770a",
+      "error": null
+    },
+    {
+      "database": "smart_response.db",
+      "timestamp": "2025-12-25T21:08:31.420330",
+      "reason": "startup",
+      "success": true,
+      "backup_file": "backups\\smart_response.db\\smart_response.db.20251225_210831.bak",
+      "size_bytes": 4096,
+      "hash": "c5fbe16449b59f75722a2c1584108147",
+      "error": null
+    },
+    {
+      "database": "smart_response\\smart_response.db",
+      "timestamp": "2025-12-25T21:08:31.451298",
+      "reason": "startup",
+      "success": true,
+      "backup_file": "backups\\smart_response_smart_response.db\\smart_response_smart_response.db.20251225_210831.bak",
+      "size_bytes": 4096,
+      "hash": "c5fbe16449b59f75722a2c1584108147",
+      "error": null
+    },
+    {
+      "database": "integrated_chat.db",
+      "timestamp": "2025-12-25T21:08:39.437241",
+      "reason": "startup",
+      "success": true,
+      "backup_file": "backups\\integrated_chat.db\\integrated_chat.db.20251225_210839.bak",
+      "size_bytes": 4096,
+      "hash": "c5fbe16449b59f75722a2c1584108147",
+      "error": null
+    },
+    {
+      "database": "integrated_database.db",
+      "timestamp": "2025-12-25T21:08:39.462694",
+      "reason": "startup",
+      "success": true,
+      "backup_file": "backups\\integrated_database.db\\integrated_database.db.20251225_210839.bak",
+      "size_bytes": 4096,
+      "hash": "c5fbe16449b59f75722a2c1584108147",
+      "error": null
+    },
+    {
+      "database": "integrated_users.db",
+      "timestamp": "2025-12-25T21:08:39.485026",
+      "reason": "startup",
+      "success": true,
+      "backup_file": "backups\\integrated_users.db\\integrated_users.db.20251225_210839.bak",
+      "size_bytes": 1368064,
+      "hash": "3d3eecd7ff6a1344ee9d1ddeb4a37f21",
+      "error": null
+    },
+    {
+      "database": "smart_response.db",
+      "timestamp": "2025-12-25T21:08:39.527594",
+      "reason": "startup",
+      "success": true,
+      "backup_file": "backups\\smart_response.db\\smart_response.db.20251225_210839.bak",
+      "size_bytes": 4096,
+      "hash": "c5fbe16449b59f75722a2c1584108147",
+      "error": null
+    },
+    {
+      "database": "smart_response\\smart_response.db",
+      "timestamp": "2025-12-25T21:08:39.554083",
+      "reason": "startup",
+      "success": true,
+      "backup_file": "backups\\smart_response_smart_response.db\\smart_response_smart_response.db.20251225_210839.bak",
+      "size_bytes": 4096,
+      "hash": "c5fbe16449b59f75722a2c1584108147",
+      "error": null
     }
   ],
   "restores": [],

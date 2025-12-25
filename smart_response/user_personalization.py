@@ -90,15 +90,33 @@ DEFAULT_USER_PARAMETERS = {
 class UserPersonalization:
     """
     Manages per-user personalized parameters with adaptive learning.
+    Uses fresh database connections per operation for thread safety.
     """
     
-    def __init__(self, db_connection):
-        self.db = db_connection
+    def __init__(self, db_getter):
+        """
+        Initialize with a database getter function or IntegratedDatabase instance.
+        This ensures thread-safe database access.
+        """
+        self._db_getter = db_getter
         self._init_tables()
+    
+    def _get_db(self):
+        """Get a fresh database connection (thread-safe)"""
+        if hasattr(self._db_getter, 'get_connection'):
+            # It's an IntegratedDatabase instance
+            return self._db_getter.get_connection()
+        elif callable(self._db_getter):
+            # It's a function that returns a connection
+            return self._db_getter()
+        else:
+            # It's a direct connection (legacy, not thread-safe)
+            return self._db_getter
     
     def _init_tables(self):
         """Create tables for user personalization"""
-        cursor = self.db.cursor()
+        db = self._get_db()
+        cursor = db.cursor()
         
         # Main personalization parameters table
         cursor.execute('''
@@ -151,14 +169,15 @@ class UserPersonalization:
             ON user_interaction_signals(user_id, processed)
         ''')
         
-        self.db.commit()
+        db.commit()
     
     def get_user_parameters(self, user_id: int) -> Dict:
         """
         Get personalized parameters for a user.
         Returns defaults merged with user's customizations.
         """
-        cursor = self.db.cursor()
+        db = self._get_db()
+        cursor = db.cursor()
         cursor.execute(
             'SELECT parameters FROM user_personalization WHERE user_id = ?',
             (user_id,)
@@ -199,7 +218,8 @@ class UserPersonalization:
         Set a specific parameter for a user.
         Records history for learning and debugging.
         """
-        cursor = self.db.cursor()
+        db = self._get_db()
+        cursor = db.cursor()
         
         # Get current parameters
         params = self.get_user_parameters(user_id)
@@ -231,14 +251,15 @@ class UserPersonalization:
             VALUES (?, ?, ?, ?, ?)
         ''', (user_id, path, json.dumps(old_value), json.dumps(value), reason))
         
-        self.db.commit()
+        db.commit()
         return True
     
     def update_parameters(self, user_id: int, updates: Dict, reason: str = None) -> bool:
         """
         Update multiple parameters at once.
         """
-        cursor = self.db.cursor()
+        db = self._get_db()
+        cursor = db.cursor()
         params = self.get_user_parameters(user_id)
         
         # Record each change
@@ -271,7 +292,7 @@ class UserPersonalization:
                 version = version + 1
         ''', (user_id, json.dumps(params), json.dumps(params)))
         
-        self.db.commit()
+        db.commit()
         return True
     
     # ==================== INTERACTION SIGNALS ====================
@@ -292,20 +313,22 @@ class UserPersonalization:
         - 'prompt_engaged': User engaged with a proactive prompt
         - 'timing_preference': User activity at specific times
         """
-        cursor = self.db.cursor()
+        db = self._get_db()
+        cursor = db.cursor()
         cursor.execute('''
             INSERT INTO user_interaction_signals 
             (user_id, signal_type, signal_value, context)
             VALUES (?, ?, ?, ?)
         ''', (user_id, signal_type, json.dumps(signal_value), context))
-        self.db.commit()
+        db.commit()
     
     def process_signals_and_adapt(self, user_id: int) -> Dict:
         """
         Process unprocessed signals and adapt user parameters.
         Returns summary of adaptations made.
         """
-        cursor = self.db.cursor()
+        db = self._get_db()
+        cursor = db.cursor()
         
         # Get user's current parameters
         params = self.get_user_parameters(user_id)
@@ -353,7 +376,7 @@ class UserPersonalization:
                 SET processed = 1 
                 WHERE id IN ({placeholders})
             ''', signal_ids)
-            self.db.commit()
+            db.commit()
         
         return {
             'adapted': len(adaptations) > 0,
@@ -478,7 +501,8 @@ class UserPersonalization:
     def get_parameter_history(self, user_id: int, parameter_path: str = None, 
                                limit: int = 20) -> List[Dict]:
         """Get history of parameter changes for a user"""
-        cursor = self.db.cursor()
+        db = self._get_db()
+        cursor = db.cursor()
         
         if parameter_path:
             cursor.execute('''
@@ -507,7 +531,8 @@ class UserPersonalization:
     
     def reset_to_defaults(self, user_id: int, category: str = None) -> bool:
         """Reset user parameters to defaults (optionally just one category)"""
-        cursor = self.db.cursor()
+        db = self._get_db()
+        cursor = db.cursor()
         
         if category:
             # Reset just one category
@@ -531,7 +556,7 @@ class UserPersonalization:
             VALUES (?, ?, NULL, NULL, ?)
         ''', (user_id, category or 'ALL', f'Reset to defaults'))
         
-        self.db.commit()
+        db.commit()
         return True
     
     def export_user_profile(self, user_id: int) -> Dict:
