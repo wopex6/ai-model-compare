@@ -497,3 +497,169 @@ The message should be 1-3 sentences, conversational, and specific to their conte
             'topics_to_avoid': avoid_topics,
             'high_interest_themes': high_interest
         }
+    
+    # ==================== AUTO THEME EXTRACTION ====================
+    
+    # Theme categories with keywords for detection
+    THEME_KEYWORDS = {
+        'career': ['work', 'job', 'career', 'promotion', 'boss', 'colleague', 'office', 
+                   'salary', 'interview', 'resume', 'professional', 'business', 'meeting'],
+        'health': ['health', 'exercise', 'workout', 'gym', 'diet', 'sleep', 'tired',
+                   'energy', 'weight', 'fitness', 'running', 'yoga', 'meditation'],
+        'relationships': ['relationship', 'friend', 'family', 'partner', 'dating', 'love',
+                         'marriage', 'parent', 'child', 'sibling', 'spouse', 'girlfriend', 'boyfriend'],
+        'finance': ['money', 'budget', 'saving', 'invest', 'debt', 'expense', 'income',
+                   'financial', 'retirement', 'stock', 'crypto', 'loan', 'mortgage'],
+        'learning': ['learn', 'study', 'course', 'book', 'skill', 'education', 'school',
+                    'university', 'degree', 'certificate', 'training', 'knowledge'],
+        'creativity': ['creative', 'art', 'music', 'write', 'design', 'paint', 'draw',
+                      'craft', 'hobby', 'project', 'idea', 'inspiration', 'blog'],
+        'mental_health': ['stress', 'anxiety', 'depression', 'overwhelm', 'worry', 'fear',
+                         'therapy', 'counseling', 'mental', 'emotional', 'feeling', 'mood'],
+        'productivity': ['productive', 'organize', 'plan', 'goal', 'habit', 'routine',
+                        'schedule', 'task', 'time management', 'focus', 'distraction'],
+        'travel': ['travel', 'trip', 'vacation', 'holiday', 'destination', 'flight',
+                  'hotel', 'adventure', 'explore', 'country', 'city'],
+        'technology': ['tech', 'computer', 'software', 'app', 'code', 'programming',
+                      'ai', 'digital', 'phone', 'device', 'website', 'online'],
+        'spirituality': ['spiritual', 'mindful', 'purpose', 'meaning', 'meditation',
+                        'gratitude', 'faith', 'soul', 'peace', 'inner', 'zen'],
+        'lifestyle': ['lifestyle', 'routine', 'balance', 'minimalist', 'simple',
+                     'morning', 'evening', 'daily', 'weekly', 'self-care']
+    }
+    
+    def extract_themes_from_message(self, message: str) -> List[Tuple[str, float]]:
+        """
+        Extract themes from a user message using keyword matching.
+        
+        Returns:
+            List of (theme, confidence) tuples, sorted by confidence
+        """
+        message_lower = message.lower()
+        words = set(message_lower.split())
+        
+        theme_scores = {}
+        
+        for theme, keywords in self.THEME_KEYWORDS.items():
+            score = 0
+            matched_keywords = []
+            
+            for keyword in keywords:
+                # Check for keyword in message (handles multi-word keywords)
+                if keyword in message_lower:
+                    score += 1
+                    matched_keywords.append(keyword)
+                # Also check individual words for single-word keywords
+                elif keyword in words:
+                    score += 0.5
+            
+            if score > 0:
+                # Normalize score (0-1 range)
+                confidence = min(1.0, score / 3)  # 3+ matches = full confidence
+                theme_scores[theme] = confidence
+        
+        # Sort by confidence descending
+        sorted_themes = sorted(theme_scores.items(), key=lambda x: x[1], reverse=True)
+        return sorted_themes[:3]  # Return top 3 themes
+    
+    def extract_and_store_themes(self, user_id: int, character_id: str, 
+                                  message: str, is_user_message: bool = True):
+        """
+        Extract themes from a message and store them in the database.
+        Updates interest scores based on message content.
+        
+        Args:
+            user_id: User ID
+            character_id: Character being talked to
+            message: The message content
+            is_user_message: True if from user (higher weight), False if from assistant
+        """
+        themes = self.extract_themes_from_message(message)
+        
+        if not themes:
+            return []
+        
+        # User messages get higher weight for theme updates
+        weight = 0.15 if is_user_message else 0.05
+        
+        stored_themes = []
+        for theme, confidence in themes:
+            interest_delta = weight * confidence
+            
+            # Extract a snippet for notes
+            snippet = message[:100] + '...' if len(message) > 100 else message
+            
+            self.update_theme(
+                user_id=user_id,
+                character_id=character_id,
+                theme=theme,
+                interest_delta=interest_delta,
+                notes=f"From message: {snippet}"
+            )
+            stored_themes.append({'theme': theme, 'confidence': confidence})
+        
+        return stored_themes
+    
+    def bulk_extract_themes_from_history(self, user_id: int, character_id: str = None,
+                                          limit: int = 50) -> Dict:
+        """
+        Extract themes from a user's conversation history.
+        Useful for initializing themes for existing users.
+        
+        Returns:
+            Summary of extracted themes
+        """
+        cursor = self.db.cursor()
+        
+        # Get user messages
+        if character_id:
+            cursor.execute('''
+                SELECT m.content
+                FROM messages m
+                JOIN ai_conversations c ON m.conversation_id = c.id
+                WHERE c.user_id = ? AND c.character_id = ? AND m.sender_type = 'user'
+                ORDER BY m.timestamp DESC
+                LIMIT ?
+            ''', (user_id, character_id, limit))
+        else:
+            cursor.execute('''
+                SELECT m.content
+                FROM messages m
+                JOIN ai_conversations c ON m.conversation_id = c.id
+                WHERE c.user_id = ? AND m.sender_type = 'user'
+                ORDER BY m.timestamp DESC
+                LIMIT ?
+            ''', (user_id, limit))
+        
+        messages = [row[0] for row in cursor.fetchall()]
+        
+        all_themes = {}
+        for msg in messages:
+            themes = self.extract_themes_from_message(msg)
+            for theme, confidence in themes:
+                if theme in all_themes:
+                    all_themes[theme]['count'] += 1
+                    all_themes[theme]['total_confidence'] += confidence
+                else:
+                    all_themes[theme] = {'count': 1, 'total_confidence': confidence}
+        
+        # Store top themes
+        target_char = character_id or 'coordinator'
+        for theme, data in all_themes.items():
+            avg_confidence = data['total_confidence'] / data['count']
+            interest_score = min(1.0, 0.3 + (data['count'] * 0.1) + (avg_confidence * 0.2))
+            
+            self.update_theme(
+                user_id=user_id,
+                character_id=target_char,
+                theme=theme,
+                interest_delta=interest_score - 0.5,  # Relative to baseline 0.5
+                notes=f"Bulk extracted from {data['count']} messages"
+            )
+        
+        return {
+            'messages_analyzed': len(messages),
+            'themes_found': len(all_themes),
+            'themes': {k: {'count': v['count'], 'avg_confidence': v['total_confidence']/v['count']} 
+                      for k, v in all_themes.items()}
+        }
