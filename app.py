@@ -3771,6 +3771,16 @@ def route_to_domain_characters():
         # Store AI responses using centralized integrated_db (same as regular characters)
         responding_chars = [r for r in formatted_responses if r.get('should_display')]
         
+        # Record signal for which characters responded (for adaptive learning)
+        if user_personalization and responding_chars:
+            for resp in responding_chars:
+                char_id = resp.get('character_id')
+                if char_id and char_id != 'coordinator':
+                    user_personalization.record_signal(
+                        user_id, 'preferred_character', char_id,
+                        context=f'Character responded to user message'
+                    )
+        
         for resp in responding_chars:
             char_id = resp.get('character_id')
             response_content = resp.get('content', '')
@@ -3961,6 +3971,14 @@ def submit_character_feedback():
         
         # Update user preference for this character
         domain_character_manager.update_user_preference(user_id, character_id, feedback)
+        
+        # Record signal for adaptive personalization
+        if user_personalization:
+            signal_type = 'preferred_character' if feedback == 'positive' else 'topic_avoid'
+            user_personalization.record_signal(
+                user_id, signal_type, character_id,
+                context=f'User gave {feedback} feedback'
+            )
         
         return jsonify({
             'success': True,
