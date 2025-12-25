@@ -653,3 +653,46 @@ class AutomatedGreetingSystem:
             })
         
         return greetings
+    
+    def cleanup_old_greetings(self, days_to_keep: int = 7) -> int:
+        """
+        Clean up old non-context greetings from both tracking table and messages.
+        Keeps greetings from the last N days and any context-related greetings.
+        Returns number of deleted greetings.
+        """
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        deleted_count = 0
+        
+        try:
+            cutoff_date = datetime.now() - timedelta(days=days_to_keep)
+            
+            # Delete old greetings from automated_greetings tracking table
+            # Keep context-related greetings (triggered_by contains 'context' or 'ai_prompt')
+            cursor.execute('''
+                DELETE FROM automated_greetings 
+                WHERE sent_at < ? 
+                AND (triggered_by IS NULL OR (triggered_by NOT LIKE '%context%' AND triggered_by NOT LIKE '%ai_prompt%'))
+            ''', (cutoff_date,))
+            deleted_count = cursor.rowcount
+            
+            # Delete old automated greeting messages from messages table
+            # These are identified by metadata containing 'is_automated_greeting': true
+            cursor.execute('''
+                DELETE FROM messages 
+                WHERE timestamp < ?
+                AND metadata LIKE '%"is_automated_greeting": true%'
+                AND metadata NOT LIKE '%"is_context_prompt": true%'
+            ''', (cutoff_date,))
+            deleted_count += cursor.rowcount
+            
+            conn.commit()
+            print(f"🧹 Cleaned up {deleted_count} old non-context greetings (older than {days_to_keep} days)")
+            
+        except Exception as e:
+            print(f"❌ Error cleaning up old greetings: {e}")
+            conn.rollback()
+        finally:
+            conn.close()
+        
+        return deleted_count

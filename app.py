@@ -1758,6 +1758,85 @@ def track_greeting_feedback():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/greetings/cleanup', methods=['POST'])
+@require_auth
+def cleanup_old_greetings():
+    """
+    Clean up old non-context greetings from the database.
+    Only admins can trigger this, or it runs automatically.
+    """
+    try:
+        user_role = request.current_user.get('role', 'guest')
+        if user_role not in ['administrator', 'master']:
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        data = request.get_json() or {}
+        days_to_keep = data.get('days_to_keep', 7)
+        
+        deleted_count = greeting_system.cleanup_old_greetings(days_to_keep)
+        
+        return jsonify({
+            'success': True,
+            'deleted_count': deleted_count,
+            'days_kept': days_to_keep
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/greetings/debug-context', methods=['GET'])
+@require_auth
+def debug_context_prompts():
+    """
+    Debug endpoint to see why AI context prompts aren't being generated.
+    Shows the context that would be used for AI prompt generation.
+    """
+    try:
+        user_id = request.current_user['user_id']
+        
+        # Get user's first name
+        profile = integrated_db.get_user_profile(user_id)
+        user_name = 'there'
+        if profile and profile.get('first_name'):
+            user_name = profile['first_name'].split()[0]
+        
+        # Check if context prompt generator is available
+        if not greeting_system.context_prompt_generator:
+            return jsonify({
+                'success': False,
+                'error': 'Context prompt generator not initialized',
+                'ai_call_func_available': greeting_system.ai_call_func is not None
+            })
+        
+        # Build prompt request to see what context we have
+        from smart_response.ai_context_prompts import AIContextPromptGenerator
+        conn = integrated_db.get_connection()
+        debug_generator = AIContextPromptGenerator(conn)
+        
+        context = debug_generator.get_conversation_context_for_ai(user_id, 'coordinator')
+        prompt_request = debug_generator.build_ai_prompt_request(user_id, user_name, 'coordinator')
+        
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'user_id': user_id,
+            'user_name': user_name,
+            'meaningful_exchange_count': context.get('meaningful_exchange_count', 0),
+            'has_sufficient_context': context.get('has_sufficient_context', False),
+            'themes_count': len(context.get('themes', [])),
+            'themes': context.get('themes', []),
+            'feedback_patterns': context.get('feedback_patterns', []),
+            'recent_suggestions_count': len(context.get('recent_suggestions', [])),
+            'should_use_ai': prompt_request.get('should_use_ai', False),
+            'skip_reason': prompt_request.get('reason') if not prompt_request.get('should_use_ai') else None,
+            'ai_call_func_available': greeting_system.ai_call_func is not None,
+            'context_prompt_generator_available': greeting_system.context_prompt_generator is not None
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/user/conversations/<session_id>/messages', methods=['POST'])
 @require_auth
 def add_conversation_message(session_id):
