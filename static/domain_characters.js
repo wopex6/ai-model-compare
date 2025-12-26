@@ -338,8 +338,9 @@ const DomainCharacters = {
      * @param {string} characterId - Character ID (for bot messages)
      * @param {boolean} isWelcome - Whether this is a welcome message
      * @param {string} timestamp - ISO timestamp string (optional)
+     * @param {object} extraMetadata - Additional metadata (summary, etc.)
      */
-    _addMessageToDisplay(content, role, characterId = null, isWelcome = false, timestamp = null) {
+    _addMessageToDisplay(content, role, characterId = null, isWelcome = false, timestamp = null, extraMetadata = {}) {
         // Get character display name for bot messages
         let displayName = null;
         if (role === 'bot' && characterId) {
@@ -363,7 +364,7 @@ const DomainCharacters = {
                 role: role,
                 timestamp: timestamp || (isWelcome ? null : new Date().toISOString()),
                 shouldScroll: true,
-                metadata: { isWelcome, characterId }
+                metadata: { isWelcome, characterId, ...extraMetadata }
             });
             
             // Restore original name
@@ -492,11 +493,22 @@ const DomainCharacters = {
             if (data.success) {
                 console.log(`✓ Routed to ${data.responding_count} character(s)`);
                 
-                // Display responses
+                // Display responses with metadata (including summary)
                 if (data.responses) {
                     data.responses.forEach(resp => {
                         if (resp.should_display) {
-                            this._addMessageToDisplay(resp.content, 'bot', resp.character_id);
+                            // Pass metadata including summary if available
+                            const metadata = resp.metadata || {};
+                            console.log('📋 Response metadata:', metadata);
+                            console.log('📋 Has summary:', metadata.has_summary, 'Summary:', metadata.summary?.substring(0, 50));
+                            this._addMessageToDisplay(
+                                resp.content, 
+                                'bot', 
+                                resp.character_id, 
+                                false, 
+                                null, 
+                                metadata
+                            );
                         }
                     });
                 }
