@@ -250,6 +250,107 @@ class IntegratedDatabase:
             )
         ''')
         
+        # ==================== GOAL COACHING SYSTEM ====================
+        # User goals table - tracks what users want to achieve
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_goals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                goal_title TEXT NOT NULL,
+                goal_description TEXT,
+                goal_type TEXT DEFAULT 'general',
+                priority INTEGER DEFAULT 1,
+                status TEXT DEFAULT 'active',
+                target_date DATE,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                completed_at DATETIME,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_goals_user_status 
+            ON user_goals(user_id, status, priority DESC)
+        ''')
+        
+        # Goal strategies - AI-generated strategies behind the scenes
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS goal_strategies (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                goal_id INTEGER NOT NULL,
+                strategy_phase TEXT DEFAULT 'discovery',
+                current_step INTEGER DEFAULT 1,
+                total_steps INTEGER,
+                strategy_json TEXT,
+                next_action TEXT,
+                next_question TEXT,
+                validation_needed TEXT,
+                last_user_input TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (goal_id) REFERENCES user_goals (id) ON DELETE CASCADE
+            )
+        ''')
+        
+        # Goal milestones - trackable progress markers
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS goal_milestones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                goal_id INTEGER NOT NULL,
+                milestone_title TEXT NOT NULL,
+                milestone_description TEXT,
+                sequence_order INTEGER DEFAULT 0,
+                status TEXT DEFAULT 'pending',
+                due_date DATE,
+                completed_at DATETIME,
+                celebration_sent BOOLEAN DEFAULT 0,
+                FOREIGN KEY (goal_id) REFERENCES user_goals (id) ON DELETE CASCADE
+            )
+        ''')
+        
+        # Goal follow-ups - scheduled proactive check-ins
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS goal_followups (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                goal_id INTEGER NOT NULL,
+                user_id INTEGER NOT NULL,
+                followup_type TEXT DEFAULT 'check_in',
+                followup_question TEXT NOT NULL,
+                context_summary TEXT,
+                scheduled_for DATETIME,
+                sent_at DATETIME,
+                user_responded BOOLEAN DEFAULT 0,
+                response_summary TEXT,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (goal_id) REFERENCES user_goals (id) ON DELETE CASCADE,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_followups_scheduled 
+            ON goal_followups(user_id, scheduled_for, sent_at)
+        ''')
+        
+        # Goal coaching sessions - tracks conversation context for goals
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS goal_coaching_sessions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                goal_id INTEGER,
+                session_type TEXT DEFAULT 'discovery',
+                session_summary TEXT,
+                insights_gathered TEXT,
+                blockers_identified TEXT,
+                recommendations TEXT,
+                started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                ended_at DATETIME,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+                FOREIGN KEY (goal_id) REFERENCES user_goals (id) ON DELETE CASCADE
+            )
+        ''')
+        
         conn.commit()
         conn.close()
     

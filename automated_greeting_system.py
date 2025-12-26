@@ -238,10 +238,28 @@ class AutomatedGreetingSystem:
                 print(f"⏭️ Skipping AI prompt: {request.get('reason', 'unknown')}")
                 return None
             
+            # Get goal coaching context if available
+            goal_context = ""
+            try:
+                from goal_coaching_system import create_goal_coaching_system
+                goal_system = create_goal_coaching_system(self.db, self.ai_call_func)
+                goal = goal_system.get_or_create_active_goal(user_id)
+                if goal:
+                    goal_context = f"""
+ACTIVE GOAL: {goal.title}
+Phase: {goal.strategy_phase} | Progress: {goal.progress_percentage:.0f}%
+Next focus: {goal.next_action or 'Continue working toward goal'}
+
+IMPORTANT: Your follow-up should help the user make progress on their goal.
+Ask about their goal progress or provide actionable guidance."""
+            except Exception as e:
+                print(f"[COACHING] Could not get goal context: {e}")
+            
             # Call AI to generate the prompt
+            enhanced_context = f"{request['context']}\n{goal_context}" if goal_context else request['context']
             ai_response = self.ai_call_func(
                 system_prompt=request['system_prompt'],
-                user_message=f"Generate a follow-up message for {user_name}.\n\n{request['context']}",
+                user_message=f"Generate a follow-up message for {user_name}.\n\n{enhanced_context}",
                 purpose='context_prompt_generation',
                 character='coordinator'
             )

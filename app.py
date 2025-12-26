@@ -142,6 +142,11 @@ email_service = EmailService()
 ai_compare = AICompare()
 chatbot = AIChatbot()
 
+# Initialize Goal Coaching System for proactive user engagement
+from goal_coaching_system import create_goal_coaching_system
+goal_coaching_system = create_goal_coaching_system(integrated_db, ai_call_func=greeting_ai_call)
+print("✓ Goal Coaching System initialized (proactive engagement)")
+
 # Initialize backup system
 backup_manager = BackupManager()
 # Backup on startup
@@ -3679,6 +3684,17 @@ def route_to_domain_characters():
                     print(f"[USER_CONTEXT] User references past conversation - expanding context")
             except Exception as e:
                 print(f"Warning: User context processing failed: {e}")
+        
+        # GOAL COACHING: Add proactive coaching context to drive user engagement
+        # This tracks goals and provides follow-up questions to keep users on track
+        if goal_coaching_system:
+            try:
+                coaching_context = goal_coaching_system.get_coaching_context_for_prompt(user_id)
+                if coaching_context:
+                    context['coaching_context'] = coaching_context
+                    print(f"[COACHING] Added goal coaching context for user {user_id}")
+            except Exception as e:
+                print(f"Warning: Goal coaching context failed: {e}")
         
         # PERSONALITY INTEGRATION: Add Big5 traits, goals, profile to AI context
         # This adapts thresholds dynamically based on conversation state
