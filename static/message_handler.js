@@ -142,6 +142,10 @@ const MessageHandler = {
         const formattedContent = sender === 'bot' ? this.formatBotResponse(content) : content;
         const senderLabel = sender === 'bot' ? `<strong>${this.getBotDisplayName()}:</strong>` : '<strong>You:</strong>';
         
+        // Check if message has a summary (for long AI responses)
+        const hasSummary = metadata.has_summary && metadata.summary;
+        const summary = metadata.summary || '';
+        
         // Add pin button (WhatsApp-style)
         const pinButton = `<button class="pin-btn" title="Pin message" onclick="MessageHandler.pinMessage(this)" 
             data-content="${content.replace(/"/g, '&quot;').replace(/'/g, '&#39;')}" 
@@ -155,24 +159,60 @@ const MessageHandler = {
             onclick="MessageHandler.setReplyTo(${messageId}, '${content.replace(/'/g, "\\'").replace(/"/g, '&quot;').substring(0, 100)}', '${role}')"
             style="opacity: 0; position: absolute; right: 30px; top: 5px; background: none; border: none; cursor: pointer; font-size: 14px; transition: opacity 0.2s;">↩️</button>`;
         
+        // Add expand button for messages with summaries
+        const expandButton = hasSummary ? `<button class="expand-btn" title="Show full response" 
+            onclick="MessageHandler.toggleExpand(this)"
+            style="opacity: 0; position: absolute; right: 55px; top: 5px; background: none; border: none; cursor: pointer; font-size: 14px; transition: opacity 0.2s;">📖</button>` : '';
+        
         // Store message ID on the element for reference
         messageDiv.dataset.messageId = messageId;
         
-        bubble.innerHTML = `${replyButton}${pinButton}${senderLabel} ${formattedContent}${sourceBadge}${timeStr}`;
+        // Build content with summary/full toggle if applicable
+        let displayContent;
+        if (hasSummary) {
+            const formattedSummary = this.formatBotResponse(summary);
+            displayContent = `
+                <div class="summary-content" style="display: block;">
+                    <div style="background: linear-gradient(135deg, #e8f5e9, #c8e6c9); padding: 10px; border-radius: 8px; margin-bottom: 8px; border-left: 4px solid #4CAF50;">
+                        <div style="font-size: 0.85em; color: #2E7D32; font-weight: bold; margin-bottom: 4px;">📋 Summary</div>
+                        ${formattedSummary}
+                    </div>
+                    <button onclick="MessageHandler.toggleExpand(this)" 
+                        style="background: #E3F2FD; border: 1px solid #2196F3; border-radius: 4px; padding: 6px 12px; cursor: pointer; font-size: 0.85em; color: #1976D2;">
+                        📖 Read Full Response
+                    </button>
+                </div>
+                <div class="full-content" style="display: none;">
+                    ${formattedContent}
+                    <button onclick="MessageHandler.toggleExpand(this)" 
+                        style="background: #FFF3E0; border: 1px solid #FF9800; border-radius: 4px; padding: 6px 12px; cursor: pointer; font-size: 0.85em; color: #E65100; margin-top: 8px;">
+                        📋 Show Summary
+                    </button>
+                </div>
+            `;
+        } else {
+            displayContent = formattedContent;
+        }
+        
+        bubble.innerHTML = `${expandButton}${replyButton}${pinButton}${senderLabel} ${displayContent}${sourceBadge}${timeStr}`;
         bubble.style.position = 'relative';
         
-        // Show pin and reply buttons on hover
+        // Show pin, reply, and expand buttons on hover
         bubble.addEventListener('mouseenter', () => {
             const pinBtn = bubble.querySelector('.pin-btn');
             const replyBtn = bubble.querySelector('.reply-btn');
+            const expandBtn = bubble.querySelector('.expand-btn');
             if (pinBtn) pinBtn.style.opacity = '1';
             if (replyBtn) replyBtn.style.opacity = '1';
+            if (expandBtn) expandBtn.style.opacity = '1';
         });
         bubble.addEventListener('mouseleave', () => {
             const pinBtn = bubble.querySelector('.pin-btn');
             const replyBtn = bubble.querySelector('.reply-btn');
+            const expandBtn = bubble.querySelector('.expand-btn');
             if (pinBtn) pinBtn.style.opacity = '0';
             if (replyBtn) replyBtn.style.opacity = '0';
+            if (expandBtn) expandBtn.style.opacity = '0';
         });
         
         messageDiv.appendChild(bubble);
@@ -364,6 +404,34 @@ const MessageHandler = {
     clearMessages() {
         if (this.messagesContainer) {
             this.messagesContainer.innerHTML = '';
+        }
+    },
+    
+    // ==================== SUMMARY EXPAND/COLLAPSE FEATURE ====================
+    
+    /**
+     * Toggle between summary and full response
+     * @param {HTMLElement} button - The clicked button element
+     */
+    toggleExpand(button) {
+        // Find the parent message bubble
+        const bubble = button.closest('.message-content, .message-bubble, [class*="bubble"]') || button.parentElement.parentElement;
+        if (!bubble) return;
+        
+        const summaryDiv = bubble.querySelector('.summary-content');
+        const fullDiv = bubble.querySelector('.full-content');
+        
+        if (!summaryDiv || !fullDiv) return;
+        
+        // Toggle visibility
+        if (summaryDiv.style.display !== 'none') {
+            summaryDiv.style.display = 'none';
+            fullDiv.style.display = 'block';
+            console.log('📖 Expanded to full response');
+        } else {
+            summaryDiv.style.display = 'block';
+            fullDiv.style.display = 'none';
+            console.log('📋 Collapsed to summary');
         }
     },
     

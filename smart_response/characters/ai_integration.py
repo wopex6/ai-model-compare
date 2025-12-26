@@ -448,6 +448,11 @@ class DomainCharacterAI:
         concern_level = character.analyze_context(message, context)
         interpretation = character.interpret_context(message, context)
         
+        # Generate summary for long responses (>300 chars)
+        summary = None
+        if ai_response and len(ai_response) > 300 and used_provider != 'fallback':
+            summary = self._generate_summary(ai_response, used_provider)
+        
         return CharacterResponse(
             character_id=character.character_id,
             display_name=character.display_name,
@@ -459,7 +464,9 @@ class DomainCharacterAI:
                 'provider': used_provider,
                 'domain': getattr(character, 'domain', 'general'),
                 'ai_generated': used_provider != 'fallback',
-                'failover_used': used_provider != provider if provider else False
+                'failover_used': used_provider != provider if provider else False,
+                'summary': summary,
+                'has_summary': summary is not None
             }
         )
     
@@ -566,6 +573,38 @@ class DomainCharacterAI:
             print(f"[TOKENS] Anthropic actual: {response.usage.input_tokens} in, {response.usage.output_tokens} out")
         
         return response.content[0].text
+    
+    def _generate_summary(self, full_response: str, provider: str) -> Optional[str]:
+        """Generate a concise summary with action items from a long AI response"""
+        try:
+            summary_prompt = """Summarize the following response in 2-3 concise sentences. 
+Focus on: 1) Key insight or answer, 2) Recommended next action (if any).
+Keep it under 100 words. Be direct and actionable.
+
+Response to summarize:
+"""
+            if provider == 'openai' and self.openai_client:
+                response = self.openai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[
+                        {"role": "system", "content": "You are a concise summarizer. Create brief, actionable summaries."},
+                        {"role": "user", "content": summary_prompt + full_response}
+                    ],
+                    max_tokens=150,
+                    temperature=0.3
+                )
+                return response.choices[0].message.content.strip()
+            elif provider == 'anthropic' and self.anthropic_client:
+                response = self.anthropic_client.messages.create(
+                    model="claude-3-haiku-20240307",
+                    max_tokens=150,
+                    system="You are a concise summarizer. Create brief, actionable summaries.",
+                    messages=[{"role": "user", "content": summary_prompt + full_response}]
+                )
+                return response.content[0].text.strip()
+        except Exception as e:
+            print(f"[SUMMARY] Failed to generate summary: {e}")
+        return None
     
     def _generate_fallback(self, character: BaseCharacter, message: str) -> str:
         """Generate fallback response when no AI is available"""
