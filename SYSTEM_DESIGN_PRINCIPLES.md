@@ -363,7 +363,19 @@ When documenting features, include:
 
 ---
 
+## **Related Documentation**
+
+- **GOAL_COACHING_PHILOSOPHY.md** - Adaptive engagement system philosophy
+  - Invisible coaching that feels like helpful conversation
+  - Psychology detection and adaptive response strategies
+  - Specific action focus over generic advice
+  - See this document for algorithm refinement guidelines
+
 ## **Version History**
+
+- **v1.1** (2025-12-26): Added Goal Coaching System reference
+  - Linked to GOAL_COACHING_PHILOSOPHY.md
+  - Adaptive engagement principles documented
 
 - **v1.0** (2025-11-29): Initial principles established
   - Based on user requirements and strategic discussion
