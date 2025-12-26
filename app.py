@@ -3685,14 +3685,15 @@ def route_to_domain_characters():
             except Exception as e:
                 print(f"Warning: User context processing failed: {e}")
         
-        # GOAL COACHING: Add proactive coaching context to drive user engagement
-        # This tracks goals and provides follow-up questions to keep users on track
+        # GOAL COACHING: Add adaptive coaching context (invisible to user)
+        # Detects user's psychological state and adapts guidance approach
         if goal_coaching_system:
             try:
-                coaching_context = goal_coaching_system.get_coaching_context_for_prompt(user_id)
+                # Pass message so it can detect user state and adapt
+                coaching_context = goal_coaching_system.get_coaching_context_for_prompt(user_id, message)
                 if coaching_context:
                     context['coaching_context'] = coaching_context
-                    print(f"[COACHING] Added goal coaching context for user {user_id}")
+                    print(f"[COACHING] Added adaptive coaching context for user {user_id}")
             except Exception as e:
                 print(f"Warning: Goal coaching context failed: {e}")
         

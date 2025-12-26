@@ -1,11 +1,15 @@
 """
-Goal Coaching System - Proactive strategy-driven user engagement
+Goal Coaching System - Conversational Engagement Engine
 
-This system transforms passive Q&A into active coaching by:
-1. Tracking user goals and strategies behind the scenes
-2. Generating follow-up questions to keep users engaged
-3. Providing continuous guidance and actionable advice
-4. Integrating with auto bot context prompts for holistic engagement
+This system works BEHIND THE SCENES to help users achieve their goals through
+natural, adaptive conversation - NOT rigid formal coaching.
+
+Key Principles:
+1. Strategy is invisible to users - they just experience helpful conversation
+2. Adapt to users' psychology, mood, and changing needs in real-time
+3. Provide SPECIFIC immediate actions, not generic advice
+4. Encourage engagement through warmth, curiosity, and celebration
+5. A strategy users don't follow is worthless - focus on adoption
 """
 
 import json
@@ -17,76 +21,119 @@ from dataclasses import dataclass
 
 @dataclass
 class GoalContext:
-    """Context for a user's active goal"""
+    """Internal context for tracking user's journey (invisible to user)"""
     goal_id: int
     title: str
     description: str
     status: str
-    strategy_phase: str
-    current_step: int
-    next_action: str
-    next_question: str
-    milestones: List[Dict]
-    progress_percentage: float
+    engagement_level: str  # high, medium, low, disengaged
+    user_mood: str  # motivated, uncertain, frustrated, neutral
+    last_action_taken: str
+    days_since_progress: int
+    blockers: List[str]
+    wins: List[str]
+
+
+@dataclass 
+class UserPsychState:
+    """Track user's psychological state for adaptive responses"""
+    energy_level: str  # high, medium, low
+    confidence: str  # confident, uncertain, struggling
+    engagement: str  # engaged, passive, resistant
+    needs_encouragement: bool
+    needs_concrete_help: bool
+    needs_space: bool
 
 
 class GoalCoachingSystem:
     """
-    Proactive goal coaching that maintains strategy and pushes users toward achievement.
+    Invisible coaching that feels like helpful conversation.
     
-    Strategy Phases:
-    1. discovery - Understanding the goal and user's situation
-    2. planning - Creating actionable steps and milestones
-    3. execution - Guiding through action steps with follow-ups
-    4. validation - Checking progress and adjusting strategy
-    5. completion - Celebrating achievements and setting next goals
+    All strategy tracking happens behind the scenes.
+    Users only experience natural, adaptive support.
+    
+    Focus Areas:
+    - Detect what user ACTUALLY needs right now (not what we planned)
+    - Give ONE specific thing they can do TODAY
+    - Celebrate small wins to build momentum
+    - Recognize when to push vs when to support
+    - Never feel like a formal coaching program
     """
     
     def __init__(self, db, ai_call_func: Callable = None):
         self.db = db
         self.ai_call_func = ai_call_func
         
-        # Phase-specific question templates
-        self.phase_questions = {
-            'discovery': [
-                "What specifically do you want to achieve with {goal}?",
-                "What's driving you to pursue this goal right now?",
-                "What obstacles have you faced before when trying this?",
-                "On a scale of 1-10, how committed are you to this goal?",
-                "What does success look like to you?"
-            ],
-            'planning': [
-                "What's the first small step you could take this week?",
-                "Who else might be able to help you with this?",
-                "What resources do you already have available?",
-                "What's a realistic timeline for your first milestone?",
-                "How will you track your progress?"
-            ],
-            'execution': [
-                "How did your last action step go?",
-                "What's blocking you from taking the next step?",
-                "What support do you need right now?",
-                "Have you encountered any unexpected challenges?",
-                "What's working well so far?"
-            ],
-            'validation': [
-                "Are you still on track with your original goal?",
-                "Do we need to adjust the strategy?",
-                "What have you learned so far?",
-                "Is the current pace sustainable for you?",
-                "Any wins to celebrate, even small ones?"
-            ]
-        }
+        # Engagement patterns to detect user state
+        self.disengagement_signals = [
+            'busy', 'later', 'not now', 'maybe', 'i guess', 'whatever',
+            'sure', 'ok', 'fine', "don't know", 'not sure'
+        ]
+        
+        self.motivation_signals = [
+            'excited', 'ready', 'let\'s do', 'want to', 'eager',
+            'motivated', 'pumped', 'can\'t wait', 'yes!', 'absolutely'
+        ]
+        
+        self.struggle_signals = [
+            'stuck', 'confused', 'overwhelmed', 'frustrated', 'hard',
+            'difficult', 'can\'t', 'struggling', 'help', 'lost'
+        ]
+        
+        self.progress_signals = [
+            'did it', 'done', 'finished', 'completed', 'achieved',
+            'finally', 'managed', 'succeeded', 'worked', 'progress'
+        ]
+    
+    def detect_user_state(self, message: str) -> UserPsychState:
+        """Detect user's psychological state from their message"""
+        message_lower = message.lower()
+        
+        # Detect engagement level
+        is_disengaged = any(s in message_lower for s in self.disengagement_signals)
+        is_motivated = any(s in message_lower for s in self.motivation_signals)
+        is_struggling = any(s in message_lower for s in self.struggle_signals)
+        has_progress = any(s in message_lower for s in self.progress_signals)
+        
+        # Determine engagement
+        if is_disengaged:
+            engagement = 'passive'
+        elif is_motivated or has_progress:
+            engagement = 'engaged'
+        else:
+            engagement = 'neutral'
+        
+        # Determine energy and confidence
+        if is_struggling:
+            energy = 'low'
+            confidence = 'struggling'
+        elif is_motivated:
+            energy = 'high'
+            confidence = 'confident'
+        elif is_disengaged:
+            energy = 'low'
+            confidence = 'uncertain'
+        else:
+            energy = 'medium'
+            confidence = 'uncertain'
+        
+        return UserPsychState(
+            energy_level=energy,
+            confidence=confidence,
+            engagement=engagement,
+            needs_encouragement=is_struggling or is_disengaged,
+            needs_concrete_help=is_struggling or '?' in message,
+            needs_space=is_disengaged and len(message) < 20
+        )
     
     def get_or_create_active_goal(self, user_id: int, goal_hint: str = None) -> Optional[GoalContext]:
-        """Get user's active goal or detect one from conversation"""
+        """Get user's active goal (internal tracking only)"""
         conn = self.db.get_connection()
         cursor = conn.cursor()
         
-        # Check for existing active goal
         cursor.execute('''
             SELECT g.id, g.goal_title, g.goal_description, g.status,
-                   s.strategy_phase, s.current_step, s.next_action, s.next_question
+                   s.strategy_phase, s.current_step, s.next_action, s.last_user_input
             FROM user_goals g
             LEFT JOIN goal_strategies s ON g.id = s.goal_id
             WHERE g.user_id = ? AND g.status = 'active'
@@ -95,22 +142,31 @@ class GoalCoachingSystem:
         ''', (user_id,))
         
         row = cursor.fetchone()
-        conn.close()
         
         if row:
+            # Calculate days since last progress
+            cursor.execute('''
+                SELECT julianday('now') - julianday(updated_at) 
+                FROM goal_strategies WHERE goal_id = ?
+            ''', (row[0],))
+            days_row = cursor.fetchone()
+            days_since = int(days_row[0]) if days_row and days_row[0] else 0
+            
+            conn.close()
             return GoalContext(
                 goal_id=row[0],
                 title=row[1],
                 description=row[2] or '',
                 status=row[3],
-                strategy_phase=row[4] or 'discovery',
-                current_step=row[5] or 1,
-                next_action=row[6] or '',
-                next_question=row[7] or '',
-                milestones=self._get_goal_milestones(row[0]),
-                progress_percentage=self._calculate_progress(row[0])
+                engagement_level='medium',
+                user_mood='neutral',
+                last_action_taken=row[6] or '',
+                days_since_progress=days_since,
+                blockers=[],
+                wins=[]
             )
         
+        conn.close()
         return None
     
     def create_goal(self, user_id: int, title: str, description: str = None, 
@@ -175,17 +231,23 @@ Only return has_goal=true if the user clearly expresses wanting to achieve, impr
         
         return None
     
-    def generate_coaching_response(self, user_id: int, user_message: str, 
-                                   goal_context: GoalContext = None) -> Dict:
-        """Generate a coaching-style response with follow-up questions"""
-        if not goal_context:
-            goal_context = self.get_or_create_active_goal(user_id)
+    def generate_adaptive_guidance(self, user_id: int, user_message: str) -> Dict:
+        """
+        Generate natural, adaptive guidance based on user's current state.
         
+        This is NOT formal coaching - it's helpful conversation that adapts to:
+        - What the user actually needs RIGHT NOW
+        - Their energy/mood/engagement level
+        - Whether to push, support, or give space
+        """
+        # Detect user's current psychological state
+        user_state = self.detect_user_state(user_message)
+        goal_context = self.get_or_create_active_goal(user_id)
+        
+        # No goal yet - check if they're expressing one naturally
         if not goal_context:
-            # No active goal - check if user is expressing one
             detected = self.detect_goal_from_message(user_id, user_message)
             if detected and detected.get('has_goal') and detected.get('confidence', 0) > 0.6:
-                # Create the goal
                 goal_id = self.create_goal(
                     user_id, 
                     detected.get('goal_title', 'New Goal'),
@@ -195,83 +257,144 @@ Only return has_goal=true if the user clearly expresses wanting to achieve, impr
                 goal_context = self.get_or_create_active_goal(user_id)
         
         if not goal_context:
-            return {
-                'has_coaching': False,
-                'coaching_context': None
-            }
+            return {'has_guidance': False}
         
-        # Update strategy based on user input
-        self._update_strategy(goal_context.goal_id, user_message)
+        # Track this interaction
+        self._track_engagement(goal_context.goal_id, user_message, user_state)
         
-        # Generate next question and guidance
-        coaching = self._generate_next_coaching_step(goal_context, user_message)
+        # Generate adaptive response based on user state
+        guidance = self._generate_adaptive_response(goal_context, user_message, user_state)
         
         return {
-            'has_coaching': True,
-            'goal_title': goal_context.title,
-            'strategy_phase': goal_context.strategy_phase,
-            'progress': goal_context.progress_percentage,
-            'next_question': coaching.get('next_question'),
-            'guidance': coaching.get('guidance'),
-            'action_items': coaching.get('action_items', []),
-            'coaching_context': coaching
+            'has_guidance': True,
+            'user_state': {
+                'energy': user_state.energy_level,
+                'engagement': user_state.engagement,
+                'needs_encouragement': user_state.needs_encouragement,
+                'needs_concrete_help': user_state.needs_concrete_help
+            },
+            **guidance
         }
     
-    def _generate_next_coaching_step(self, goal: GoalContext, user_input: str) -> Dict:
-        """Generate the next coaching step with AI"""
+    def _generate_adaptive_response(self, goal: GoalContext, user_input: str, 
+                                    user_state: UserPsychState) -> Dict:
+        """Generate response adapted to user's psychological state"""
+        
+        # Determine response strategy based on user state
+        if user_state.needs_space:
+            strategy = "gentle_check_in"
+            tone = "Give space, light touch, no pressure"
+        elif user_state.needs_encouragement:
+            strategy = "supportive_boost"
+            tone = "Warm, validating, celebrate any effort"
+        elif user_state.needs_concrete_help:
+            strategy = "specific_action"
+            tone = "Clear, practical, ONE thing they can do TODAY"
+        elif user_state.engagement == 'engaged':
+            strategy = "momentum_builder"
+            tone = "Energetic, build on their motivation, stretch them slightly"
+        else:
+            strategy = "curious_exploration"
+            tone = "Curious, open questions, understand where they are"
+        
         if not self.ai_call_func:
-            # Fallback to template-based questions
-            phase_qs = self.phase_questions.get(goal.strategy_phase, self.phase_questions['discovery'])
-            step_idx = min(goal.current_step - 1, len(phase_qs) - 1)
-            return {
-                'next_question': phase_qs[step_idx].format(goal=goal.title),
-                'guidance': f"Let's work on your goal: {goal.title}",
-                'action_items': []
-            }
+            return self._get_fallback_guidance(goal, user_state, strategy)
         
         try:
             response = self.ai_call_func(
-                system_prompt=f"""You are a proactive goal coach helping the user achieve: "{goal.title}"
+                system_prompt=f"""You are having a natural, helpful conversation with someone working toward: "{goal.title}"
 
-Current Phase: {goal.strategy_phase}
-Progress: {goal.progress_percentage}%
-Next Action: {goal.next_action or 'To be determined'}
+CRITICAL RULES:
+1. DO NOT sound like a formal coach or program
+2. Be conversational, warm, like a supportive friend
+3. Give ONE specific thing they can do TODAY (not vague advice)
+4. Adapt to their current mood and energy
 
-Your role is to:
-1. Acknowledge what the user shared
-2. Provide specific, actionable guidance
-3. Ask ONE focused follow-up question to keep momentum
-4. End with encouragement
+USER'S CURRENT STATE:
+- Energy: {user_state.energy_level}
+- Confidence: {user_state.confidence}  
+- Engagement: {user_state.engagement}
 
-Keep responses concise but warm. Focus on the next immediate step.
+RESPONSE STRATEGY: {strategy}
+TONE: {tone}
 
-Return your response in this JSON format:
-{{
-    "acknowledgment": "brief acknowledgment of user's input",
-    "guidance": "specific advice or instruction (2-3 sentences)",
-    "next_question": "one focused follow-up question",
-    "action_items": ["specific action 1", "specific action 2"],
-    "encouragement": "brief motivating message"
-}}""",
-                user_message=f"User said: {user_input}\n\nGenerate the next coaching step.",
-                purpose='goal_coaching',
+{"They seem disengaged - don't push, just check in warmly." if user_state.needs_space else ""}
+{"They're struggling - validate first, then offer concrete help." if user_state.needs_encouragement else ""}
+{"They need specific guidance - give them ONE clear action." if user_state.needs_concrete_help else ""}
+{"They're motivated - match their energy and help them channel it." if user_state.engagement == 'engaged' else ""}
+
+Days since last progress: {goal.days_since_progress}
+Last action: {goal.last_action_taken or 'None recorded'}
+
+Respond naturally. End with either:
+- A specific action suggestion (if they need direction)
+- A gentle check-in question (if they need space)
+- Encouragement to keep going (if they're making progress)
+
+DO NOT use formal coaching language. Sound human.""",
+                user_message=user_input,
+                purpose='adaptive_guidance',
                 character='coordinator'
             )
             
             if response and response.get('success'):
-                import re
-                response_text = response.get('response', '{}')
-                json_match = re.search(r'\{[^{}]*\}', response_text, re.DOTALL)
-                if json_match:
-                    return json.loads(json_match.group())
+                return {
+                    'response_text': response.get('response', ''),
+                    'strategy_used': strategy,
+                    'immediate_action': self._extract_action(response.get('response', ''))
+                }
         except Exception as e:
-            print(f"[COACHING] Error generating step: {e}")
+            print(f"[COACHING] Adaptive response error: {e}")
+        
+        return self._get_fallback_guidance(goal, user_state, strategy)
+    
+    def _get_fallback_guidance(self, goal: GoalContext, user_state: UserPsychState, 
+                               strategy: str) -> Dict:
+        """Fallback guidance when AI is unavailable"""
+        
+        if strategy == "gentle_check_in":
+            text = f"No rush at all. Whenever you're ready to chat about {goal.title}, I'm here. 😊"
+        elif strategy == "supportive_boost":
+            text = f"Hey, I know {goal.title} can feel overwhelming sometimes. Even thinking about it counts as progress. What's one tiny thing you could do in the next 5 minutes?"
+        elif strategy == "specific_action":
+            text = f"Here's something specific: spend just 10 minutes today on {goal.title}. Set a timer, do one small thing, then stop. That's it. What would that one thing be?"
+        elif strategy == "momentum_builder":
+            text = f"Love the energy! Let's channel it - what's the ONE thing that would make the biggest difference for {goal.title} right now?"
+        else:
+            text = f"I'm curious - what's on your mind about {goal.title} today?"
         
         return {
-            'next_question': f"What's your next step toward {goal.title}?",
-            'guidance': "Let's keep moving forward with your goal.",
-            'action_items': []
+            'response_text': text,
+            'strategy_used': strategy,
+            'immediate_action': None
         }
+    
+    def _extract_action(self, response_text: str) -> Optional[str]:
+        """Extract specific action item from response"""
+        action_indicators = ['try ', 'could ', 'spend ', 'take ', 'start ', 'do ', 'make ']
+        sentences = response_text.split('.')
+        
+        for sentence in sentences:
+            sentence_lower = sentence.lower().strip()
+            if any(indicator in sentence_lower for indicator in action_indicators):
+                if len(sentence) > 20 and len(sentence) < 150:
+                    return sentence.strip()
+        return None
+    
+    def _track_engagement(self, goal_id: int, user_input: str, user_state: UserPsychState):
+        """Track user engagement for adaptive learning"""
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        
+        # Update strategy with engagement data
+        cursor.execute('''
+            UPDATE goal_strategies 
+            SET last_user_input = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE goal_id = ?
+        ''', (user_input[:500], goal_id))
+        
+        conn.commit()
+        conn.close()
     
     def _update_strategy(self, goal_id: int, user_input: str):
         """Update goal strategy based on user input"""
@@ -397,24 +520,52 @@ Return your response in this JSON format:
         conn.commit()
         conn.close()
     
-    def get_coaching_context_for_prompt(self, user_id: int) -> Optional[str]:
-        """Get coaching context to inject into AI prompts"""
+    def get_coaching_context_for_prompt(self, user_id: int, user_message: str = "") -> Optional[str]:
+        """
+        Get invisible coaching context for AI prompts.
+        
+        This guides the AI to be helpful without being formal or rigid.
+        The user should never feel like they're in a "coaching program".
+        """
         goal = self.get_or_create_active_goal(user_id)
         if not goal:
             return None
         
+        # Detect user state if message provided
+        user_state = self.detect_user_state(user_message) if user_message else None
+        
+        # Determine approach based on user state
+        if user_state:
+            if user_state.needs_space:
+                approach = "Be gentle, no pressure. Just check in warmly."
+            elif user_state.needs_encouragement:
+                approach = "Validate their feelings first. Then offer ONE small, easy action."
+            elif user_state.needs_concrete_help:
+                approach = "Give ONE specific thing they can do TODAY. Be practical, not philosophical."
+            elif user_state.engagement == 'engaged':
+                approach = "Match their energy! Help them channel it into immediate action."
+            else:
+                approach = "Be curious and warm. Ask about what's on their mind."
+        else:
+            approach = "Be helpful and conversational. Give specific, not generic, guidance."
+        
+        # Build context that guides AI naturally
         context = f"""
-ACTIVE GOAL COACHING CONTEXT:
-- Goal: {goal.title}
-- Phase: {goal.strategy_phase}
-- Progress: {goal.progress_percentage:.0f}%
-- Next focus: {goal.next_action or 'Continue discovery'}
+BEHIND-THE-SCENES CONTEXT (invisible to user):
+The user is working toward: "{goal.title}"
+Days since last engagement: {goal.days_since_progress}
+Last discussed: {goal.last_action_taken or 'Nothing specific yet'}
 
-COACHING INSTRUCTIONS:
-1. Always end your response with a follow-up question related to their goal
-2. Provide specific, actionable guidance (not just generic advice)
-3. Track progress and celebrate small wins
-4. Keep the user engaged and moving forward
+YOUR APPROACH: {approach}
+
+CRITICAL GUIDELINES:
+- Sound like a helpful friend, NOT a formal coach
+- Give ONE specific action they can do TODAY (not vague advice like "stay positive")
+- If they share progress, celebrate it genuinely
+- If they're stuck, acknowledge it's hard, then offer concrete help
+- End with something that invites continued conversation (question OR action suggestion)
+- NEVER use formal coaching language or numbered steps
+- Adapt to their energy - if they're tired, don't push; if they're motivated, channel it
 """
         return context
 
