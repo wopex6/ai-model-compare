@@ -138,7 +138,8 @@ const MessageHandler = {
             sourceBadge = `<span class="source-badge" style="font-size: 0.65em; opacity: 0.5; margin-left: 4px;" title="${badgeTitle}">[${badgeText}]</span>`;
         }
         
-        // Format message content
+        // Format message content - apply formatting for bot messages
+        const formattedContent = sender === 'bot' ? this.formatBotResponse(content) : content;
         const senderLabel = sender === 'bot' ? `<strong>${this.getBotDisplayName()}:</strong>` : '<strong>You:</strong>';
         
         // Add pin button (WhatsApp-style)
@@ -157,7 +158,7 @@ const MessageHandler = {
         // Store message ID on the element for reference
         messageDiv.dataset.messageId = messageId;
         
-        bubble.innerHTML = `${replyButton}${pinButton}${senderLabel} ${content}${sourceBadge}${timeStr}`;
+        bubble.innerHTML = `${replyButton}${pinButton}${senderLabel} ${formattedContent}${sourceBadge}${timeStr}`;
         bubble.style.position = 'relative';
         
         // Show pin and reply buttons on hover
@@ -196,6 +197,101 @@ const MessageHandler = {
     getBotDisplayName() {
         // Use theme config if provided, otherwise fallback to defaults
         return this.theme.characterDisplayName || 'Assistant';
+    },
+    
+    /**
+     * Format bot response for better readability
+     * - Converts bullet points (-, *, •) to proper list items
+     * - Converts numbered lists (1., 2., etc.) to proper formatting
+     * - Adds paragraph breaks for better spacing
+     * - Preserves markdown-style formatting
+     * 
+     * @param {string} content - Raw message content
+     * @returns {string} Formatted HTML content
+     */
+    formatBotResponse(content) {
+        if (!content) return '';
+        
+        // Split by newlines first
+        let lines = content.split(/\n/);
+        let formatted = [];
+        let inList = false;
+        let listType = null; // 'ul' or 'ol'
+        
+        for (let i = 0; i < lines.length; i++) {
+            let line = lines[i].trim();
+            
+            // Skip empty lines but add spacing
+            if (!line) {
+                if (inList) {
+                    formatted.push(listType === 'ul' ? '</ul>' : '</ol>');
+                    inList = false;
+                    listType = null;
+                }
+                formatted.push('<br>');
+                continue;
+            }
+            
+            // Check for bullet points (-, *, •)
+            const bulletMatch = line.match(/^[-*•]\s+(.+)$/);
+            if (bulletMatch) {
+                if (!inList || listType !== 'ul') {
+                    if (inList) formatted.push(listType === 'ul' ? '</ul>' : '</ol>');
+                    formatted.push('<ul style="margin: 8px 0; padding-left: 20px;">');
+                    inList = true;
+                    listType = 'ul';
+                }
+                formatted.push(`<li style="margin: 4px 0;">${bulletMatch[1]}</li>`);
+                continue;
+            }
+            
+            // Check for numbered lists (1., 2., etc.)
+            const numberMatch = line.match(/^(\d+)[.)]\s+(.+)$/);
+            if (numberMatch) {
+                if (!inList || listType !== 'ol') {
+                    if (inList) formatted.push(listType === 'ul' ? '</ul>' : '</ol>');
+                    formatted.push('<ol style="margin: 8px 0; padding-left: 20px;">');
+                    inList = true;
+                    listType = 'ol';
+                }
+                formatted.push(`<li style="margin: 4px 0;">${numberMatch[2]}</li>`);
+                continue;
+            }
+            
+            // Close any open list
+            if (inList) {
+                formatted.push(listType === 'ul' ? '</ul>' : '</ol>');
+                inList = false;
+                listType = null;
+            }
+            
+            // Check for headers (## or bold at start)
+            if (line.startsWith('##')) {
+                line = `<strong style="display: block; margin: 10px 0 5px 0;">${line.replace(/^#+\s*/, '')}</strong>`;
+            } else if (line.startsWith('**') && line.endsWith('**')) {
+                line = `<strong style="display: block; margin: 10px 0 5px 0;">${line.slice(2, -2)}</strong>`;
+            }
+            
+            // Convert inline bold (**text**)
+            line = line.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+            
+            // Convert inline italic (*text* or _text_)
+            line = line.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+            line = line.replace(/_([^_]+)_/g, '<em>$1</em>');
+            
+            // Convert inline code (`code`)
+            line = line.replace(/`([^`]+)`/g, '<code style="background: #f0f0f0; padding: 2px 4px; border-radius: 3px;">$1</code>');
+            
+            // Wrap in paragraph
+            formatted.push(`<p style="margin: 6px 0;">${line}</p>`);
+        }
+        
+        // Close any remaining open list
+        if (inList) {
+            formatted.push(listType === 'ul' ? '</ul>' : '</ol>');
+        }
+        
+        return formatted.join('');
     },
     
     /**
