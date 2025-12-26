@@ -868,18 +868,31 @@ class IntegratedDatabase:
         
         conn.close()
         
-        # Filter out old automated greetings (keep only the most recent one)
+        # Filter out old GENERIC greetings (daily/inactivity) but KEEP AI context prompts
+        # Users may want to follow up on context prompts after being reminded
         if filter_old_greetings and raw_messages:
-            # Find all automated greeting indices
-            greeting_indices = []
+            # Find all generic greeting indices (daily/inactivity only, not AI context prompts)
+            generic_greeting_indices = []
             for i, msg in enumerate(raw_messages):
-                if msg['metadata'].get('is_automated_greeting'):
-                    greeting_indices.append(i)
+                metadata = msg['metadata']
+                if metadata.get('is_automated_greeting'):
+                    # Only filter generic greetings (daily, inactivity)
+                    # Keep AI context prompts (triggered_by='ai_context' or no greeting_type)
+                    greeting_type = metadata.get('greeting_type', '')
+                    triggered_by = metadata.get('triggered_by', '')
+                    
+                    # Skip AI context prompts - keep them all
+                    if triggered_by == 'ai_context' or 'context' in str(triggered_by).lower():
+                        continue
+                    
+                    # Filter generic greetings (daily, inactivity, scheduled)
+                    if greeting_type in ['daily', 'inactivity'] or triggered_by in ['scheduled_time', 'inactivity_timeout']:
+                        generic_greeting_indices.append(i)
             
-            # Keep only the most recent greeting (if any)
-            if len(greeting_indices) > 1:
-                # Remove all but the last greeting
-                indices_to_remove = set(greeting_indices[:-1])
+            # Keep only the most recent generic greeting (if any)
+            if len(generic_greeting_indices) > 1:
+                # Remove all but the last generic greeting
+                indices_to_remove = set(generic_greeting_indices[:-1])
                 raw_messages = [msg for i, msg in enumerate(raw_messages) if i not in indices_to_remove]
         
         return raw_messages
