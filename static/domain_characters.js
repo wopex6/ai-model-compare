@@ -469,14 +469,23 @@ const DomainCharacters = {
         }
         
         try {
+            // Check if replying to a specific message (WhatsApp-style)
+            const replyToId = typeof MessageHandler !== 'undefined' ? MessageHandler.getReplyToId() : null;
+            
             const response = await AuthHelper.authenticatedFetch(this.endpoints.route, {
                 method: 'POST',
                 body: JSON.stringify({
                     message: message,
                     character_id: this.selectedCharacter,
-                    use_ai: useAi
+                    use_ai: useAi,
+                    reply_to_message_id: replyToId
                 })
             });
+            
+            // Clear the reply state after sending
+            if (replyToId && typeof MessageHandler !== 'undefined') {
+                MessageHandler.clearReplyTo();
+            }
             
             const data = await response.json();
             

@@ -485,6 +485,14 @@ class DomainCharacterAI:
             else:
                 parts.append(f"\nUser context: {json.dumps(user_profile)}")
         
+        # Reply context (WhatsApp-style - user is responding to a specific message)
+        if context.get('reply_to'):
+            reply_to = context['reply_to']
+            sender = "your previous message" if reply_to.get('sender_type') == 'assistant' else "their previous message"
+            parts.append(f"\n⚠️ IMPORTANT: The user is REPLYING to {sender}:")
+            parts.append(f'"{reply_to.get("content", "")}"')
+            parts.append("Address this specific context in your response.")
+        
         # Recent conversation summary
         if context.get('conversation_summary'):
             parts.append(f"\nRecent conversation: {context['conversation_summary']}")
