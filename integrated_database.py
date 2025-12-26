@@ -685,6 +685,22 @@ class IntegratedDatabase:
             else:
                 print("✓ character_id column already exists")
             
+            # Add reply_to_message_id column to messages table (WhatsApp-style replies)
+            cursor.execute("PRAGMA table_info(messages)")
+            msg_columns = [col[1] for col in cursor.fetchall()]
+            
+            if 'reply_to_message_id' not in msg_columns:
+                print("🔧 Migrating database: Adding reply_to_message_id column to messages...")
+                cursor.execute('ALTER TABLE messages ADD COLUMN reply_to_message_id INTEGER')
+                cursor.execute('''
+                    CREATE INDEX IF NOT EXISTS idx_messages_reply_to 
+                    ON messages(reply_to_message_id)
+                ''')
+                conn.commit()
+                print("✅ Migration complete: reply_to_message_id column added")
+            else:
+                print("✓ reply_to_message_id column already exists")
+            
         except Exception as e:
             print(f"❌ Migration error: {e}")
             conn.rollback()
@@ -852,8 +868,9 @@ class IntegratedDatabase:
         conn.close()
         return messages
     
-    def add_message(self, session_id: str, user_id: int, sender_type: str, content: str, metadata: Dict[str, Any] = None) -> bool:
-        """Add a message to a conversation"""
+    def add_message(self, session_id: str, user_id: int, sender_type: str, content: str, 
+                     metadata: Dict[str, Any] = None, reply_to_message_id: int = None) -> int:
+        """Add a message to a conversation. Returns message ID or 0 on failure."""
         conn = self.get_connection()
         cursor = conn.cursor()
         
@@ -863,15 +880,17 @@ class IntegratedDatabase:
         
         if not conversation:
             conn.close()
-            return False
+            return 0
         
         conversation_id = conversation[0]
         
-        # Add message
+        # Add message with optional reply reference
         cursor.execute('''
-            INSERT INTO messages (conversation_id, sender_type, content, metadata)
-            VALUES (?, ?, ?, ?)
-        ''', (conversation_id, sender_type, content, json.dumps(metadata or {})))
+            INSERT INTO messages (conversation_id, sender_type, content, metadata, reply_to_message_id)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (conversation_id, sender_type, content, json.dumps(metadata or {}), reply_to_message_id))
+        
+        message_id = cursor.lastrowid
         
         # Update conversation timestamp
         cursor.execute('''
@@ -881,7 +900,7 @@ class IntegratedDatabase:
         
         conn.commit()
         conn.close()
-        return True
+        return message_id
     
     def record_interaction(self, user_id: int, interaction_type: str, interaction_data: Dict[str, Any]) -> bool:
         """Record user interaction"""
@@ -951,18 +970,46 @@ class IntegratedDatabase:
         finally:
             conn.close()
     
-    def save_character_message(self, user_id: int, character_id: str, role: str, content: str, metadata: dict = None) -> bool:
-        """Save message to database for user+character (auto-creates session if needed)"""
+    def save_character_message(self, user_id: int, character_id: str, role: str, content: str, 
+                                 metadata: dict = None, reply_to_message_id: int = None) -> int:
+        """Save message to database for user+character (auto-creates session if needed). Returns message ID."""
         try:
             # Get or create session for this user+character
             session_id = self.get_or_create_character_session(user_id, character_id)
             
             # Save message using existing add_message method
-            return self.add_message(session_id, user_id, role, content, metadata)
+            return self.add_message(session_id, user_id, role, content, metadata, reply_to_message_id)
             
         except Exception as e:
             print(f"❌ Error saving character message: {e}")
-            return False
+            return 0
+    
+    def get_message_by_id(self, message_id: int) -> Optional[Dict]:
+        """Get a specific message by ID (for reply context)"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT m.id, m.conversation_id, m.sender_type, m.content, m.metadata, 
+                   m.timestamp, m.reply_to_message_id
+            FROM messages m
+            WHERE m.id = ?
+        ''', (message_id,))
+        
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            return {
+                'id': row[0],
+                'conversation_id': row[1],
+                'sender_type': row[2],
+                'content': row[3],
+                'metadata': json.loads(row[4]) if row[4] else {},
+                'timestamp': row[5],
+                'reply_to_message_id': row[6]
+            }
+        return None
     
     def get_character_messages(self, user_id: int, character_id: str, limit: int = None) -> List[Dict]:
         """Get conversation history for user+character"""

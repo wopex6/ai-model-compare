@@ -3610,6 +3610,7 @@ def route_to_domain_characters():
         message = data.get('message', '')
         requested_character = data.get('character_id')  # Optional: specific character
         use_ai = data.get('use_ai', True)  # Whether to use AI for responses
+        reply_to_message_id = data.get('reply_to_message_id')  # WhatsApp-style reply reference
         
         if not message.strip():
             return jsonify({'error': 'Message cannot be empty'}), 400
@@ -3621,11 +3622,26 @@ def route_to_domain_characters():
             'user_id': user_id,
             'timestamp': datetime.now().isoformat()
         }
+        
+        # If replying to a specific message, fetch it and add to context
+        reply_context = None
+        if reply_to_message_id:
+            replied_message = integrated_db.get_message_by_id(reply_to_message_id)
+            if replied_message:
+                reply_context = {
+                    'id': replied_message['id'],
+                    'content': replied_message['content'],
+                    'sender_type': replied_message['sender_type'],
+                    'timestamp': replied_message['timestamp']
+                }
+                context['reply_to'] = reply_context
+                print(f"[REPLY] User replying to message {reply_to_message_id}: {replied_message['content'][:50]}...")
 
         # Store user message using centralized integrated_db (same as regular characters)
         target_character = requested_character or 'coordinator'
         try:
-            integrated_db.save_character_message(user_id, target_character, 'user', message)
+            integrated_db.save_character_message(user_id, target_character, 'user', message, 
+                                                  reply_to_message_id=reply_to_message_id)
             print(f"[HISTORY] ✓ Saved user message for {target_character}")
             
             # Extract and store themes from user message (for context-aware prompts)

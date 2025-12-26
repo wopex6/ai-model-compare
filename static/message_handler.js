@@ -15,6 +15,9 @@ const MessageHandler = {
     theme: null,
     messagesContainer: null,
     
+    // Reply-to state (WhatsApp-style)
+    replyingTo: null,  // { id, content, sender_type }
+    
     /**
      * Initialize the message handler for a specific character
      * @param {string} characterName - Character identifier (e.g., 'scientist', 'coach')
@@ -145,17 +148,30 @@ const MessageHandler = {
             data-timestamp="${timestamp || ''}"
             style="opacity: 0; position: absolute; right: 5px; top: 5px; background: none; border: none; cursor: pointer; font-size: 14px; transition: opacity 0.2s;">📌</button>`;
         
-        bubble.innerHTML = `${pinButton}${senderLabel} ${content}${sourceBadge}${timeStr}`;
+        // Add reply button (WhatsApp-style)
+        const messageId = metadata.id || metadata.message_id || Date.now();
+        const replyButton = `<button class="reply-btn" title="Reply to this message" 
+            onclick="MessageHandler.setReplyTo(${messageId}, '${content.replace(/'/g, "\\'").replace(/"/g, '&quot;').substring(0, 100)}', '${role}')"
+            style="opacity: 0; position: absolute; right: 30px; top: 5px; background: none; border: none; cursor: pointer; font-size: 14px; transition: opacity 0.2s;">↩️</button>`;
+        
+        // Store message ID on the element for reference
+        messageDiv.dataset.messageId = messageId;
+        
+        bubble.innerHTML = `${replyButton}${pinButton}${senderLabel} ${content}${sourceBadge}${timeStr}`;
         bubble.style.position = 'relative';
         
-        // Show pin button on hover
+        // Show pin and reply buttons on hover
         bubble.addEventListener('mouseenter', () => {
-            const btn = bubble.querySelector('.pin-btn');
-            if (btn) btn.style.opacity = '1';
+            const pinBtn = bubble.querySelector('.pin-btn');
+            const replyBtn = bubble.querySelector('.reply-btn');
+            if (pinBtn) pinBtn.style.opacity = '1';
+            if (replyBtn) replyBtn.style.opacity = '1';
         });
         bubble.addEventListener('mouseleave', () => {
-            const btn = bubble.querySelector('.pin-btn');
-            if (btn) btn.style.opacity = '0';
+            const pinBtn = bubble.querySelector('.pin-btn');
+            const replyBtn = bubble.querySelector('.reply-btn');
+            if (pinBtn) pinBtn.style.opacity = '0';
+            if (replyBtn) replyBtn.style.opacity = '0';
         });
         
         messageDiv.appendChild(bubble);
@@ -252,6 +268,99 @@ const MessageHandler = {
         if (this.messagesContainer) {
             this.messagesContainer.innerHTML = '';
         }
+    },
+    
+    // ==================== REPLY-TO FEATURE (WhatsApp-style) ====================
+    
+    /**
+     * Set the message being replied to
+     * Shows a preview above the input field
+     */
+    setReplyTo(messageId, content, senderType) {
+        this.replyingTo = {
+            id: messageId,
+            content: content.substring(0, 100),
+            sender_type: senderType
+        };
+        
+        // Show reply preview UI
+        this.showReplyPreview();
+        
+        // Focus the input
+        const input = document.getElementById('userInput');
+        if (input) input.focus();
+        
+        console.log(`↩️ Replying to message ${messageId}: "${content.substring(0, 30)}..."`);
+    },
+    
+    /**
+     * Clear the reply-to state
+     */
+    clearReplyTo() {
+        this.replyingTo = null;
+        this.hideReplyPreview();
+        console.log('↩️ Reply cleared');
+    },
+    
+    /**
+     * Get the current reply-to message ID (for sending)
+     */
+    getReplyToId() {
+        return this.replyingTo?.id || null;
+    },
+    
+    /**
+     * Show the reply preview above the input
+     */
+    showReplyPreview() {
+        // Remove existing preview
+        this.hideReplyPreview();
+        
+        if (!this.replyingTo) return;
+        
+        // Find or create reply preview container
+        const inputContainer = document.querySelector('.chat-input, .input-container, .message-input');
+        if (!inputContainer) {
+            console.warn('Could not find input container for reply preview');
+            return;
+        }
+        
+        const sender = this.replyingTo.sender_type === 'assistant' ? this.getBotDisplayName() : 'You';
+        
+        const preview = document.createElement('div');
+        preview.id = 'reply-preview';
+        preview.style.cssText = `
+            background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+            border-left: 4px solid #2196F3;
+            padding: 8px 12px;
+            margin-bottom: 8px;
+            border-radius: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9em;
+        `;
+        preview.innerHTML = `
+            <div style="flex: 1; overflow: hidden;">
+                <div style="font-weight: bold; color: #1976D2; margin-bottom: 2px;">↩️ Replying to ${sender}</div>
+                <div style="color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                    ${this.replyingTo.content}...
+                </div>
+            </div>
+            <button onclick="MessageHandler.clearReplyTo()" 
+                style="background: none; border: none; cursor: pointer; font-size: 18px; padding: 4px; color: #666;"
+                title="Cancel reply">✕</button>
+        `;
+        
+        inputContainer.insertBefore(preview, inputContainer.firstChild);
+    },
+    
+    /**
+     * Hide the reply preview
+     */
+    hideReplyPreview() {
+        const existing = document.getElementById('reply-preview');
+        if (existing) existing.remove();
     },
     
     /**
