@@ -750,10 +750,21 @@
                 }
             });
             
-            // Handle analysis toggle
-            document.getElementById('showAnalysis').addEventListener('change', function(e) {
-                const panel = document.getElementById('character-analysis-panel');
-                panel.style.display = e.target.checked ? 'block' : 'none';
+            // Handle analysis toggle - persist to localStorage
+            const analysisCheckbox = document.getElementById('showAnalysis');
+            const analysisPanel = document.getElementById('character-analysis-panel');
+            
+            // Restore saved state on load
+            const savedAnalysisState = localStorage.getItem('showAiAnalysis');
+            if (savedAnalysisState === 'true') {
+                analysisCheckbox.checked = true;
+                analysisPanel.style.display = 'block';
+            }
+            
+            // Save state on change
+            analysisCheckbox.addEventListener('change', function(e) {
+                analysisPanel.style.display = e.target.checked ? 'block' : 'none';
+                localStorage.setItem('showAiAnalysis', e.target.checked);
             });
             
             // Update character ID when switching characters
