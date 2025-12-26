@@ -245,22 +245,23 @@ const MessageHandler = {
                 continue;
             }
             
-            // Check for numbered lists (1., 2., etc.)
+            // Check for numbered lists (1., 2., etc.) - use manual numbering for reliability
             const numberMatch = line.match(/^(\d+)[.)]\s+(.+)$/);
             if (numberMatch) {
+                const itemNumber = numberMatch[1];
                 if (!inList || listType !== 'ol') {
-                    if (inList) formatted.push(listType === 'ul' ? '</ul>' : '</ol>');
-                    formatted.push('<ol style="margin: 8px 0; padding-left: 20px;">');
+                    if (inList) formatted.push('</div>');
+                    formatted.push('<div class="numbered-list" style="margin: 8px 0;">');
                     inList = true;
                     listType = 'ol';
                 }
-                formatted.push(`<li style="margin: 4px 0;">${numberMatch[2]}</li>`);
+                formatted.push(`<div style="margin: 6px 0; padding-left: 8px; display: flex; gap: 8px;"><span style="font-weight: bold; color: #1976D2; min-width: 20px;">${itemNumber}.</span><span>${numberMatch[2]}</span></div>`);
                 continue;
             }
             
             // Close any open list
             if (inList) {
-                formatted.push(listType === 'ul' ? '</ul>' : '</ol>');
+                formatted.push(listType === 'ul' ? '</ul>' : '</div>');
                 inList = false;
                 listType = null;
             }
@@ -288,7 +289,7 @@ const MessageHandler = {
         
         // Close any remaining open list
         if (inList) {
-            formatted.push(listType === 'ul' ? '</ul>' : '</ol>');
+            formatted.push(listType === 'ul' ? '</ul>' : '</div>');
         }
         
         return formatted.join('');
