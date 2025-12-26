@@ -838,35 +838,51 @@ class IntegratedDatabase:
         conn.close()
         return conversations
     
-    def get_conversation_messages(self, session_id: str, user_id: int) -> List[Dict[str, Any]]:
-        """Get messages for a conversation"""
+    def get_conversation_messages(self, session_id: str, user_id: int, filter_old_greetings: bool = True) -> List[Dict[str, Any]]:
+        """Get messages for a conversation, optionally filtering old automated greetings"""
         conn = self.get_connection()
         cursor = conn.cursor()
         
         cursor.execute('''
-            SELECT m.sender_type, m.content, m.metadata, m.timestamp
+            SELECT m.id, m.sender_type, m.content, m.metadata, m.timestamp
             FROM messages m
             JOIN ai_conversations c ON m.conversation_id = c.id
             WHERE c.session_id = ? AND c.user_id = ?
             ORDER BY m.timestamp ASC
         ''', (session_id, user_id))
         
-        messages = []
+        raw_messages = []
         for row in cursor.fetchall():
-            metadata = json.loads(row[2]) if row[2] else {}
+            metadata = json.loads(row[3]) if row[3] else {}
             # Append 'Z' to timestamp to indicate UTC (SQLite stores in UTC but doesn't include timezone)
-            timestamp = row[3]
+            timestamp = row[4]
             if timestamp and not timestamp.endswith('Z'):
                 timestamp = timestamp + 'Z'
-            messages.append({
-                'sender_type': row[0],
-                'content': row[1],
+            raw_messages.append({
+                'id': row[0],
+                'sender_type': row[1],
+                'content': row[2],
                 'metadata': metadata,
                 'timestamp': timestamp
             })
         
         conn.close()
-        return messages
+        
+        # Filter out old automated greetings (keep only the most recent one)
+        if filter_old_greetings and raw_messages:
+            # Find all automated greeting indices
+            greeting_indices = []
+            for i, msg in enumerate(raw_messages):
+                if msg['metadata'].get('is_automated_greeting'):
+                    greeting_indices.append(i)
+            
+            # Keep only the most recent greeting (if any)
+            if len(greeting_indices) > 1:
+                # Remove all but the last greeting
+                indices_to_remove = set(greeting_indices[:-1])
+                raw_messages = [msg for i, msg in enumerate(raw_messages) if i not in indices_to_remove]
+        
+        return raw_messages
     
     def add_message(self, session_id: str, user_id: int, sender_type: str, content: str, 
                      metadata: Dict[str, Any] = None, reply_to_message_id: int = None) -> int:
