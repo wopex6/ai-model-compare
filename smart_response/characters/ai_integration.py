@@ -504,6 +504,10 @@ class DomainCharacterAI:
         if context.get('conversation_summary'):
             parts.append(f"\nRecent conversation: {context['conversation_summary']}")
         
+        # Goal coaching context (proactive engagement)
+        if context.get('coaching_context'):
+            parts.append(f"\n{context['coaching_context']}")
+        
         return "\n".join(parts)
     
     def _generate_openai(self, system_prompt: str, message: str, 
