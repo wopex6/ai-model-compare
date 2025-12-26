@@ -153,10 +153,13 @@ const MessageHandler = {
             data-timestamp="${timestamp || ''}"
             style="opacity: 0; position: absolute; right: 5px; top: 5px; background: none; border: none; cursor: pointer; font-size: 14px; transition: opacity 0.2s;">📌</button>`;
         
-        // Add reply button (WhatsApp-style)
+        // Add reply button (WhatsApp-style) - use data attributes to avoid escaping issues
         const messageId = metadata.id || metadata.message_id || Date.now();
+        const safeContent = content.substring(0, 100).replace(/[\n\r]/g, ' ').replace(/[<>]/g, '');
         const replyButton = `<button class="reply-btn" title="Reply to this message" 
-            onclick="MessageHandler.setReplyTo(${messageId}, '${content.replace(/'/g, "\\'").replace(/"/g, '&quot;').substring(0, 100)}', '${role}')"
+            data-msg-id="${messageId}"
+            data-msg-content="${encodeURIComponent(safeContent)}"
+            data-msg-role="${role}"
             style="opacity: 0; position: absolute; right: 30px; top: 5px; background: none; border: none; cursor: pointer; font-size: 14px; transition: opacity 0.2s;">↩️</button>`;
         
         // Add expand button for messages with summaries
@@ -214,6 +217,17 @@ const MessageHandler = {
             if (replyBtn) replyBtn.style.opacity = '0';
             if (expandBtn) expandBtn.style.opacity = '0';
         });
+        
+        // Add click handler for reply button (using data attributes to avoid escaping issues)
+        const replyBtn = bubble.querySelector('.reply-btn');
+        if (replyBtn) {
+            replyBtn.addEventListener('click', () => {
+                const msgId = replyBtn.dataset.msgId;
+                const msgContent = decodeURIComponent(replyBtn.dataset.msgContent || '');
+                const msgRole = replyBtn.dataset.msgRole;
+                this.setReplyTo(msgId, msgContent, msgRole);
+            });
+        }
         
         messageDiv.appendChild(bubble);
         this.messagesContainer.appendChild(messageDiv);
