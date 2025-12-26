@@ -497,8 +497,23 @@ const MessageHandler = {
         
         if (!this.replyingTo) return;
         
-        // Find or create reply preview container
-        const inputContainer = document.querySelector('.chat-input, .input-container, .message-input');
+        // Find input container - try multiple selectors for different templates
+        const selectors = [
+            '#chat-input-area',
+            '.chat-input-area', 
+            '.message-input-area',
+            '.message-input',
+            '.chat-input',
+            '.input-container',
+            '.input-group'
+        ];
+        
+        let inputContainer = null;
+        for (const selector of selectors) {
+            inputContainer = document.querySelector(selector);
+            if (inputContainer) break;
+        }
+        
         if (!inputContainer) {
             console.warn('Could not find input container for reply preview');
             return;
