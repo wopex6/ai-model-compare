@@ -488,6 +488,17 @@ const DomainCharacters = {
                 MessageHandler.clearReplyTo();
             }
             
+            // Check for session expiry (401) before parsing JSON
+            if (response.status === 401) {
+                console.warn('⚠️ Session expired during message send');
+                this._displayError('Your session has expired. Please log in again.');
+                // Redirect to login after a short delay
+                setTimeout(() => {
+                    window.location.href = '/login?redirect=' + encodeURIComponent(window.location.pathname);
+                }, 2000);
+                return null;
+            }
+            
             const data = await response.json();
             
             if (data.success) {
