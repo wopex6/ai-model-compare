@@ -4091,6 +4091,17 @@ def get_character_history(character_id):
             if entry['user_message'] or entry['ai_response']:
                 paired_history.append(entry)
         
+        # Sort by timestamp to ensure chronological order
+        # This handles edge cases where pairing/filtering might disrupt order
+        def parse_timestamp(ts):
+            if not ts:
+                return ''
+            # Normalize timestamp for sorting
+            ts_str = str(ts).replace('Z', '').replace('+00:00', '')
+            return ts_str
+        
+        paired_history.sort(key=lambda x: parse_timestamp(x.get('timestamp', '')))
+        
         return jsonify({
             'success': True,
             'character_id': character_id,
