@@ -508,6 +508,10 @@ class DomainCharacterAI:
         if context.get('coaching_context'):
             parts.append(f"\n{context['coaching_context']}")
         
+        # File attachments context (user-uploaded files for AI reference)
+        if context.get('file_attachments'):
+            parts.append(f"\n{context['file_attachments']}")
+        
         return "\n".join(parts)
     
     def _generate_openai(self, system_prompt: str, message: str, 

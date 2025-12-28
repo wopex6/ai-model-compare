@@ -351,6 +351,35 @@ class IntegratedDatabase:
             )
         ''')
         
+        # ==================== AI FILE ATTACHMENTS ====================
+        # Stores files uploaded by users for AI processing
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS ai_file_attachments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                filename TEXT NOT NULL,
+                original_filename TEXT NOT NULL,
+                file_type TEXT,
+                file_size INTEGER,
+                content_description TEXT,
+                ai_instructions TEXT,
+                extracted_text TEXT,
+                character_id TEXT,
+                conversation_id INTEGER,
+                message_id INTEGER,
+                status TEXT DEFAULT 'active',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                expires_at DATETIME,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+                FOREIGN KEY (conversation_id) REFERENCES ai_conversations (id) ON DELETE SET NULL
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_attachments_user_status 
+            ON ai_file_attachments(user_id, status, created_at DESC)
+        ''')
+        
         conn.commit()
         conn.close()
     
@@ -2360,6 +2389,146 @@ class IntegratedDatabase:
             return cursor.rowcount > 0
         except Exception as e:
             print(f"Error deleting highlight: {e}")
+            return False
+        finally:
+            conn.close()
+    
+    # ==================== AI FILE ATTACHMENTS ====================
+    
+    def save_ai_attachment(self, user_id: int, filename: str, original_filename: str,
+                          file_type: str, file_size: int, content_description: str = None,
+                          ai_instructions: str = None, extracted_text: str = None,
+                          character_id: str = None) -> Optional[int]:
+        """Save an AI file attachment with context"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Set expiry to 7 days from now
+            expires_at = (datetime.now() + timedelta(days=7)).isoformat()
+            
+            cursor.execute('''
+                INSERT INTO ai_file_attachments 
+                (user_id, filename, original_filename, file_type, file_size,
+                 content_description, ai_instructions, extracted_text, character_id, expires_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (user_id, filename, original_filename, file_type, file_size,
+                  content_description, ai_instructions, extracted_text, character_id, expires_at))
+            
+            conn.commit()
+            attachment_id = cursor.lastrowid
+            print(f"✓ Saved AI attachment #{attachment_id}: {original_filename}")
+            return attachment_id
+        except Exception as e:
+            print(f"Error saving AI attachment: {e}")
+            return None
+        finally:
+            conn.close()
+    
+    def get_active_attachments(self, user_id: int, character_id: str = None, limit: int = 5) -> List[Dict]:
+        """Get user's active AI attachments for context injection"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            if character_id:
+                cursor.execute('''
+                    SELECT id, filename, original_filename, file_type, file_size,
+                           content_description, ai_instructions, extracted_text, 
+                           character_id, created_at
+                    FROM ai_file_attachments
+                    WHERE user_id = ? AND status = 'active' 
+                    AND (character_id = ? OR character_id IS NULL)
+                    AND (expires_at IS NULL OR expires_at > datetime('now'))
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                ''', (user_id, character_id, limit))
+            else:
+                cursor.execute('''
+                    SELECT id, filename, original_filename, file_type, file_size,
+                           content_description, ai_instructions, extracted_text, 
+                           character_id, created_at
+                    FROM ai_file_attachments
+                    WHERE user_id = ? AND status = 'active'
+                    AND (expires_at IS NULL OR expires_at > datetime('now'))
+                    ORDER BY created_at DESC
+                    LIMIT ?
+                ''', (user_id, limit))
+            
+            rows = cursor.fetchall()
+            attachments = []
+            for row in rows:
+                attachments.append({
+                    'id': row[0],
+                    'filename': row[1],
+                    'original_filename': row[2],
+                    'file_type': row[3],
+                    'file_size': row[4],
+                    'content_description': row[5],
+                    'ai_instructions': row[6],
+                    'extracted_text': row[7],
+                    'character_id': row[8],
+                    'created_at': row[9]
+                })
+            return attachments
+        except Exception as e:
+            print(f"Error getting attachments: {e}")
+            return []
+        finally:
+            conn.close()
+    
+    def get_attachment_by_id(self, attachment_id: int, user_id: int) -> Optional[Dict]:
+        """Get a specific attachment by ID"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                SELECT id, filename, original_filename, file_type, file_size,
+                       content_description, ai_instructions, extracted_text, 
+                       character_id, status, created_at, expires_at
+                FROM ai_file_attachments
+                WHERE id = ? AND user_id = ?
+            ''', (attachment_id, user_id))
+            
+            row = cursor.fetchone()
+            if row:
+                return {
+                    'id': row[0],
+                    'filename': row[1],
+                    'original_filename': row[2],
+                    'file_type': row[3],
+                    'file_size': row[4],
+                    'content_description': row[5],
+                    'ai_instructions': row[6],
+                    'extracted_text': row[7],
+                    'character_id': row[8],
+                    'status': row[9],
+                    'created_at': row[10],
+                    'expires_at': row[11]
+                }
+            return None
+        except Exception as e:
+            print(f"Error getting attachment: {e}")
+            return None
+        finally:
+            conn.close()
+    
+    def deactivate_attachment(self, attachment_id: int, user_id: int) -> bool:
+        """Deactivate an attachment (soft delete)"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                UPDATE ai_file_attachments
+                SET status = 'inactive'
+                WHERE id = ? AND user_id = ?
+            ''', (attachment_id, user_id))
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception as e:
+            print(f"Error deactivating attachment: {e}")
             return False
         finally:
             conn.close()
