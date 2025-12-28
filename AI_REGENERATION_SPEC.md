@@ -487,6 +487,19 @@ CREATE TABLE ai_usage_log (
 | GET | `/api/greetings/pending` | Get pending greetings |
 | POST | `/api/greetings/activity` | Record user activity |
 
+### AI File Attachments
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| POST | `/api/ai-attachments/upload` | Upload file with context description |
+| GET | `/api/ai-attachments` | Get user's active attachments |
+| DELETE | `/api/ai-attachments/<id>` | Remove attachment from AI context |
+
+**Upload Parameters:**
+- `file` - The file to upload
+- `content_description` - What the file contains (required)
+- `ai_instructions` - How AI should use it (optional)
+- `character_id` - Associate with specific character (optional)
+
 ---
 
 ## 10. Frontend Architecture
@@ -670,8 +683,10 @@ python migrate_all_tables.py
 ### December 2025
 
 #### Dec 28, 2025
+- **Added AI File Attachment feature** - users can upload files with context for AI processing
 - Fixed session expiry handling (401 → login redirect)
 - Fixed timestamp ordering in chat history
+- Restored and expanded AI_REGENERATION_SPEC.md (715 lines)
 
 #### Dec 27, 2025
 - Added AI character analysis checkbox persistence
