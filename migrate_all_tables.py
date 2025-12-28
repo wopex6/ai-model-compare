@@ -1099,6 +1099,41 @@ def migrate_all_tables():
         print("✅ idx_personalization_user")
         
         # ============================================================
+        # AI FILE ATTACHMENTS
+        # ============================================================
+        print("\n📦 AI FILE ATTACHMENTS")
+        print("-" * 80)
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS ai_file_attachments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                filename TEXT NOT NULL,
+                original_filename TEXT NOT NULL,
+                file_type TEXT,
+                file_size INTEGER,
+                content_description TEXT,
+                ai_instructions TEXT,
+                extracted_text TEXT,
+                character_id TEXT,
+                conversation_id INTEGER,
+                message_id INTEGER,
+                status TEXT DEFAULT 'active',
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                expires_at DATETIME,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+                FOREIGN KEY (conversation_id) REFERENCES ai_conversations (id) ON DELETE SET NULL
+            )
+        ''')
+        print("✅ ai_file_attachments")
+        
+        cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_attachments_user_status 
+            ON ai_file_attachments(user_id, status, created_at DESC)
+        ''')
+        print("✅ idx_attachments_user_status")
+        
+        # ============================================================
         # MESSAGES TABLE - reply_to_message_id column
         # ============================================================
         print("\n📦 MESSAGES TABLE UPDATES")
