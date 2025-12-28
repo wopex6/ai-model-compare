@@ -1034,6 +1034,152 @@ def download_file(filename):
         print(f"Error serving file {filename}: {e}")
         return jsonify({'error': 'File not found'}), 404
 
+# ==================== AI FILE ATTACHMENT ENDPOINTS ====================
+
+@app.route('/api/ai-attachments/upload', methods=['POST'])
+@require_auth
+def upload_ai_attachment():
+    """
+    Upload a file for AI processing with context description.
+    User specifies what the content is about and how AI should use it.
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        # Get context from form data
+        content_description = request.form.get('content_description', '')
+        ai_instructions = request.form.get('ai_instructions', '')
+        character_id = request.form.get('character_id')
+        
+        if not content_description:
+            return jsonify({'error': 'Please describe what this file contains'}), 400
+        
+        if file and allowed_file(file.filename):
+            # Generate unique filename
+            original_filename = secure_filename(file.filename)
+            unique_id = str(uuid.uuid4())
+            file_extension = original_filename.rsplit('.', 1)[1].lower()
+            unique_filename = f"ai_{unique_id}.{file_extension}"
+            
+            # Save file
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+            file.save(filepath)
+            
+            # Get file info
+            file_size = os.path.getsize(filepath)
+            file_type = file_extension
+            
+            # Extract text content for supported file types
+            extracted_text = None
+            if file_type == 'txt':
+                try:
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        extracted_text = f.read()[:10000]  # Limit to 10k chars
+                except:
+                    pass
+            
+            # Save to database
+            user_id = request.current_user.get('user_id')
+            attachment_id = integrated_db.save_ai_attachment(
+                user_id=user_id,
+                filename=unique_filename,
+                original_filename=original_filename,
+                file_type=file_type,
+                file_size=file_size,
+                content_description=content_description,
+                ai_instructions=ai_instructions,
+                extracted_text=extracted_text,
+                character_id=character_id
+            )
+            
+            if attachment_id:
+                print(f"[AI_ATTACHMENT] ✓ User {user_id} uploaded: {original_filename}")
+                print(f"  Description: {content_description[:50]}...")
+                print(f"  Instructions: {ai_instructions[:50] if ai_instructions else 'None'}...")
+                
+                return jsonify({
+                    'success': True,
+                    'attachment_id': attachment_id,
+                    'filename': unique_filename,
+                    'original_filename': original_filename,
+                    'file_size': file_size,
+                    'file_type': file_type,
+                    'content_description': content_description,
+                    'ai_instructions': ai_instructions,
+                    'file_url': f'/api/files/{unique_filename}'
+                })
+            else:
+                return jsonify({'error': 'Failed to save attachment'}), 500
+        else:
+            return jsonify({'error': 'File type not allowed'}), 400
+    except Exception as e:
+        print(f"Error uploading AI attachment: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/ai-attachments', methods=['GET'])
+@require_auth
+def get_ai_attachments():
+    """Get user's active AI attachments"""
+    try:
+        user_id = request.current_user.get('user_id')
+        character_id = request.args.get('character_id')
+        
+        attachments = integrated_db.get_active_attachments(user_id, character_id)
+        
+        return jsonify({
+            'success': True,
+            'attachments': attachments
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/ai-attachments/<int:attachment_id>', methods=['DELETE'])
+@require_auth
+def delete_ai_attachment(attachment_id):
+    """Deactivate an AI attachment"""
+    try:
+        user_id = request.current_user.get('user_id')
+        
+        success = integrated_db.deactivate_attachment(attachment_id, user_id)
+        
+        if success:
+            return jsonify({'success': True, 'message': 'Attachment removed'})
+        else:
+            return jsonify({'error': 'Attachment not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+def format_attachments_for_ai(attachments):
+    """Format active attachments into context for AI prompt"""
+    if not attachments:
+        return None
+    
+    context_parts = ["USER'S ATTACHED FILES FOR REFERENCE:"]
+    
+    for att in attachments:
+        context_parts.append(f"\n--- FILE: {att['original_filename']} ---")
+        context_parts.append(f"Description: {att['content_description']}")
+        
+        if att['ai_instructions']:
+            context_parts.append(f"User's instructions: {att['ai_instructions']}")
+        
+        if att['extracted_text']:
+            # Limit text to avoid token explosion
+            text_preview = att['extracted_text'][:3000]
+            if len(att['extracted_text']) > 3000:
+                text_preview += "\n... [content truncated]"
+            context_parts.append(f"Content:\n{text_preview}")
+    
+    context_parts.append("\n--- END OF ATTACHED FILES ---")
+    context_parts.append("Use these files to inform your response when relevant.")
+    
+    return "\n".join(context_parts)
+
 # Admin Messaging Endpoints
 @app.route('/api/admin-chat/messages', methods=['GET'])
 @require_auth
@@ -3726,6 +3872,18 @@ def route_to_domain_characters():
                         print(f"[PERSONALITY] Change detected: {personality_context.change_summary}")
             except Exception as e:
                 print(f"Warning: Personality integration failed: {e}")
+        
+        # AI FILE ATTACHMENTS: Include user's uploaded files in context
+        # These are files the user uploaded with descriptions of what they contain
+        try:
+            attachments = integrated_db.get_active_attachments(user_id, target_character)
+            if attachments:
+                attachment_context = format_attachments_for_ai(attachments)
+                if attachment_context:
+                    context['file_attachments'] = attachment_context
+                    print(f"[ATTACHMENTS] Added {len(attachments)} file(s) to context")
+        except Exception as e:
+            print(f"Warning: File attachment context failed: {e}")
         
         # Configurable: Number of conversation exchanges to include for AI context
         # Can be set via environment variable AI_CONTEXT_EXCHANGES (default: 5)

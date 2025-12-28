@@ -674,10 +674,58 @@
                     <!-- Messages loaded dynamically per character -->
                 </div>
                 
+                <!-- Active Attachments Display -->
+                <div id="active-attachments" style="display: none; padding: 8px 15px; background: #f0f4ff; border-top: 1px solid #ddd;">
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <span style="font-size: 12px; color: #666;"><i class="fas fa-paperclip"></i> Active files:</span>
+                        <div id="attachment-badges" style="display: flex; gap: 6px; flex-wrap: wrap;"></div>
+                    </div>
+                </div>
+                
                 <div class="chat-input-area">
                     <div class="input-group" style="display: flex; gap: 8px; align-items: flex-end;">
+                        <button id="attachBtn" title="Attach file for AI" style="padding: 10px 12px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 8px; cursor: pointer; transition: all 0.2s;">
+                            <i class="fas fa-paperclip"></i>
+                        </button>
                         <textarea id="userInput" placeholder="Type your message... (Shift+Enter to send)" autocomplete="off" rows="1" style="flex: 1;"></textarea>
                         <button id="sendBtn"><i class="fas fa-paper-plane"></i> Send</button>
+                    </div>
+                </div>
+                
+                <!-- File Attachment Modal -->
+                <div id="attachment-modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
+                    <div style="background: white; border-radius: 12px; padding: 24px; max-width: 500px; width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <h3 style="margin: 0; color: #333;"><i class="fas fa-file-upload"></i> Attach File for AI</h3>
+                            <button id="close-attachment-modal" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #666;">&times;</button>
+                        </div>
+                        
+                        <form id="attachment-form">
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 6px; font-weight: 500; color: #444;">Select File</label>
+                                <input type="file" id="attachment-file" style="width: 100%; padding: 10px; border: 2px dashed #ddd; border-radius: 8px; cursor: pointer;">
+                                <div id="file-preview" style="margin-top: 8px; font-size: 13px; color: #666;"></div>
+                            </div>
+                            
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: block; margin-bottom: 6px; font-weight: 500; color: #444;">What is this file about? <span style="color: #e74c3c;">*</span></label>
+                                <textarea id="content-description" placeholder="e.g., This is my resume, a project report, meeting notes..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; min-height: 60px; resize: vertical;" required></textarea>
+                            </div>
+                            
+                            <div style="margin-bottom: 20px;">
+                                <label style="display: block; margin-bottom: 6px; font-weight: 500; color: #444;">How should AI use this? <span style="color: #999; font-weight: normal;">(optional)</span></label>
+                                <textarea id="ai-instructions" placeholder="e.g., Help me improve it, answer questions about it, summarize the key points..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; min-height: 60px; resize: vertical;"></textarea>
+                            </div>
+                            
+                            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                                <button type="button" id="cancel-attachment" style="padding: 10px 20px; background: #f0f0f0; border: none; border-radius: 8px; cursor: pointer;">Cancel</button>
+                                <button type="submit" id="upload-attachment" style="padding: 10px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 500;">
+                                    <i class="fas fa-upload"></i> Upload
+                                </button>
+                            </div>
+                        </form>
+                        
+                        <div id="upload-status" style="margin-top: 16px; display: none;"></div>
                     </div>
                 </div>
             </div>
@@ -772,7 +820,159 @@
             DomainCharacters.selectCharacter = async function(charId) {
                 await originalSelectChar.call(DomainCharacters, charId);
                 MessageHandler.currentCharacterId = charId;
+                // Refresh attachments when switching characters
+                loadActiveAttachments();
             };
+            
+            // ==================== FILE ATTACHMENT HANDLING ====================
+            const attachBtn = document.getElementById('attachBtn');
+            const attachmentModal = document.getElementById('attachment-modal');
+            const closeModalBtn = document.getElementById('close-attachment-modal');
+            const cancelBtn = document.getElementById('cancel-attachment');
+            const attachmentForm = document.getElementById('attachment-form');
+            const fileInput = document.getElementById('attachment-file');
+            const filePreview = document.getElementById('file-preview');
+            const uploadStatus = document.getElementById('upload-status');
+            
+            // Open modal
+            attachBtn.addEventListener('click', () => {
+                attachmentModal.style.display = 'flex';
+                attachmentForm.reset();
+                filePreview.textContent = '';
+                uploadStatus.style.display = 'none';
+            });
+            
+            // Close modal
+            const closeModal = () => {
+                attachmentModal.style.display = 'none';
+            };
+            closeModalBtn.addEventListener('click', closeModal);
+            cancelBtn.addEventListener('click', closeModal);
+            attachmentModal.addEventListener('click', (e) => {
+                if (e.target === attachmentModal) closeModal();
+            });
+            
+            // File preview
+            fileInput.addEventListener('change', () => {
+                if (fileInput.files.length > 0) {
+                    const file = fileInput.files[0];
+                    const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+                    filePreview.innerHTML = `<i class="fas fa-file"></i> ${file.name} (${sizeMB} MB)`;
+                } else {
+                    filePreview.textContent = '';
+                }
+            });
+            
+            // Upload attachment
+            attachmentForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const file = fileInput.files[0];
+                const contentDesc = document.getElementById('content-description').value.trim();
+                const aiInstr = document.getElementById('ai-instructions').value.trim();
+                
+                if (!file) {
+                    showUploadStatus('Please select a file', 'error');
+                    return;
+                }
+                if (!contentDesc) {
+                    showUploadStatus('Please describe what the file contains', 'error');
+                    return;
+                }
+                
+                // Show uploading state
+                const uploadBtn = document.getElementById('upload-attachment');
+                uploadBtn.disabled = true;
+                uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Uploading...';
+                
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    formData.append('content_description', contentDesc);
+                    formData.append('ai_instructions', aiInstr);
+                    formData.append('character_id', DomainCharacters.selectedCharacter || 'coordinator');
+                    
+                    const response = await AuthHelper.authenticatedFetch('/api/ai-attachments/upload', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        showUploadStatus(`✓ "${file.name}" uploaded successfully! AI will now reference this file.`, 'success');
+                        setTimeout(() => {
+                            closeModal();
+                            loadActiveAttachments();
+                        }, 1500);
+                    } else {
+                        showUploadStatus(data.error || 'Upload failed', 'error');
+                    }
+                } catch (err) {
+                    console.error('Upload error:', err);
+                    showUploadStatus('Upload failed. Please try again.', 'error');
+                } finally {
+                    uploadBtn.disabled = false;
+                    uploadBtn.innerHTML = '<i class="fas fa-upload"></i> Upload';
+                }
+            });
+            
+            function showUploadStatus(message, type) {
+                uploadStatus.style.display = 'block';
+                uploadStatus.style.padding = '10px';
+                uploadStatus.style.borderRadius = '8px';
+                uploadStatus.style.background = type === 'error' ? '#ffe6e6' : '#e6ffe6';
+                uploadStatus.style.color = type === 'error' ? '#c00' : '#060';
+                uploadStatus.textContent = message;
+            }
+            
+            // Load and display active attachments
+            async function loadActiveAttachments() {
+                try {
+                    const charId = DomainCharacters.selectedCharacter || 'coordinator';
+                    const response = await AuthHelper.authenticatedFetch(`/api/ai-attachments?character_id=${charId}`);
+                    const data = await response.json();
+                    
+                    const container = document.getElementById('active-attachments');
+                    const badges = document.getElementById('attachment-badges');
+                    
+                    if (data.success && data.attachments && data.attachments.length > 0) {
+                        container.style.display = 'block';
+                        badges.innerHTML = data.attachments.map(att => `
+                            <span class="attachment-badge" data-id="${att.id}" style="display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: white; border: 1px solid #667eea; border-radius: 15px; font-size: 12px; color: #667eea;">
+                                <i class="fas fa-file"></i>
+                                <span title="${att.content_description}">${att.original_filename.length > 20 ? att.original_filename.substring(0, 17) + '...' : att.original_filename}</span>
+                                <button onclick="removeAttachment(${att.id})" style="background: none; border: none; color: #999; cursor: pointer; padding: 0 2px; font-size: 14px;" title="Remove">&times;</button>
+                            </span>
+                        `).join('');
+                    } else {
+                        container.style.display = 'none';
+                        badges.innerHTML = '';
+                    }
+                } catch (err) {
+                    console.error('Error loading attachments:', err);
+                }
+            }
+            
+            // Remove attachment
+            window.removeAttachment = async function(attachmentId) {
+                if (!confirm('Remove this file from AI context?')) return;
+                
+                try {
+                    const response = await AuthHelper.authenticatedFetch(`/api/ai-attachments/${attachmentId}`, {
+                        method: 'DELETE'
+                    });
+                    const data = await response.json();
+                    if (data.success) {
+                        loadActiveAttachments();
+                    }
+                } catch (err) {
+                    console.error('Error removing attachment:', err);
+                }
+            };
+            
+            // Load attachments on init
+            loadActiveAttachments();
             
             console.log('✅ Domain Characters page initialized');
         });
