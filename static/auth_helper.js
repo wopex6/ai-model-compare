@@ -26,13 +26,15 @@ const AuthHelper = {
 
     /**
      * Get headers for authenticated requests
-     * Automatically includes Content-Type and Authorization
+     * @param {boolean} includeContentType - Whether to include Content-Type: application/json
      * @returns {object} Headers object ready for fetch
      */
-    getAuthHeaders() {
-        const headers = {
-            'Content-Type': 'application/json'
-        };
+    getAuthHeaders(includeContentType = true) {
+        const headers = {};
+        
+        if (includeContentType) {
+            headers['Content-Type'] = 'application/json';
+        }
         
         const authToken = this.getAuthToken();
         if (authToken) {
@@ -57,11 +59,14 @@ const AuthHelper = {
      * });
      */
     async authenticatedFetch(url, options = {}) {
+        // Don't set Content-Type for FormData (browser sets it with boundary)
+        const isFormData = options.body instanceof FormData;
+        
         // Merge provided options with auth headers
         const fetchOptions = {
             ...options,
             headers: {
-                ...this.getAuthHeaders(),
+                ...this.getAuthHeaders(!isFormData),
                 ...(options.headers || {})
             }
         };
