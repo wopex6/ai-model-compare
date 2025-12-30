@@ -863,13 +863,15 @@ const MessageHandler = {
         
         // Save to database
         try {
+            // Use consistent character_id (same as pinned messages)
+            const characterId = this.currentCharacterId || this.characterName || 'coordinator';
             const response = await AuthHelper.authenticatedFetch('/api/user/highlights', {
                 method: 'POST',
                 body: JSON.stringify({
                     highlighted_text: textToHighlight,
                     full_message: this._pendingHighlight.fullMessage,
                     message_role: this._pendingHighlight.role,
-                    character_id: this.currentCharacterId,
+                    character_id: characterId,
                     color: color
                 })
             });
@@ -1163,13 +1165,12 @@ const MessageHandler = {
     },
     
     async applyStoredHighlights() {
-        if (!this.currentCharacterId) {
-            console.log('⚠️ Cannot apply highlights: currentCharacterId not set');
-            return;
-        }
-        
         try {
-            const url = `/api/user/highlights?character_id=${this.currentCharacterId}`;
+            // On domain-characters page, fetch ALL highlights (same fix as pinned messages)
+            const isDomainPage = this.characterName === 'domain-characters';
+            const url = isDomainPage 
+                ? '/api/user/highlights'  // Fetch all highlights on domain page
+                : `/api/user/highlights?character_id=${this.currentCharacterId || this.characterName}`;
             console.log(`Fetching highlights from: ${url}`);
             const response = await AuthHelper.authenticatedFetch(url);
             
