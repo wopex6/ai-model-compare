@@ -1385,48 +1385,101 @@ const MessageHandler = {
      * @param {string} contentSnippet - First 100 chars of message content to match
      * @param {string} timestamp - Message timestamp to help identify
      */
-    goToMessage(contentSnippet, timestamp) {
+    async goToMessage(contentSnippet, timestamp) {
         // Close the pinned panel first
         const panel = document.getElementById('pinned-messages-panel');
         if (panel) panel.style.display = 'none';
         document.getElementById('pinnedBtn')?.classList.remove('active');
         
-        // Find the message in the chat by matching content
+        // First try to find in current view
+        let targetMessage = this._findMessageInView(contentSnippet);
+        
+        if (targetMessage) {
+            this._highlightAndScrollTo(targetMessage);
+            return;
+        }
+        
+        // Message not in current view - try to load more history
+        console.log('📍 Message not in current view, loading more history...');
+        
+        // Try to load more history (up to 500 messages)
+        const characterId = this.currentCharacterId || 'coordinator';
+        try {
+            const response = await AuthHelper.authenticatedFetch(
+                `/api/domain-characters/history/${characterId}?limit=500`
+            );
+            const data = await response.json();
+            
+            if (data.success && data.history && data.history.length > 0) {
+                // Reload the chat with full history
+                if (typeof DomainCharacters !== 'undefined' && DomainCharacters._reloadHistoryWithData) {
+                    await DomainCharacters._reloadHistoryWithData(data.history, characterId);
+                } else {
+                    // Fallback: just reload history normally with higher limit
+                    if (typeof DomainCharacters !== 'undefined') {
+                        await DomainCharacters.loadCharacterHistory(characterId);
+                    }
+                }
+                
+                // Wait for DOM to update, then try to find again
+                await new Promise(resolve => setTimeout(resolve, 300));
+                targetMessage = this._findMessageInView(contentSnippet);
+                
+                if (targetMessage) {
+                    this._highlightAndScrollTo(targetMessage);
+                    return;
+                }
+            }
+        } catch (error) {
+            console.error('Error loading history for pinned message:', error);
+        }
+        
+        // Still not found
+        alert('Message not found. It may have been deleted or is from a different character.');
+    },
+    
+    /**
+     * Find a message in the current view by content
+     * @param {string} contentSnippet - Content to search for
+     * @returns {HTMLElement|null} Message element or null
+     */
+    _findMessageInView(contentSnippet) {
         const messages = this.messagesContainer?.querySelectorAll('.message, .message-bubble') || [];
-        let targetMessage = null;
         
         for (const msg of messages) {
             const msgContent = msg.querySelector('.message-content, .bubble-content');
             if (msgContent) {
                 const text = msgContent.textContent || msgContent.innerText || '';
                 // Match first 50 chars (accounting for formatting differences)
-                if (text.substring(0, 50).includes(contentSnippet.substring(0, 50))) {
-                    targetMessage = msg;
-                    break;
+                const snippet = contentSnippet.substring(0, 50).replace(/\\n/g, '\n').trim();
+                if (text.substring(0, 80).includes(snippet.substring(0, 40))) {
+                    return msg;
                 }
             }
         }
+        return null;
+    },
+    
+    /**
+     * Highlight and scroll to a message element
+     * @param {HTMLElement} targetMessage - Message element to highlight
+     */
+    _highlightAndScrollTo(targetMessage) {
+        // Scroll to message
+        targetMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
         
-        if (targetMessage) {
-            // Scroll to message
-            targetMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            
-            // Highlight effect
-            const originalBg = targetMessage.style.background;
-            targetMessage.style.transition = 'background 0.3s';
-            targetMessage.style.background = 'linear-gradient(135deg, #fff3cd, #ffeeba)';
-            targetMessage.style.boxShadow = '0 0 10px rgba(255, 193, 7, 0.5)';
-            
-            setTimeout(() => {
-                targetMessage.style.background = originalBg || '';
-                targetMessage.style.boxShadow = '';
-            }, 2000);
-            
-            console.log('📍 Scrolled to pinned message');
-        } else {
-            // Message not found in current view - might need to load more history
-            alert('Message not found in current view. It may be in older history.');
-        }
+        // Highlight effect
+        const originalBg = targetMessage.style.background;
+        targetMessage.style.transition = 'background 0.3s';
+        targetMessage.style.background = 'linear-gradient(135deg, #fff3cd, #ffeeba)';
+        targetMessage.style.boxShadow = '0 0 10px rgba(255, 193, 7, 0.5)';
+        
+        setTimeout(() => {
+            targetMessage.style.background = originalBg || '';
+            targetMessage.style.boxShadow = '';
+        }, 2000);
+        
+        console.log('📍 Scrolled to pinned message');
     },
     
     /**
