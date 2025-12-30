@@ -1297,12 +1297,12 @@ const MessageHandler = {
         if (!panel) return;
         
         try {
-            // Use currentCharacterId (matches what's used when saving) or fetch all if not set
-            const characterId = this.currentCharacterId || this.characterName;
-            // For domain-characters page, fetch all pinned messages (no filter)
-            const url = characterId === 'domain-characters' 
-                ? '/api/user/pinned-messages' 
-                : `/api/user/pinned-messages?character_id=${characterId}`;
+            // On domain-characters page, fetch ALL pins (including old ones saved as 'domain-characters')
+            // This ensures backward compatibility with existing pins
+            const isDomainPage = this.characterName === 'domain-characters';
+            const url = isDomainPage 
+                ? '/api/user/pinned-messages'  // Fetch all pins on domain page
+                : `/api/user/pinned-messages?character_id=${this.currentCharacterId || this.characterName}`;
             const response = await AuthHelper.authenticatedFetch(url);
             const data = await response.json();
             
