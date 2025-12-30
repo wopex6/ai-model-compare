@@ -77,7 +77,22 @@ app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour
 
 # File Upload Configuration
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
-ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'mp3', 'wav', 'mp4', 'avi', 'mov', 'doc', 'docx', 'xls', 'xlsx', 'zip', 'rar', 'svg', 'webp', 'ogg', 'm4a', 'webm'}
+ALLOWED_EXTENSIONS = {
+    # Text/Documents
+    'txt', 'md', 'pdf', 'doc', 'docx', 'rtf',
+    # Data formats (AI-readable)
+    'json', 'csv', 'xml', 'yaml', 'yml',
+    # Code files
+    'py', 'js', 'ts', 'html', 'css', 'sql', 'sh', 'bat',
+    # Spreadsheets
+    'xls', 'xlsx',
+    # Images
+    'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp',
+    # Audio/Video
+    'mp3', 'wav', 'ogg', 'm4a', 'mp4', 'avi', 'mov', 'webm',
+    # Archives
+    'zip', 'rar'
+}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -1076,7 +1091,9 @@ def upload_ai_attachment():
             
             # Extract text content for supported file types
             extracted_text = None
-            if file_type == 'txt':
+            text_formats = {'txt', 'md', 'json', 'csv', 'xml', 'yaml', 'yml', 
+                           'py', 'js', 'ts', 'html', 'css', 'sql', 'sh', 'bat'}
+            if file_type in text_formats:
                 try:
                     with open(filepath, 'r', encoding='utf-8') as f:
                         extracted_text = f.read()[:10000]  # Limit to 10k chars
