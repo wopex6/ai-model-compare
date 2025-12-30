@@ -1251,13 +1251,15 @@ const MessageHandler = {
         const timestamp = button.dataset.timestamp;
         
         try {
+            // Use currentCharacterId (matches what's used when loading) for consistency
+            const characterId = this.currentCharacterId || this.characterName || 'coordinator';
             const response = await AuthHelper.authenticatedFetch('/api/user/pinned-messages', {
                 method: 'POST',
                 body: JSON.stringify({
                     content: content,
                     role: role,
                     timestamp: timestamp,
-                    character_id: this.characterName || 'coordinator'
+                    character_id: characterId
                 })
             });
             
