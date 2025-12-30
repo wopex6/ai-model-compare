@@ -1496,8 +1496,8 @@ const MessageHandler = {
      * @param {HTMLElement} targetMessage - Message element to highlight
      */
     _highlightAndScrollTo(targetMessage) {
-        // Scroll to message
-        targetMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Scroll to message (top of message visible at top of viewport)
+        targetMessage.scrollIntoView({ behavior: 'smooth', block: 'start' });
         
         // Highlight effect
         const originalBg = targetMessage.style.background;
