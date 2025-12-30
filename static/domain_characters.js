@@ -278,6 +278,43 @@ const DomainCharacters = {
     },
     
     /**
+     * Reload history with provided data (used by goToMessage for loading older history)
+     * @param {Array} history - History data from API
+     * @param {string} characterId - Character ID
+     */
+    async _reloadHistoryWithData(history, characterId) {
+        // Clear current messages
+        const messagesContainer = document.getElementById('domain-chat-messages');
+        if (messagesContainer) {
+            messagesContainer.innerHTML = '';
+        }
+        
+        // Store in local cache
+        this.conversations[characterId] = history;
+        
+        // Display messages with timestamps
+        history.forEach(msg => {
+            if (msg.user_message) {
+                this._addMessageToDisplay(msg.user_message, 'user', null, false, msg.timestamp);
+            }
+            
+            // Handle multi-responses (coordinator view)
+            if (msg.responses && msg.responses.length > 0) {
+                msg.responses.forEach(resp => {
+                    if (resp.content) {
+                        this._addMessageToDisplay(resp.content, 'bot', resp.character || characterId, false, msg.timestamp);
+                    }
+                });
+            } else if (msg.ai_response) {
+                const responder = msg.character || characterId;
+                this._addMessageToDisplay(msg.ai_response, 'bot', responder, false, msg.timestamp);
+            }
+        });
+        
+        console.log(`✓ Reloaded ${history.length} messages for pinned message navigation`);
+    },
+    
+    /**
      * Show welcome message for a character
      * @private
      */
