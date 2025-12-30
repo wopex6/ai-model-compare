@@ -294,6 +294,29 @@ const ConversationBox = {
     },
     
     /**
+     * Reload history with provided data (used by goToMessage for loading older history)
+     * @param {Array} messages - Messages data from API
+     * @param {string} characterId - Character ID
+     */
+    async _reloadHistoryWithData(messages, characterId) {
+        // Clear existing messages
+        MessageHandler.messagesContainer.innerHTML = '';
+        
+        // Display each message
+        messages.forEach(msg => {
+            MessageHandler.addMessage({
+                content: msg.content,
+                role: msg.sender_type === 'assistant' ? 'bot' : msg.sender_type,
+                timestamp: msg.timestamp,
+                source: msg.metadata?.source,
+                shouldScroll: false
+            });
+        });
+        
+        console.log(`✓ Reloaded ${messages.length} messages for pinned message navigation`);
+    },
+    
+    /**
      * Send a quick/preset message
      * 
      * @param {string} message - The message to send

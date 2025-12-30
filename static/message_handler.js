@@ -1403,24 +1403,41 @@ const MessageHandler = {
         console.log('📍 Message not in current view, loading more history...');
         
         // Try to load more history (up to 500 messages)
-        const characterId = this.currentCharacterId || 'coordinator';
+        const characterId = this.currentCharacterId || this.characterName || 'coordinator';
         try {
-            const response = await AuthHelper.authenticatedFetch(
-                `/api/domain-characters/history/${characterId}?limit=500`
-            );
-            const data = await response.json();
+            // Determine the right API endpoint based on page type
+            const isDomainPage = typeof DomainCharacters !== 'undefined';
+            const isConversationBox = typeof ConversationBox !== 'undefined' && ConversationBox.config;
             
-            if (data.success && data.history && data.history.length > 0) {
-                // Reload the chat with full history
-                if (typeof DomainCharacters !== 'undefined' && DomainCharacters._reloadHistoryWithData) {
-                    await DomainCharacters._reloadHistoryWithData(data.history, characterId);
-                } else {
-                    // Fallback: just reload history normally with higher limit
-                    if (typeof DomainCharacters !== 'undefined') {
-                        await DomainCharacters.loadCharacterHistory(characterId);
+            let historyLoaded = false;
+            
+            if (isDomainPage) {
+                const response = await AuthHelper.authenticatedFetch(
+                    `/api/domain-characters/history/${characterId}?limit=500`
+                );
+                const data = await response.json();
+                
+                if (data.success && data.history && data.history.length > 0) {
+                    if (DomainCharacters._reloadHistoryWithData) {
+                        await DomainCharacters._reloadHistoryWithData(data.history, characterId);
+                        historyLoaded = true;
                     }
                 }
+            } else if (isConversationBox && ConversationBox.config.historyEndpoint) {
+                const response = await AuthHelper.authenticatedFetch(
+                    `${ConversationBox.config.historyEndpoint}?limit=500`
+                );
+                const data = await response.json();
                 
+                if (data.messages && data.messages.length > 0) {
+                    if (ConversationBox._reloadHistoryWithData) {
+                        await ConversationBox._reloadHistoryWithData(data.messages, characterId);
+                        historyLoaded = true;
+                    }
+                }
+            }
+            
+            if (historyLoaded) {
                 // Wait for DOM to update, then try to find again
                 await new Promise(resolve => setTimeout(resolve, 300));
                 targetMessage = this._findMessageInView(contentSnippet);
@@ -1618,10 +1635,14 @@ const MessageHandler = {
             const data = await response.json();
             
             if (data.highlights && data.highlights.length > 0) {
-                content.innerHTML = data.highlights.map(h => `
+                content.innerHTML = data.highlights.map(h => {
+                    const escapedText = h.full_message ? h.full_message.replace(/'/g, "\\'").replace(/"/g, '\\"').substring(0, 100) : h.highlighted_text.replace(/'/g, "\\'").replace(/"/g, '\\"').substring(0, 100);
+                    return `
                     <div class="panel-item" data-highlight-id="${h.id}">
-                        <button onclick="MessageHandler.deleteHighlightFromPanel(${h.id})" 
-                            style="position: absolute; right: 5px; top: 5px; background: none; border: none; cursor: pointer; font-size: 12px; opacity: 0.6;" title="Remove">✕</button>
+                        <div style="position: absolute; right: 5px; top: 5px; display: flex; gap: 8px;">
+                            <button onclick="MessageHandler.goToHighlight('${escapedText}')" style="background: none; border: none; cursor: pointer; font-size: 11px; opacity: 0.6; color: #667eea;" title="Go to message">↗️</button>
+                            <button onclick="MessageHandler.deleteHighlightFromPanel(${h.id})" style="background: none; border: none; cursor: pointer; font-size: 12px; opacity: 0.6;" title="Remove">✕</button>
+                        </div>
                         <div style="font-size: 0.75em; color: #888; margin-bottom: 4px;">
                             ${h.message_role === 'user' ? 'You' : 'Bot'} • ${this.formatPinTimestamp(h.created_at)}
                         </div>
@@ -1630,7 +1651,7 @@ const MessageHandler = {
                         </div>
                         ${h.note ? `<div style="font-size: 0.75em; color: #667eea; margin-top: 4px; font-style: italic;">📝 ${h.note}</div>` : ''}
                     </div>
-                `).join('');
+                `}).join('');
             } else {
                 content.innerHTML = '<p class="panel-empty">No highlights yet.<br>Select text in messages and click "Highlight" to save.</p>';
             }
@@ -1638,6 +1659,76 @@ const MessageHandler = {
             console.error('Error loading highlights:', error);
             content.innerHTML = '<p class="panel-empty">Error loading highlights</p>';
         }
+    },
+    
+    /**
+     * Go to a highlighted message in chat
+     * @param {string} contentSnippet - Content to search for
+     */
+    async goToHighlight(contentSnippet) {
+        // Close the highlights panel first
+        const panel = document.getElementById('highlights-panel');
+        if (panel) panel.style.display = 'none';
+        document.getElementById('highlightsBtn')?.classList.remove('active');
+        
+        // Reuse the same logic as goToMessage
+        let targetMessage = this._findMessageInView(contentSnippet);
+        
+        if (targetMessage) {
+            this._highlightAndScrollTo(targetMessage);
+            return;
+        }
+        
+        // Message not in current view - try to load more history
+        console.log('📍 Highlight message not in current view, loading more history...');
+        
+        const characterId = this.currentCharacterId || this.characterName || 'coordinator';
+        try {
+            const isDomainPage = typeof DomainCharacters !== 'undefined';
+            const isConversationBox = typeof ConversationBox !== 'undefined' && ConversationBox.config;
+            
+            let historyLoaded = false;
+            
+            if (isDomainPage) {
+                const response = await AuthHelper.authenticatedFetch(
+                    `/api/domain-characters/history/${characterId}?limit=500`
+                );
+                const data = await response.json();
+                
+                if (data.success && data.history && data.history.length > 0) {
+                    if (DomainCharacters._reloadHistoryWithData) {
+                        await DomainCharacters._reloadHistoryWithData(data.history, characterId);
+                        historyLoaded = true;
+                    }
+                }
+            } else if (isConversationBox && ConversationBox.config.historyEndpoint) {
+                const response = await AuthHelper.authenticatedFetch(
+                    `${ConversationBox.config.historyEndpoint}?limit=500`
+                );
+                const data = await response.json();
+                
+                if (data.messages && data.messages.length > 0) {
+                    if (ConversationBox._reloadHistoryWithData) {
+                        await ConversationBox._reloadHistoryWithData(data.messages, characterId);
+                        historyLoaded = true;
+                    }
+                }
+            }
+            
+            if (historyLoaded) {
+                await new Promise(resolve => setTimeout(resolve, 300));
+                targetMessage = this._findMessageInView(contentSnippet);
+                
+                if (targetMessage) {
+                    this._highlightAndScrollTo(targetMessage);
+                    return;
+                }
+            }
+        } catch (error) {
+            console.error('Error loading history for highlight:', error);
+        }
+        
+        alert('Message not found. It may have been deleted or is from a different character.');
     },
     
     /**
