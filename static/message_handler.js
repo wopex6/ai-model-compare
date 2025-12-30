@@ -1332,10 +1332,14 @@ const MessageHandler = {
             const isLong = pin.content.length > 150;
             const shortContent = isLong ? pin.content.substring(0, 150) + '...' : pin.content;
             const fullContent = pin.content.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const escapedContent = pin.content.replace(/'/g, "\\'").replace(/"/g, '\\"').substring(0, 100);
             
             return `
             <div class="pinned-message" data-pin-id="${pin.id}" style="background: ${pin.role === 'user' ? 'linear-gradient(135deg, #667eea22, #764ba222)' : '#f5f5f5'}; padding: 10px; margin-bottom: 8px; border-radius: 8px; position: relative; border-left: 3px solid ${pin.role === 'user' ? '#667eea' : '#26a69a'};">
-                <button onclick="MessageHandler.unpinMessage(${pin.id})" style="position: absolute; right: 5px; top: 5px; background: none; border: none; cursor: pointer; font-size: 12px; opacity: 0.6;" title="Unpin">✕</button>
+                <div style="position: absolute; right: 5px; top: 5px; display: flex; gap: 8px;">
+                    <button onclick="MessageHandler.goToMessage('${escapedContent}', '${pin.timestamp}')" style="background: none; border: none; cursor: pointer; font-size: 11px; opacity: 0.6; color: #667eea;" title="Go to message">↗️</button>
+                    <button onclick="MessageHandler.unpinMessage(${pin.id})" style="background: none; border: none; cursor: pointer; font-size: 12px; opacity: 0.6;" title="Unpin">✕</button>
+                </div>
                 <div style="font-size: 0.75em; color: #888; margin-bottom: 4px;">
                     ${pin.role === 'user' ? 'You' : 'Bot'} • ${this.formatPinTimestamp(pin.timestamp)}
                 </div>
@@ -1373,6 +1377,55 @@ const MessageHandler = {
             fullContent.style.display = 'none';
             if (expandBtn) expandBtn.style.display = 'block';
             if (collapseBtn) collapseBtn.style.display = 'none';
+        }
+    },
+    
+    /**
+     * Go to (scroll to and highlight) the original message in chat
+     * @param {string} contentSnippet - First 100 chars of message content to match
+     * @param {string} timestamp - Message timestamp to help identify
+     */
+    goToMessage(contentSnippet, timestamp) {
+        // Close the pinned panel first
+        const panel = document.getElementById('pinned-messages-panel');
+        if (panel) panel.style.display = 'none';
+        document.getElementById('pinnedBtn')?.classList.remove('active');
+        
+        // Find the message in the chat by matching content
+        const messages = this.messagesContainer?.querySelectorAll('.message, .message-bubble') || [];
+        let targetMessage = null;
+        
+        for (const msg of messages) {
+            const msgContent = msg.querySelector('.message-content, .bubble-content');
+            if (msgContent) {
+                const text = msgContent.textContent || msgContent.innerText || '';
+                // Match first 50 chars (accounting for formatting differences)
+                if (text.substring(0, 50).includes(contentSnippet.substring(0, 50))) {
+                    targetMessage = msg;
+                    break;
+                }
+            }
+        }
+        
+        if (targetMessage) {
+            // Scroll to message
+            targetMessage.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            
+            // Highlight effect
+            const originalBg = targetMessage.style.background;
+            targetMessage.style.transition = 'background 0.3s';
+            targetMessage.style.background = 'linear-gradient(135deg, #fff3cd, #ffeeba)';
+            targetMessage.style.boxShadow = '0 0 10px rgba(255, 193, 7, 0.5)';
+            
+            setTimeout(() => {
+                targetMessage.style.background = originalBg || '';
+                targetMessage.style.boxShadow = '';
+            }, 2000);
+            
+            console.log('📍 Scrolled to pinned message');
+        } else {
+            // Message not found in current view - might need to load more history
+            alert('Message not found in current view. It may be in older history.');
         }
     },
     
