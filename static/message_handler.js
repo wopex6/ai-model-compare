@@ -1332,12 +1332,11 @@ const MessageHandler = {
             const isLong = pin.content.length > 150;
             const shortContent = isLong ? pin.content.substring(0, 150) + '...' : pin.content;
             const fullContent = pin.content.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            const escapedContent = pin.content.replace(/'/g, "\\'").replace(/"/g, '\\"').substring(0, 100);
             
             return `
-            <div class="pinned-message" data-pin-id="${pin.id}" style="background: ${pin.role === 'user' ? 'linear-gradient(135deg, #667eea22, #764ba222)' : '#f5f5f5'}; padding: 10px; margin-bottom: 8px; border-radius: 8px; position: relative; border-left: 3px solid ${pin.role === 'user' ? '#667eea' : '#26a69a'};">
+            <div class="pinned-message" data-pin-id="${pin.id}" data-content="${encodeURIComponent(pin.content.substring(0, 100))}" data-timestamp="${pin.timestamp || ''}" style="background: ${pin.role === 'user' ? 'linear-gradient(135deg, #667eea22, #764ba222)' : '#f5f5f5'}; padding: 10px; margin-bottom: 8px; border-radius: 8px; position: relative; border-left: 3px solid ${pin.role === 'user' ? '#667eea' : '#26a69a'};">
                 <div style="position: absolute; right: 5px; top: 5px; display: flex; gap: 8px;">
-                    <button onclick="MessageHandler.goToMessage('${escapedContent}', '${pin.timestamp}')" style="background: none; border: none; cursor: pointer; font-size: 11px; opacity: 0.6; color: #667eea;" title="Go to message">↗️</button>
+                    <button onclick="MessageHandler.goToMessageFromPin(this)" style="background: none; border: none; cursor: pointer; font-size: 11px; opacity: 0.6; color: #667eea;" title="Go to message">↗️</button>
                     <button onclick="MessageHandler.unpinMessage(${pin.id})" style="background: none; border: none; cursor: pointer; font-size: 12px; opacity: 0.6;" title="Unpin">✕</button>
                 </div>
                 <div style="font-size: 0.75em; color: #888; margin-bottom: 4px;">
@@ -1378,6 +1377,21 @@ const MessageHandler = {
             if (expandBtn) expandBtn.style.display = 'block';
             if (collapseBtn) collapseBtn.style.display = 'none';
         }
+    },
+    
+    /**
+     * Go to message from pin button click (reads from data attributes)
+     * @param {HTMLElement} button - The button clicked
+     */
+    goToMessageFromPin(button) {
+        const container = button.closest('.pinned-message');
+        if (!container) return;
+        
+        const encodedContent = container.dataset.content || '';
+        const timestamp = container.dataset.timestamp || '';
+        const contentSnippet = decodeURIComponent(encodedContent);
+        
+        this.goToMessage(contentSnippet, timestamp);
     },
     
     /**
@@ -1636,11 +1650,11 @@ const MessageHandler = {
             
             if (data.highlights && data.highlights.length > 0) {
                 content.innerHTML = data.highlights.map(h => {
-                    const escapedText = h.full_message ? h.full_message.replace(/'/g, "\\'").replace(/"/g, '\\"').substring(0, 100) : h.highlighted_text.replace(/'/g, "\\'").replace(/"/g, '\\"').substring(0, 100);
+                    const searchText = h.full_message || h.highlighted_text || '';
                     return `
-                    <div class="panel-item" data-highlight-id="${h.id}">
+                    <div class="panel-item" data-highlight-id="${h.id}" data-content="${encodeURIComponent(searchText.substring(0, 100))}">
                         <div style="position: absolute; right: 5px; top: 5px; display: flex; gap: 8px;">
-                            <button onclick="MessageHandler.goToHighlight('${escapedText}')" style="background: none; border: none; cursor: pointer; font-size: 11px; opacity: 0.6; color: #667eea;" title="Go to message">↗️</button>
+                            <button onclick="MessageHandler.goToHighlightFromPanel(this)" style="background: none; border: none; cursor: pointer; font-size: 11px; opacity: 0.6; color: #667eea;" title="Go to message">↗️</button>
                             <button onclick="MessageHandler.deleteHighlightFromPanel(${h.id})" style="background: none; border: none; cursor: pointer; font-size: 12px; opacity: 0.6;" title="Remove">✕</button>
                         </div>
                         <div style="font-size: 0.75em; color: #888; margin-bottom: 4px;">
@@ -1659,6 +1673,20 @@ const MessageHandler = {
             console.error('Error loading highlights:', error);
             content.innerHTML = '<p class="panel-empty">Error loading highlights</p>';
         }
+    },
+    
+    /**
+     * Go to highlight from panel button click (reads from data attributes)
+     * @param {HTMLElement} button - The button clicked
+     */
+    goToHighlightFromPanel(button) {
+        const container = button.closest('.panel-item');
+        if (!container) return;
+        
+        const encodedContent = container.dataset.content || '';
+        const contentSnippet = decodeURIComponent(encodedContent);
+        
+        this.goToHighlight(contentSnippet);
     },
     
     /**
