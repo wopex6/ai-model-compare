@@ -1480,10 +1480,10 @@ const MessageHandler = {
         for (const msg of messages) {
             const msgContent = msg.querySelector('.message-content, .bubble-content');
             if (msgContent) {
-                const text = msgContent.textContent || msgContent.innerText || '';
-                // Match first 50 chars (accounting for formatting differences)
-                const snippet = contentSnippet.substring(0, 50).replace(/\\n/g, '\n').trim();
-                if (text.substring(0, 80).includes(snippet.substring(0, 40))) {
+                const text = (msgContent.textContent || msgContent.innerText || '').toLowerCase();
+                // Search anywhere in the message, not just at the start
+                const snippet = contentSnippet.substring(0, 50).replace(/\\n/g, '\n').trim().toLowerCase();
+                if (snippet.length > 10 && text.includes(snippet.substring(0, 30))) {
                     return msg;
                 }
             }
