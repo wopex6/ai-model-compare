@@ -140,7 +140,21 @@ const MessageHandler = {
         
         // Format message content - apply formatting for bot messages
         const formattedContent = sender === 'bot' ? this.formatBotResponse(content) : content;
-        const senderLabel = sender === 'bot' ? `<strong>${this.getBotDisplayName()}:</strong>` : '<strong>You:</strong>';
+        
+        // Only show sender label for bot messages when speaking character differs from page character
+        // User messages never show "You:" label to save space
+        let senderLabel = '';
+        if (sender === 'bot') {
+            const speakingCharacter = metadata.characterId || this.theme.characterDisplayName;
+            const pageCharacter = this.currentCharacterId || this.characterName;
+            // Show label only if different character is speaking (e.g., Work Advisor on Coordinator page)
+            const isDifferentCharacter = speakingCharacter && pageCharacter && 
+                speakingCharacter !== pageCharacter && 
+                !speakingCharacter.toLowerCase().includes(pageCharacter?.toLowerCase() || '');
+            if (isDifferentCharacter) {
+                senderLabel = `<strong>${this.getBotDisplayName()}:</strong> `;
+            }
+        }
         
         // Check if message has a summary (for long AI responses)
         const hasSummary = metadata.has_summary && metadata.summary;
@@ -926,13 +940,26 @@ const MessageHandler = {
     
     _highlightTextInElement(element, text, color, highlightId) {
         // Find and highlight text within an element using TreeWalker
+        // Use simple walker without filter (original working approach)
         const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
         let node;
         let textNodes = [];
         
         // Collect all text nodes
         while (node = walker.nextNode()) {
-            textNodes.push(node);
+            // Skip text inside buttons when collecting
+            let parent = node.parentElement;
+            let isInButton = false;
+            while (parent && parent !== element) {
+                if (parent.tagName === 'BUTTON') {
+                    isInButton = true;
+                    break;
+                }
+                parent = parent.parentElement;
+            }
+            if (!isInButton) {
+                textNodes.push(node);
+            }
         }
         
         // Try to find the text in the combined text content
@@ -942,7 +969,15 @@ const MessageHandler = {
         
         // If not found with exact text, try normalized version
         if (idx < 0) {
-            const normalizeText = (t) => t.replace(/\s+/g, ' ').trim();
+            // Normalize: whitespace, bullets/dashes, list markers
+            const normalizeText = (t) => t
+                .replace(/\s+/g, ' ')
+                .replace(/[•·‣⁃◦∙●○]/g, '-')
+                .replace(/[–—]/g, '-')
+                .replace(/:\s*-\s+/g, ': ')  // Remove list markers after colon
+                .replace(/\.\s*-\s+/g, '. ')
+                .replace(/^\s*-\s+/gm, '')
+                .trim();
             const normalizedFull = normalizeText(fullText);
             const normalizedSearch = normalizeText(text);
             const normalizedIdx = normalizedFull.indexOf(normalizedSearch);
@@ -1029,25 +1064,79 @@ const MessageHandler = {
     },
     
     _highlightTextInElementNormalized(element, normalizedText, color, highlightId) {
-        // Fallback: try to find and highlight using normalized text matching
+        // Fallback: highlight across multiple text nodes using normalized matching
         const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, null, false);
+        let textNodes = [];
         let node;
-        const normalizeText = (t) => t.replace(/\s+/g, ' ').trim();
         
+        // Collect all text nodes (skip buttons)
         while (node = walker.nextNode()) {
-            const normalized = normalizeText(node.textContent);
-            if (normalized.includes(normalizedText)) {
-                try {
-                    const range = document.createRange();
-                    range.selectNodeContents(node);
-                    this._applyHighlightToRange(range, color, highlightId);
-                    return true;
-                } catch (e) {
-                    console.error('Error in normalized highlight:', e);
-                }
+            let parent = node.parentElement;
+            let isInButton = false;
+            while (parent && parent !== element) {
+                if (parent.tagName === 'BUTTON') { isInButton = true; break; }
+                parent = parent.parentElement;
+            }
+            if (!isInButton) {
+                textNodes.push(node);
             }
         }
-        return false;
+        
+        // Normalize: whitespace, bullets/dashes, list markers
+        const normalizeText = (t) => t
+            .replace(/\s+/g, ' ')
+            .replace(/[•·‣⁃◦∙●○]/g, '-')
+            .replace(/[–—]/g, '-')
+            .replace(/:\s*-\s+/g, ': ')
+            .replace(/\.\s*-\s+/g, '. ')
+            .replace(/^\s*-\s+/gm, '')
+            .trim();
+        
+        // Build combined text and find normalized match position
+        const fullText = textNodes.map(n => n.textContent).join('');
+        const normalizedFull = normalizeText(fullText);
+        const normalizedSearch = normalizeText(normalizedText);
+        
+        // Try to find the search text
+        let searchIdx = normalizedFull.indexOf(normalizedSearch);
+        if (searchIdx < 0) {
+            // Try shorter match
+            const searchShort = normalizedSearch.substring(0, 30);
+            searchIdx = normalizedFull.indexOf(searchShort);
+        }
+        
+        if (searchIdx < 0) return false;
+        
+        // Map normalized position back to original and highlight all matching nodes
+        // For simplicity, highlight all nodes that contain part of the match
+        let highlighted = false;
+        let currentNormPos = 0;
+        
+        for (const textNode of textNodes) {
+            const nodeText = textNode.textContent;
+            const nodeNormalized = normalizeText(nodeText);
+            const nodeNormLen = nodeNormalized.length;
+            
+            // Check if this node overlaps with our search range
+            const nodeStart = currentNormPos;
+            const nodeEnd = currentNormPos + nodeNormLen;
+            const searchEnd = searchIdx + normalizedSearch.length;
+            
+            if (nodeEnd > searchIdx && nodeStart < searchEnd && nodeText.trim().length > 0) {
+                try {
+                    const range = document.createRange();
+                    range.selectNodeContents(textNode);
+                    this._applyHighlightToRange(range, color, highlightId);
+                    highlighted = true;
+                } catch (e) {
+                    // Continue with other nodes
+                }
+            }
+            
+            currentNormPos = nodeEnd;
+        }
+        
+        return highlighted;
     },
     
     async toggleHighlightsPanel() {
@@ -1197,26 +1286,37 @@ const MessageHandler = {
                     
                     // Find the message containing this highlight text
                     let found = false;
+                    // Normalize: whitespace, bullets/dashes, list markers
+                    const normalizeText = (text) => text
+                        .replace(/\s+/g, ' ')
+                        .replace(/[•·‣⁃◦∙●○]/g, '-')  // Normalize bullets to dash
+                        .replace(/[–—]/g, '-')  // Normalize em/en dashes
+                        .replace(/:\s*-\s+/g, ': ')  // Remove list markers after colon (formatBotResponse strips these)
+                        .replace(/\.\s*-\s+/g, '. ')  // Remove list markers after period
+                        .replace(/^\s*-\s+/gm, '')  // Remove leading list markers
+                        .trim();
+                    const normalizedHighlight = normalizeText(highlight.highlighted_text);
+                    // Extract key phrase - first 25 chars after removing any leading numbers/punctuation
+                    const keyPhrase = normalizedHighlight.replace(/^\d+\.\s*/, '').substring(0, 25);
+                    
                     for (let i = 0; i < messages.length; i++) {
                         const messageEl = messages[i];
                         const messageText = messageEl.textContent;
-                        
-                        // Normalize both texts for comparison (remove extra whitespace, normalize line breaks)
-                        const normalizeText = (text) => text.replace(/\s+/g, ' ').trim();
-                        const normalizedHighlight = normalizeText(highlight.highlighted_text);
                         const normalizedMessage = normalizeText(messageText);
                         
-                        if (normalizedMessage.includes(normalizedHighlight)) {
-                            console.log(`    ✓ Found in message element ${i}`);
-                            // Apply highlight using the original (non-normalized) text
+                        // Try multiple matching strategies
+                        const hasFullMatch = normalizedMessage.includes(normalizedHighlight);
+                        const hasKeyPhrase = keyPhrase.length > 15 && normalizedMessage.includes(keyPhrase);
+                        
+                        if (hasFullMatch || hasKeyPhrase) {
+                            // Apply highlight using the original text first, then try normalized
                             const success = this._highlightTextInElement(messageEl, highlight.highlighted_text, highlight.color || 'green', highlight.id);
                             if (success) {
                                 appliedCount++;
                                 found = true;
                                 break;
                             } else {
-                                console.log(`    ✗ _highlightTextInElement failed - trying with normalized text`);
-                                // Try again with normalized text
+                                // Try with normalized text as fallback
                                 const success2 = this._highlightTextInElementNormalized(messageEl, normalizedHighlight, highlight.color || 'green', highlight.id);
                                 if (success2) {
                                     appliedCount++;
@@ -1227,7 +1327,7 @@ const MessageHandler = {
                         }
                     }
                     if (!found) {
-                        console.log(`    ✗ Text not found in any of ${messages.length} messages`);
+                        console.log(`Highlight "${highlight.highlighted_text.substring(0, 30)}..." not found in messages`);
                     }
                 });
                 
@@ -1252,6 +1352,21 @@ const MessageHandler = {
         const timestamp = button.dataset.timestamp;
         
         try {
+            // First check if already pinned
+            const checkResponse = await AuthHelper.authenticatedFetch('/api/user/pinned-messages/check', {
+                method: 'POST',
+                body: JSON.stringify({ content: content })
+            });
+            const checkData = await checkResponse.json();
+            
+            if (checkData.is_pinned) {
+                // Already pinned - show feedback and offer to unpin
+                button.textContent = '📍';
+                button.title = 'Already pinned - click to unpin';
+                button.onclick = () => this.unpinMessage(checkData.pin_id);
+                return;
+            }
+            
             // Use currentCharacterId (matches what's used when loading) for consistency
             const characterId = this.currentCharacterId || this.characterName || 'coordinator';
             const response = await AuthHelper.authenticatedFetch('/api/user/pinned-messages', {
@@ -1267,13 +1382,15 @@ const MessageHandler = {
             const data = await response.json();
             
             if (data.success) {
-                // Visual feedback
+                // Update button to show pinned state permanently
                 button.textContent = '📍';
-                button.title = 'Pinned!';
+                button.title = 'Unpin message';
                 button.style.opacity = '1';
+                // Change onclick to unpin
+                button.onclick = () => this.unpinMessage(data.pin_id);
+                
+                // Fade out after brief highlight
                 setTimeout(() => {
-                    button.textContent = '📌';
-                    button.title = 'Pin message';
                     button.style.opacity = '0';
                 }, 1500);
                 
@@ -1281,6 +1398,18 @@ const MessageHandler = {
                 this.loadPinnedMessages();
                 
                 console.log('📌 Message pinned successfully');
+            } else if (data.error === 'Message already pinned') {
+                // Already pinned - update to show pinned state
+                button.textContent = '📍';
+                button.title = 'Unpin message';
+                button.style.opacity = '1';
+                // Change onclick to unpin using the existing pin_id
+                if (data.existing_id) {
+                    button.onclick = () => this.unpinMessage(data.existing_id);
+                }
+                setTimeout(() => {
+                    button.style.opacity = '0';
+                }, 1500);
             } else {
                 alert(data.error || 'Failed to pin message');
             }
@@ -1309,10 +1438,36 @@ const MessageHandler = {
             
             if (data.success && data.pinned_messages) {
                 this.renderPinnedMessages(data.pinned_messages);
+                // Update pin button icons in chat to show which messages are already pinned
+                this._updatePinButtonStates(data.pinned_messages);
             }
         } catch (error) {
             console.error('Error loading pinned messages:', error);
         }
+    },
+    
+    /**
+     * Update pin button icons to show 📍 for already-pinned messages
+     * @param {Array} pinnedMessages - Array of pinned message objects
+     */
+    _updatePinButtonStates(pinnedMessages) {
+        if (!pinnedMessages || pinnedMessages.length === 0) return;
+        
+        // Get all pin buttons in the chat
+        const pinButtons = document.querySelectorAll('.pin-btn');
+        
+        pinButtons.forEach(button => {
+            const buttonContent = button.dataset.content;
+            // Check if this message is in the pinned list
+            const pinnedMatch = pinnedMessages.find(pin => pin.content === buttonContent);
+            
+            if (pinnedMatch) {
+                // Already pinned - show pinned icon and change to unpin action
+                button.textContent = '📍';
+                button.title = 'Unpin message';
+                button.onclick = () => this.unpinMessage(pinnedMatch.id);
+            }
+        });
     },
     
     /**
@@ -1476,17 +1631,36 @@ const MessageHandler = {
      * @returns {HTMLElement|null} Message element or null
      */
     _findMessageInView(contentSnippet) {
-        const messages = this.messagesContainer?.querySelectorAll('.message, .message-bubble') || [];
+        // Use broader selectors to find messages
+        const messages = this.messagesContainer?.querySelectorAll('.message, .message-bubble, .message-content') || [];
+        
+        // Normalize text for comparison (same as applyStoredHighlights)
+        const normalizeText = (text) => text
+            .replace(/\s+/g, ' ')
+            .replace(/[•·‣⁃◦∙●○]/g, '-')
+            .replace(/[–—]/g, '-')
+            .replace(/:\s*-\s+/g, ': ')  // Remove list markers after colon
+            .replace(/\.\s*-\s+/g, '. ')
+            .replace(/^\s*-\s+/gm, '')
+            .trim()
+            .toLowerCase();
+        const snippetNorm = normalizeText(contentSnippet.substring(0, 80).replace(/\\n/g, '\n'));
+        // Extract key phrase - first 25 chars after removing numbers/punctuation
+        const keyPhrase = snippetNorm.replace(/^\d+\.\s*/, '').substring(0, 25);
+        
+        if (snippetNorm.length < 10) return null;
         
         for (const msg of messages) {
-            const msgContent = msg.querySelector('.message-content, .bubble-content');
-            if (msgContent) {
-                const text = (msgContent.textContent || msgContent.innerText || '').toLowerCase();
-                // Search anywhere in the message, not just at the start
-                const snippet = contentSnippet.substring(0, 50).replace(/\\n/g, '\n').trim().toLowerCase();
-                if (snippet.length > 10 && text.includes(snippet.substring(0, 30))) {
-                    return msg;
-                }
+            // Check both the element itself and any content child
+            const msgContent = msg.querySelector('.message-content, .bubble-content') || msg;
+            const text = normalizeText(msgContent.textContent || msgContent.innerText || '');
+            
+            // Try matching with key phrase or progressively shorter snippets
+            if (text.includes(keyPhrase) ||
+                text.includes(snippetNorm.substring(0, 40)) ||
+                text.includes(snippetNorm.substring(0, 25))) {
+                // Return the parent .message element if this is a content element
+                return msg.closest('.message') || msg;
             }
         }
         return null;
@@ -1497,10 +1671,14 @@ const MessageHandler = {
      * @param {HTMLElement} targetMessage - Message element to highlight
      */
     _highlightAndScrollTo(targetMessage) {
-        // Scroll to message (top of message visible at top of viewport)
-        targetMessage.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // First, check if there's a saved-highlight span inside - scroll to that instead
+        const highlightSpan = targetMessage.querySelector('.saved-highlight, .saved-highlight-yellow');
+        const scrollTarget = highlightSpan || targetMessage;
         
-        // Highlight effect
+        // Scroll to put the highlight at the TOP of the viewport
+        scrollTarget.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        
+        // Highlight effect on the whole message
         const originalBg = targetMessage.style.background;
         targetMessage.style.transition = 'background 0.3s';
         targetMessage.style.background = 'linear-gradient(135deg, #fff3cd, #ffeeba)';
@@ -1511,7 +1689,7 @@ const MessageHandler = {
             targetMessage.style.boxShadow = '';
         }, 2000);
         
-        console.log('📍 Scrolled to pinned message');
+        console.log('📍 Scrolled to message');
     },
     
     /**
@@ -1570,9 +1748,24 @@ const MessageHandler = {
                 // Remove from UI
                 const pinElement = document.querySelector(`[data-pin-id="${pinId}"]`);
                 if (pinElement) {
+                    // Get content to find and reset the pin button in chat
+                    const content = decodeURIComponent(pinElement.dataset.content || '');
+                    
                     pinElement.style.opacity = '0';
                     pinElement.style.transform = 'translateX(100%)';
                     setTimeout(() => pinElement.remove(), 300);
+                    
+                    // Reset the pin button in chat back to 📌
+                    if (content) {
+                        const pinButtons = document.querySelectorAll('.pin-btn');
+                        pinButtons.forEach(btn => {
+                            if (btn.dataset.content && btn.dataset.content.substring(0, 100) === content.substring(0, 100)) {
+                                btn.textContent = '📌';
+                                btn.title = 'Pin message';
+                                btn.onclick = () => this.pinMessage(btn);
+                            }
+                        });
+                    }
                 }
                 
                 // Refresh panel
@@ -1651,9 +1844,9 @@ const MessageHandler = {
             
             if (data.highlights && data.highlights.length > 0) {
                 content.innerHTML = data.highlights.map(h => {
-                    const searchText = h.full_message || h.highlighted_text || '';
+                    const searchText = h.highlighted_text || h.full_message || '';
                     return `
-                    <div class="panel-item" data-highlight-id="${h.id}" data-content="${encodeURIComponent(searchText.substring(0, 100))}">
+                    <div class="panel-item" data-highlight-id="${h.id}" data-content="${encodeURIComponent(searchText.substring(0, 150))}">
                         <div style="position: absolute; right: 5px; top: 5px; display: flex; gap: 8px;">
                             <button onclick="MessageHandler.goToHighlightFromPanel(this)" style="background: none; border: none; cursor: pointer; font-size: 11px; opacity: 0.6; color: #667eea;" title="Go to message">↗️</button>
                             <button onclick="MessageHandler.deleteHighlightFromPanel(${h.id})" style="background: none; border: none; cursor: pointer; font-size: 12px; opacity: 0.6;" title="Remove">✕</button>

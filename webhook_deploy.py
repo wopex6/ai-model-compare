@@ -32,7 +32,7 @@ def deploy_webhook():
         # Navigate to project directory and pull
         result = subprocess.run(
             ['git', 'pull', 'origin', 'main'],
-            cwd='/home/YOUR_USERNAME/ai-model-compare',
+            cwd='/home/trabcd/ai-model-compare',
             capture_output=True,
             text=True
         )
@@ -41,19 +41,28 @@ def deploy_webhook():
         if 'requirements.txt' in result.stdout:
             subprocess.run(
                 ['pip', 'install', '-r', 'requirements.txt'],
-                cwd='/home/YOUR_USERNAME/ai-model-compare'
+                cwd='/home/trabcd/ai-model-compare'
             )
+        
+        # Run database migrations automatically
+        migrate_result = subprocess.run(
+            ['python', 'migrate_all_tables.py'],
+            cwd='/home/trabcd/ai-model-compare',
+            capture_output=True,
+            text=True
+        )
         
         # Reload by touching WSGI
         subprocess.run([
             'touch',
-            '/var/www/YOUR_USERNAME_pythonanywhere_com_wsgi.py'
+            '/var/www/trabcd_pythonanywhere_com_wsgi.py'
         ])
         
         return jsonify({
             'status': 'success',
             'message': 'Deployment triggered',
-            'output': result.stdout
+            'git_output': result.stdout,
+            'migration_output': migrate_result.stdout if migrate_result else 'skipped'
         }), 200
         
     except Exception as e:

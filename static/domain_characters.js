@@ -83,6 +83,11 @@ const DomainCharacters = {
         // Set default to coordinator
         this.selectedCharacter = this.coordinatorId;
         
+        // Update MessageHandler's currentCharacterId for consistent pin/highlight saving
+        if (typeof MessageHandler !== 'undefined') {
+            MessageHandler.currentCharacterId = this.coordinatorId;
+        }
+        
         console.log('✅ DomainCharacters initialized');
     },
     
@@ -170,6 +175,11 @@ const DomainCharacters = {
         // Load conversation history for this character
         if (previousCharacter !== characterId) {
             await this.loadCharacterHistory(characterId);
+            
+            // Update MessageHandler's currentCharacterId for consistent pin/highlight saving
+            if (typeof MessageHandler !== 'undefined') {
+                MessageHandler.currentCharacterId = characterId;
+            }
             
             // Callback: character changed
             if (this.callbacks.onCharacterChanged) {
@@ -261,6 +271,11 @@ const DomainCharacters = {
                 } else {
                     console.log('Highlights NOT enabled - skipping applyStoredHighlights');
                 }
+                
+                // Update pin button states after messages are loaded
+                setTimeout(() => {
+                    MessageHandler.loadPinnedMessages();
+                }, 600);
                 
                 // Callback: history loaded (like ConversationBox)
                 if (this.callbacks.onHistoryLoaded) {

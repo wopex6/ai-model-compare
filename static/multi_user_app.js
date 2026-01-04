@@ -342,7 +342,7 @@ class IntegratedAIChatbot {
         // Check both 'role' and 'user_role' properties (API returns 'user_role')
         const userRole = user?.role || user?.user_role;
         
-        if (user && (userRole === 'master' || userRole === 'administrator')) {
+        if (user && (userRole === 'master' || userRole === 'administrator' || userRole === 'developer')) {
             const dashboardBtn = document.getElementById('personality-dashboard-btn');
             console.log('✅ User has personality access! Role:', userRole);
             if (dashboardBtn) {
