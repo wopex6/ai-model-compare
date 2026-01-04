@@ -153,6 +153,7 @@
             flex: 1;
             min-height: 0;
             overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
             padding: 20px;
             background: linear-gradient(to bottom, #fafafa, #ffffff);
         }
@@ -521,9 +522,13 @@
                 font-size: 0.85rem;
             }
             
-            /* Chat messages */
+            /* Chat messages - fix iOS scroll freeze */
             .chat-messages {
                 padding: 10px;
+                overflow-y: auto;
+                -webkit-overflow-scrolling: touch;
+                flex: 1;
+                min-height: 0;
             }
             
             /* Chat input */
