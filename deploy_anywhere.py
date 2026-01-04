@@ -46,23 +46,23 @@ def check_api_token():
 
 
 def git_push():
-    """Push local changes to GitHub"""
+    """Push local changes to GitHub (fully automated)"""
     print("\n📤 Pushing to GitHub...")
     
     # Check for uncommitted changes
     result = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True)
     if result.stdout.strip():
-        print("⚠️  You have uncommitted changes:")
-        print(result.stdout)
-        response = input("Commit and push anyway? (y/n): ")
-        if response.lower() != 'y':
-            print("Aborted.")
-            return False
+        print("⚠️  Uncommitted changes found, auto-committing...")
         
-        # Add and commit
+        # Add all changes
         subprocess.run(['git', 'add', '-A'])
-        message = input("Commit message: ") or "Deploy to production"
+        
+        # Auto-generate commit message with timestamp
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
+        message = f"Deploy to production - {timestamp}"
         subprocess.run(['git', 'commit', '-m', message])
+        print(f"✅ Committed: {message}")
     
     # Push
     result = subprocess.run(['git', 'push', 'origin', 'main'], capture_output=True, text=True)
@@ -177,16 +177,13 @@ def show_deployment_summary():
 
 
 def main():
-    """Main deployment flow"""
+    """Main deployment flow (fully automated)"""
     show_deployment_summary()
     
     if not check_api_token():
         sys.exit(1)
     
-    response = input("\nProceed with deployment? (y/n): ")
-    if response.lower() != 'y':
-        print("Deployment cancelled.")
-        sys.exit(0)
+    print("\n🚀 Starting automated deployment...")
     
     # Step 1: Push to GitHub
     if not git_push():
