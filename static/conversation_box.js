@@ -429,10 +429,12 @@ const ConversationBox = {
         const nextBtn = document.getElementById('search-next-btn');
         const closeBtn = document.getElementById('search-close-btn');
         
-        if (!searchInput || !searchBar || !searchToggle) return;
+        if (!searchInput || !searchBar) return;
         
-        // Toggle search bar
-        searchToggle.addEventListener('click', () => this.toggleSearch());
+        // Toggle search bar (only if floating toggle exists)
+        if (searchToggle) {
+            searchToggle.addEventListener('click', () => this.toggleSearch());
+        }
         
         // Close search
         closeBtn?.addEventListener('click', () => this.closeSearch());
@@ -471,10 +473,16 @@ const ConversationBox = {
      * @param {boolean} forceOpen - Force open if true
      */
     toggleSearch(forceOpen = false) {
-        const searchBar = document.getElementById('conversation-search-bar');
-        const searchInput = document.getElementById('conversation-search-input');
+        let searchBar = document.getElementById('conversation-search-bar');
         
-        if (!searchBar) return;
+        // Create search UI if it doesn't exist (fallback)
+        if (!searchBar) {
+            this._createSearchUI();
+            searchBar = document.getElementById('conversation-search-bar');
+            if (!searchBar) return; // Still failed, give up
+        }
+        
+        const searchInput = document.getElementById('conversation-search-input');
         
         this.searchVisible = forceOpen || !this.searchVisible;
         searchBar.style.display = this.searchVisible ? 'block' : 'none';
@@ -516,7 +524,7 @@ const ConversationBox = {
      */
     performSearch(query) {
         this.clearSearchHighlights();
-        this.searchResults = [];
+        this.searchResults = [];  // Now stores individual <mark> elements, not message bubbles
         this.currentSearchIndex = -1;
         
         const resultsCount = document.getElementById('search-results-count');
@@ -534,10 +542,12 @@ const ConversationBox = {
         messages.forEach((bubble, index) => {
             const text = bubble.textContent.toLowerCase();
             if (text.includes(queryLower)) {
-                this.searchResults.push(bubble);
                 this._highlightText(bubble, query);
             }
         });
+        
+        // Collect all mark elements as individual search results
+        this.searchResults = Array.from(MessageHandler.messagesContainer.querySelectorAll('mark.search-highlight'));
         
         if (resultsCount) {
             resultsCount.textContent = this.searchResults.length > 0 
@@ -552,7 +562,7 @@ const ConversationBox = {
     },
     
     /**
-     * Highlight search text in element
+     * Highlight search text in element using TreeWalker (safe for buttons)
      * @private
      */
     _highlightText(element, query) {
@@ -561,9 +571,52 @@ const ConversationBox = {
             element.dataset.originalHtml = element.innerHTML;
         }
         
-        const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
-        element.innerHTML = element.dataset.originalHtml.replace(regex, 
-            '<mark style="background: #ffeb3b; padding: 0 2px; border-radius: 2px;">$1</mark>');
+        // Use TreeWalker to find text nodes, skipping buttons
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
+            acceptNode: (node) => {
+                let parent = node.parentElement;
+                while (parent && parent !== element) {
+                    if (parent.tagName === 'BUTTON' || parent.tagName === 'MARK' ||
+                        parent.classList?.contains('pin-btn') || parent.classList?.contains('reply-btn')) {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    parent = parent.parentElement;
+                }
+                return NodeFilter.FILTER_ACCEPT;
+            }
+        }, false);
+        
+        const queryLower = query.toLowerCase();
+        const nodesToHighlight = [];
+        let node;
+        
+        // Collect matches first (can't modify DOM while walking)
+        while (node = walker.nextNode()) {
+            const text = node.textContent;
+            const textLower = text.toLowerCase();
+            let idx = textLower.indexOf(queryLower);
+            while (idx !== -1) {
+                nodesToHighlight.push({ node, start: idx, length: query.length });
+                idx = textLower.indexOf(queryLower, idx + 1);
+            }
+        }
+        
+        // Apply highlights in reverse order to preserve positions
+        for (let i = nodesToHighlight.length - 1; i >= 0; i--) {
+            const { node, start, length } = nodesToHighlight[i];
+            try {
+                const range = document.createRange();
+                range.setStart(node, start);
+                range.setEnd(node, start + length);
+                const mark = document.createElement('mark');
+                mark.className = 'search-highlight';
+                // Darker gray for non-current matches
+                mark.style.cssText = 'background: #bdbdbd; padding: 0 2px; border-radius: 2px;';
+                range.surroundContents(mark);
+            } catch (e) {
+                // Skip if range is invalid
+            }
+        }
     },
     
     /**
@@ -589,9 +642,11 @@ const ConversationBox = {
     navigateSearch(direction) {
         if (this.searchResults.length === 0) return;
         
-        // Remove current highlight
+        // Remove current highlight styling from previous
         if (this.currentSearchIndex >= 0 && this.searchResults[this.currentSearchIndex]) {
-            this.searchResults[this.currentSearchIndex].style.outline = '';
+            const prev = this.searchResults[this.currentSearchIndex];
+            prev.style.background = '#bdbdbd';  // Reset to non-current darker gray
+            prev.style.outline = '';
         }
         
         // Calculate new index
@@ -602,11 +657,13 @@ const ConversationBox = {
             this.currentSearchIndex = this.searchResults.length - 1;
         }
         
-        // Highlight and scroll to current result
+        // Highlight current result with distinct color (orange)
         const current = this.searchResults[this.currentSearchIndex];
         if (current) {
-            current.style.outline = '2px solid #ff9800';
-            current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            current.style.background = '#ffcc80';  // Lighter orange for current
+            current.style.outline = '2px solid #ff9800';  // Orange outline
+            // Scroll to make current visible - use 'nearest' for better mobile experience
+            current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
         
         // Update count display

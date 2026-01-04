@@ -1741,6 +1741,16 @@ def pin_message():
         conn = integrated_db.get_connection()
         cursor = conn.cursor()
         
+        # Check for duplicate - same content already pinned for this user (ignore character_id)
+        cursor.execute('''
+            SELECT id FROM pinned_messages 
+            WHERE user_id = ? AND message_content = ?
+        ''', (user_id, message_content))
+        existing = cursor.fetchone()
+        if existing:
+            conn.close()
+            return jsonify({'error': 'Message already pinned', 'existing_id': existing[0]}), 409
+        
         # Get current max display_order
         cursor.execute('''
             SELECT COALESCE(MAX(display_order), 0) + 1 FROM pinned_messages WHERE user_id = ?
@@ -1796,6 +1806,65 @@ def update_pinned_message(pin_id):
             conn.commit()
         
         return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/user/pinned-messages/check', methods=['POST'])
+@require_auth
+def check_if_pinned():
+    """Check if a message is already pinned"""
+    conn = None
+    try:
+        user_id = request.current_user['user_id']
+        data = request.json
+        message_content = data.get('content')
+        
+        if not message_content:
+            return jsonify({'error': 'Content is required'}), 400
+        
+        conn = integrated_db.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT id FROM pinned_messages WHERE user_id = ? AND message_content = ?
+        ''', (user_id, message_content))
+        existing = cursor.fetchone()
+        
+        return jsonify({'is_pinned': existing is not None, 'pin_id': existing[0] if existing else None})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/api/user/pinned-messages/cleanup-duplicates', methods=['POST'])
+@require_auth
+def cleanup_duplicate_pins():
+    """Remove duplicate pinned messages, keeping the oldest one"""
+    conn = None
+    try:
+        user_id = request.current_user['user_id']
+        
+        conn = integrated_db.get_connection()
+        cursor = conn.cursor()
+        
+        # Find and delete duplicates (keep the one with lowest id)
+        cursor.execute('''
+            DELETE FROM pinned_messages 
+            WHERE id NOT IN (
+                SELECT MIN(id) FROM pinned_messages 
+                WHERE user_id = ?
+                GROUP BY message_content, character_id
+            ) AND user_id = ?
+        ''', (user_id, user_id))
+        
+        deleted_count = cursor.rowcount
+        conn.commit()
+        
+        return jsonify({'success': True, 'deleted_count': deleted_count})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
     finally:
@@ -5362,6 +5431,44 @@ def get_developer_access_log():
         return jsonify(logs)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# ============================================================
+# GITHUB WEBHOOK FOR AUTO-DEPLOYMENT (DISABLED - use deploy_anywhere.py instead)
+# Uncomment to enable automatic deployment on GitHub push
+# ============================================================
+
+# @app.route('/deploy-webhook', methods=['POST'])
+# def deploy_webhook():
+#     """GitHub webhook endpoint for auto-deployment with database migrations"""
+#     import hmac
+#     import hashlib
+#     import subprocess
+#     
+#     signature = request.headers.get('X-Hub-Signature-256')
+#     if signature:
+#         secret = os.getenv('GITHUB_WEBHOOK_SECRET', '')
+#         if secret:
+#             expected_signature = 'sha256=' + hmac.new(
+#                 secret.encode(), request.data, hashlib.sha256
+#             ).hexdigest()
+#             if not hmac.compare_digest(signature, expected_signature):
+#                 return jsonify({'error': 'Invalid signature'}), 401
+#     
+#     try:
+#         result = subprocess.run(['git', 'pull', 'origin', 'main'],
+#             cwd='/home/trabcd/ai-model-compare', capture_output=True, text=True)
+#         if 'requirements.txt' in result.stdout:
+#             subprocess.run(['pip', 'install', '-r', 'requirements.txt'],
+#                 cwd='/home/trabcd/ai-model-compare')
+#         migrate_result = subprocess.run(['python', 'migrate_all_tables.py'],
+#             cwd='/home/trabcd/ai-model-compare', capture_output=True, text=True)
+#         subprocess.run(['touch', '/var/www/trabcd_pythonanywhere_com_wsgi.py'])
+#         return jsonify({'status': 'success', 'message': 'Deployment triggered',
+#             'git_output': result.stdout,
+#             'migration_output': migrate_result.stdout if migrate_result else 'skipped'}), 200
+#     except Exception as e:
+#         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 if __name__ == '__main__':
