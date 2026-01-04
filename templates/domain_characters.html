@@ -402,28 +402,28 @@
             
             /* Sidebar becomes compact horizontal bar */
             .characters-sidebar {
-                padding: 6px 10px;
+                padding: 8px 10px;
                 border-radius: 10px;
-                max-height: 70px;
-                overflow: hidden;
                 flex-shrink: 0;
                 order: 1;
+                background: rgba(255, 255, 255, 0.95);
             }
             
             .sidebar-title {
-                font-size: 0.8rem;
+                font-size: 0.75rem;
                 margin-bottom: 6px;
-                padding-bottom: 4px;
+                padding-bottom: 0;
+                color: #666;
             }
             
             .domain-character-list {
                 display: flex !important;
                 flex-direction: row !important;
                 flex-wrap: nowrap !important;
-                gap: 8px;
+                gap: 6px;
                 overflow-x: auto;
                 overflow-y: hidden;
-                padding-bottom: 4px;
+                padding-bottom: 2px;
                 -webkit-overflow-scrolling: touch;
                 scrollbar-width: none;
             }
@@ -438,48 +438,73 @@
                 flex-shrink: 0 !important;
                 min-width: auto !important;
                 width: auto !important;
-                padding: 6px 12px !important;
-                font-size: 0.75rem !important;
-                border-radius: 20px !important;
+                padding: 5px 10px !important;
+                font-size: 0.7rem !important;
+                border-radius: 16px !important;
                 white-space: nowrap;
+                min-height: 32px !important;
+            }
+            
+            /* Hide domain subtitle on mobile pills */
+            .domain-character-list .char-domain {
+                display: none;
             }
             
             /* Main chat takes remaining space */
             .main-chat {
                 border-radius: 12px;
                 flex: 1;
-                min-height: 300px;
+                min-height: 0;
                 order: 2;
                 display: flex;
                 flex-direction: column;
+                overflow: hidden;
             }
             
+            /* Compact chat header on mobile */
             .chat-header {
-                padding: 10px 15px;
-                gap: 10px;
+                padding: 8px 12px;
+                gap: 8px;
+                flex-shrink: 0;
             }
             
             .chat-header .avatar {
-                width: 40px;
-                height: 40px;
-                font-size: 18px;
+                width: 32px;
+                height: 32px;
+                font-size: 14px;
+            }
+            
+            .chat-header .info {
+                flex: 1;
+                min-width: 0;
             }
             
             .chat-header .info h3 {
-                font-size: 1rem;
+                font-size: 0.9rem;
+                margin: 0;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
             
             .chat-header .info p {
-                font-size: 0.75rem;
+                font-size: 0.65rem;
+                margin: 0;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
             
             .header-actions {
-                gap: 5px;
+                gap: 4px;
+                flex-shrink: 0;
             }
             
             .header-action-btn {
-                padding: 6px 10px;
-                font-size: 0.75rem;
+                padding: 5px 8px;
+                font-size: 14px;
+                min-height: 32px;
+                min-width: 32px;
             }
             
             .header-action-btn span {
@@ -535,26 +560,33 @@
         /* Small phones (iPhone SE, etc) */
         @media (max-width: 375px) {
             .domain-header h1 {
-                font-size: 1.1rem;
+                font-size: 1rem;
             }
             
             .chat-header .info h3 {
-                font-size: 0.9rem;
+                font-size: 0.85rem;
+            }
+            
+            .chat-header .info p {
+                font-size: 0.6rem;
             }
             
             .header-action-btn {
-                padding: 5px 8px;
-                font-size: 0.7rem;
+                padding: 4px 6px;
+                font-size: 12px;
+                min-height: 28px;
+                min-width: 28px;
             }
             
-            /* Hide text on very small screens */
+            /* Icons only on very small screens */
             .header-action-btn span:not(:first-child) {
                 display: none;
             }
             
-            .main-chat {
-                height: calc(100vh - 290px);
-                height: calc(100dvh - 290px);
+            .domain-character-list .character-card,
+            .domain-character-list > div {
+                padding: 4px 8px !important;
+                font-size: 0.65rem !important;
             }
         }
         
