@@ -7,10 +7,9 @@ Usage:
     python deploy_anywhere.py
 
 Prerequisites:
-    1. Install paramiko: pip install paramiko
-    2. Set environment variables or edit config below:
-       - PYTHONANYWHERE_USERNAME (default: trabcd)
-       - PYTHONANYWHERE_API_TOKEN (get from pythonanywhere.com/account)
+    1. pip install requests python-dotenv
+    2. Add to your .env file (gitignored, safe):
+       PYTHONANYWHERE_API_TOKEN=your_token_here
 """
 
 import os
@@ -18,6 +17,10 @@ import sys
 import subprocess
 import requests
 from pathlib import Path
+from dotenv import load_dotenv
+
+# Load from .env file (gitignored, so safe for secrets)
+load_dotenv()
 
 # Configuration
 USERNAME = os.getenv('PYTHONANYWHERE_USERNAME', 'trabcd')
