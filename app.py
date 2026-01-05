@@ -314,6 +314,8 @@ def process_with_smart_response(message, character_name, ai_chat_function):
     Note: ai_chat_function will receive enhanced_message (with context prepended)
     instead of the original message when context is available.
     """
+    print(f"🔵 process_with_smart_response called: character={character_name}, msg={message[:50]}...")
+    
     # Check if user is authenticated (optional)
     user_data = authenticate_token()
     user_id = user_data.get('user_id') if user_data else None
@@ -365,6 +367,9 @@ def process_with_smart_response(message, character_name, ai_chat_function):
     # Smart Response only for authenticated users
     clarification_questions = []  # Store any clarification questions to append to response
     situation_analysis = None  # Store situation analysis for context
+    
+    # DEBUG: Check what's available
+    print(f"🔍 smart_handler={smart_handler is not None}, user_id={user_id}, context_manager={context_manager is not None}")
     
     if smart_handler and user_id and context_manager:
         # Get conversation context
