@@ -375,20 +375,24 @@ def process_with_smart_response(message, character_name, ai_chat_function):
         if clarification_system:
             try:
                 confidence, questions = clarification_system.analyze_message(message, context)
+                print(f"❓ Confidence: {confidence.overall:.0%} (goal={confidence.goal_clarity:.0%}, emotion={confidence.emotional_clarity:.0%})")
                 if questions:
                     clarification_questions = questions[:1]  # Max 1 question per response
-                    print(f"❓ Clarification needed (confidence: {confidence.overall:.0%}): {questions[0].question}")
+                    print(f"   → Question: {questions[0].question}")
             except Exception as e:
                 print(f"⚠️ Clarification analysis failed: {e}")
+        else:
+            print("⚠️ clarification_system not initialized")
         
         # CHARACTER TRAIT ANALYSIS: Understand user's situation
         if character_trait_system:
             try:
                 situation_analysis = character_trait_system.analyze_situation(message, context)
-                if situation_analysis.emotional_state != 'neutral':
-                    print(f"🎭 Situation: {situation_analysis.emotional_state} ({situation_analysis.goal_type})")
+                print(f"🎭 Situation: {situation_analysis.emotional_state} ({situation_analysis.goal_type})")
             except Exception as e:
                 print(f"⚠️ Situation analysis failed: {e}")
+        else:
+            print("⚠️ character_trait_system not initialized")
         
         # Track previous interaction for learning
         prev_key = f"{user_id}_{character_name}"
