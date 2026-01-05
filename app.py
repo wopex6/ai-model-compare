@@ -4082,6 +4082,34 @@ def route_to_domain_characters():
             message, context, requested_character
         )
         
+        # PROACTIVE CLARIFICATION: Analyze message for ambiguity (Domain Characters)
+        domain_clarification_questions = []
+        if clarification_system:
+            try:
+                confidence, questions = clarification_system.analyze_message(message, context)
+                if questions:
+                    domain_clarification_questions = questions[:1]
+                    print(f"❓ [DOMAIN] Clarification needed (confidence: {confidence.overall:.0%}): {questions[0].question}")
+            except Exception as e:
+                print(f"⚠️ Domain clarification analysis failed: {e}")
+        
+        # CHARACTER TRAIT ANALYSIS: Understand user's situation (Domain Characters)
+        domain_situation = None
+        if character_trait_system:
+            try:
+                domain_situation = character_trait_system.analyze_situation(message, context)
+                if domain_situation.emotional_state != 'neutral':
+                    print(f"🎭 [DOMAIN] Situation: {domain_situation.emotional_state} ({domain_situation.goal_type})")
+                    # Add to context for AI
+                    context['situation_analysis'] = {
+                        'emotional_state': domain_situation.emotional_state,
+                        'goal_type': domain_situation.goal_type,
+                        'needs_validation': domain_situation.needs_validation,
+                        'needs_action': domain_situation.needs_action
+                    }
+            except Exception as e:
+                print(f"⚠️ Domain situation analysis failed: {e}")
+        
         # If AI integration available and use_ai is True, generate AI responses
         if use_ai and domain_character_ai and responses:
             ai_responses = []
@@ -4213,13 +4241,42 @@ def route_to_domain_characters():
             except Exception as e:
                 print(f"[SUMMARY] ✗ Failed: {e}")
         
-        return jsonify({
+        # PROACTIVE CLARIFICATION: Append clarification to last response (Domain Characters)
+        if domain_clarification_questions and clarification_system and formatted_responses:
+            try:
+                clarification_text = clarification_system.format_questions_for_response(
+                    domain_clarification_questions, 
+                    context.get('user_language')
+                )
+                if clarification_text:
+                    # Append to last displaying response
+                    for resp in reversed(formatted_responses):
+                        if resp.get('should_display'):
+                            resp['content'] += clarification_text
+                            resp['has_clarification'] = True
+                            print(f"✅ [DOMAIN] Added clarification question to response")
+                            break
+            except Exception as e:
+                print(f"⚠️ Failed to append domain clarification: {e}")
+        
+        response_data = {
             'success': True,
             'responses': formatted_responses,
             'responding_count': len([r for r in formatted_responses if r['should_display']]),
             'message': message,
             'ai_generated': use_ai and domain_character_ai is not None
-        })
+        }
+        
+        # Add situation analysis to response metadata
+        if domain_situation:
+            response_data['situation'] = {
+                'emotional_state': domain_situation.emotional_state,
+                'goal_type': domain_situation.goal_type,
+                'needs_validation': domain_situation.needs_validation,
+                'needs_action': domain_situation.needs_action
+            }
+        
+        return jsonify(response_data)
     except Exception as e:
         import traceback
         traceback.print_exc()
