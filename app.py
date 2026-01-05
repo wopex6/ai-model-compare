@@ -363,10 +363,32 @@ def process_with_smart_response(message, character_name, ai_chat_function):
             message_history = []
     
     # Smart Response only for authenticated users
+    clarification_questions = []  # Store any clarification questions to append to response
+    situation_analysis = None  # Store situation analysis for context
+    
     if smart_handler and user_id and context_manager:
         # Get conversation context
         context = context_manager.get_context_for_ai(user_id, character_name, message_history)
         print(f"📚 Context loaded: {len(context.get('recent_topics', []))} topics, {context.get('message_count', 0)} messages")
+        
+        # PROACTIVE CLARIFICATION: Analyze message for ambiguity
+        if clarification_system:
+            try:
+                confidence, questions = clarification_system.analyze_message(message, context)
+                if questions:
+                    clarification_questions = questions[:1]  # Max 1 question per response
+                    print(f"❓ Clarification needed (confidence: {confidence.overall:.0%}): {questions[0].question}")
+            except Exception as e:
+                print(f"⚠️ Clarification analysis failed: {e}")
+        
+        # CHARACTER TRAIT ANALYSIS: Understand user's situation
+        if character_trait_system:
+            try:
+                situation_analysis = character_trait_system.analyze_situation(message, context)
+                if situation_analysis.emotional_state != 'neutral':
+                    print(f"🎭 Situation: {situation_analysis.emotional_state} ({situation_analysis.goal_type})")
+            except Exception as e:
+                print(f"⚠️ Situation analysis failed: {e}")
         
         # Track previous interaction for learning
         prev_key = f"{user_id}_{character_name}"
@@ -455,10 +477,27 @@ def process_with_smart_response(message, character_name, ai_chat_function):
         
         # Format context for AI prompt
         context_prompt = context_manager.format_context_for_prompt(context)
-        if context_prompt:
+        
+        # Add situation analysis to context (from character trait system)
+        situation_context = ""
+        if situation_analysis:
+            situation_parts = []
+            if situation_analysis.emotional_state != 'neutral':
+                situation_parts.append(f"User appears: {situation_analysis.emotional_state}")
+            if situation_analysis.goal_type != 'general':
+                situation_parts.append(f"Seeking: {situation_analysis.goal_type}")
+            if situation_analysis.needs_validation:
+                situation_parts.append("Needs emotional validation")
+            if situation_analysis.needs_action:
+                situation_parts.append("Wants actionable steps")
+            if situation_parts:
+                situation_context = "\n[Current Situation]\n" + "\n".join(f"- {p}" for p in situation_parts)
+        
+        if context_prompt or situation_context:
             # Prepend context to message so AI receives it
             # This makes AI aware of user's emotional state, goals, and preferences
-            enhanced_message = f"{context_prompt}\n\nUser's current message: {message}"
+            full_context = (context_prompt + situation_context).strip()
+            enhanced_message = f"{full_context}\n\nUser's current message: {message}"
         else:
             enhanced_message = message
     else:
@@ -595,6 +634,32 @@ def process_with_smart_response(message, character_name, ai_chat_function):
     if isinstance(response, dict):
         response['type'] = 'full_ai'
         response['smart_response'] = True
+    
+    # PROACTIVE CLARIFICATION: Append clarification question to response
+    if clarification_questions and clarification_system:
+        try:
+            clarification_text = clarification_system.format_questions_for_response(
+                clarification_questions, 
+                context.get('user_language') if context else None
+            )
+            if clarification_text:
+                if isinstance(response, dict) and 'response' in response:
+                    response['response'] += clarification_text
+                    response['has_clarification'] = True
+                elif isinstance(response, str):
+                    response += clarification_text
+                print(f"✅ Added clarification question to response")
+        except Exception as e:
+            print(f"⚠️ Failed to append clarification: {e}")
+    
+    # Add situation analysis to response metadata
+    if situation_analysis and isinstance(response, dict):
+        response['situation'] = {
+            'emotional_state': situation_analysis.emotional_state,
+            'goal_type': situation_analysis.goal_type,
+            'needs_validation': situation_analysis.needs_validation,
+            'needs_action': situation_analysis.needs_action
+        }
     
     return response
 
