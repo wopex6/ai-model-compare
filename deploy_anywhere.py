@@ -46,23 +46,23 @@ def check_api_token():
 
 
 def git_push():
-    """Push local changes to GitHub (fully automated)"""
+    """Push local changes to GitHub"""
     print("\n📤 Pushing to GitHub...")
     
     # Check for uncommitted changes
     result = subprocess.run(['git', 'status', '--porcelain'], capture_output=True, text=True)
     if result.stdout.strip():
-        print("⚠️  Uncommitted changes found, auto-committing...")
+        print("⚠️  You have uncommitted changes:")
+        print(result.stdout)
+        response = input("Commit and push anyway? (y/n): ")
+        if response.lower() != 'y':
+            print("Aborted.")
+            return False
         
-        # Add all changes
+        # Add and commit
         subprocess.run(['git', 'add', '-A'])
-        
-        # Auto-generate commit message with timestamp
-        from datetime import datetime
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
-        message = f"Deploy to production - {timestamp}"
+        message = input("Commit message: ") or "Deploy to production"
         subprocess.run(['git', 'commit', '-m', message])
-        print(f"✅ Committed: {message}")
     
     # Push
     result = subprocess.run(['git', 'push', 'origin', 'main'], capture_output=True, text=True)
@@ -177,13 +177,16 @@ def show_deployment_summary():
 
 
 def main():
-    """Main deployment flow (fully automated)"""
+    """Main deployment flow"""
     show_deployment_summary()
     
     if not check_api_token():
         sys.exit(1)
     
-    print("\n🚀 Starting automated deployment...")
+    response = input("\nProceed with deployment? (y/n): ")
+    if response.lower() != 'y':
+        print("Deployment cancelled.")
+        sys.exit(0)
     
     # Step 1: Push to GitHub
     if not git_push():
@@ -206,6 +209,10 @@ def main():
         print("=" * 50)
     else:
         print("\n⚠️  Please reload manually from PythonAnywhere dashboard")
+    
+    # Show deployed commit
+    print("\n📌 Deployed commit:")
+    subprocess.run(['git', 'log', '-1', '--oneline'])
 
 
 if __name__ == '__main__':
