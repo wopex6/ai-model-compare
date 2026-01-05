@@ -647,7 +647,7 @@ def process_with_smart_response(message, character_name, ai_chat_function):
     # PROACTIVE CLARIFICATION: Append clarification question to response
     if clarification_questions and clarification_system:
         try:
-            clarification_text = clarification_system.format_questions_for_response(
+            clarification_text = clarification_system.format_clarification_for_response(
                 clarification_questions, 
                 context.get('user_language') if context else None
             )
@@ -4253,7 +4253,7 @@ def route_to_domain_characters():
         # PROACTIVE CLARIFICATION: Append clarification to last response (Domain Characters)
         if domain_clarification_questions and clarification_system and formatted_responses:
             try:
-                clarification_text = clarification_system.format_questions_for_response(
+                clarification_text = clarification_system.format_clarification_for_response(
                     domain_clarification_questions, 
                     context.get('user_language')
                 )
