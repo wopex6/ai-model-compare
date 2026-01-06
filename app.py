@@ -404,8 +404,10 @@ def process_with_smart_response(message, character_name, ai_chat_function):
         
         # EXPLICIT CONTEXT EXTRACTION: Capture user's explicit statements with CRITICAL priority
         explicit_context_items = []
+        past_explicit_context = ""
         if explicit_context_handler:
             try:
+                # Extract new explicit context from current message
                 explicit_context_items = explicit_context_handler.extract_explicit_context(
                     user_id, character_name, message
                 )
@@ -413,6 +415,11 @@ def process_with_smart_response(message, character_name, ai_chat_function):
                     print(f"📌 [EXPLICIT] Extracted {len(explicit_context_items)} explicit context items")
                     for item in explicit_context_items:
                         print(f"   → {item['type']}: {item['value']} ({item['priority']})")
+                
+                # Retrieve ALL past explicit context (goals, preferences, values user has stated)
+                past_explicit_context = explicit_context_handler.format_for_ai_prompt(user_id, character_name)
+                if past_explicit_context:
+                    print(f"📚 [EXPLICIT] Retrieved past user statements for AI")
             except Exception as e:
                 print(f"⚠️ Explicit context extraction failed: {e}")
         
@@ -429,6 +436,30 @@ def process_with_smart_response(message, character_name, ai_chat_function):
                 user_followup=message,
                 time_to_followup=time_diff
             )
+            
+            # OUTCOME RECORDING: Learn from follow-up patterns
+            if character_trait_system and 'situation' in prev:
+                try:
+                    # Infer satisfaction from follow-up timing
+                    # Quick follow-up (< 60s) = engaged, likely satisfied
+                    # Medium (1-5min) = neutral
+                    # Long gap or no follow-up = possibly dissatisfied or session ended
+                    if time_diff < 60:
+                        satisfaction = 0.8  # Quick engagement = good
+                    elif time_diff < 300:
+                        satisfaction = 0.6  # Normal pace
+                    else:
+                        satisfaction = 0.4  # Long gap
+                    
+                    character_trait_system.record_outcome(
+                        user_id=user_id,
+                        character_id=character_name,
+                        situation=prev['situation'],
+                        conversation_length=prev.get('conv_length', 1),
+                        satisfaction=satisfaction
+                    )
+                except Exception as e:
+                    print(f"⚠️ Outcome recording failed: {e}")
         
         # Check if this is small talk
         response_type, response_data = smart_handler.process_message(
@@ -489,11 +520,13 @@ def process_with_smart_response(message, character_name, ai_chat_function):
                     context=context
                 )
             
-            # Store for learning
+            # Store for learning (including situation for outcome recording)
             previous_interactions[prev_key] = {
                 'message': message,
                 'response_type': 'quick_reply',
-                'timestamp': datetime.now()
+                'timestamp': datetime.now(),
+                'situation': situation_analysis,
+                'conv_length': len(message_history)
             }
             
             return result
@@ -520,14 +553,19 @@ def process_with_smart_response(message, character_name, ai_chat_function):
                 situation_context = "\n[Current Situation]\n" + "\n".join(f"- {p}" for p in situation_parts)
         
         # Add explicit context (user's own words - CRITICAL priority)
+        # This includes BOTH current message extractions AND past stated context
         explicit_context = ""
+        if past_explicit_context:
+            # Past context from database (goals, preferences, values user has stated before)
+            explicit_context = f"\n{past_explicit_context}"
         if explicit_context_items:
+            # Add current message extractions
             explicit_parts = []
             for item in explicit_context_items:
                 if item['priority'] == 'CRITICAL':
-                    explicit_parts.append(f"User explicitly stated: \"{item['value']}\" ({item['type']})")
+                    explicit_parts.append(f"User just stated: \"{item['value']}\" ({item['type']})")
             if explicit_parts:
-                explicit_context = "\n[User's Explicit Statements - TRUST THESE]\n" + "\n".join(f"- {p}" for p in explicit_parts)
+                explicit_context += "\n[From This Message]\n" + "\n".join(f"- {p}" for p in explicit_parts)
         
         if context_prompt or situation_context or explicit_context:
             # Prepend context to message so AI receives it
@@ -663,7 +701,9 @@ def process_with_smart_response(message, character_name, ai_chat_function):
         previous_interactions[prev_key] = {
             'message': message,
             'response_type': 'full_ai',
-            'timestamp': datetime.now()
+            'timestamp': datetime.now(),
+            'situation': situation_analysis,
+            'conv_length': len(message_history)
         }
     
     # Add metadata
@@ -1678,6 +1718,54 @@ def get_message_usage():
     try:
         usage = integrated_db.get_message_usage(request.current_user['user_id'])
         return jsonify(usage)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# ==================== USER EXPLICIT CONTEXT ====================
+
+@app.route('/api/user/explicit-context', methods=['GET'])
+@require_auth
+def get_user_explicit_context():
+    """Get user's explicit context (goals, preferences, values they've stated)"""
+    try:
+        user_id = request.current_user['user_id']
+        character = request.args.get('character', 'general')
+        context_type = request.args.get('type')  # Optional filter by type
+        
+        if not explicit_context_handler:
+            return jsonify({'error': 'Explicit context handler not available'}), 500
+        
+        context_items = explicit_context_handler.get_explicit_context(
+            user_id, character, context_type
+        )
+        
+        return jsonify({
+            'success': True,
+            'context_items': context_items,
+            'count': len(context_items)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/user/explicit-context/summary', methods=['GET'])
+@require_auth
+def get_explicit_context_summary():
+    """Get formatted summary of user's explicit context for display"""
+    try:
+        user_id = request.current_user['user_id']
+        character = request.args.get('character', 'general')
+        
+        if not explicit_context_handler:
+            return jsonify({'error': 'Explicit context handler not available'}), 500
+        
+        # Get formatted summary
+        summary = explicit_context_handler.format_for_ai_prompt(user_id, character)
+        
+        return jsonify({
+            'success': True,
+            'summary': summary,
+            'has_context': bool(summary)
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -4157,18 +4245,18 @@ def route_to_domain_characters():
         domain_explicit_context = []
         if explicit_context_handler:
             try:
+                # Extract new explicit context from current message
                 domain_explicit_context = explicit_context_handler.extract_explicit_context(
                     user_id, requested_character, message
                 )
                 if domain_explicit_context:
                     print(f"📌 [DOMAIN] Extracted {len(domain_explicit_context)} explicit context items")
-                    # Add to context for AI
-                    explicit_statements = []
-                    for item in domain_explicit_context:
-                        if item['priority'] == 'CRITICAL':
-                            explicit_statements.append(f"{item['type']}: {item['value']}")
-                    if explicit_statements:
-                        context['explicit_context'] = explicit_statements
+                
+                # Retrieve ALL past explicit context for AI prompt (user's stated goals, preferences, etc.)
+                past_context_prompt = explicit_context_handler.format_for_ai_prompt(user_id, requested_character)
+                if past_context_prompt:
+                    context['explicit_user_context'] = past_context_prompt
+                    print(f"📚 [DOMAIN] Retrieved past explicit context for AI")
             except Exception as e:
                 print(f"⚠️ Domain explicit context extraction failed: {e}")
         
