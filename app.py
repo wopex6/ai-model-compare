@@ -1145,11 +1145,38 @@ def get_smart_response_analytics():
                 cursor.execute('SELECT COUNT(*) FROM character_library WHERE is_base = 1')
                 base_chars = cursor.fetchone()[0]
                 
+                # Character effectiveness scores
+                cursor.execute('''
+                    SELECT character_id, display_name, effectiveness_score, usage_count
+                    FROM character_library
+                    ORDER BY effectiveness_score DESC
+                ''')
+                effectiveness = [{'character': r[0], 'name': r[1], 
+                                 'effectiveness': r[2], 'usage_count': r[3]} 
+                                for r in cursor.fetchall()]
+                
+                # Best performing situations
+                cursor.execute('''
+                    SELECT character_id, situation_json, AVG(user_satisfaction) as avg_sat,
+                           COUNT(*) as count
+                    FROM character_usage_outcomes
+                    WHERE user_satisfaction IS NOT NULL
+                    GROUP BY character_id, situation_json
+                    HAVING count >= 3
+                    ORDER BY avg_sat DESC
+                    LIMIT 10
+                ''')
+                best_situations = [{'character': r[0], 'situation': r[1], 
+                                   'avg_satisfaction': r[2], 'count': r[3]} 
+                                  for r in cursor.fetchall()]
+                
                 analytics['character_system'] = {
                     'total_characters': total_chars,
                     'base_characters': base_chars,
                     'ai_generated_characters': total_chars - base_chars,
-                    'usage_by_character': char_usage
+                    'usage_by_character': char_usage,
+                    'effectiveness_ranking': effectiveness,
+                    'best_performing_situations': best_situations
                 }
             except Exception as e:
                 analytics['character_system'] = {'error': str(e)}
@@ -1216,6 +1243,72 @@ def get_smart_response_analytics():
             'success': True,
             'analytics': analytics
         })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/background-tasks/run', methods=['POST'])
+@require_auth
+def run_background_task():
+    """Manually trigger a background task (admin only)"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        data = request.get_json() or {}
+        task_name = data.get('task')
+        
+        valid_tasks = ['context_maintenance', 'pattern_expansion', 
+                       'character_expansion', 'monthly_cleanup']
+        
+        if not task_name:
+            return jsonify({
+                'error': 'Task name required',
+                'valid_tasks': valid_tasks
+            }), 400
+        
+        if task_name not in valid_tasks:
+            return jsonify({
+                'error': f'Invalid task: {task_name}',
+                'valid_tasks': valid_tasks
+            }), 400
+        
+        # Run the task
+        if background_scheduler:
+            result = background_scheduler.run_manual_task(task_name)
+            return jsonify({
+                'success': True,
+                'task': task_name,
+                'result': result
+            })
+        else:
+            return jsonify({'error': 'Background scheduler not available'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/background-tasks/status', methods=['GET'])
+@require_auth
+def get_background_task_status():
+    """Get background task scheduler status (admin only)"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        if background_scheduler:
+            return jsonify({
+                'success': True,
+                'running': background_scheduler.running,
+                'available_tasks': ['context_maintenance', 'pattern_expansion', 
+                                   'character_expansion', 'monthly_cleanup']
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'running': False,
+                'error': 'Background scheduler not initialized'
+            })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -1906,6 +1999,58 @@ def get_explicit_context_summary():
             'success': True,
             'summary': summary,
             'has_context': bool(summary)
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/user/explicit-context/<int:context_id>', methods=['DELETE'])
+@require_auth
+def delete_explicit_context(context_id):
+    """Delete/deactivate a specific explicit context item"""
+    try:
+        user_id = request.current_user['user_id']
+        
+        if not explicit_context_handler:
+            return jsonify({'error': 'Explicit context handler not available'}), 500
+        
+        # Verify ownership before deleting
+        cursor = explicit_context_handler.db.cursor()
+        cursor.execute('''
+            SELECT user_id FROM explicit_context WHERE id = ?
+        ''', (context_id,))
+        row = cursor.fetchone()
+        
+        if not row:
+            return jsonify({'error': 'Context item not found'}), 404
+        if row[0] != user_id:
+            return jsonify({'error': 'Not authorized to delete this item'}), 403
+        
+        # Deactivate (soft delete)
+        explicit_context_handler.deactivate_context(context_id)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Context item removed'
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/user/explicit-context/stats', methods=['GET'])
+@require_auth
+def get_explicit_context_stats():
+    """Get user's explicit context statistics"""
+    try:
+        user_id = request.current_user['user_id']
+        character = request.args.get('character', 'general')
+        
+        if not explicit_context_handler:
+            return jsonify({'error': 'Explicit context handler not available'}), 500
+        
+        stats = explicit_context_handler.get_stats(user_id, character)
+        
+        return jsonify({
+            'success': True,
+            'stats': stats
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
