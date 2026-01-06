@@ -627,6 +627,68 @@ class ExplicitContextHandler:
         ''', (context_id,))
         self.db.commit()
     
+    def expire_old_context(self) -> Dict:
+        """
+        Expire old context items based on type-specific expiration rules.
+        Emotional states expire quickly, values persist longer.
+        
+        Returns:
+            Dict with counts of expired items by type
+        """
+        try:
+            from smart_response.config import CONTEXT_EXPIRATION, DEFAULT_CONTEXT_EXPIRATION_HOURS
+        except ImportError:
+            # Fallback defaults
+            CONTEXT_EXPIRATION = {
+                'emotional_state': 24,
+                'goal': 168,
+                'preference': 720,
+                'need': 72,
+                'self_description': 2160,
+                'intention': 48,
+                'value': 8760,
+            }
+            DEFAULT_CONTEXT_EXPIRATION_HOURS = 168
+        
+        cursor = self.db.cursor()
+        expired_counts = {}
+        
+        for context_type, hours in CONTEXT_EXPIRATION.items():
+            cursor.execute('''
+                UPDATE explicit_context
+                SET active = 0
+                WHERE context_type = ? 
+                AND active = 1
+                AND timestamp < datetime('now', ? || ' hours')
+            ''', (context_type, f'-{hours}'))
+            
+            count = cursor.rowcount
+            if count > 0:
+                expired_counts[context_type] = count
+        
+        # Expire any unknown types using default
+        cursor.execute('''
+            UPDATE explicit_context
+            SET active = 0
+            WHERE context_type NOT IN (?, ?, ?, ?, ?, ?, ?)
+            AND active = 1
+            AND timestamp < datetime('now', ? || ' hours')
+        ''', ('emotional_state', 'goal', 'preference', 'need', 
+              'self_description', 'intention', 'value',
+              f'-{DEFAULT_CONTEXT_EXPIRATION_HOURS}'))
+        
+        other_count = cursor.rowcount
+        if other_count > 0:
+            expired_counts['other'] = other_count
+        
+        self.db.commit()
+        
+        total_expired = sum(expired_counts.values())
+        if total_expired > 0:
+            print(f"🧹 Expired {total_expired} old context items: {expired_counts}")
+        
+        return expired_counts
+    
     def get_stats(self, user_id: int, character: str) -> Dict:
         """Get statistics about explicit context"""
         cursor = self.db.cursor()

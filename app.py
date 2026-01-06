@@ -447,16 +447,19 @@ def process_with_smart_response(message, character_name, ai_chat_function):
             # OUTCOME RECORDING: Learn from follow-up patterns
             if character_trait_system and 'situation' in prev:
                 try:
+                    # Import config for thresholds
+                    from smart_response.config import (
+                        QUICK_FOLLOWUP_THRESHOLD, NORMAL_FOLLOWUP_THRESHOLD,
+                        SATISFACTION_QUICK_FOLLOWUP, SATISFACTION_NORMAL_FOLLOWUP,
+                        SATISFACTION_SLOW_FOLLOWUP
+                    )
                     # Infer satisfaction from follow-up timing
-                    # Quick follow-up (< 60s) = engaged, likely satisfied
-                    # Medium (1-5min) = neutral
-                    # Long gap or no follow-up = possibly dissatisfied or session ended
-                    if time_diff < 60:
-                        satisfaction = 0.8  # Quick engagement = good
-                    elif time_diff < 300:
-                        satisfaction = 0.6  # Normal pace
+                    if time_diff < QUICK_FOLLOWUP_THRESHOLD:
+                        satisfaction = SATISFACTION_QUICK_FOLLOWUP  # Quick engagement
+                    elif time_diff < NORMAL_FOLLOWUP_THRESHOLD:
+                        satisfaction = SATISFACTION_NORMAL_FOLLOWUP  # Normal pace
                     else:
-                        satisfaction = 0.4  # Long gap
+                        satisfaction = SATISFACTION_SLOW_FOLLOWUP  # Long gap
                     
                     character_trait_system.record_outcome(
                         user_id=user_id,
@@ -546,6 +549,7 @@ def process_with_smart_response(message, character_name, ai_chat_function):
         
         # Add situation analysis to context (from character trait system)
         situation_context = ""
+        response_style_hint = ""
         if situation_analysis:
             situation_parts = []
             if situation_analysis.emotional_state != 'neutral':
@@ -558,6 +562,24 @@ def process_with_smart_response(message, character_name, ai_chat_function):
                 situation_parts.append("Wants actionable steps")
             if situation_parts:
                 situation_context = "\n[Current Situation]\n" + "\n".join(f"- {p}" for p in situation_parts)
+            
+            # DYNAMIC CHARACTER MATCHING: Adjust response style based on situation
+            if character_trait_system:
+                try:
+                    from smart_response.config import CHARACTER_MATCH_THRESHOLD, URGENCY_THRESHOLD
+                    matched_char, match_score, reasoning = character_trait_system.match_character(situation_analysis)
+                    if match_score > CHARACTER_MATCH_THRESHOLD:  # Good match - use character's style
+                        response_style_hint = f"\n[Response Style Guidance]\n"
+                        response_style_hint += f"- Approach: {matched_char.philosophical_lens}\n"
+                        if situation_analysis.needs_validation:
+                            response_style_hint += f"- Prioritize emotional acknowledgment before solutions\n"
+                        if situation_analysis.needs_action:
+                            response_style_hint += f"- Include concrete, actionable next steps\n"
+                        if situation_analysis.urgency > URGENCY_THRESHOLD:
+                            response_style_hint += f"- Be direct and concise - user needs quick help\n"
+                        print(f"🎯 Character match: {matched_char.display_name} ({match_score:.0%}) - {reasoning}")
+                except Exception as e:
+                    print(f"⚠️ Character matching failed: {e}")
         
         # Add explicit context (user's own words - CRITICAL priority)
         # This includes BOTH current message extractions AND past stated context
@@ -574,10 +596,10 @@ def process_with_smart_response(message, character_name, ai_chat_function):
             if explicit_parts:
                 explicit_context += "\n[From This Message]\n" + "\n".join(f"- {p}" for p in explicit_parts)
         
-        if context_prompt or situation_context or explicit_context:
+        if context_prompt or situation_context or explicit_context or response_style_hint:
             # Prepend context to message so AI receives it
             # This makes AI aware of user's emotional state, goals, and preferences
-            full_context = (context_prompt + situation_context + explicit_context).strip()
+            full_context = (context_prompt + situation_context + explicit_context + response_style_hint).strip()
             enhanced_message = f"{full_context}\n\nUser's current message: {message}"
         else:
             enhanced_message = message
@@ -1082,6 +1104,118 @@ def get_statistics():
         
         stats = integrated_db.get_usage_statistics()
         return jsonify(stats)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/smart-response-analytics')
+@require_auth
+def get_smart_response_analytics():
+    """Get analytics for smart response system (admin only)"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        analytics = {
+            'character_system': None,
+            'explicit_context': None,
+            'character_expansion': None
+        }
+        
+        # Character trait system stats
+        if character_trait_system:
+            try:
+                cursor = character_trait_system.db.cursor()
+                
+                # Character usage stats
+                cursor.execute('''
+                    SELECT character_id, COUNT(*) as uses, 
+                           AVG(user_satisfaction) as avg_satisfaction
+                    FROM character_usage_outcomes
+                    GROUP BY character_id
+                    ORDER BY uses DESC
+                ''')
+                char_usage = [{'character': r[0], 'uses': r[1], 'avg_satisfaction': r[2]} 
+                             for r in cursor.fetchall()]
+                
+                # Total characters
+                cursor.execute('SELECT COUNT(*) FROM character_library')
+                total_chars = cursor.fetchone()[0]
+                
+                cursor.execute('SELECT COUNT(*) FROM character_library WHERE is_base = 1')
+                base_chars = cursor.fetchone()[0]
+                
+                analytics['character_system'] = {
+                    'total_characters': total_chars,
+                    'base_characters': base_chars,
+                    'ai_generated_characters': total_chars - base_chars,
+                    'usage_by_character': char_usage
+                }
+            except Exception as e:
+                analytics['character_system'] = {'error': str(e)}
+        
+        # Explicit context stats
+        if explicit_context_handler:
+            try:
+                cursor = explicit_context_handler.db.cursor()
+                
+                cursor.execute('''
+                    SELECT context_type, COUNT(*) as count,
+                           COUNT(DISTINCT user_id) as unique_users
+                    FROM explicit_context
+                    WHERE active = 1
+                    GROUP BY context_type
+                    ORDER BY count DESC
+                ''')
+                context_types = [{'type': r[0], 'count': r[1], 'unique_users': r[2]} 
+                                for r in cursor.fetchall()]
+                
+                cursor.execute('SELECT COUNT(*) FROM explicit_context WHERE active = 1')
+                total_active = cursor.fetchone()[0]
+                
+                cursor.execute('SELECT COUNT(DISTINCT user_id) FROM explicit_context')
+                users_with_context = cursor.fetchone()[0]
+                
+                analytics['explicit_context'] = {
+                    'total_active_items': total_active,
+                    'users_with_context': users_with_context,
+                    'by_type': context_types
+                }
+            except Exception as e:
+                analytics['explicit_context'] = {'error': str(e)}
+        
+        # Character expansion stats (if available)
+        if character_trait_system:
+            try:
+                cursor = character_trait_system.db.cursor()
+                
+                cursor.execute('''
+                    SELECT COUNT(*) FROM trait_space_gaps WHERE filled_by IS NULL
+                ''')
+                unfilled = cursor.fetchone()[0]
+                
+                cursor.execute('''
+                    SELECT COUNT(*) FROM trait_space_gaps WHERE filled_by IS NOT NULL
+                ''')
+                filled = cursor.fetchone()[0]
+                
+                cursor.execute('''
+                    SELECT COUNT(*) FROM character_generation_log WHERE success = 1
+                ''')
+                successful_gens = cursor.fetchone()[0]
+                
+                analytics['character_expansion'] = {
+                    'unfilled_gaps': unfilled,
+                    'filled_gaps': filled,
+                    'successful_generations': successful_gens
+                }
+            except Exception as e:
+                analytics['character_expansion'] = {'error': str(e)}
+        
+        return jsonify({
+            'success': True,
+            'analytics': analytics
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

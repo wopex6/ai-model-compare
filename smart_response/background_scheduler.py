@@ -78,6 +78,19 @@ class BackgroundScheduler:
                 expiration_days=60
             )
             
+            # EXPLICIT CONTEXT EXPIRATION: Expire old emotional states, goals, etc.
+            try:
+                from smart_response.explicit_context_handler import ExplicitContextHandler
+                import sqlite3
+                conn = sqlite3.connect(self.db_path, check_same_thread=False)
+                explicit_handler = ExplicitContextHandler(conn)
+                expired = explicit_handler.expire_old_context()
+                results['explicit_context_expired'] = expired
+                conn.close()
+            except Exception as e:
+                print(f"⚠️ Explicit context expiration failed: {e}")
+                results['explicit_context_error'] = str(e)
+            
             print(f"\n✓ Maintenance completed successfully")
             return results
             
