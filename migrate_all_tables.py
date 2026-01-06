@@ -282,6 +282,31 @@ def migrate_all_tables():
         ''')
         print("✅ inferred_traits")
         
+        # Inferred personality (Big5 traits from conversation analysis)
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS inferred_personality (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL UNIQUE,
+                openness REAL NOT NULL DEFAULT 0.5,
+                conscientiousness REAL NOT NULL DEFAULT 0.5,
+                extraversion REAL NOT NULL DEFAULT 0.5,
+                agreeableness REAL NOT NULL DEFAULT 0.5,
+                neuroticism REAL NOT NULL DEFAULT 0.5,
+                confidence REAL NOT NULL DEFAULT 0.0,
+                message_count INTEGER DEFAULT 0,
+                last_updated DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+            )
+        ''')
+        print("✅ inferred_personality")
+        
+        # Add message_count column if missing (migration for existing tables)
+        try:
+            cursor.execute('ALTER TABLE inferred_personality ADD COLUMN message_count INTEGER DEFAULT 0')
+            print("   + Added message_count column")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+        
         # ============================================================
         # CONVERSATION CONTEXT
         # ============================================================

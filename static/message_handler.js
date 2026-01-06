@@ -178,7 +178,7 @@ const MessageHandler = {
         
         // Add expand button for messages with summaries
         const expandButton = hasSummary ? `<button class="expand-btn" title="Show full response" 
-            onclick="MessageHandler.toggleExpand(this)"
+            onclick="MessageHandler.toggleExpand(this, event)"
             style="opacity: 0; position: absolute; right: 55px; top: 5px; background: none; border: none; cursor: pointer; font-size: 14px; transition: opacity 0.2s;">📖</button>` : '';
         
         // Store message ID on the element for reference
@@ -194,14 +194,14 @@ const MessageHandler = {
                         <div style="font-size: 0.85em; color: #2E7D32; font-weight: bold; margin-bottom: 4px;">📋 Summary</div>
                         ${formattedSummary}
                     </div>
-                    <button onclick="MessageHandler.toggleExpand(this)" 
+                    <button onclick="MessageHandler.toggleExpand(this, event)" 
                         style="background: #E3F2FD; border: 1px solid #2196F3; border-radius: 4px; padding: 6px 12px; cursor: pointer; font-size: 0.85em; color: #1976D2;">
                         📖 Read Full Response
                     </button>
                 </div>
                 <div class="full-content" style="display: none;">
                     ${formattedContent}
-                    <button onclick="MessageHandler.toggleExpand(this)" 
+                    <button onclick="MessageHandler.toggleExpand(this, event)" 
                         style="background: #FFF3E0; border: 1px solid #FF9800; border-radius: 4px; padding: 6px 12px; cursor: pointer; font-size: 0.85em; color: #E65100; margin-top: 8px;">
                         📋 Show Summary
                     </button>
@@ -441,15 +441,30 @@ const MessageHandler = {
      * Toggle between summary and full response
      * @param {HTMLElement} button - The clicked button element
      */
-    toggleExpand(button) {
+    toggleExpand(button, event) {
+        // Prevent event bubbling that might trigger parent click handlers
+        if (event) {
+            event.stopPropagation();
+            event.preventDefault();
+        }
+        
         // Find the parent message bubble
         const bubble = button.closest('.message-content, .message-bubble, [class*="bubble"]') || button.parentElement.parentElement;
-        if (!bubble) return;
+        console.log('🔍 toggleExpand: bubble found:', bubble ? 'yes' : 'no', bubble?.className);
+        if (!bubble) {
+            console.error('❌ toggleExpand: Could not find parent bubble');
+            return;
+        }
         
         const summaryDiv = bubble.querySelector('.summary-content');
         const fullDiv = bubble.querySelector('.full-content');
         
-        if (!summaryDiv || !fullDiv) return;
+        console.log('🔍 toggleExpand: summaryDiv:', summaryDiv ? 'found' : 'missing', 'fullDiv:', fullDiv ? 'found' : 'missing');
+        
+        if (!summaryDiv || !fullDiv) {
+            console.error('❌ toggleExpand: Missing summary or full content div');
+            return;
+        }
         
         // Toggle visibility
         if (summaryDiv.style.display !== 'none') {
