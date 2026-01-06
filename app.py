@@ -4107,8 +4107,14 @@ def route_to_domain_characters():
         if character_trait_system:
             try:
                 domain_situation = character_trait_system.analyze_situation(message, context)
-                # Always log situation analysis
-                print(f"🎭 [DOMAIN] Situation: {domain_situation.emotional_state} ({domain_situation.goal_type})")
+                # Always log situation analysis with flags
+                flags = []
+                if domain_situation.needs_validation:
+                    flags.append("needs_validation")
+                if domain_situation.needs_action:
+                    flags.append("needs_action")
+                flag_str = f" [{', '.join(flags)}]" if flags else ""
+                print(f"🎭 [DOMAIN] Situation: {domain_situation.emotional_state} ({domain_situation.goal_type}){flag_str}")
                 if domain_situation.emotional_state != 'neutral':
                     # Add to context for AI when not neutral
                     context['situation_analysis'] = {
