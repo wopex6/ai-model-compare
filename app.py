@@ -4107,9 +4107,10 @@ def route_to_domain_characters():
         if character_trait_system:
             try:
                 domain_situation = character_trait_system.analyze_situation(message, context)
+                # Always log situation analysis
+                print(f"🎭 [DOMAIN] Situation: {domain_situation.emotional_state} ({domain_situation.goal_type})")
                 if domain_situation.emotional_state != 'neutral':
-                    print(f"🎭 [DOMAIN] Situation: {domain_situation.emotional_state} ({domain_situation.goal_type})")
-                    # Add to context for AI
+                    # Add to context for AI when not neutral
                     context['situation_analysis'] = {
                         'emotional_state': domain_situation.emotional_state,
                         'goal_type': domain_situation.goal_type,
