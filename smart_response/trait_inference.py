@@ -288,7 +288,7 @@ class TraitInferenceEngine:
         try:
             # Check if inferred traits already exist
             cursor.execute('''
-                SELECT id FROM inferred_personality WHERE user_id = ?
+                SELECT 1 FROM inferred_personality WHERE user_id = ?
             ''', (user_id,))
             
             exists = cursor.fetchone() is not None

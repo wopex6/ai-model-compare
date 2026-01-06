@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Fix: Add message_count column to inferred_personality table
+Fix: Add missing columns to inferred_personality table
 """
 import sqlite3
 from pathlib import Path
 
 DB_PATH = Path(__file__).parent / 'integrated_users.db'
 
-def fix_column():
+def fix_columns():
     print("=" * 60)
-    print("FIX: Add message_count column to inferred_personality")
+    print("FIX: Ensure inferred_personality table has all columns")
     print("=" * 60)
     
     conn = sqlite3.connect(DB_PATH)
@@ -36,7 +36,7 @@ def fix_column():
                 )
             ''')
             conn.commit()
-            print("✅ Table created with message_count column")
+            print("✅ Table created with all columns")
             return
         
         # Check existing columns
@@ -44,20 +44,31 @@ def fix_column():
         columns = [col[1] for col in cursor.fetchall()]
         print(f"Existing columns: {columns}")
         
-        if 'message_count' in columns:
-            print("✅ message_count column already exists")
-            return
+        # Add missing columns
+        columns_to_add = [
+            ('id', 'INTEGER PRIMARY KEY AUTOINCREMENT'),
+            ('message_count', 'INTEGER DEFAULT 0'),
+        ]
         
-        # Add the column
-        print("Adding message_count column...")
-        cursor.execute('ALTER TABLE inferred_personality ADD COLUMN message_count INTEGER DEFAULT 0')
-        conn.commit()
-        print("✅ message_count column added successfully!")
+        for col_name, col_type in columns_to_add:
+            if col_name not in columns:
+                try:
+                    print(f"Adding {col_name} column...")
+                    cursor.execute(f'ALTER TABLE inferred_personality ADD COLUMN {col_name} {col_type}')
+                    conn.commit()
+                    print(f"✅ {col_name} column added")
+                except sqlite3.OperationalError as e:
+                    if 'duplicate column' in str(e).lower():
+                        print(f"✅ {col_name} column already exists")
+                    else:
+                        print(f"⚠️ Could not add {col_name}: {e}")
+            else:
+                print(f"✅ {col_name} column already exists")
         
-        # Verify
+        # Verify final schema
         cursor.execute('PRAGMA table_info(inferred_personality)')
         columns = [col[1] for col in cursor.fetchall()]
-        print(f"Updated columns: {columns}")
+        print(f"\nFinal columns: {columns}")
         
     except Exception as e:
         print(f"❌ Error: {e}")
@@ -65,4 +76,4 @@ def fix_column():
         conn.close()
 
 if __name__ == '__main__':
-    fix_column()
+    fix_columns()
