@@ -396,7 +396,14 @@ def process_with_smart_response(message, character_name, ai_chat_function):
         if character_trait_system:
             try:
                 situation_analysis = character_trait_system.analyze_situation(message, context)
-                print(f"🎭 Situation: {situation_analysis.emotional_state} ({situation_analysis.goal_type})")
+                # Log with flags for consistency with Domain Characters
+                flags = []
+                if situation_analysis.needs_validation:
+                    flags.append("needs_validation")
+                if situation_analysis.needs_action:
+                    flags.append("needs_action")
+                flag_str = f" [{', '.join(flags)}]" if flags else ""
+                print(f"🎭 Situation: {situation_analysis.emotional_state} ({situation_analysis.goal_type}){flag_str}")
             except Exception as e:
                 print(f"⚠️ Situation analysis failed: {e}")
         else:
