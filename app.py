@@ -228,6 +228,7 @@ try:
     from smart_response.character_traits import create_character_trait_system
     from smart_response.developer_analytics import create_developer_analytics
     from smart_response.personality_context_integrator import create_personality_integrator
+    from smart_response.explicit_context_handler import ExplicitContextHandler
     smart_response_conn = sqlite3.connect('integrated_users.db', check_same_thread=False)
     smart_handler = SmartResponseHandler(smart_response_conn)
     context_manager = ConversationContextManager(smart_response_conn)
@@ -238,6 +239,7 @@ try:
     character_trait_system = create_character_trait_system(smart_response_conn)
     developer_analytics = create_developer_analytics(smart_response_conn)
     personality_integrator = create_personality_integrator(smart_response_conn, integrated_db)
+    explicit_context_handler = ExplicitContextHandler(smart_response_conn)
     print("✓ User Context Manager initialized (preferences, goals, language learning)")
     print("✓ Proactive Clarification System initialized")
     print("✓ Character Trait System initialized (12D trait-space matching)")
@@ -293,6 +295,7 @@ except Exception as e:
     character_trait_system = None
     developer_analytics = None
     personality_integrator = None
+    explicit_context_handler = None
     domain_character_manager = None
     domain_character_ai = None
     previous_interactions = {}
@@ -399,6 +402,20 @@ def process_with_smart_response(message, character_name, ai_chat_function):
         else:
             print("⚠️ character_trait_system not initialized")
         
+        # EXPLICIT CONTEXT EXTRACTION: Capture user's explicit statements with CRITICAL priority
+        explicit_context_items = []
+        if explicit_context_handler:
+            try:
+                explicit_context_items = explicit_context_handler.extract_explicit_context(
+                    user_id, character_name, message
+                )
+                if explicit_context_items:
+                    print(f"📌 [EXPLICIT] Extracted {len(explicit_context_items)} explicit context items")
+                    for item in explicit_context_items:
+                        print(f"   → {item['type']}: {item['value']} ({item['priority']})")
+            except Exception as e:
+                print(f"⚠️ Explicit context extraction failed: {e}")
+        
         # Track previous interaction for learning
         prev_key = f"{user_id}_{character_name}"
         if prev_key in previous_interactions:
@@ -502,10 +519,20 @@ def process_with_smart_response(message, character_name, ai_chat_function):
             if situation_parts:
                 situation_context = "\n[Current Situation]\n" + "\n".join(f"- {p}" for p in situation_parts)
         
-        if context_prompt or situation_context:
+        # Add explicit context (user's own words - CRITICAL priority)
+        explicit_context = ""
+        if explicit_context_items:
+            explicit_parts = []
+            for item in explicit_context_items:
+                if item['priority'] == 'CRITICAL':
+                    explicit_parts.append(f"User explicitly stated: \"{item['value']}\" ({item['type']})")
+            if explicit_parts:
+                explicit_context = "\n[User's Explicit Statements - TRUST THESE]\n" + "\n".join(f"- {p}" for p in explicit_parts)
+        
+        if context_prompt or situation_context or explicit_context:
             # Prepend context to message so AI receives it
             # This makes AI aware of user's emotional state, goals, and preferences
-            full_context = (context_prompt + situation_context).strip()
+            full_context = (context_prompt + situation_context + explicit_context).strip()
             enhanced_message = f"{full_context}\n\nUser's current message: {message}"
         else:
             enhanced_message = message
@@ -4125,6 +4152,25 @@ def route_to_domain_characters():
                     }
             except Exception as e:
                 print(f"⚠️ Domain situation analysis failed: {e}")
+        
+        # EXPLICIT CONTEXT EXTRACTION: Capture user's explicit statements (Domain Characters)
+        domain_explicit_context = []
+        if explicit_context_handler:
+            try:
+                domain_explicit_context = explicit_context_handler.extract_explicit_context(
+                    user_id, requested_character, message
+                )
+                if domain_explicit_context:
+                    print(f"📌 [DOMAIN] Extracted {len(domain_explicit_context)} explicit context items")
+                    # Add to context for AI
+                    explicit_statements = []
+                    for item in domain_explicit_context:
+                        if item['priority'] == 'CRITICAL':
+                            explicit_statements.append(f"{item['type']}: {item['value']}")
+                    if explicit_statements:
+                        context['explicit_context'] = explicit_statements
+            except Exception as e:
+                print(f"⚠️ Domain explicit context extraction failed: {e}")
         
         # If AI integration available and use_ai is True, generate AI responses
         if use_ai and domain_character_ai and responses:

@@ -16,10 +16,12 @@ try:
     from smart_response.pattern_expander import PatternExpander
     from smart_response.context_archival import ContextArchival
     from smart_response.ai_budget_manager import AIBudgetManager
+    from smart_response.character_expansion import CharacterExpansionSystem
 except ModuleNotFoundError:
     from pattern_expander import PatternExpander
     from context_archival import ContextArchival
     from ai_budget_manager import AIBudgetManager
+    from character_expansion import CharacterExpansionSystem
 
 
 class BackgroundScheduler:
@@ -28,7 +30,8 @@ class BackgroundScheduler:
     Respects AI budget limits
     """
     
-    def __init__(self, db_path='integrated_users.db', budget_manager=None):
+    def __init__(self, db_path='integrated_users.db', budget_manager=None, 
+                 character_trait_system=None):
         self.db_path = db_path
         self.running = False
         self.thread = None
@@ -37,6 +40,8 @@ class BackgroundScheduler:
         self.pattern_expander = PatternExpander(db_path)
         self.context_archival = ContextArchival(db_path)
         self.budget_manager = budget_manager  # Pass in from app.py, or None for testing
+        self.character_trait_system = character_trait_system  # For character expansion
+        self.character_expansion = None  # Lazy init when needed
     
     def schedule_tasks(self):
         """Configure task schedule"""
@@ -47,12 +52,16 @@ class BackgroundScheduler:
         # Weekly tasks (run Sunday at 3 AM)
         schedule.every().sunday.at("03:00").do(self.run_pattern_expansion)
         
+        # Weekly character expansion (run Wednesday at 3 AM - spread out from pattern expansion)
+        schedule.every().wednesday.at("03:00").do(self.run_character_expansion)
+        
         # Monthly tasks (run every 30 days at 4 AM - approximates monthly)
         schedule.every(30).days.at("04:00").do(self.run_monthly_cleanup)
         
         print("✓ Background tasks scheduled:")
         print("   - Context maintenance: Daily at 2:00 AM")
         print("   - Pattern expansion: Weekly on Sunday at 3:00 AM")
+        print("   - Character expansion: Weekly on Wednesday at 3:00 AM")
         print("   - Monthly cleanup: 1st of month at 4:00 AM")
     
     def run_context_maintenance(self):
@@ -107,6 +116,62 @@ class BackgroundScheduler:
             print(f"\n❌ Pattern expansion failed: {e}")
             return None
     
+    def run_character_expansion(self):
+        """Weekly character expansion - fills gaps in trait-space (uses AI - check budget)"""
+        print(f"\n{'='*60}")
+        print(f"SCHEDULED TASK: Character Expansion")
+        print(f"Time: {datetime.now()}")
+        print(f"{'='*60}")
+        
+        if not self.character_trait_system:
+            print("⚠️ Skipping character expansion: No character_trait_system configured")
+            return None
+        
+        try:
+            # Initialize character expansion if needed
+            if not self.character_expansion:
+                import sqlite3
+                conn = sqlite3.connect(self.db_path, check_same_thread=False)
+                self.character_expansion = CharacterExpansionSystem(conn, self.budget_manager)
+            
+            # Analyze gaps in trait-space
+            gaps = self.character_expansion.analyze_trait_space_coverage(self.character_trait_system)
+            
+            if not gaps:
+                print("✓ No significant gaps found in trait-space")
+                return {'gaps_found': 0, 'characters_added': 0}
+            
+            print(f"📊 Found {len(gaps)} gaps in trait-space")
+            
+            # Try to fill the most severe gap (limit to 1 per run to conserve budget)
+            characters_added = 0
+            for gap in gaps[:1]:  # Only process top gap
+                print(f"   → Gap score: {gap.gap_score:.2f}, situations: {gap.situation_types}")
+                
+                # Generate character (template-based, no AI cost)
+                candidate = self.character_expansion.generate_character_for_gap(gap)
+                
+                if candidate:
+                    # Add to system
+                    success = self.character_expansion.add_character_to_system(
+                        candidate, self.character_trait_system
+                    )
+                    if success:
+                        characters_added += 1
+            
+            print(f"\n✓ Character expansion completed")
+            print(f"   Gaps analyzed: {len(gaps)}")
+            print(f"   Characters added: {characters_added}")
+            
+            return {
+                'gaps_found': len(gaps),
+                'characters_added': characters_added
+            }
+            
+        except Exception as e:
+            print(f"\n❌ Character expansion failed: {e}")
+            return None
+    
     def run_monthly_cleanup(self):
         """Monthly deep cleanup"""
         print(f"\n{'='*60}")
@@ -136,6 +201,8 @@ class BackgroundScheduler:
             return self.run_context_maintenance()
         elif task_name == 'pattern_expansion':
             return self.run_pattern_expansion()
+        elif task_name == 'character_expansion':
+            return self.run_character_expansion()
         elif task_name == 'monthly_cleanup':
             return self.run_monthly_cleanup()
         else:
