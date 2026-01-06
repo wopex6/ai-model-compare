@@ -127,6 +127,7 @@ def deploy_via_api():
     commands = [
         f'cd {PROJECT_PATH} && git pull origin main',
         f'cd {PROJECT_PATH} && python migrate_all_tables.py',
+        f'cd {PROJECT_PATH} && python fix_message_count_column.py',
     ]
     
     for cmd in commands:
