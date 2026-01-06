@@ -407,16 +407,21 @@ class CharacterTraitSystem:
         if any(re.search(p, message_lower) for p in intensity_words):
             analysis.emotional_intensity = 0.8
         
-        # Detect goal type
-        if re.search(r'\b(help me|advice|suggest|recommend|what should)\b', message_lower):
-            analysis.goal_type = 'advice'
-        elif re.search(r'\b(plan|steps|how to|strategy|approach)\b', message_lower):
-            analysis.goal_type = 'planning'
-        elif re.search(r'\b(just need to vent|listen|understand|hear me)\b', message_lower):
+        # Detect goal type (order matters - more specific patterns first)
+        # Venting: explicit requests to be heard without advice
+        if re.search(r'(just need to vent|just want to vent|need someone to listen|just listen|hear me out)', message_lower):
             analysis.goal_type = 'venting'
             analysis.needs_validation = True
-        elif re.search(r'\b(learn|understand|explain|teach|why)\b', message_lower):
+        # Learning: seeking understanding (check before advice since "help me understand" is learning)
+        elif re.search(r'(understand why|explain why|why does|why do|why is|teach me|learn about|want to learn)', message_lower):
             analysis.goal_type = 'learning'
+        # Advice: general help requests
+        elif re.search(r'\b(help me|advice|suggest|recommend|what should)\b', message_lower):
+            analysis.goal_type = 'advice'
+        # Planning: structured approach requests
+        elif re.search(r'\b(plan|steps|how to|strategy|approach)\b', message_lower):
+            analysis.goal_type = 'planning'
+        # Support: emotional validation
         elif re.search(r'\b(support|comfort|feeling|emotions?)\b', message_lower):
             analysis.goal_type = 'support'
             analysis.needs_validation = True
