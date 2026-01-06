@@ -246,14 +246,18 @@ const DomainCharacters = {
                     if (msg.responses && msg.responses.length > 0) {
                         msg.responses.forEach(resp => {
                             if (resp.content) {
+                                // Generate client-side summary for long messages
+                                const summaryData = this._generateClientSummary(resp.content);
                                 // Use actual responder character, not the viewing character
-                                this._addMessageToDisplay(resp.content, 'bot', resp.character || characterId, false, msg.timestamp);
+                                this._addMessageToDisplay(resp.content, 'bot', resp.character || characterId, false, msg.timestamp, summaryData);
                             }
                         });
                     } else if (msg.ai_response) {
                         // Single response - use msg.character if available (actual responder)
                         const responder = msg.character || characterId;
-                        this._addMessageToDisplay(msg.ai_response, 'bot', responder, false, msg.timestamp);
+                        // Generate client-side summary for long messages
+                        const summaryData = this._generateClientSummary(msg.ai_response);
+                        this._addMessageToDisplay(msg.ai_response, 'bot', responder, false, msg.timestamp, summaryData);
                     }
                 });
                 
@@ -317,12 +321,16 @@ const DomainCharacters = {
             if (msg.responses && msg.responses.length > 0) {
                 msg.responses.forEach(resp => {
                     if (resp.content) {
-                        this._addMessageToDisplay(resp.content, 'bot', resp.character || characterId, false, msg.timestamp);
+                        // Generate client-side summary for long messages
+                        const summaryData = this._generateClientSummary(resp.content);
+                        this._addMessageToDisplay(resp.content, 'bot', resp.character || characterId, false, msg.timestamp, summaryData);
                     }
                 });
             } else if (msg.ai_response) {
                 const responder = msg.character || characterId;
-                this._addMessageToDisplay(msg.ai_response, 'bot', responder, false, msg.timestamp);
+                // Generate client-side summary for long messages
+                const summaryData = this._generateClientSummary(msg.ai_response);
+                this._addMessageToDisplay(msg.ai_response, 'bot', responder, false, msg.timestamp, summaryData);
             }
         });
         
@@ -380,6 +388,39 @@ const DomainCharacters = {
         if (sendBtn) {
             sendBtn.disabled = true;
         }
+    },
+    
+    /**
+     * Generate a client-side summary for long messages
+     * @private
+     * @param {string} content - Message content
+     * @returns {object} - { has_summary: boolean, summary: string }
+     */
+    _generateClientSummary(content) {
+        // Only summarize long bot messages (>500 chars)
+        if (!content || content.length < 500) {
+            return { has_summary: false, summary: '' };
+        }
+        
+        // Extract first meaningful paragraph or sentences
+        const lines = content.split('\n').filter(l => l.trim());
+        let summary = '';
+        
+        // Try to get first 2-3 sentences or ~150 chars
+        for (const line of lines) {
+            if (summary.length > 150) break;
+            const cleanLine = line.replace(/^[#*\->\s]+/, '').trim();
+            if (cleanLine) {
+                summary += (summary ? ' ' : '') + cleanLine;
+            }
+        }
+        
+        // Truncate if still too long
+        if (summary.length > 200) {
+            summary = summary.substring(0, 197) + '...';
+        }
+        
+        return { has_summary: true, summary: summary };
     },
     
     /**
