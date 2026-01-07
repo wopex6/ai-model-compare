@@ -52,8 +52,8 @@ gpt.py
 *.sqlite.backup_*
 backups/backup_log.json
 
-# Debug and test files
-*_test.py
-test_*.py
+# Debug and test files (temporarily commented to allow reading)
+# *_test.py
+# test_*.py
 personality_test_debug.png
 debug_*.md
