@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Analytics Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #f5f7fa 0%, #e4e8eb 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .dashboard-header {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            padding: 20px 30px;
+            margin-bottom: 20px;
+        }
+        
+        .dashboard-header h1 {
+            margin: 0;
+            font-size: 1.5rem;
+        }
+        
+        .dashboard-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px 40px;
+        }
+        
+        .stat-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+        }
+        
+        .stat-card h3 {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #333;
+        }
+        
+        .stat-change {
+            font-size: 0.8rem;
+            margin-top: 5px;
+        }
+        
+        .stat-change.positive { color: var(--success); }
+        .stat-change.negative { color: var(--danger); }
+        
+        .chart-card {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+            margin-bottom: 20px;
+        }
+        
+        .chart-card h3 {
+            font-size: 1rem;
+            color: #333;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .character-effectiveness {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        
+        .char-row {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .char-name {
+            width: 120px;
+            font-weight: 500;
+            font-size: 0.85rem;
+        }
+        
+        .char-bar-container {
+            flex: 1;
+            height: 24px;
+            background: #f0f0f0;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        
+        .char-bar {
+            height: 100%;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 10px;
+            color: white;
+            font-size: 0.75rem;
+            font-weight: 600;
+            transition: width 0.5s ease;
+        }
+        
+        .context-type-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+        }
+        
+        .context-type-item {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 12px;
+            text-align: center;
+        }
+        
+        .context-type-item .count {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        
+        .context-type-item .label {
+            font-size: 0.75rem;
+            color: #666;
+            margin-top: 4px;
+        }
+        
+        .budget-meter {
+            background: #f0f0f0;
+            border-radius: 20px;
+            height: 30px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .budget-fill {
+            height: 100%;
+            border-radius: 20px;
+            transition: width 0.5s ease;
+        }
+        
+        .budget-fill.safe { background: linear-gradient(90deg, #10b981, #34d399); }
+        .budget-fill.warning { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+        .budget-fill.danger { background: linear-gradient(90deg, #ef4444, #f87171); }
+        
+        .budget-label {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+        
+        .task-status {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .task-badge {
+            padding: 8px 14px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .task-badge.running { background: #dcfce7; color: #166534; }
+        .task-badge.pending { background: #fef3c7; color: #92400e; }
+        .task-badge.error { background: #fee2e2; color: #991b1b; }
+        
+        .refresh-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .refresh-btn:hover {
+            background: var(--secondary);
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .error-msg {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .back-link {
+            color: rgba(255,255,255,0.8);
+            text-decoration: none;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .back-link:hover {
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard-header">
+        <div style="max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+                <a href="/chatchat" class="back-link"><i class="fas fa-arrow-left"></i> Back to Dashboard</a>
+                <h1 style="margin-top: 10px;"><i class="fas fa-chart-line"></i> Admin Analytics Dashboard</h1>
+            </div>
+            <button class="refresh-btn" onclick="loadAllData()">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+        </div>
+    </div>
+    
+    <div class="dashboard-container">
+        <div id="error-container"></div>
+        
+        <!-- Top Stats Row -->
+        <div class="row" id="stats-row">
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <h3><i class="fas fa-users" style="color: var(--primary);"></i> Total Users</h3>
+                    <div class="stat-value" id="total-users">-</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <h3><i class="fas fa-comments" style="color: var(--success);"></i> Total Messages</h3>
+                    <div class="stat-value" id="total-messages">-</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <h3><i class="fas fa-robot" style="color: var(--warning);"></i> AI Calls Today</h3>
+                    <div class="stat-value" id="ai-calls-today">-</div>
+                    <div class="stat-change" id="ai-budget-status">-</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <h3><i class="fas fa-brain" style="color: var(--secondary);"></i> Context Items</h3>
+                    <div class="stat-value" id="context-items">-</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- AI Budget Section -->
+        <div class="row">
+            <div class="col-md-6">
+                <div class="chart-card">
+                    <h3><i class="fas fa-tachometer-alt"></i> AI Budget Usage</h3>
+                    <div class="budget-meter">
+                        <div class="budget-fill safe" id="budget-fill" style="width: 0%;"></div>
+                        <span class="budget-label" id="budget-label">Loading...</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 0.8rem; color: #666;">
+                        <span>0</span>
+                        <span id="budget-limit">/ 100 calls</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="chart-card">
+                    <h3><i class="fas fa-tasks"></i> Background Tasks</h3>
+                    <div class="task-status" id="task-status">
+                        <div class="loading">Loading tasks...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Character Effectiveness -->
+        <div class="row">
+            <div class="col-md-8">
+                <div class="chart-card">
+                    <h3><i class="fas fa-theater-masks"></i> Character Effectiveness</h3>
+                    <div class="character-effectiveness" id="char-effectiveness">
+                        <div class="loading">Loading character data...</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="chart-card">
+                    <h3><i class="fas fa-lightbulb"></i> Explicit Context by Type</h3>
+                    <div class="context-type-grid" id="context-types">
+                        <div class="loading">Loading...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Recent Activity -->
+        <div class="row">
+            <div class="col-12">
+                <div class="chart-card">
+                    <h3><i class="fas fa-history"></i> Recent AI Calls</h3>
+                    <div id="recent-calls" style="max-height: 300px; overflow-y: auto;">
+                        <div class="loading">Loading recent calls...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="{{ url_for('static', filename='auth_helper.js') }}"></script>
+    <script>
+        async function loadAllData() {
+            try {
+                // Load all data in parallel
+                const [statsRes, budgetRes, analyticsRes, tasksRes] = await Promise.all([
+                    AuthHelper.authenticatedFetch('/api/admin/statistics'),
+                    AuthHelper.authenticatedFetch('/api/ai-budget/status'),
+                    AuthHelper.authenticatedFetch('/api/admin/smart-response-analytics'),
+                    AuthHelper.authenticatedFetch('/api/admin/background-tasks/status')
+                ]);
+                
+                const stats = await statsRes.json();
+                const budget = await budgetRes.json();
+                const analytics = await analyticsRes.json();
+                const tasks = await tasksRes.json();
+                
+                // Update stats
+                if (stats.total_users !== undefined) {
+                    document.getElementById('total-users').textContent = stats.total_users.toLocaleString();
+                }
+                if (stats.total_messages !== undefined) {
+                    document.getElementById('total-messages').textContent = stats.total_messages.toLocaleString();
+                }
+                
+                // Update budget
+                if (budget.daily_usage !== undefined) {
+                    const usage = budget.daily_usage;
+                    const limit = budget.daily_limit || 100;
+                    const percent = Math.min((usage / limit) * 100, 100);
+                    
+                    document.getElementById('ai-calls-today').textContent = usage;
+                    document.getElementById('budget-label').textContent = `${usage} / ${limit}`;
+                    document.getElementById('budget-limit').textContent = `/ ${limit} calls`;
+                    
+                    const fill = document.getElementById('budget-fill');
+                    fill.style.width = percent + '%';
+                    fill.className = 'budget-fill ' + (percent < 60 ? 'safe' : percent < 85 ? 'warning' : 'danger');
+                    
+                    const statusText = percent < 60 ? 'Normal usage' : percent < 85 ? 'Approaching limit' : 'Near limit!';
+                    const statusClass = percent < 60 ? 'positive' : 'negative';
+                    document.getElementById('ai-budget-status').innerHTML = `<span class="${statusClass}">${statusText}</span>`;
+                }
+                
+                // Update analytics
+                if (analytics) {
+                    // Context items count
+                    if (analytics.explicit_context_stats) {
+                        document.getElementById('context-items').textContent = 
+                            (analytics.explicit_context_stats.total_items || 0).toLocaleString();
+                        
+                        // Context by type
+                        const byType = analytics.explicit_context_stats.by_type || {};
+                        const typeLabels = {
+                            'goal': '🎯 Goals',
+                            'preference': '⚙️ Preferences',
+                            'emotional_state': '💭 Feelings',
+                            'value': '💎 Values',
+                            'need': '🤝 Needs',
+                            'self_description': '👤 About',
+                            'intention': '📋 Intentions'
+                        };
+                        
+                        let typeHtml = '';
+                        for (const [type, count] of Object.entries(byType)) {
+                            typeHtml += `
+                                <div class="context-type-item">
+                                    <div class="count">${count}</div>
+                                    <div class="label">${typeLabels[type] || type}</div>
+                                </div>
+                            `;
+                        }
+                        document.getElementById('context-types').innerHTML = typeHtml || '<p style="color:#888;">No context data</p>';
+                    }
+                    
+                    // Character effectiveness
+                    if (analytics.character_stats && analytics.character_stats.effectiveness) {
+                        const effectiveness = analytics.character_stats.effectiveness;
+                        let charHtml = '';
+                        
+                        const colors = ['#667eea', '#764ba2', '#10b981', '#f59e0b', '#ef4444', '#6366f1', '#ec4899', '#14b8a6'];
+                        let colorIdx = 0;
+                        
+                        for (const [char, score] of Object.entries(effectiveness).sort((a,b) => b[1] - a[1])) {
+                            const percent = Math.round(score * 100);
+                            charHtml += `
+                                <div class="char-row">
+                                    <div class="char-name">${char}</div>
+                                    <div class="char-bar-container">
+                                        <div class="char-bar" style="width: ${percent}%; background: ${colors[colorIdx % colors.length]};">
+                                            ${percent}%
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                            colorIdx++;
+                        }
+                        document.getElementById('char-effectiveness').innerHTML = charHtml || '<p style="color:#888;">No character data</p>';
+                    }
+                }
+                
+                // Update tasks
+                if (tasks && tasks.tasks) {
+                    let taskHtml = '';
+                    for (const [name, info] of Object.entries(tasks.tasks)) {
+                        const status = info.running ? 'running' : 'pending';
+                        const icon = info.running ? 'fa-spinner fa-spin' : 'fa-clock';
+                        taskHtml += `
+                            <div class="task-badge ${status}">
+                                <i class="fas ${icon}"></i> ${name}
+                            </div>
+                        `;
+                    }
+                    document.getElementById('task-status').innerHTML = taskHtml || '<p style="color:#888;">No tasks</p>';
+                }
+                
+                // Load recent AI calls
+                const callsRes = await AuthHelper.authenticatedFetch('/api/developer/ai-calls?limit=10');
+                const calls = await callsRes.json();
+                
+                if (calls && calls.length > 0) {
+                    let callsHtml = '<table style="width:100%; font-size: 0.85rem;">';
+                    callsHtml += '<tr style="background:#f8f9fa;"><th style="padding:8px;">Time</th><th>Purpose</th><th>Tokens</th><th>Cost</th></tr>';
+                    for (const call of calls) {
+                        const time = new Date(call.timestamp).toLocaleTimeString();
+                        callsHtml += `
+                            <tr style="border-bottom: 1px solid #eee;">
+                                <td style="padding:8px;">${time}</td>
+                                <td>${call.purpose || '-'}</td>
+                                <td>${call.tokens_used || '-'}</td>
+                                <td>$${(call.cost || 0).toFixed(4)}</td>
+                            </tr>
+                        `;
+                    }
+                    callsHtml += '</table>';
+                    document.getElementById('recent-calls').innerHTML = callsHtml;
+                } else {
+                    document.getElementById('recent-calls').innerHTML = '<p style="color:#888; text-align:center;">No recent AI calls</p>';
+                }
+                
+            } catch (error) {
+                console.error('Error loading analytics:', error);
+                document.getElementById('error-container').innerHTML = `
+                    <div class="error-msg">
+                        <i class="fas fa-exclamation-triangle"></i> Error loading data: ${error.message}
+                        <br><small>Make sure you have admin privileges.</small>
+                    </div>
+                `;
+            }
+        }
+        
+        // Load on page load
+        document.addEventListener('DOMContentLoaded', loadAllData);
+        
+        // Auto-refresh every 30 seconds
+        setInterval(loadAllData, 30000);
+    </script>
+</body>
+</html>
