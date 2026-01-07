@@ -57,10 +57,43 @@ def git_push():
         # Add all changes
         subprocess.run(['git', 'add', '-A'])
         
-        # Auto-generate commit message with timestamp
+        # Generate meaningful commit message from changed files
         from datetime import datetime
-        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
-        message = f"Deploy to production - {timestamp}"
+        changed_files = result.stdout.strip().split('\n')
+        
+        # Analyze changes to create descriptive message
+        changes = []
+        for line in changed_files[:5]:  # Look at first 5 files
+            if len(line) > 3:
+                filepath = line[3:].strip()
+                filename = filepath.split('/')[-1].split('\\')[-1]
+                if 'test' in filename.lower():
+                    changes.append('tests')
+                elif 'analytics' in filename.lower():
+                    changes.append('analytics')
+                elif '.html' in filename:
+                    changes.append('templates')
+                elif '.js' in filename:
+                    changes.append('frontend')
+                elif '.py' in filename:
+                    changes.append('backend')
+                elif '.css' in filename:
+                    changes.append('styles')
+                elif '.md' in filename:
+                    changes.append('docs')
+        
+        # Create unique list of change types
+        unique_changes = list(dict.fromkeys(changes))[:3]
+        if unique_changes:
+            change_desc = ', '.join(unique_changes)
+            message = f"Update {change_desc}"
+        else:
+            message = "Update files"
+        
+        # Add file count if many files changed
+        if len(changed_files) > 3:
+            message += f" ({len(changed_files)} files)"
+        
         subprocess.run(['git', 'commit', '-m', message])
         print(f"✅ Committed: {message}")
     

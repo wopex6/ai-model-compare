@@ -129,16 +129,34 @@ const DomainCharacters = {
      */
     async loadCharacters() {
         try {
-            const response = await AuthHelper.authenticatedFetch(this.endpoints.list);
+            // Use regular fetch since this endpoint doesn't require auth
+            const response = await fetch(this.endpoints.list);
             const data = await response.json();
             
             if (data.success && data.characters) {
                 this.characters = data.characters;
                 console.log(`✓ Loaded ${data.characters.length} domain characters`);
                 this._renderCharacterList();
+            } else {
+                console.error('Failed to load characters:', data.error || 'Unknown error');
+                this._showCharacterLoadError(data.error || 'Failed to load characters');
             }
         } catch (error) {
             console.error('Failed to load domain characters:', error);
+            this._showCharacterLoadError(error.message);
+        }
+    },
+    
+    /**
+     * Show error message in character list
+     * @private
+     */
+    _showCharacterLoadError(message) {
+        const container = document.getElementById(this.ui.characterListId);
+        if (container) {
+            container.innerHTML = `<div class="error-msg" style="padding: 20px; color: #e74c3c; text-align: center;">
+                <i class="fas fa-exclamation-triangle"></i> ${message}
+            </div>`;
         }
     },
     
