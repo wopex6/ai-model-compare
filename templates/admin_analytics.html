@@ -564,11 +564,19 @@
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        animation: false,
                         plugins: {
                             legend: { display: false }
                         },
                         scales: {
-                            y: { beginAtZero: true }
+                            y: { 
+                                beginAtZero: true,
+                                suggestedMax: Math.max(10, Math.max(...dataPoints) + 2),
+                                ticks: {
+                                    stepSize: 1,
+                                    precision: 0
+                                }
+                            }
                         }
                     }
                 });
