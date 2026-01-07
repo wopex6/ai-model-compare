@@ -6062,126 +6062,116 @@ def get_developer_access_log():
 # ============================================================
 # ==================== API SELF-DOCUMENTATION ====================
 
+def _get_category_for_route(rule_path):
+    """Determine category based on route path"""
+    category_prefixes = [
+        ('/api/auth/', 'authentication'),
+        ('/api/admin/', 'admin'),
+        ('/api/developer/', 'developer'),
+        ('/api/user/explicit-context', 'explicit_context'),
+        ('/api/user/', 'user'),
+        ('/api/ai-budget/', 'ai_budget'),
+        ('/api/domain-characters/', 'domain_characters'),
+        ('/api/personality/', 'personality'),
+        ('/api/smart-response/', 'smart_response'),
+        ('/api/history/', 'history'),
+        ('/api/context/', 'context'),
+        ('/api/profile/', 'profile'),
+        ('/api/explicit-context/', 'explicit_context'),
+        ('/chat/', 'chat'),
+        ('/personality/', 'personality'),
+        ('/api/', 'other'),
+    ]
+    for prefix, category in category_prefixes:
+        if rule_path.startswith(prefix):
+            return category
+    return None
+
+def _get_category_description(category):
+    """Get human-readable description for category"""
+    descriptions = {
+        'authentication': 'User authentication and session management',
+        'admin': 'Administrative functions (requires admin role)',
+        'developer': 'Developer analytics and debugging (requires developer role)',
+        'explicit_context': 'User-stated goals, preferences, and values',
+        'user': 'User profile and preferences',
+        'ai_budget': 'AI usage budget and cost control',
+        'domain_characters': 'AI characters with specific domains/expertise',
+        'personality': 'Personality assessment and profiling',
+        'smart_response': 'Smart response system analytics',
+        'history': 'Conversation history and analytics',
+        'context': 'Conversation context management',
+        'profile': 'User profile management',
+        'chat': 'Main chat functionality',
+        'other': 'Other API endpoints',
+    }
+    return descriptions.get(category, category.replace('_', ' ').title())
+
 @app.route('/api')
 def api_documentation():
-    """Self-documenting API endpoint - lists all available APIs"""
-    api_docs = {
-        'version': '1.0',
-        'base_url': request.host_url.rstrip('/'),
-        'categories': {
-            'authentication': {
-                'description': 'User authentication and session management',
-                'endpoints': [
-                    {'method': 'POST', 'path': '/api/auth/register', 'description': 'Register new user'},
-                    {'method': 'POST', 'path': '/api/auth/login', 'description': 'Login user'},
-                    {'method': 'POST', 'path': '/api/auth/logout', 'description': 'Logout user'},
-                    {'method': 'GET', 'path': '/api/auth/me', 'description': 'Get current user info'},
-                    {'method': 'POST', 'path': '/api/auth/verify-email', 'description': 'Verify email with code'},
-                    {'method': 'POST', 'path': '/api/auth/resend-verification', 'description': 'Resend verification email'},
-                    {'method': 'POST', 'path': '/api/auth/forgot-password', 'description': 'Request password reset'},
-                    {'method': 'POST', 'path': '/api/auth/reset-password', 'description': 'Reset password with token'},
-                ]
-            },
-            'user_management': {
-                'description': 'User profile and preferences',
-                'endpoints': [
-                    {'method': 'GET', 'path': '/api/user/profile', 'description': 'Get user profile'},
-                    {'method': 'PUT', 'path': '/api/user/profile', 'description': 'Update user profile'},
-                    {'method': 'GET', 'path': '/api/user/conversations', 'description': 'Get user conversations'},
-                    {'method': 'DELETE', 'path': '/api/user/conversations/<session_id>', 'description': 'Delete conversation'},
-                    {'method': 'GET', 'path': '/api/user/message-usage', 'description': 'Get message usage/limits'},
-                    {'method': 'GET', 'path': '/api/user/highlights', 'description': 'Get saved highlights'},
-                    {'method': 'POST', 'path': '/api/user/highlights', 'description': 'Save a highlight'},
-                ]
-            },
-            'explicit_context': {
-                'description': 'User-stated goals, preferences, and values (CRITICAL priority)',
-                'endpoints': [
-                    {'method': 'GET', 'path': '/api/user/explicit-context', 'description': 'Get explicit context items', 'params': ['character', 'type']},
-                    {'method': 'GET', 'path': '/api/user/explicit-context/summary', 'description': 'Get formatted context summary'},
-                    {'method': 'GET', 'path': '/api/user/explicit-context/stats', 'description': 'Get context statistics'},
-                    {'method': 'DELETE', 'path': '/api/user/explicit-context/<id>', 'description': 'Remove a context item'},
-                ]
-            },
-            'chat': {
-                'description': 'Main chat functionality',
-                'endpoints': [
-                    {'method': 'POST', 'path': '/chat/message', 'description': 'Send chat message'},
-                    {'method': 'GET', 'path': '/chat/sessions', 'description': 'List chat sessions'},
-                    {'method': 'POST', 'path': '/chat/sessions', 'description': 'Create new session'},
-                    {'method': 'GET', 'path': '/chat/sessions/<session_id>', 'description': 'Get session details'},
-                    {'method': 'DELETE', 'path': '/chat/sessions/<session_id>', 'description': 'Delete session'},
-                    {'method': 'GET', 'path': '/chat/export', 'description': 'Export chat history'},
-                ]
-            },
-            'domain_characters': {
-                'description': 'AI characters with specific domains/expertise',
-                'endpoints': [
-                    {'method': 'GET', 'path': '/api/domain-characters', 'description': 'List all domain characters'},
-                    {'method': 'GET', 'path': '/api/domain-characters/<character_id>', 'description': 'Get character details'},
-                    {'method': 'POST', 'path': '/api/domain-characters/route', 'description': 'Route message to character'},
-                    {'method': 'GET', 'path': '/api/domain-characters/history/<character_id>', 'description': 'Get conversation history'},
-                    {'method': 'GET', 'path': '/api/domain-characters/session', 'description': 'Get/create session'},
-                ]
-            },
-            'personality': {
-                'description': 'Personality assessment and profiling',
-                'endpoints': [
-                    {'method': 'GET', 'path': '/api/personality/profile', 'description': 'Get personality profile'},
-                    {'method': 'GET', 'path': '/api/personality/history', 'description': 'Get assessment history'},
-                    {'method': 'GET', 'path': '/api/personality/trends/<trait>', 'description': 'Get trait trends'},
-                    {'method': 'GET', 'path': '/api/personality/stats', 'description': 'Get personality stats'},
-                    {'method': 'POST', 'path': '/personality/assessment/start', 'description': 'Start assessment'},
-                ]
-            },
-            'smart_response': {
-                'description': 'Smart response system analytics',
-                'endpoints': [
-                    {'method': 'GET', 'path': '/api/smart-response/stats', 'description': 'Get smart response statistics'},
-                    {'method': 'GET', 'path': '/api/context/<character>', 'description': 'Get conversation context'},
-                    {'method': 'GET', 'path': '/api/history/<character>', 'description': 'Get dual-layer history'},
-                    {'method': 'GET', 'path': '/api/history/<character>/stats', 'description': 'Get history statistics'},
-                ]
-            },
-            'ai_budget': {
-                'description': 'AI usage budget and cost control',
-                'endpoints': [
-                    {'method': 'GET', 'path': '/api/ai-budget/status', 'description': 'Get current budget status'},
-                    {'method': 'GET', 'path': '/api/ai-budget/notifications', 'description': 'Get budget notifications'},
-                    {'method': 'POST', 'path': '/api/ai-budget/notifications/acknowledge', 'description': 'Acknowledge notification'},
-                    {'method': 'POST', 'path': '/api/ai-budget/reset-circuit-breaker', 'description': 'Reset circuit breaker (admin)'},
-                ]
-            },
-            'admin': {
-                'description': 'Administrative functions (requires admin role)',
-                'endpoints': [
-                    {'method': 'GET', 'path': '/api/admin/users', 'description': 'List all users'},
-                    {'method': 'POST', 'path': '/api/admin/users/<id>/role', 'description': 'Change user role'},
-                    {'method': 'POST', 'path': '/api/admin/users/<id>/permanent-delete', 'description': 'Permanently delete user'},
-                    {'method': 'GET', 'path': '/api/admin/statistics', 'description': 'Get usage statistics'},
-                    {'method': 'GET', 'path': '/api/admin/smart-response-analytics', 'description': 'Get smart response analytics'},
-                    {'method': 'GET', 'path': '/api/admin/background-tasks/status', 'description': 'Get scheduler status'},
-                    {'method': 'POST', 'path': '/api/admin/background-tasks/run', 'description': 'Trigger background task'},
-                    {'method': 'GET', 'path': '/api/admin/ai-errors', 'description': 'Get AI error log'},
-                    {'method': 'GET', 'path': '/api/admin/ai-usage/summary', 'description': 'Get AI usage summary'},
-                    {'method': 'GET', 'path': '/api/admin/patterns/suggestions', 'description': 'Get pattern suggestions'},
-                    {'method': 'GET', 'path': '/api/admin/backup/status', 'description': 'Get backup status'},
-                    {'method': 'POST', 'path': '/api/admin/backup/run', 'description': 'Run backup'},
-                ]
-            },
-            'developer': {
-                'description': 'Developer analytics and debugging (requires developer role)',
-                'endpoints': [
-                    {'method': 'GET', 'path': '/api/developer/metrics', 'description': 'Get system metrics'},
-                    {'method': 'GET', 'path': '/api/developer/ai-calls', 'description': 'Get AI call logs'},
-                    {'method': 'GET', 'path': '/api/developer/user-context', 'description': 'Get user context data'},
-                    {'method': 'GET', 'path': '/api/developer/character-effectiveness', 'description': 'Get character effectiveness'},
-                    {'method': 'GET', 'path': '/api/developer/debug', 'description': 'Get debug info'},
-                    {'method': 'POST', 'path': '/api/developer/query', 'description': 'Run custom SQL query'},
-                    {'method': 'GET', 'path': '/api/developer/health-history', 'description': 'Get health history'},
-                ]
+    """Self-documenting API endpoint - dynamically lists all available APIs"""
+    categories = {}
+    excluded_methods = {'HEAD', 'OPTIONS'}
+    excluded_endpoints = {'static', 'api_documentation'}
+    
+    for rule in app.url_map.iter_rules():
+        # Skip static files and this endpoint
+        if rule.endpoint in excluded_endpoints:
+            continue
+        
+        # Get category for this route
+        category = _get_category_for_route(rule.rule)
+        if not category:
+            continue
+        
+        # Initialize category if needed
+        if category not in categories:
+            categories[category] = {
+                'description': _get_category_description(category),
+                'endpoints': []
             }
-        },
+        
+        # Get methods (excluding HEAD, OPTIONS)
+        methods = [m for m in rule.methods if m not in excluded_methods]
+        
+        # Get docstring from view function
+        view_func = app.view_functions.get(rule.endpoint)
+        description = ''
+        if view_func and view_func.__doc__:
+            # Get first line of docstring
+            description = view_func.__doc__.strip().split('\n')[0]
+        
+        # Add endpoint for each method
+        for method in methods:
+            categories[category]['endpoints'].append({
+                'method': method,
+                'path': rule.rule,
+                'description': description,
+                'endpoint': rule.endpoint
+            })
+    
+    # Sort endpoints within each category by path
+    for cat in categories.values():
+        cat['endpoints'].sort(key=lambda x: (x['path'], x['method']))
+    
+    # Sort categories
+    category_order = ['authentication', 'user', 'explicit_context', 'chat', 
+                      'domain_characters', 'personality', 'smart_response', 
+                      'history', 'context', 'ai_budget', 'admin', 'developer', 'other']
+    sorted_categories = {}
+    for cat in category_order:
+        if cat in categories:
+            sorted_categories[cat] = categories[cat]
+    # Add any remaining categories
+    for cat in categories:
+        if cat not in sorted_categories:
+            sorted_categories[cat] = categories[cat]
+    
+    api_docs = {
+        'version': '1.0 (auto-generated)',
+        'base_url': request.host_url.rstrip('/'),
+        'total_endpoints': sum(len(c['endpoints']) for c in categories.values()),
+        'categories': sorted_categories,
         'authentication': {
             'type': 'JWT Bearer Token',
             'header': 'Authorization: Bearer <token>',
