@@ -2055,6 +2055,74 @@ def get_explicit_context_stats():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/user/explicit-context/ui-data', methods=['GET'])
+@require_auth
+def get_explicit_context_ui_data():
+    """Get explicit context formatted for frontend UI display"""
+    try:
+        user_id = request.current_user['user_id']
+        character = request.args.get('character', 'general')
+        
+        if not explicit_context_handler:
+            return jsonify({'has_context': False, 'groups': {}})
+        
+        # Get raw context items
+        cursor = explicit_context_handler.db.cursor()
+        cursor.execute('''
+            SELECT id, context_type, context_key, context_value, 
+                   original_statement, priority, confidence, timestamp
+            FROM explicit_context
+            WHERE user_id = ? AND (character = ? OR character = 'general')
+            AND active = 1
+            ORDER BY priority DESC, timestamp DESC
+        ''', (user_id, character))
+        
+        rows = cursor.fetchall()
+        
+        # Group by type with display-friendly labels
+        type_labels = {
+            'emotional_state': {'label': '💭 Current Feelings', 'icon': 'heart', 'color': 'pink'},
+            'goal': {'label': '🎯 Your Goals', 'icon': 'target', 'color': 'blue'},
+            'preference': {'label': '⚙️ Preferences', 'icon': 'settings', 'color': 'gray'},
+            'need': {'label': '🤝 What You Need', 'icon': 'hand', 'color': 'green'},
+            'value': {'label': '💎 Your Values', 'icon': 'gem', 'color': 'purple'},
+            'self_description': {'label': '👤 About You', 'icon': 'user', 'color': 'indigo'},
+            'intention': {'label': '📋 Intentions', 'icon': 'list', 'color': 'orange'},
+        }
+        
+        groups = {}
+        for row in rows:
+            ctx_type = row[1]
+            if ctx_type not in groups:
+                meta = type_labels.get(ctx_type, {'label': ctx_type.title(), 'icon': 'info', 'color': 'gray'})
+                groups[ctx_type] = {
+                    'label': meta['label'],
+                    'icon': meta['icon'],
+                    'color': meta['color'],
+                    'items': []
+                }
+            
+            groups[ctx_type]['items'].append({
+                'id': row[0],
+                'key': row[2],
+                'value': row[3],
+                'original': row[4],
+                'priority': row[5],
+                'confidence': row[6],
+                'timestamp': row[7],
+                'can_delete': True
+            })
+        
+        return jsonify({
+            'success': True,
+            'has_context': len(rows) > 0,
+            'total_items': len(rows),
+            'groups': groups,
+            'help_text': "These are things you've told me about yourself. I use this to give you better responses. You can remove anything that's no longer accurate."
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 # ==================== CONVERSATION HIGHLIGHTS ====================
 
 @app.route('/api/user/highlights', methods=['GET'])
@@ -5992,6 +6060,141 @@ def get_developer_access_log():
 
 
 # ============================================================
+# ==================== API SELF-DOCUMENTATION ====================
+
+@app.route('/api')
+def api_documentation():
+    """Self-documenting API endpoint - lists all available APIs"""
+    api_docs = {
+        'version': '1.0',
+        'base_url': request.host_url.rstrip('/'),
+        'categories': {
+            'authentication': {
+                'description': 'User authentication and session management',
+                'endpoints': [
+                    {'method': 'POST', 'path': '/api/auth/register', 'description': 'Register new user'},
+                    {'method': 'POST', 'path': '/api/auth/login', 'description': 'Login user'},
+                    {'method': 'POST', 'path': '/api/auth/logout', 'description': 'Logout user'},
+                    {'method': 'GET', 'path': '/api/auth/me', 'description': 'Get current user info'},
+                    {'method': 'POST', 'path': '/api/auth/verify-email', 'description': 'Verify email with code'},
+                    {'method': 'POST', 'path': '/api/auth/resend-verification', 'description': 'Resend verification email'},
+                    {'method': 'POST', 'path': '/api/auth/forgot-password', 'description': 'Request password reset'},
+                    {'method': 'POST', 'path': '/api/auth/reset-password', 'description': 'Reset password with token'},
+                ]
+            },
+            'user_management': {
+                'description': 'User profile and preferences',
+                'endpoints': [
+                    {'method': 'GET', 'path': '/api/user/profile', 'description': 'Get user profile'},
+                    {'method': 'PUT', 'path': '/api/user/profile', 'description': 'Update user profile'},
+                    {'method': 'GET', 'path': '/api/user/conversations', 'description': 'Get user conversations'},
+                    {'method': 'DELETE', 'path': '/api/user/conversations/<session_id>', 'description': 'Delete conversation'},
+                    {'method': 'GET', 'path': '/api/user/message-usage', 'description': 'Get message usage/limits'},
+                    {'method': 'GET', 'path': '/api/user/highlights', 'description': 'Get saved highlights'},
+                    {'method': 'POST', 'path': '/api/user/highlights', 'description': 'Save a highlight'},
+                ]
+            },
+            'explicit_context': {
+                'description': 'User-stated goals, preferences, and values (CRITICAL priority)',
+                'endpoints': [
+                    {'method': 'GET', 'path': '/api/user/explicit-context', 'description': 'Get explicit context items', 'params': ['character', 'type']},
+                    {'method': 'GET', 'path': '/api/user/explicit-context/summary', 'description': 'Get formatted context summary'},
+                    {'method': 'GET', 'path': '/api/user/explicit-context/stats', 'description': 'Get context statistics'},
+                    {'method': 'DELETE', 'path': '/api/user/explicit-context/<id>', 'description': 'Remove a context item'},
+                ]
+            },
+            'chat': {
+                'description': 'Main chat functionality',
+                'endpoints': [
+                    {'method': 'POST', 'path': '/chat/message', 'description': 'Send chat message'},
+                    {'method': 'GET', 'path': '/chat/sessions', 'description': 'List chat sessions'},
+                    {'method': 'POST', 'path': '/chat/sessions', 'description': 'Create new session'},
+                    {'method': 'GET', 'path': '/chat/sessions/<session_id>', 'description': 'Get session details'},
+                    {'method': 'DELETE', 'path': '/chat/sessions/<session_id>', 'description': 'Delete session'},
+                    {'method': 'GET', 'path': '/chat/export', 'description': 'Export chat history'},
+                ]
+            },
+            'domain_characters': {
+                'description': 'AI characters with specific domains/expertise',
+                'endpoints': [
+                    {'method': 'GET', 'path': '/api/domain-characters', 'description': 'List all domain characters'},
+                    {'method': 'GET', 'path': '/api/domain-characters/<character_id>', 'description': 'Get character details'},
+                    {'method': 'POST', 'path': '/api/domain-characters/route', 'description': 'Route message to character'},
+                    {'method': 'GET', 'path': '/api/domain-characters/history/<character_id>', 'description': 'Get conversation history'},
+                    {'method': 'GET', 'path': '/api/domain-characters/session', 'description': 'Get/create session'},
+                ]
+            },
+            'personality': {
+                'description': 'Personality assessment and profiling',
+                'endpoints': [
+                    {'method': 'GET', 'path': '/api/personality/profile', 'description': 'Get personality profile'},
+                    {'method': 'GET', 'path': '/api/personality/history', 'description': 'Get assessment history'},
+                    {'method': 'GET', 'path': '/api/personality/trends/<trait>', 'description': 'Get trait trends'},
+                    {'method': 'GET', 'path': '/api/personality/stats', 'description': 'Get personality stats'},
+                    {'method': 'POST', 'path': '/personality/assessment/start', 'description': 'Start assessment'},
+                ]
+            },
+            'smart_response': {
+                'description': 'Smart response system analytics',
+                'endpoints': [
+                    {'method': 'GET', 'path': '/api/smart-response/stats', 'description': 'Get smart response statistics'},
+                    {'method': 'GET', 'path': '/api/context/<character>', 'description': 'Get conversation context'},
+                    {'method': 'GET', 'path': '/api/history/<character>', 'description': 'Get dual-layer history'},
+                    {'method': 'GET', 'path': '/api/history/<character>/stats', 'description': 'Get history statistics'},
+                ]
+            },
+            'ai_budget': {
+                'description': 'AI usage budget and cost control',
+                'endpoints': [
+                    {'method': 'GET', 'path': '/api/ai-budget/status', 'description': 'Get current budget status'},
+                    {'method': 'GET', 'path': '/api/ai-budget/notifications', 'description': 'Get budget notifications'},
+                    {'method': 'POST', 'path': '/api/ai-budget/notifications/acknowledge', 'description': 'Acknowledge notification'},
+                    {'method': 'POST', 'path': '/api/ai-budget/reset-circuit-breaker', 'description': 'Reset circuit breaker (admin)'},
+                ]
+            },
+            'admin': {
+                'description': 'Administrative functions (requires admin role)',
+                'endpoints': [
+                    {'method': 'GET', 'path': '/api/admin/users', 'description': 'List all users'},
+                    {'method': 'POST', 'path': '/api/admin/users/<id>/role', 'description': 'Change user role'},
+                    {'method': 'POST', 'path': '/api/admin/users/<id>/permanent-delete', 'description': 'Permanently delete user'},
+                    {'method': 'GET', 'path': '/api/admin/statistics', 'description': 'Get usage statistics'},
+                    {'method': 'GET', 'path': '/api/admin/smart-response-analytics', 'description': 'Get smart response analytics'},
+                    {'method': 'GET', 'path': '/api/admin/background-tasks/status', 'description': 'Get scheduler status'},
+                    {'method': 'POST', 'path': '/api/admin/background-tasks/run', 'description': 'Trigger background task'},
+                    {'method': 'GET', 'path': '/api/admin/ai-errors', 'description': 'Get AI error log'},
+                    {'method': 'GET', 'path': '/api/admin/ai-usage/summary', 'description': 'Get AI usage summary'},
+                    {'method': 'GET', 'path': '/api/admin/patterns/suggestions', 'description': 'Get pattern suggestions'},
+                    {'method': 'GET', 'path': '/api/admin/backup/status', 'description': 'Get backup status'},
+                    {'method': 'POST', 'path': '/api/admin/backup/run', 'description': 'Run backup'},
+                ]
+            },
+            'developer': {
+                'description': 'Developer analytics and debugging (requires developer role)',
+                'endpoints': [
+                    {'method': 'GET', 'path': '/api/developer/metrics', 'description': 'Get system metrics'},
+                    {'method': 'GET', 'path': '/api/developer/ai-calls', 'description': 'Get AI call logs'},
+                    {'method': 'GET', 'path': '/api/developer/user-context', 'description': 'Get user context data'},
+                    {'method': 'GET', 'path': '/api/developer/character-effectiveness', 'description': 'Get character effectiveness'},
+                    {'method': 'GET', 'path': '/api/developer/debug', 'description': 'Get debug info'},
+                    {'method': 'POST', 'path': '/api/developer/query', 'description': 'Run custom SQL query'},
+                    {'method': 'GET', 'path': '/api/developer/health-history', 'description': 'Get health history'},
+                ]
+            }
+        },
+        'authentication': {
+            'type': 'JWT Bearer Token',
+            'header': 'Authorization: Bearer <token>',
+            'obtain_token': 'POST /api/auth/login with {email, password}'
+        },
+        'rate_limits': {
+            'ai_calls_per_day': 100,
+            'ai_calls_per_hour': 30,
+            'messages_per_minute': 20
+        }
+    }
+    return jsonify(api_docs)
+
 # GITHUB WEBHOOK FOR AUTO-DEPLOYMENT (DISABLED - use deploy_anywhere.py instead)
 # Uncomment to enable automatic deployment on GitHub push
 # ============================================================
