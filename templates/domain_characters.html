@@ -678,6 +678,10 @@
                             class="header-action-btn" title="Search messages" style="padding: 6px 10px; font-size: 16px;">
                             🔍
                         </button>
+                        <button id="contextBtn" onclick="ExplicitContextUI.toggle()" 
+                            class="header-action-btn" title="What I know about you" style="padding: 6px 10px; font-size: 16px;">
+                            🧠
+                        </button>
                         <label id="analysisBtn" class="header-action-btn" title="Show AI character analysis" 
                             style="padding: 6px 10px; font-size: 14px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
                             <input type="checkbox" id="showAnalysis" style="margin: 0; cursor: pointer;"> 📊
@@ -704,6 +708,17 @@
                     </div>
                     <div id="highlights-content" class="panel-content">
                         <p class="panel-empty">Loading highlights...</p>
+                    </div>
+                </div>
+                
+                <!-- Explicit Context Panel -->
+                <div id="explicit-context-panel" class="action-panel" style="display: none; background: #fafbfc;">
+                    <div class="panel-header">
+                        <h4>🧠 What I Know About You</h4>
+                        <button onclick="ExplicitContextUI.toggle()" class="panel-close">✕</button>
+                    </div>
+                    <div id="explicit-context-content" class="panel-content">
+                        <p class="panel-empty">Loading your context...</p>
                     </div>
                 </div>
                 
@@ -772,9 +787,11 @@
     <!-- Scripts -->
     <script src="{{ url_for('static', filename='pwa-register.js') }}"></script>
     <script src="{{ url_for('static', filename='auth_helper.js') }}"></script>
-    <script src="{{ url_for('static', filename='message_handler.js') }}"></script>
-    <script src="{{ url_for('static', filename='conversation_box.js') }}"></script>
     <script src="{{ url_for('static', filename='domain_characters.js') }}"></script>
+    <script src="{{ url_for('static', filename='conversation_box.js') }}"></script>
+    <script src="{{ url_for('static', filename='explicit_context_ui.js') }}"></script>
+    <script src="{{ url_for('static', filename='proactive_clarification_ui.js') }}"></script>
+    <script src="{{ url_for('static', filename='ai_budget_notifications.js') }}"></script>
     <script src="{{ url_for('static', filename='greeting_handler.js') }}"></script>
     <script>
         // Initialize when DOM is ready
@@ -1010,6 +1027,22 @@
             
             // Load attachments on init
             loadActiveAttachments();
+            
+            // Initialize Explicit Context UI
+            ExplicitContextUI.init('explicit-context-panel', 'coordinator');
+            
+            // Initialize Proactive Clarification UI
+            ProactiveClarificationUI.init();
+            
+            // Initialize AI Budget Notifications
+            AIBudgetNotifications.init();
+            
+            // Update explicit context when switching characters
+            const origSelectCharForContext = DomainCharacters.selectCharacter;
+            DomainCharacters.selectCharacter = async function(charId) {
+                await origSelectCharForContext.call(DomainCharacters, charId);
+                ExplicitContextUI.setCharacter(charId);
+            };
             
             console.log('✅ Domain Characters page initialized');
         });

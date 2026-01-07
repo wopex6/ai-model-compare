@@ -5072,6 +5072,11 @@ def admin_ai_errors_page():
     """Admin page for viewing AI provider errors - auth handled client-side"""
     return render_template('admin_ai_errors.html')
 
+@app.route('/admin/analytics')
+def admin_analytics_page():
+    """Admin analytics dashboard - auth handled client-side"""
+    return render_template('admin_analytics.html')
+
 
 print("✓ Admin AI Error Log API endpoints registered")
 
