@@ -524,14 +524,15 @@
                 
                 for (let i = 6; i >= 0; i--) {
                     const date = new Date(today);
-                    date.setDate(date.getDate() - i);
+                    date.setDate(today.getDate() - i);
                     const dateStr = date.toLocaleDateString('en-US', { weekday: 'short' });
                     labels.push(dateStr);
                     
-                    // Count calls for this day
-                    const dayStart = new Date(date.setHours(0,0,0,0));
-                    const dayEnd = new Date(date.setHours(23,59,59,999));
+                    // Count calls for this day - create separate date objects
+                    const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
+                    const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
                     const count = callsArray.filter(c => {
+                        if (!c || !c.timestamp) return false;
                         const callDate = new Date(c.timestamp);
                         return callDate >= dayStart && callDate <= dayEnd;
                     }).length;
