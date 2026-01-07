@@ -9,7 +9,7 @@ from playwright.sync_api import sync_playwright
 import time
 
 # Configuration - Use production URL
-BASE_URL = "https://wopex6.pythonanywhere.com"
+BASE_URL = "https://trabcd.pythonanywhere.com"
 ADMIN_USER = "Wai Tse"
 ADMIN_PASSWORD = ".//"
 
