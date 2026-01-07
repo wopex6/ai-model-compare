@@ -466,8 +466,16 @@
                 document.getElementById('task-status').innerHTML = taskHtml || '<p style="color:#888;">No tasks configured</p>';
                 
                 // Load recent AI calls
-                const callsRes = await AuthHelper.authenticatedFetch('/api/developer/ai-calls?limit=10');
-                const calls = await callsRes.json();
+                let calls = [];
+                try {
+                    const callsRes = await AuthHelper.authenticatedFetch('/api/developer/ai-calls?limit=10');
+                    const callsData = await callsRes.json();
+                    // Handle both array response and error object
+                    calls = Array.isArray(callsData) ? callsData : [];
+                } catch (e) {
+                    console.warn('Could not load AI calls:', e);
+                    calls = [];
+                }
                 
                 if (calls && calls.length > 0) {
                     let callsHtml = '<table style="width:100%; font-size: 0.85rem;">';
@@ -508,8 +516,9 @@
         let contextChart = null;
         
         function renderCharts(calls, contextByType) {
-            // Ensure calls is an array
+            // Ensure calls is an array and contextByType is an object
             const callsArray = Array.isArray(calls) ? calls : [];
+            const contextData = (contextByType && typeof contextByType === 'object') ? contextByType : {};
             
             // 1. Usage Chart - Line chart showing AI calls over time
             const usageCtx = document.getElementById('usage-chart');
@@ -580,8 +589,8 @@
                     'intention': 'Intentions'
                 };
                 
-                const chartLabels = Object.keys(contextByType).map(k => typeLabels[k] || k);
-                const chartData = Object.values(contextByType);
+                const chartLabels = Object.keys(contextData).map(k => typeLabels[k] || k);
+                const chartData = Object.values(contextData);
                 const chartColors = ['#667eea', '#764ba2', '#10b981', '#f59e0b', '#ef4444', '#6366f1', '#ec4899'];
                 
                 if (chartLabels.length > 0) {
