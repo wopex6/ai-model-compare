@@ -5516,8 +5516,8 @@ def restore_backup():
     """Restore a database from backup (DANGEROUS - requires confirmation)"""
     try:
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'administrator':
-            return jsonify({'error': 'Administrator access required for restore'}), 403
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required for restore'}), 403
         
         data = request.get_json()
         if not data:
