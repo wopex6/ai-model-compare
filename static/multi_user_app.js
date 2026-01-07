@@ -1086,6 +1086,8 @@ class IntegratedAIChatbot {
         let html = '';
         if (role === 'administrator') {
             html = '<span class="role-badge admin">👑 Administrator - Unlimited</span>';
+        } else if (role === 'developer') {
+            html = '<span class="role-badge admin">🛠️ Developer - Unlimited</span>';
         } else if (role === 'paid') {
             html = '<span class="role-badge paid">💎 Paid User - Unlimited</span>';
         } else {
@@ -1947,7 +1949,7 @@ class IntegratedAIChatbot {
         
         // Check if user has personality access
         const hasPersonalityAccess = this.currentUser && 
-            (this.currentUser.role === 'master' || this.currentUser.role === 'administrator');
+            (this.currentUser.role === 'master' || this.currentUser.role === 'administrator' || this.currentUser.role === 'developer');
         
         // If user has access, fetch interpretation counts for conversations
         let interpretationCounts = {};
