@@ -3535,8 +3535,8 @@ def update_explicit_context(context_id):
 
 @app.route('/api/explicit-context/<int:context_id>', methods=['DELETE'])
 @require_auth
-def delete_explicit_context(context_id):
-    """Delete (deactivate) an explicit context item"""
+def delete_explicit_context_legacy(context_id):
+    """Delete (deactivate) an explicit context item (legacy endpoint)"""
     try:
         user_id = request.current_user['user_id']
         
