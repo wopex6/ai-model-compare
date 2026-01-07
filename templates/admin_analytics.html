@@ -348,117 +348,105 @@
     <script>
         async function loadAllData() {
             try {
-                // Load all data in parallel
-                const [statsRes, budgetRes, analyticsRes, tasksRes] = await Promise.all([
+                // Load all data in parallel with individual error handling
+                const results = await Promise.allSettled([
                     AuthHelper.authenticatedFetch('/api/admin/statistics'),
                     AuthHelper.authenticatedFetch('/api/ai-budget/status'),
                     AuthHelper.authenticatedFetch('/api/admin/smart-response-analytics'),
                     AuthHelper.authenticatedFetch('/api/admin/background-tasks/status')
                 ]);
                 
-                const stats = await statsRes.json();
-                const budget = await budgetRes.json();
-                const analytics = await analyticsRes.json();
-                const tasks = await tasksRes.json();
+                const stats = results[0].status === 'fulfilled' ? await results[0].value.json().catch(() => ({})) : {};
+                const budget = results[1].status === 'fulfilled' ? await results[1].value.json().catch(() => ({})) : {};
+                const analytics = results[2].status === 'fulfilled' ? await results[2].value.json().catch(() => ({})) : {};
+                const tasks = results[3].status === 'fulfilled' ? await results[3].value.json().catch(() => ({})) : {};
                 
                 // Update stats
-                if (stats.total_users !== undefined) {
-                    document.getElementById('total-users').textContent = stats.total_users.toLocaleString();
-                }
-                if (stats.total_messages !== undefined) {
-                    document.getElementById('total-messages').textContent = stats.total_messages.toLocaleString();
-                }
+                document.getElementById('total-users').textContent = stats.total_users !== undefined ? stats.total_users.toLocaleString() : '0';
+                document.getElementById('total-messages').textContent = stats.total_messages !== undefined ? stats.total_messages.toLocaleString() : '0';
                 
                 // Update budget
-                if (budget.daily_usage !== undefined) {
-                    const usage = budget.daily_usage;
-                    const limit = budget.daily_limit || 100;
-                    const percent = Math.min((usage / limit) * 100, 100);
-                    
-                    document.getElementById('ai-calls-today').textContent = usage;
-                    document.getElementById('budget-label').textContent = `${usage} / ${limit}`;
-                    document.getElementById('budget-limit').textContent = `/ ${limit} calls`;
-                    
-                    const fill = document.getElementById('budget-fill');
-                    fill.style.width = percent + '%';
-                    fill.className = 'budget-fill ' + (percent < 60 ? 'safe' : percent < 85 ? 'warning' : 'danger');
-                    
-                    const statusText = percent < 60 ? 'Normal usage' : percent < 85 ? 'Approaching limit' : 'Near limit!';
-                    const statusClass = percent < 60 ? 'positive' : 'negative';
-                    document.getElementById('ai-budget-status').innerHTML = `<span class="${statusClass}">${statusText}</span>`;
-                }
+                const usage = budget.daily_usage || 0;
+                const limit = budget.daily_limit || 100;
+                const percent = Math.min((usage / limit) * 100, 100);
                 
-                // Update analytics
-                if (analytics) {
-                    // Context items count
-                    if (analytics.explicit_context_stats) {
-                        document.getElementById('context-items').textContent = 
-                            (analytics.explicit_context_stats.total_items || 0).toLocaleString();
-                        
-                        // Context by type
-                        const byType = analytics.explicit_context_stats.by_type || {};
-                        const typeLabels = {
-                            'goal': '🎯 Goals',
-                            'preference': '⚙️ Preferences',
-                            'emotional_state': '💭 Feelings',
-                            'value': '💎 Values',
-                            'need': '🤝 Needs',
-                            'self_description': '👤 About',
-                            'intention': '📋 Intentions'
-                        };
-                        
-                        let typeHtml = '';
-                        for (const [type, count] of Object.entries(byType)) {
-                            typeHtml += `
-                                <div class="context-type-item">
-                                    <div class="count">${count}</div>
-                                    <div class="label">${typeLabels[type] || type}</div>
-                                </div>
-                            `;
-                        }
-                        document.getElementById('context-types').innerHTML = typeHtml || '<p style="color:#888;">No context data</p>';
-                    }
-                    
-                    // Character effectiveness
-                    if (analytics.character_stats && analytics.character_stats.effectiveness) {
-                        const effectiveness = analytics.character_stats.effectiveness;
-                        let charHtml = '';
-                        
-                        const colors = ['#667eea', '#764ba2', '#10b981', '#f59e0b', '#ef4444', '#6366f1', '#ec4899', '#14b8a6'];
-                        let colorIdx = 0;
-                        
-                        for (const [char, score] of Object.entries(effectiveness).sort((a,b) => b[1] - a[1])) {
-                            const percent = Math.round(score * 100);
-                            charHtml += `
-                                <div class="char-row">
-                                    <div class="char-name">${char}</div>
-                                    <div class="char-bar-container">
-                                        <div class="char-bar" style="width: ${percent}%; background: ${colors[colorIdx % colors.length]};">
-                                            ${percent}%
-                                        </div>
-                                    </div>
-                                </div>
-                            `;
-                            colorIdx++;
-                        }
-                        document.getElementById('char-effectiveness').innerHTML = charHtml || '<p style="color:#888;">No character data</p>';
-                    }
+                document.getElementById('ai-calls-today').textContent = usage;
+                document.getElementById('budget-label').textContent = `${usage} / ${limit}`;
+                document.getElementById('budget-limit').textContent = `/ ${limit} calls`;
+                
+                const fill = document.getElementById('budget-fill');
+                fill.style.width = percent + '%';
+                fill.className = 'budget-fill ' + (percent < 60 ? 'safe' : percent < 85 ? 'warning' : 'danger');
+                
+                const statusText = percent < 60 ? 'Normal usage' : percent < 85 ? 'Approaching limit' : 'Near limit!';
+                const statusClass = percent < 60 ? 'positive' : 'negative';
+                document.getElementById('ai-budget-status').innerHTML = `<span class="${statusClass}">${statusText}</span>`;
+                
+                // Update analytics - always update to clear loading state
+                // Context items count
+                const contextStats = analytics.explicit_context_stats || {};
+                document.getElementById('context-items').textContent = (contextStats.total_items || 0).toLocaleString();
+                
+                // Context by type
+                const byType = contextStats.by_type || {};
+                const typeLabels = {
+                    'goal': '🎯 Goals',
+                    'preference': '⚙️ Preferences',
+                    'emotional_state': '💭 Feelings',
+                    'value': '💎 Values',
+                    'need': '🤝 Needs',
+                    'self_description': '👤 About',
+                    'intention': '📋 Intentions'
+                };
+                
+                let typeHtml = '';
+                for (const [type, count] of Object.entries(byType)) {
+                    typeHtml += `
+                        <div class="context-type-item">
+                            <div class="count">${count}</div>
+                            <div class="label">${typeLabels[type] || type}</div>
+                        </div>
+                    `;
                 }
+                document.getElementById('context-types').innerHTML = typeHtml || '<p style="color:#888;">No context data</p>';
+                
+                // Character effectiveness
+                const charStats = analytics.character_stats || {};
+                const effectiveness = charStats.effectiveness || {};
+                let charHtml = '';
+                
+                const colors = ['#667eea', '#764ba2', '#10b981', '#f59e0b', '#ef4444', '#6366f1', '#ec4899', '#14b8a6'];
+                let colorIdx = 0;
+                
+                for (const [char, score] of Object.entries(effectiveness).sort((a,b) => b[1] - a[1])) {
+                    const percent = Math.round(score * 100);
+                    charHtml += `
+                        <div class="char-row">
+                            <div class="char-name">${char}</div>
+                            <div class="char-bar-container">
+                                <div class="char-bar" style="width: ${percent}%; background: ${colors[colorIdx % colors.length]};">
+                                    ${percent}%
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    colorIdx++;
+                }
+                document.getElementById('char-effectiveness').innerHTML = charHtml || '<p style="color:#888;">No character data</p>';
                 
                 // Update tasks
-                if (tasks && tasks.tasks) {
-                    let taskHtml = '';
-                    for (const [name, info] of Object.entries(tasks.tasks)) {
-                        const status = info.running ? 'running' : 'pending';
-                        const icon = info.running ? 'fa-spinner fa-spin' : 'fa-clock';
-                        taskHtml += `
-                            <div class="task-badge ${status}">
-                                <i class="fas ${icon}"></i> ${name}
-                            </div>
-                        `;
-                    }
-                    document.getElementById('task-status').innerHTML = taskHtml || '<p style="color:#888;">No tasks</p>';
+                let taskHtml = '';
+                const taskList = (tasks && tasks.tasks) ? tasks.tasks : {};
+                for (const [name, info] of Object.entries(taskList)) {
+                    const status = info.running ? 'running' : 'pending';
+                    const icon = info.running ? 'fa-spinner fa-spin' : 'fa-clock';
+                    taskHtml += `
+                        <div class="task-badge ${status}">
+                            <i class="fas ${icon}"></i> ${name}
+                        </div>
+                    `;
                 }
+                document.getElementById('task-status').innerHTML = taskHtml || '<p style="color:#888;">No tasks configured</p>';
                 
                 // Load recent AI calls
                 const callsRes = await AuthHelper.authenticatedFetch('/api/developer/ai-calls?limit=10');
