@@ -508,6 +508,9 @@
         let contextChart = null;
         
         function renderCharts(calls, contextByType) {
+            // Ensure calls is an array
+            const callsArray = Array.isArray(calls) ? calls : [];
+            
             // 1. Usage Chart - Line chart showing AI calls over time
             const usageCtx = document.getElementById('usage-chart');
             if (usageCtx) {
@@ -528,7 +531,7 @@
                     // Count calls for this day
                     const dayStart = new Date(date.setHours(0,0,0,0));
                     const dayEnd = new Date(date.setHours(23,59,59,999));
-                    const count = calls.filter(c => {
+                    const count = callsArray.filter(c => {
                         const callDate = new Date(c.timestamp);
                         return callDate >= dayStart && callDate <= dayEnd;
                     }).length;

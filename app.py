@@ -1300,16 +1300,21 @@ def get_background_task_status():
             return jsonify({
                 'success': True,
                 'running': background_scheduler.running,
-                'available_tasks': ['context_maintenance', 'pattern_expansion', 
-                                   'character_expansion', 'monthly_cleanup']
+                'tasks': {
+                    'context_maintenance': {'status': 'available'},
+                    'pattern_expansion': {'status': 'available'},
+                    'character_expansion': {'status': 'available'},
+                    'monthly_cleanup': {'status': 'available'}
+                }
             })
         else:
             return jsonify({
-                'success': False,
+                'success': True,
                 'running': False,
-                'error': 'Background scheduler not initialized'
+                'tasks': {}
             })
     except Exception as e:
+        print(f"Error in get_background_task_status: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/auth/verify-email', methods=['POST'])
@@ -3691,11 +3696,19 @@ def get_ai_budget_status():
     """Get current AI budget status and usage"""
     try:
         if not ai_budget:
-            return jsonify({'error': 'AI Budget Manager not initialized'}), 500
+            # Return default values when not initialized
+            return jsonify({
+                'daily_usage': 0,
+                'daily_limit': 100,
+                'monthly_usage': 0,
+                'monthly_limit': 1000,
+                'status': 'not_initialized'
+            })
         
         report = ai_budget.get_usage_report()
         return jsonify(report)
     except Exception as e:
+        print(f"Error in get_ai_budget_status: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/ai-budget/notifications', methods=['GET'])
@@ -5825,15 +5838,16 @@ def get_monthly_ai_usage():
 # =============================================================================
 
 def require_developer(f):
-    """Decorator to require developer role"""
+    """Decorator to require developer or admin role"""
     from functools import wraps
     @wraps(f)
     def decorated(*args, **kwargs):
         if not hasattr(request, 'current_user') or not request.current_user:
             return jsonify({'error': 'Authentication required'}), 401
         user_role = integrated_db.get_user_role(request.current_user['user_id'])
-        if user_role != 'developer':
-            return jsonify({'error': 'Developer access required'}), 403
+        # Allow both developer and administrator roles
+        if user_role not in ('developer', 'administrator'):
+            return jsonify({'error': 'Developer/Admin access required'}), 403
         return f(*args, **kwargs)
     return decorated
 

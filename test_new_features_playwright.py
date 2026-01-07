@@ -11,7 +11,7 @@ import time
 # Configuration - Use production URL
 BASE_URL = "https://trabcd.pythonanywhere.com"
 ADMIN_USER = "Wai Tse"
-ADMIN_PASSWORD = ".//"
+ADMIN_PASSWORD = "123"
 
 def test_all_features():
     """Test all new features"""
@@ -108,18 +108,18 @@ def test_all_features():
             print("🧠 STEP 3: TEST EXPLICIT CONTEXT UI")
             print("="*60)
             
-            page.goto(f"{BASE_URL}/domain-characters", timeout=15000)
-            time.sleep(3)
+            page.goto(f"{BASE_URL}/life-companion", timeout=15000)
+            time.sleep(4)  # Wait for page to fully load
             
-            # Look for context button in header
-            context_btn = page.query_selector("#context-btn, .context-btn, [data-action='context']")
+            # Look for context button with correct ID
+            context_btn = page.query_selector("#contextBtn")
             if context_btn:
-                print("✅ Context button found in header")
+                print("✅ Context button found (#contextBtn)")
                 context_btn.click()
                 time.sleep(1)
                 
                 # Check if context panel appeared
-                context_panel = page.query_selector("#explicit-context-panel, .explicit-context-panel")
+                context_panel = page.query_selector("#explicit-context-panel")
                 if context_panel:
                     is_visible = context_panel.is_visible()
                     print(f"✅ Context panel visible: {is_visible}")
@@ -127,18 +127,16 @@ def test_all_features():
                 else:
                     print("⚠️  Context panel not found after click")
             else:
-                # Try alternative selector
-                print("⚠️  Context button not found with primary selector, trying alternatives...")
-                all_btns = page.query_selector_all(".header-action-btn")
-                for btn in all_btns:
-                    title = btn.get_attribute("title") or ""
-                    text = btn.inner_text()
-                    if "context" in title.lower() or "🧠" in text:
-                        print(f"✅ Found context button: {title or text}")
-                        btn.click()
-                        time.sleep(1)
-                        results["explicit_context_ui"] = True
-                        break
+                # Try alternative - look for brain emoji button
+                print("⚠️  #contextBtn not found, trying alternatives...")
+                brain_btn = page.query_selector("button:has-text('🧠')")
+                if brain_btn:
+                    print("✅ Found brain emoji button")
+                    brain_btn.click()
+                    time.sleep(1)
+                    results["explicit_context_ui"] = True
+                else:
+                    print("❌ Context button not found")
             
             page.screenshot(path="test_explicit_context.png")
             print("📸 Screenshot saved: test_explicit_context.png")
