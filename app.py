@@ -2460,11 +2460,20 @@ def get_pending_greetings():
     try:
         user_id = request.current_user['user_id']
         since_param = request.args.get('since')
-        since = datetime.fromisoformat(since_param) if since_param else None
+        since = None
+        if since_param:
+            # Handle ISO format with 'Z' suffix (UTC)
+            since_str = since_param.replace('Z', '+00:00')
+            try:
+                since = datetime.fromisoformat(since_str)
+            except ValueError:
+                # Fallback: ignore invalid date
+                since = None
         
         greetings = greeting_system.get_pending_greetings(user_id, since)
         return jsonify({'success': True, 'greetings': greetings})
     except Exception as e:
+        print(f"Error in get_pending_greetings: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/greetings/activity', methods=['POST'])
