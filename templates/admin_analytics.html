@@ -521,10 +521,20 @@
             const contextData = (contextByType && typeof contextByType === 'object') ? contextByType : {};
             
             // 1. Usage Chart - Line chart showing AI calls over time
-            const usageCtx = document.getElementById('usage-chart');
-            if (usageCtx) {
-                // Destroy existing chart if present
-                if (usageChart) usageChart.destroy();
+            const usageCanvas = document.getElementById('usage-chart');
+            if (usageCanvas) {
+                // Properly destroy and reset canvas
+                if (usageChart) {
+                    usageChart.destroy();
+                    usageChart = null;
+                }
+                // Reset canvas dimensions to prevent expansion
+                const parent = usageCanvas.parentElement;
+                usageCanvas.remove();
+                const newCanvas = document.createElement('canvas');
+                newCanvas.id = 'usage-chart';
+                newCanvas.height = 200;
+                parent.appendChild(newCanvas);
                 
                 // Group calls by date (last 7 days)
                 const today = new Date();
@@ -548,7 +558,7 @@
                     dataPoints.push(count);
                 }
                 
-                usageChart = new Chart(usageCtx, {
+                usageChart = new Chart(newCanvas, {
                     type: 'line',
                     data: {
                         labels: labels,
@@ -583,9 +593,19 @@
             }
             
             // 2. Context Distribution - Doughnut chart
-            const contextCtx = document.getElementById('context-chart');
-            if (contextCtx) {
-                if (contextChart) contextChart.destroy();
+            const contextCanvas = document.getElementById('context-chart');
+            if (contextCanvas) {
+                // Properly destroy and reset canvas
+                if (contextChart) {
+                    contextChart.destroy();
+                    contextChart = null;
+                }
+                const ctxParent = contextCanvas.parentElement;
+                contextCanvas.remove();
+                const newContextCanvas = document.createElement('canvas');
+                newContextCanvas.id = 'context-chart';
+                newContextCanvas.height = 200;
+                ctxParent.appendChild(newContextCanvas);
                 
                 const typeLabels = {
                     'goal': 'Goals',
@@ -602,7 +622,7 @@
                 const chartColors = ['#667eea', '#764ba2', '#10b981', '#f59e0b', '#ef4444', '#6366f1', '#ec4899'];
                 
                 if (chartLabels.length > 0) {
-                    contextChart = new Chart(contextCtx, {
+                    contextChart = new Chart(newContextCanvas, {
                         type: 'doughnut',
                         data: {
                             labels: chartLabels,
@@ -625,7 +645,7 @@
                         }
                     });
                 } else {
-                    contextCtx.parentElement.innerHTML = '<p style="color:#888; text-align:center; padding:40px;">No context data available</p>';
+                    ctxParent.innerHTML = '<p style="color:#888; text-align:center; padding:40px;">No context data available</p>';
                 }
             }
         }
