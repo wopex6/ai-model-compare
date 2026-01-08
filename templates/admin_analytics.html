@@ -292,13 +292,17 @@
             <div class="col-md-6">
                 <div class="chart-card">
                     <h3><i class="fas fa-chart-line"></i> AI Usage (Last 7 Days)</h3>
-                    <canvas id="usage-chart" height="200"></canvas>
+                    <div id="usage-chart-container" style="position: relative; height: 200px; width: 100%;">
+                        <canvas id="usage-chart"></canvas>
+                    </div>
                 </div>
             </div>
             <div class="col-md-6">
                 <div class="chart-card">
                     <h3><i class="fas fa-chart-pie"></i> Context Distribution</h3>
-                    <canvas id="context-chart" height="200"></canvas>
+                    <div id="context-chart-container" style="position: relative; height: 200px; width: 100%;">
+                        <canvas id="context-chart"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
@@ -521,20 +525,17 @@
             const contextData = (contextByType && typeof contextByType === 'object') ? contextByType : {};
             
             // 1. Usage Chart - Line chart showing AI calls over time
-            const usageCanvas = document.getElementById('usage-chart');
-            if (usageCanvas) {
-                // Properly destroy and reset canvas
+            const usageContainer = document.getElementById('usage-chart-container');
+            if (usageContainer) {
+                // Destroy existing chart
                 if (usageChart) {
                     usageChart.destroy();
                     usageChart = null;
                 }
-                // Reset canvas dimensions to prevent expansion
-                const parent = usageCanvas.parentElement;
-                usageCanvas.remove();
-                const newCanvas = document.createElement('canvas');
-                newCanvas.id = 'usage-chart';
-                newCanvas.height = 200;
-                parent.appendChild(newCanvas);
+                
+                // Clear container and create fresh canvas
+                usageContainer.innerHTML = '<canvas id="usage-chart"></canvas>';
+                const usageCanvas = document.getElementById('usage-chart');
                 
                 // Group calls by date (last 7 days)
                 const today = new Date();
@@ -547,7 +548,7 @@
                     const dateStr = date.toLocaleDateString('en-US', { weekday: 'short' });
                     labels.push(dateStr);
                     
-                    // Count calls for this day - create separate date objects
+                    // Count calls for this day
                     const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
                     const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
                     const count = callsArray.filter(c => {
@@ -558,7 +559,8 @@
                     dataPoints.push(count);
                 }
                 
-                usageChart = new Chart(newCanvas, {
+                const maxVal = Math.max(...dataPoints, 1);
+                usageChart = new Chart(usageCanvas, {
                     type: 'line',
                     data: {
                         labels: labels,
@@ -581,7 +583,7 @@
                         scales: {
                             y: { 
                                 beginAtZero: true,
-                                suggestedMax: Math.max(10, Math.max(...dataPoints) + 2),
+                                max: maxVal + 2,
                                 ticks: {
                                     stepSize: 1,
                                     precision: 0
@@ -593,19 +595,13 @@
             }
             
             // 2. Context Distribution - Doughnut chart
-            const contextCanvas = document.getElementById('context-chart');
-            if (contextCanvas) {
-                // Properly destroy and reset canvas
+            const contextContainer = document.getElementById('context-chart-container');
+            if (contextContainer) {
+                // Destroy existing chart
                 if (contextChart) {
                     contextChart.destroy();
                     contextChart = null;
                 }
-                const ctxParent = contextCanvas.parentElement;
-                contextCanvas.remove();
-                const newContextCanvas = document.createElement('canvas');
-                newContextCanvas.id = 'context-chart';
-                newContextCanvas.height = 200;
-                ctxParent.appendChild(newContextCanvas);
                 
                 const typeLabels = {
                     'goal': 'Goals',
@@ -622,7 +618,11 @@
                 const chartColors = ['#667eea', '#764ba2', '#10b981', '#f59e0b', '#ef4444', '#6366f1', '#ec4899'];
                 
                 if (chartLabels.length > 0) {
-                    contextChart = new Chart(newContextCanvas, {
+                    // Clear container and create fresh canvas
+                    contextContainer.innerHTML = '<canvas id="context-chart"></canvas>';
+                    const contextCanvas = document.getElementById('context-chart');
+                    
+                    contextChart = new Chart(contextCanvas, {
                         type: 'doughnut',
                         data: {
                             labels: chartLabels,
@@ -636,6 +636,7 @@
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
+                            animation: false,
                             plugins: {
                                 legend: {
                                     position: 'right',
@@ -645,7 +646,7 @@
                         }
                     });
                 } else {
-                    ctxParent.innerHTML = '<p style="color:#888; text-align:center; padding:40px;">No context data available</p>';
+                    contextContainer.innerHTML = '<p style="color:#888; text-align:center; padding:40px;">No context data available</p>';
                 }
             }
         }
