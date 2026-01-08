@@ -25,6 +25,7 @@ class AIBudgetManager:
     """
     
     # HARD LIMITS (as per user requirements)
+    DAILY_CALL_LIMIT = 100  # Default daily limit (for reports)
     DAILY_CALL_LIMIT_USER = 100  # Maximum 100 calls/day per regular user
     DAILY_CALL_LIMIT_ADMIN = 1000  # Maximum 1000 calls/day per admin
     SYSTEM_DAILY_CAP = 2000  # Maximum 2000 calls/day SYSTEM-WIDE

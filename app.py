@@ -218,6 +218,7 @@ personality_assessment_ui = PersonalityAssessmentUI(personality_profiler)
 user_profile_manager = UserProfileManager()
 
 # Initialize Smart Response System with Context Manager, Dual-Layer History, and AI Budget Manager
+background_scheduler = None  # Will be initialized if available
 try:
     from smart_response.handler import SmartResponseHandler
     from smart_response.conversation_context import ConversationContextManager
@@ -298,6 +299,7 @@ except Exception as e:
     explicit_context_handler = None
     domain_character_manager = None
     domain_character_ai = None
+    background_scheduler = None
     previous_interactions = {}
     message_histories = {}
 
