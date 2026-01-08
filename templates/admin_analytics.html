@@ -258,6 +258,43 @@
     <div class="dashboard-container">
         <div id="error-container"></div>
         
+        <!-- Filters and Export Row -->
+        <div class="row" style="margin-bottom: 20px;">
+            <div class="col-md-8">
+                <div class="stat-card" style="padding: 15px;">
+                    <div style="display: flex; align-items: center; gap: 15px; flex-wrap: wrap;">
+                        <label style="font-weight: 500; color: #666;">
+                            <i class="fas fa-calendar"></i> Date Range:
+                        </label>
+                        <select id="date-range" onchange="loadAllData()" style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px;">
+                            <option value="7">Last 7 Days</option>
+                            <option value="14">Last 14 Days</option>
+                            <option value="30">Last 30 Days</option>
+                            <option value="90">Last 90 Days</option>
+                        </select>
+                        <label style="font-weight: 500; color: #666; margin-left: 20px;">
+                            <i class="fas fa-filter"></i> User:
+                        </label>
+                        <select id="user-filter" onchange="loadAllData()" style="padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px;">
+                            <option value="">All Users</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="stat-card" style="padding: 15px;">
+                    <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                        <button onclick="exportToCSV()" class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-download"></i> Export CSV
+                        </button>
+                        <button onclick="printReport()" class="btn btn-outline-secondary btn-sm">
+                            <i class="fas fa-print"></i> Print Report
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
         <!-- Top Stats Row -->
         <div class="row" id="stats-row">
             <div class="col-md-3">
@@ -283,6 +320,35 @@
                 <div class="stat-card">
                     <h3><i class="fas fa-brain" style="color: var(--secondary);"></i> Context Items</h3>
                     <div class="stat-value" id="context-items">-</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Secondary Stats Row -->
+        <div class="row" id="secondary-stats-row">
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <h3><i class="fas fa-user-clock" style="color: #8b5cf6;"></i> Active Today</h3>
+                    <div class="stat-value" id="active-today">-</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <h3><i class="fas fa-exclamation-triangle" style="color: var(--danger);"></i> Errors Today</h3>
+                    <div class="stat-value" id="errors-today">-</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <h3><i class="fas fa-clock" style="color: #06b6d4;"></i> Avg Response</h3>
+                    <div class="stat-value" id="avg-response">-</div>
+                    <div class="stat-change" style="color: #888;">milliseconds</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stat-card">
+                    <h3><i class="fas fa-dollar-sign" style="color: var(--success);"></i> Est. Cost Today</h3>
+                    <div class="stat-value" id="cost-today">-</div>
                 </div>
             </div>
         </div>
@@ -387,13 +453,21 @@
                 document.getElementById('total-messages').textContent = stats.total_messages !== undefined ? stats.total_messages.toLocaleString() : '0';
                 
                 // Update budget
-                const usage = budget.daily_usage || 0;
-                const limit = budget.daily_limit || 100;
+                const usage = budget.today?.calls || budget.daily_usage || 0;
+                const limit = budget.today?.limit || budget.daily_limit || 100;
                 const percent = Math.min((usage / limit) * 100, 100);
+                const costToday = budget.today?.cost || 0;
+                const errorsToday = budget.today?.errors || 0;
                 
                 document.getElementById('ai-calls-today').textContent = usage;
                 document.getElementById('budget-label').textContent = `${usage} / ${limit}`;
                 document.getElementById('budget-limit').textContent = `/ ${limit} calls`;
+                
+                // Update secondary stats
+                document.getElementById('active-today').textContent = stats.active_today || stats.total_users || '0';
+                document.getElementById('errors-today').textContent = errorsToday;
+                document.getElementById('avg-response').textContent = stats.avg_response_ms || '-';
+                document.getElementById('cost-today').textContent = `$${costToday.toFixed(2)}`;
                 
                 const fill = document.getElementById('budget-fill');
                 fill.style.width = percent + '%';
@@ -651,8 +725,62 @@
             }
         }
         
+        // Store data for export
+        let analyticsData = {};
+        
+        // Export to CSV
+        function exportToCSV() {
+            const rows = [
+                ['Metric', 'Value', 'Date'],
+                ['Total Users', document.getElementById('total-users').textContent, new Date().toISOString()],
+                ['Total Messages', document.getElementById('total-messages').textContent, new Date().toISOString()],
+                ['AI Calls Today', document.getElementById('ai-calls-today').textContent, new Date().toISOString()],
+                ['Context Items', document.getElementById('context-items').textContent, new Date().toISOString()],
+                ['Active Today', document.getElementById('active-today').textContent, new Date().toISOString()],
+                ['Errors Today', document.getElementById('errors-today').textContent, new Date().toISOString()],
+                ['Avg Response (ms)', document.getElementById('avg-response').textContent, new Date().toISOString()],
+                ['Est. Cost Today', document.getElementById('cost-today').textContent, new Date().toISOString()]
+            ];
+            
+            const csvContent = rows.map(r => r.join(',')).join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `analytics_${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+        
+        // Print report
+        function printReport() {
+            window.print();
+        }
+        
+        // Load user list for filter
+        async function loadUserFilter() {
+            try {
+                const res = await AuthHelper.authenticatedFetch('/api/admin/statistics');
+                const data = await res.json();
+                if (data.users) {
+                    const select = document.getElementById('user-filter');
+                    data.users.forEach(u => {
+                        const opt = document.createElement('option');
+                        opt.value = u.id;
+                        opt.textContent = u.username;
+                        select.appendChild(opt);
+                    });
+                }
+            } catch (e) {
+                console.warn('Could not load user list:', e);
+            }
+        }
+        
         // Load on page load
-        document.addEventListener('DOMContentLoaded', loadAllData);
+        document.addEventListener('DOMContentLoaded', () => {
+            loadAllData();
+            loadUserFilter();
+        });
         
         // Auto-refresh every 30 seconds
         setInterval(loadAllData, 30000);
