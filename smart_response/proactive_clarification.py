@@ -86,6 +86,35 @@ class ProactiveClarificationSystem:
         r'\b(better|worse|more|less)\b(?!\s+than)',  # Comparative without reference
     ]
     
+    # Emotional distress indicators (trigger supportive clarification)
+    DISTRESS_INDICATORS = [
+        r'\b(overwhelmed|stressed|anxious|depressed|hopeless)\b',
+        r'\b(can\'t cope|too much|falling apart|breaking down)\b',
+        r'\b(don\'t know what to do|lost|stuck|trapped)\b',
+        r'\b(everything is|nothing works|always|never)\b',
+    ]
+    
+    # Decision-making indicators (trigger option exploration)
+    DECISION_INDICATORS = [
+        r'\b(should i|which one|what if|either|or)\b',
+        r'\b(deciding|choose|pick|option|alternative)\b',
+        r'\b(pros and cons|trade-?off|weighing)\b',
+    ]
+    
+    # Goal-setting indicators (trigger specificity questions)
+    GOAL_INDICATORS = [
+        r'\b(i want to|i need to|i\'m trying to|my goal)\b',
+        r'\b(i wish|i hope|dream of|aspire)\b',
+        r'\b(achieve|accomplish|reach|attain)\b',
+    ]
+    
+    # Relationship indicators (trigger context questions)
+    RELATIONSHIP_INDICATORS = [
+        r'\b(my (partner|spouse|husband|wife|boyfriend|girlfriend))\b',
+        r'\b(my (boss|colleague|coworker|friend|family))\b',
+        r'\b(relationship|marriage|dating|breakup)\b',
+    ]
+    
     # Missing context indicators
     CONTEXT_GAPS = {
         'timeframe': [
@@ -133,6 +162,27 @@ class ProactiveClarificationSystem:
         'clarify_reference': [
             "When you mention '{reference}', could you tell me more about that?",
             "I want to make sure I understand - what do you mean by '{reference}'?",
+        ],
+        # New template categories
+        'distress_support': [
+            "That sounds really difficult. What would be most helpful for you right now - someone to listen, or to explore some options?",
+            "I hear you. Before we dive in, what's weighing on you most heavily?",
+            "It sounds like you're going through a lot. What feels most urgent to address?",
+        ],
+        'decision_explore': [
+            "What factors are most important to you in making this decision?",
+            "Have you considered what the best and worst outcomes might be for each option?",
+            "What's holding you back from deciding right now?",
+        ],
+        'goal_specificity': [
+            "That's a great goal! What would be the first sign that you're making progress?",
+            "What's been stopping you from achieving this so far?",
+            "How will you know when you've succeeded?",
+        ],
+        'relationship_context': [
+            "How long have you been dealing with this situation?",
+            "What's the dynamic typically like between you two?",
+            "Have you talked to them about how you feel?",
         ],
     }
     
@@ -273,14 +323,36 @@ class ProactiveClarificationSystem:
         # Prioritize by what's most unclear
         gaps = []
         
-        if confidence.goal_clarity < 0.6:
-            gaps.append(('goal', ClarificationReason.AMBIGUOUS_GOAL, ImportanceLevel.HIGH))
+        # Check for emotional distress first (highest priority)
+        has_distress = any(re.search(p, message_lower) for p in self.DISTRESS_INDICATORS)
+        if has_distress:
+            gaps.append(('distress_support', ClarificationReason.EMOTIONAL_UNCERTAINTY, ImportanceLevel.CRITICAL))
         
-        if confidence.context_sufficiency < 0.5:
-            gaps.append(('context', ClarificationReason.MISSING_CONTEXT, ImportanceLevel.NORMAL))
+        # Check for decision-making context
+        has_decision = any(re.search(p, message_lower) for p in self.DECISION_INDICATORS)
+        if has_decision and confidence.action_clarity < 0.7:
+            gaps.append(('decision_explore', ClarificationReason.UNCLEAR_PRIORITY, ImportanceLevel.HIGH))
         
-        if confidence.action_clarity < 0.5:
-            gaps.append(('priority', ClarificationReason.UNCLEAR_PRIORITY, ImportanceLevel.NORMAL))
+        # Check for goal-setting context
+        has_goal = any(re.search(p, message_lower) for p in self.GOAL_INDICATORS)
+        if has_goal and confidence.goal_clarity < 0.7:
+            gaps.append(('goal_specificity', ClarificationReason.AMBIGUOUS_GOAL, ImportanceLevel.HIGH))
+        
+        # Check for relationship context
+        has_relationship = any(re.search(p, message_lower) for p in self.RELATIONSHIP_INDICATORS)
+        if has_relationship and confidence.context_sufficiency < 0.6:
+            gaps.append(('relationship_context', ClarificationReason.MISSING_CONTEXT, ImportanceLevel.HIGH))
+        
+        # Standard clarity checks (lower priority if specific triggers found)
+        if not gaps:
+            if confidence.goal_clarity < 0.6:
+                gaps.append(('goal', ClarificationReason.AMBIGUOUS_GOAL, ImportanceLevel.HIGH))
+            
+            if confidence.context_sufficiency < 0.5:
+                gaps.append(('context', ClarificationReason.MISSING_CONTEXT, ImportanceLevel.NORMAL))
+            
+            if confidence.action_clarity < 0.5:
+                gaps.append(('priority', ClarificationReason.UNCLEAR_PRIORITY, ImportanceLevel.NORMAL))
         
         # Check for vague references that need clarification
         vague_refs = re.findall(r'\b(this|that|it)\s+(\w+)', message_lower)
