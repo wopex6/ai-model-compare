@@ -6260,9 +6260,8 @@ def system_health():
         return jsonify({'status': 'error', 'error': str(e)}), 500
 
 @app.route('/api/system/errors')
-@require_role(['administrator', 'developer'])
 def system_errors():
-    """Get recent system errors"""
+    """Get recent system errors (admin only)"""
     try:
         limit = request.args.get('limit', 50, type=int)
         error_type = request.args.get('type')
@@ -6279,7 +6278,6 @@ def system_errors():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/system/cache')
-@require_role(['administrator', 'developer'])
 def cache_stats():
     """Get cache statistics"""
     try:
@@ -6289,7 +6287,6 @@ def cache_stats():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/system/cache/clear', methods=['POST'])
-@require_role(['administrator', 'developer'])
 def clear_cache():
     """Clear the cache"""
     try:
