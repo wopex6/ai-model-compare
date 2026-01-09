@@ -61,11 +61,23 @@ from smart_response.handler import SmartResponseHandler
 from smart_response.characters import CharacterManager, DOMAIN_CHARACTER_CONFIGS, create_ai_integration
 # Import User Personalization System
 from smart_response.user_personalization import UserPersonalization
-# Import new modules
-from smart_response.cache_manager import get_cache, cached
-from smart_response.rate_limiter import get_rate_limiter, InputValidator, get_csrf
-from smart_response.monitoring import get_error_tracker, get_uptime_monitor, get_alert_manager, track_error
-from smart_response.context_window import create_context_window, create_multi_turn_memory, create_character_switcher
+# Import new modules (optional - graceful degradation)
+try:
+    from smart_response.cache_manager import get_cache, cached
+    from smart_response.rate_limiter import get_rate_limiter, InputValidator, get_csrf
+    from smart_response.monitoring import get_error_tracker, get_uptime_monitor, get_alert_manager, track_error
+    from smart_response.context_window import create_context_window, create_multi_turn_memory, create_character_switcher
+    NEW_MODULES_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: New modules not available: {e}")
+    NEW_MODULES_AVAILABLE = False
+    # Provide dummy functions
+    def get_cache(): return None
+    def get_rate_limiter(): return None
+    def get_error_tracker(): return None
+    def get_uptime_monitor(): return None
+    def get_alert_manager(db=None): return None
+    def track_error(*args, **kwargs): pass
 import sqlite3
 
 # Disable auto-docs in production
@@ -6229,7 +6241,10 @@ def system_health():
     """Get system health status"""
     try:
         uptime = get_uptime_monitor()
-        health = uptime.get_health_status()
+        if uptime:
+            health = uptime.get_health_status()
+        else:
+            health = {'status': 'healthy', 'checks': {}, 'uptime_formatted': 'N/A'}
         
         # Check database
         try:
@@ -6239,6 +6254,7 @@ def system_health():
         except:
             health['checks']['database'] = {'status': 'unhealthy'}
         
+        health['new_modules_available'] = NEW_MODULES_AVAILABLE
         return jsonify(health)
     except Exception as e:
         return jsonify({'status': 'error', 'error': str(e)}), 500
