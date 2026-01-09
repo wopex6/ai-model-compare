@@ -61,6 +61,11 @@ from smart_response.handler import SmartResponseHandler
 from smart_response.characters import CharacterManager, DOMAIN_CHARACTER_CONFIGS, create_ai_integration
 # Import User Personalization System
 from smart_response.user_personalization import UserPersonalization
+# Import new modules
+from smart_response.cache_manager import get_cache, cached
+from smart_response.rate_limiter import get_rate_limiter, InputValidator, get_csrf
+from smart_response.monitoring import get_error_tracker, get_uptime_monitor, get_alert_manager, track_error
+from smart_response.context_window import create_context_window, create_multi_turn_memory, create_character_switcher
 import sqlite3
 
 # Disable auto-docs in production
@@ -6214,6 +6219,69 @@ def api_documentation():
         }
     }
     return jsonify(api_docs)
+
+# ============================================================
+# NEW FEATURE ENDPOINTS: Monitoring, Cache, Health
+# ============================================================
+
+@app.route('/api/system/health')
+def system_health():
+    """Get system health status"""
+    try:
+        uptime = get_uptime_monitor()
+        health = uptime.get_health_status()
+        
+        # Check database
+        try:
+            cursor = db.connection.cursor()
+            cursor.execute("SELECT 1")
+            health['checks']['database'] = {'status': 'healthy'}
+        except:
+            health['checks']['database'] = {'status': 'unhealthy'}
+        
+        return jsonify(health)
+    except Exception as e:
+        return jsonify({'status': 'error', 'error': str(e)}), 500
+
+@app.route('/api/system/errors')
+@require_role(['administrator', 'developer'])
+def system_errors():
+    """Get recent system errors"""
+    try:
+        limit = request.args.get('limit', 50, type=int)
+        error_type = request.args.get('type')
+        
+        tracker = get_error_tracker()
+        errors = tracker.get_recent_errors(limit, error_type)
+        summary = tracker.get_error_summary()
+        
+        return jsonify({
+            'errors': errors,
+            'summary': summary
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/system/cache')
+@require_role(['administrator', 'developer'])
+def cache_stats():
+    """Get cache statistics"""
+    try:
+        cache = get_cache()
+        return jsonify(cache.get_stats())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/system/cache/clear', methods=['POST'])
+@require_role(['administrator', 'developer'])
+def clear_cache():
+    """Clear the cache"""
+    try:
+        cache = get_cache()
+        cache.clear()
+        return jsonify({'status': 'success', 'message': 'Cache cleared'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 # GITHUB WEBHOOK FOR AUTO-DEPLOYMENT (DISABLED - use deploy_anywhere.py instead)
 # Uncomment to enable automatic deployment on GitHub push
