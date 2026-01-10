@@ -4465,6 +4465,18 @@ def route_to_domain_characters():
                                                   reply_to_message_id=reply_to_message_id)
             print(f"[HISTORY] ✓ Saved user message for {target_character}")
             
+            # Log activity for analytics
+            try:
+                from smart_response.user_analytics import create_user_analytics
+                conn = integrated_db.get_connection()
+                analytics = create_user_analytics(conn)
+                analytics.log_activity(user_id, 'message_sent', 
+                                       {'character': target_character, 'message_length': len(message)},
+                                       page='life-companion')
+                conn.close()
+            except Exception as ae:
+                print(f"[ANALYTICS] Could not log activity: {ae}")
+            
             # Extract and store themes from user message (for context-aware prompts)
             if greeting_system and greeting_system.context_prompt_generator:
                 try:
@@ -4712,6 +4724,18 @@ def route_to_domain_characters():
                 # Save to the specific character's history
                 integrated_db.save_character_message(user_id, char_id, 'assistant', response_content)
                 print(f"[HISTORY] ✓ Saved AI response for {char_id}")
+                
+                # Log AI response for analytics
+                try:
+                    from smart_response.user_analytics import create_user_analytics
+                    conn = integrated_db.get_connection()
+                    analytics = create_user_analytics(conn)
+                    analytics.log_activity(user_id, 'ai_response', 
+                                           {'character': char_id, 'response_length': len(response_content)},
+                                           page='life-companion')
+                    conn.close()
+                except Exception as ae:
+                    pass  # Silent fail for analytics
                 
                 # ALSO save to coordinator's history if user was talking to coordinator
                 # This ensures coordinator view shows complete conversation

@@ -113,8 +113,9 @@ class HeavyUsageTest:
                 # 6. Verify analytics dashboard
                 self.test_analytics_dashboard(page)
                 
-                # 7. Verify API analytics endpoints
-                self.test_api_analytics()
+                # 7. Verify API analytics endpoints (with cookies)
+                cookies = context.cookies()
+                self.test_api_analytics(cookies)
                 
                 # 8. Test budget/limit display
                 self.test_budget_display(page)
@@ -164,21 +165,21 @@ class HeavyUsageTest:
                     char_selector.click()
                     page.wait_for_timeout(500)
                 
-                # Send message
+                # Send message (updated selectors for actual app)
                 message = random.choice(TEST_MESSAGES)
-                input_field = page.query_selector('#user-input, textarea[name="message"], .chat-input')
+                input_field = page.query_selector('#userInput, #chat-input, textarea#userInput, textarea[placeholder*="message"]')
                 
                 if input_field:
                     input_field.fill(message)
                     
-                    # Submit
-                    send_btn = page.query_selector('button[type="submit"], .send-btn, #send-btn')
+                    # Submit (updated selectors)
+                    send_btn = page.query_selector('#sendBtn, #send-chat-btn, button:has-text("Send")')
                     if send_btn:
                         send_btn.click()
+                        self.results['messages_sent'] += 1
                     else:
-                        input_field.press('Enter')
-                    
-                    self.results['messages_sent'] += 1
+                        input_field.press('Shift+Enter')
+                        self.results['messages_sent'] += 1
                     
                     # Wait for response (short wait to speed up test)
                     page.wait_for_timeout(500)
@@ -237,16 +238,18 @@ class HeavyUsageTest:
         """Verify context panel is working"""
         print("\n📋 Testing Context Panel...")
         
-        page.goto(f"{BASE_URL}/", timeout=30000)
+        # Go to Life Companion page where context panel exists
+        page.goto(f"{BASE_URL}/life-companion", timeout=30000)
         page.wait_for_load_state('networkidle')
+        page.wait_for_timeout(2000)
         
-        # Look for context panel elements
+        # Look for context panel elements (updated selectors)
         context_elements = [
-            '.context-panel',
-            '#context-sidebar',
-            '.personality-panel',
-            '[data-context]',
-            '.user-context'
+            '#explicit-context-panel',
+            '#contextBtn',
+            '.action-panel',
+            '#explicit-context-content',
+            '.panel-content'
         ]
         
         found = False
@@ -255,13 +258,26 @@ class HeavyUsageTest:
             if element:
                 found = True
                 self.results['context_verified'] = True
+                print(f"  ✅ Context element found: {selector}")
                 break
         
+        # Try clicking the context button to open panel
+        context_btn = page.query_selector('#contextBtn')
+        if context_btn:
+            context_btn.click()
+            page.wait_for_timeout(500)
+            panel = page.query_selector('#explicit-context-panel')
+            if panel and panel.is_visible():
+                found = True
+                self.results['context_verified'] = True
+                print("  ✅ Context panel opens on click")
+        
         # Also check for personality/trait indicators
-        trait_elements = page.query_selector_all('.trait, .personality-trait, [data-trait]')
+        trait_elements = page.query_selector_all('.trait, .personality-preset, .bot-info')
         
         if found or len(trait_elements) > 0:
-            print(f"  ✅ Context panel verified (found {len(trait_elements)} trait elements)")
+            if not found:
+                print(f"  ✅ Context panel verified (found {len(trait_elements)} trait elements)")
             self.results['context_verified'] = True
         else:
             print("  ⚠️ Context panel elements not found (may be hidden)")
@@ -362,27 +378,45 @@ class HeavyUsageTest:
         self.results['analytics_verified'] = tests_passed >= 4
         print(f"\n  Dashboard tests: {tests_passed}/{total_tests} passed")
     
-    def test_api_analytics(self):
+    def test_api_analytics(self, cookies=None):
         """Test all analytics API endpoints"""
         print("\n🔌 Testing Analytics API Endpoints...")
         
+        # Build cookies dict for requests
+        session_cookies = {}
+        if cookies:
+            for cookie in cookies:
+                session_cookies[cookie['name']] = cookie['value']
+        
         endpoints = [
-            ('/api/system/health', 'System Health'),
-            ('/api/ai-budget/status', 'Budget Status'),
-            ('/api/smart-response/stats', 'Smart Response Stats'),
-            ('/api/analytics/engagement', 'Engagement Metrics'),
-            ('/api/analytics/conversations', 'Conversation Insights'),
-            ('/api/analytics/hourly', 'Hourly Activity'),
-            ('/api/analytics/trends/active_users', 'User Trends'),
+            ('/api/system/health', 'System Health', False),
+            ('/api/ai-budget/status', 'Budget Status', False),
+            ('/api/smart-response/stats', 'Smart Response Stats', True),  # Requires auth
+            ('/api/analytics/engagement', 'Engagement Metrics', False),
+            ('/api/analytics/conversations', 'Conversation Insights', False),
+            ('/api/analytics/hourly', 'Hourly Activity', False),
+            ('/api/analytics/trends/active_users', 'User Trends', False),
         ]
         
         passed = 0
-        for endpoint, name in endpoints:
+        for endpoint, name, needs_auth in endpoints:
             try:
-                response = requests.get(f"{BASE_URL}{endpoint}", timeout=10)
+                if needs_auth and session_cookies:
+                    response = requests.get(f"{BASE_URL}{endpoint}", cookies=session_cookies, timeout=10)
+                else:
+                    response = requests.get(f"{BASE_URL}{endpoint}", timeout=10)
+                    
                 if response.status_code == 200:
                     print(f"  ✅ {name}: OK")
                     passed += 1
+                elif response.status_code == 401 and needs_auth:
+                    print(f"  ⚠️ {name}: 401 (auth required - using session cookies)")
+                    # Retry with cookies
+                    if session_cookies:
+                        response = requests.get(f"{BASE_URL}{endpoint}", cookies=session_cookies, timeout=10)
+                        if response.status_code == 200:
+                            print(f"  ✅ {name}: OK (with auth)")
+                            passed += 1
                 else:
                     print(f"  ❌ {name}: {response.status_code}")
             except Exception as e:
