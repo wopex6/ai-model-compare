@@ -3799,6 +3799,65 @@ def reset_ai_circuit_breaker():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/ai-budget/limits', methods=['GET'])
+@require_auth
+def get_ai_limits():
+    """Get current AI call limits"""
+    try:
+        if not ai_budget:
+            return jsonify({'error': 'AI Budget Manager not initialized'}), 500
+        
+        limits = ai_budget.get_limits()
+        return jsonify(limits)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/ai-budget/limits', methods=['PUT'])
+@require_auth
+def update_ai_limits():
+    """Update AI call limits (admin only)"""
+    try:
+        # Admin only
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        if not ai_budget:
+            return jsonify({'error': 'AI Budget Manager not initialized'}), 500
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        updated = []
+        errors = []
+        
+        for key, value in data.items():
+            try:
+                value = int(value)
+                if value < 1:
+                    errors.append(f"{key}: must be at least 1")
+                    continue
+                if value > 10000:
+                    errors.append(f"{key}: cannot exceed 10000")
+                    continue
+                    
+                if ai_budget.update_limit(key, value):
+                    updated.append(key)
+                else:
+                    errors.append(f"{key}: invalid key")
+            except (ValueError, TypeError):
+                errors.append(f"{key}: must be a valid integer")
+        
+        return jsonify({
+            'success': len(updated) > 0,
+            'updated': updated,
+            'errors': errors,
+            'current_limits': ai_budget.get_limits()
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/personality/profile', methods=['GET'])
 @app.route('/api/personality/profile/<int:user_id>', methods=['GET'])
 @require_auth

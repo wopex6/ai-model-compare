@@ -46,8 +46,12 @@ class AIBudgetManager:
     def __init__(self, db_connection):
         self.db = db_connection
         self._init_tables()
+        self._init_settings_table()
         self.circuit_breaker_active = False
         self.notifications_sent = {}  # Track notifications to avoid spam
+        
+        # Load dynamic limits from database (override class defaults)
+        self._load_dynamic_limits()
     
     def _init_tables(self):
         """Create tables for AI usage tracking"""
@@ -132,6 +136,80 @@ class AIBudgetManager:
         
         self.db.commit()
         print("✓ AI Budget Manager initialized (Users: 100/day, Admins: 1000/day, System cap: 2000/day)")
+    
+    def _init_settings_table(self):
+        """Create settings table for dynamic limits"""
+        cursor = self.db.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS ai_budget_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        self.db.commit()
+    
+    def _load_dynamic_limits(self):
+        """Load dynamic limits from database"""
+        try:
+            cursor = self.db.cursor()
+            cursor.execute('SELECT key, value FROM ai_budget_settings')
+            rows = cursor.fetchall()
+            
+            for key, value in rows:
+                if key == 'hourly_limit':
+                    self.HOURLY_CALL_LIMIT = int(value)
+                elif key == 'daily_limit_user':
+                    self.DAILY_CALL_LIMIT_USER = int(value)
+                elif key == 'daily_limit_admin':
+                    self.DAILY_CALL_LIMIT_ADMIN = int(value)
+                elif key == 'system_daily_cap':
+                    self.SYSTEM_DAILY_CAP = int(value)
+                elif key == 'background_limit':
+                    self.BACKGROUND_CALL_LIMIT = int(value)
+        except Exception as e:
+            print(f"Warning: Could not load dynamic limits: {e}")
+    
+    def get_limits(self) -> Dict:
+        """Get current AI call limits"""
+        return {
+            'hourly_limit': self.HOURLY_CALL_LIMIT,
+            'daily_limit_user': self.DAILY_CALL_LIMIT_USER,
+            'daily_limit_admin': self.DAILY_CALL_LIMIT_ADMIN,
+            'system_daily_cap': self.SYSTEM_DAILY_CAP,
+            'background_limit': self.BACKGROUND_CALL_LIMIT
+        }
+    
+    def update_limit(self, key: str, value: int) -> bool:
+        """Update a specific limit"""
+        valid_keys = ['hourly_limit', 'daily_limit_user', 'daily_limit_admin', 'system_daily_cap', 'background_limit']
+        if key not in valid_keys:
+            return False
+        
+        try:
+            cursor = self.db.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO ai_budget_settings (key, value, updated_at)
+                VALUES (?, ?, CURRENT_TIMESTAMP)
+            ''', (key, str(value)))
+            self.db.commit()
+            
+            # Update instance variable
+            if key == 'hourly_limit':
+                self.HOURLY_CALL_LIMIT = value
+            elif key == 'daily_limit_user':
+                self.DAILY_CALL_LIMIT_USER = value
+            elif key == 'daily_limit_admin':
+                self.DAILY_CALL_LIMIT_ADMIN = value
+            elif key == 'system_daily_cap':
+                self.SYSTEM_DAILY_CAP = value
+            elif key == 'background_limit':
+                self.BACKGROUND_CALL_LIMIT = value
+            
+            return True
+        except Exception as e:
+            print(f"Error updating limit {key}: {e}")
+            return False
     
     def can_make_ai_call(self, user_id: Optional[int] = None, is_admin: bool = False, is_background: bool = False) -> Tuple[bool, str]:
         """

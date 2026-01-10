@@ -169,6 +169,29 @@
         .budget-fill.warning { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
         .budget-fill.danger { background: linear-gradient(90deg, #ef4444, #f87171); }
         
+        .limit-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .limit-item label {
+            font-size: 0.8rem;
+            color: #666;
+            font-weight: 500;
+        }
+        .limit-item input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            width: 100% !important;
+        }
+        .limit-item input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+        }
+        
         .budget-label {
             position: absolute;
             top: 50%;
@@ -389,6 +412,39 @@
                 </div>
             </div>
             <div class="col-md-6">
+                <div class="chart-card">
+                    <h3><i class="fas fa-sliders-h"></i> AI Call Limits</h3>
+                    <div class="limits-form" id="limits-form">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                            <div class="limit-item">
+                                <label for="limit-hourly">Hourly Limit</label>
+                                <input type="number" id="limit-hourly" min="1" max="100" value="30" style="width: 80px;">
+                            </div>
+                            <div class="limit-item">
+                                <label for="limit-daily-user">User Daily</label>
+                                <input type="number" id="limit-daily-user" min="1" max="500" value="100" style="width: 80px;">
+                            </div>
+                            <div class="limit-item">
+                                <label for="limit-daily-admin">Admin Daily</label>
+                                <input type="number" id="limit-daily-admin" min="1" max="2000" value="1000" style="width: 80px;">
+                            </div>
+                            <div class="limit-item">
+                                <label for="limit-system-cap">System Cap</label>
+                                <input type="number" id="limit-system-cap" min="1" max="5000" value="2000" style="width: 80px;">
+                            </div>
+                        </div>
+                        <button onclick="updateAILimits()" class="btn btn-primary" style="margin-top: 15px; width: 100%;">
+                            <i class="fas fa-save"></i> Update Limits
+                        </button>
+                        <div id="limits-status" style="margin-top: 10px; font-size: 0.85rem;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Background Tasks -->
+        <div class="row">
+            <div class="col-md-12">
                 <div class="chart-card">
                     <h3><i class="fas fa-tasks"></i> Background Tasks</h3>
                     <div class="task-status" id="task-status">
@@ -776,10 +832,66 @@
             }
         }
         
+        // Load AI limits
+        async function loadAILimits() {
+            try {
+                const res = await AuthHelper.authenticatedFetch('/api/ai-budget/limits');
+                if (res.ok) {
+                    const limits = await res.json();
+                    document.getElementById('limit-hourly').value = limits.hourly_limit || 30;
+                    document.getElementById('limit-daily-user').value = limits.daily_limit_user || 100;
+                    document.getElementById('limit-daily-admin').value = limits.daily_limit_admin || 1000;
+                    document.getElementById('limit-system-cap').value = limits.system_daily_cap || 2000;
+                }
+            } catch (e) {
+                console.warn('Could not load AI limits:', e);
+            }
+        }
+        
+        // Update AI limits
+        async function updateAILimits() {
+            const statusDiv = document.getElementById('limits-status');
+            statusDiv.innerHTML = '<span style="color:#666;"><i class="fas fa-spinner fa-spin"></i> Updating...</span>';
+            
+            try {
+                const data = {
+                    hourly_limit: parseInt(document.getElementById('limit-hourly').value),
+                    daily_limit_user: parseInt(document.getElementById('limit-daily-user').value),
+                    daily_limit_admin: parseInt(document.getElementById('limit-daily-admin').value),
+                    system_daily_cap: parseInt(document.getElementById('limit-system-cap').value)
+                };
+                
+                const res = await AuthHelper.authenticatedFetch('/api/ai-budget/limits', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await res.json();
+                
+                if (result.success) {
+                    statusDiv.innerHTML = '<span style="color:#10b981;"><i class="fas fa-check"></i> Limits updated successfully!</span>';
+                    // Reload data to reflect new limits
+                    loadAllData();
+                } else {
+                    const errors = result.errors?.join(', ') || 'Unknown error';
+                    statusDiv.innerHTML = `<span style="color:#ef4444;"><i class="fas fa-exclamation-triangle"></i> ${errors}</span>`;
+                }
+            } catch (e) {
+                statusDiv.innerHTML = `<span style="color:#ef4444;"><i class="fas fa-exclamation-triangle"></i> Error: ${e.message}</span>`;
+            }
+            
+            // Clear status after 5 seconds
+            setTimeout(() => {
+                statusDiv.innerHTML = '';
+            }, 5000);
+        }
+        
         // Load on page load
         document.addEventListener('DOMContentLoaded', () => {
             loadAllData();
             loadUserFilter();
+            loadAILimits();
         });
         
         // Auto-refresh every 30 seconds
