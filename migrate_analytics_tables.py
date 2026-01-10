@@ -60,9 +60,31 @@ def migrate():
     ''')
     print("✓ daily_stats table created")
     
+    # Add missing columns to existing tables (safe - ignores if exists)
+    try:
+        cursor.execute('ALTER TABLE user_activity_log ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP')
+        print("✓ Added created_at column to user_activity_log")
+    except:
+        pass  # Column already exists
+    
+    try:
+        cursor.execute('ALTER TABLE conversation_analytics ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP')
+        print("✓ Added created_at column to conversation_analytics")
+    except:
+        pass
+    
+    try:
+        cursor.execute('ALTER TABLE daily_stats ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP')
+        print("✓ Added created_at column to daily_stats")
+    except:
+        pass
+    
     # Create indexes
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_activity_user ON user_activity_log(user_id)')
-    cursor.execute('CREATE INDEX IF NOT EXISTS idx_activity_date ON user_activity_log(created_at)')
+    try:
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_activity_date ON user_activity_log(created_at)')
+    except:
+        pass  # Index creation may fail if column doesn't exist
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_conv_user ON conversation_analytics(user_id)')
     print("✓ Indexes created")
     
