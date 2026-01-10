@@ -433,22 +433,32 @@
                 display: none;
             }
             
-            /* Character cards as compact pills */
+            /* Character cards as icon-only buttons */
             .domain-character-list .character-card,
-            .domain-character-list > div {
+            .domain-character-list > div,
+            .domain-char-item {
                 flex-shrink: 0 !important;
-                min-width: auto !important;
-                width: auto !important;
-                padding: 5px 10px !important;
-                font-size: 0.7rem !important;
-                border-radius: 16px !important;
-                white-space: nowrap;
-                min-height: 32px !important;
+                min-width: 44px !important;
+                width: 44px !important;
+                height: 44px !important;
+                padding: 8px !important;
+                border-radius: 12px !important;
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
             }
             
-            /* Hide domain subtitle on mobile pills */
+            /* Hide text, show only icon */
+            .domain-char-item .char-name,
+            .domain-char-item .char-domain,
+            .domain-character-list .char-name,
             .domain-character-list .char-domain {
-                display: none;
+                display: none !important;
+            }
+            
+            .domain-char-item .char-icon {
+                font-size: 1.4rem !important;
+                display: block !important;
             }
             
             /* Main chat takes remaining space */
@@ -590,8 +600,17 @@
             
             .domain-character-list .character-card,
             .domain-character-list > div {
-                padding: 4px 8px !important;
+                padding: 6px !important;
                 font-size: 0.65rem !important;
+            }
+            
+            .domain-char-item .char-name,
+            .domain-char-item .char-domain {
+                display: none !important;
+            }
+            
+            .domain-char-item .char-icon {
+                font-size: 1.2rem !important;
             }
         }
         
