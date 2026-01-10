@@ -217,8 +217,18 @@ body {
     transition: all 0.3s ease;
     color: white;
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.nav-btn i {
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+.nav-btn .nav-text {
+    white-space: nowrap;
 }
 
 .nav-btn:hover {
@@ -1078,6 +1088,23 @@ body {
 .empty-state h3 {
     margin-bottom: 10px;
     color: #333;
+}
+
+/* Icon-only nav buttons on medium screens (horizontal nav, limited space) */
+@media (min-width: 769px) and (max-width: 1400px) {
+    .nav-btn {
+        padding: 10px 12px !important;
+        min-width: 44px;
+        justify-content: center;
+    }
+    
+    .nav-btn .nav-text {
+        display: none !important;
+    }
+    
+    .nav-btn i {
+        font-size: 1.2rem;
+    }
 }
 
 /* Responsive design */
