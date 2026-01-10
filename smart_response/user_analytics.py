@@ -28,54 +28,57 @@ class UserAnalytics:
     
     def _init_tables(self):
         """Create analytics tables"""
-        cursor = self.db.cursor()
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS user_activity_log (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                action_type TEXT NOT NULL,
-                action_data TEXT,
-                page TEXT,
-                session_id TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS conversation_analytics (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                character_id TEXT,
-                message_count INTEGER DEFAULT 0,
-                avg_message_length REAL,
-                session_duration_seconds INTEGER,
-                sentiment_score REAL,
-                topics TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS daily_stats (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                date DATE NOT NULL UNIQUE,
-                total_users INTEGER DEFAULT 0,
-                active_users INTEGER DEFAULT 0,
-                new_users INTEGER DEFAULT 0,
-                total_messages INTEGER DEFAULT 0,
-                total_ai_calls INTEGER DEFAULT 0,
-                avg_session_duration INTEGER DEFAULT 0,
-                top_characters TEXT,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_activity_user ON user_activity_log(user_id)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_activity_date ON user_activity_log(created_at)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_conv_user ON conversation_analytics(user_id)')
-        
-        self.db.commit()
+        try:
+            cursor = self.db.cursor()
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS user_activity_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    action_type TEXT NOT NULL,
+                    action_data TEXT,
+                    page TEXT,
+                    session_id TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS conversation_analytics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    character_id TEXT,
+                    message_count INTEGER DEFAULT 0,
+                    avg_message_length REAL,
+                    session_duration_seconds INTEGER,
+                    sentiment_score REAL,
+                    topics TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS daily_stats (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    date DATE NOT NULL UNIQUE,
+                    total_users INTEGER DEFAULT 0,
+                    active_users INTEGER DEFAULT 0,
+                    new_users INTEGER DEFAULT 0,
+                    total_messages INTEGER DEFAULT 0,
+                    total_ai_calls INTEGER DEFAULT 0,
+                    avg_session_duration INTEGER DEFAULT 0,
+                    top_characters TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_activity_user ON user_activity_log(user_id)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_activity_date ON user_activity_log(created_at)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_conv_user ON conversation_analytics(user_id)')
+            
+            self.db.commit()
+        except Exception as e:
+            print(f"Warning: Could not create analytics tables: {e}")
     
     def log_activity(self, user_id: int, action_type: str, 
                      action_data: Dict = None, page: str = None,
