@@ -3727,11 +3727,13 @@ def get_ai_budget_status():
     try:
         # Check if user is admin to show correct limit
         is_admin = False
+        user_id = request.current_user.get('user_id') if request.current_user else None
         try:
-            user_role = integrated_db.get_user_role(request.current_user['user_id'])
+            user_role = integrated_db.get_user_role(user_id)
             is_admin = has_admin_access(user_role)
-        except:
-            pass
+            print(f"[AI-BUDGET] User {user_id} role={user_role} is_admin={is_admin}")
+        except Exception as e:
+            print(f"[AI-BUDGET] Error checking admin: {e}")
         
         if not ai_budget:
             # Return default values when not initialized
