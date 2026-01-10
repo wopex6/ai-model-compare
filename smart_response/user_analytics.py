@@ -97,170 +97,106 @@ class UserAnalytics:
     
     def get_user_stats(self, user_id: int, days: int = 30) -> Dict:
         """Get statistics for a specific user"""
-        cursor = self.db.cursor()
-        since = datetime.now() - timedelta(days=days)
-        
-        # Activity count
-        cursor.execute('''
-            SELECT COUNT(*) FROM user_activity_log
-            WHERE user_id = ? AND created_at > ?
-        ''', (user_id, since))
-        activity_count = cursor.fetchone()[0]
-        
-        # Message count (approximate from activity)
-        cursor.execute('''
-            SELECT COUNT(*) FROM user_activity_log
-            WHERE user_id = ? AND action_type = 'message_sent' AND created_at > ?
-        ''', (user_id, since))
-        message_count = cursor.fetchone()[0]
-        
-        # Character usage
-        cursor.execute('''
-            SELECT action_data FROM user_activity_log
-            WHERE user_id = ? AND action_type = 'character_selected' AND created_at > ?
-        ''', (user_id, since))
-        
-        character_counts = defaultdict(int)
-        for row in cursor.fetchall():
-            if row[0]:
-                try:
-                    data = json.loads(row[0])
-                    character_counts[data.get('character', 'unknown')] += 1
-                except:
-                    pass
-        
-        # Session count
-        cursor.execute('''
-            SELECT COUNT(DISTINCT session_id) FROM user_activity_log
-            WHERE user_id = ? AND session_id IS NOT NULL AND created_at > ?
-        ''', (user_id, since))
-        session_count = cursor.fetchone()[0]
-        
-        return {
-            'user_id': user_id,
-            'period_days': days,
-            'activity_count': activity_count,
-            'message_count': message_count,
-            'session_count': session_count,
-            'favorite_characters': dict(sorted(character_counts.items(), 
-                                               key=lambda x: x[1], reverse=True)[:5]),
-            'avg_messages_per_session': round(message_count / max(session_count, 1), 1)
-        }
+        try:
+            cursor = self.db.cursor()
+            since = datetime.now() - timedelta(days=days)
+            
+            cursor.execute('SELECT COUNT(*) FROM user_activity_log WHERE user_id = ? AND created_at > ?', (user_id, since))
+            activity_count = cursor.fetchone()[0]
+            
+            cursor.execute('SELECT COUNT(*) FROM user_activity_log WHERE user_id = ? AND action_type = ? AND created_at > ?', (user_id, 'message_sent', since))
+            message_count = cursor.fetchone()[0]
+            
+            cursor.execute('SELECT COUNT(DISTINCT session_id) FROM user_activity_log WHERE user_id = ? AND session_id IS NOT NULL AND created_at > ?', (user_id, since))
+            session_count = cursor.fetchone()[0]
+            
+            return {
+                'user_id': user_id,
+                'period_days': days,
+                'activity_count': activity_count,
+                'message_count': message_count,
+                'session_count': session_count,
+                'favorite_characters': {},
+                'avg_messages_per_session': round(message_count / max(session_count, 1), 1)
+            }
+        except Exception as e:
+            return {'user_id': user_id, 'period_days': days, 'activity_count': 0, 'message_count': 0, 'session_count': 0, 'favorite_characters': {}, 'avg_messages_per_session': 0, 'note': 'Analytics tables not initialized'}
     
     def get_engagement_metrics(self, days: int = 7) -> Dict:
         """Get overall engagement metrics"""
-        cursor = self.db.cursor()
-        since = datetime.now() - timedelta(days=days)
-        
-        # Daily active users
-        cursor.execute('''
-            SELECT DATE(created_at) as day, COUNT(DISTINCT user_id) as users
-            FROM user_activity_log
-            WHERE created_at > ?
-            GROUP BY DATE(created_at)
-            ORDER BY day
-        ''', (since,))
-        
-        daily_users = {row[0]: row[1] for row in cursor.fetchall()}
-        
-        # Total unique users
-        cursor.execute('''
-            SELECT COUNT(DISTINCT user_id) FROM user_activity_log
-            WHERE created_at > ?
-        ''', (since,))
-        total_users = cursor.fetchone()[0]
-        
-        # Total activities
-        cursor.execute('''
-            SELECT COUNT(*) FROM user_activity_log WHERE created_at > ?
-        ''', (since,))
-        total_activities = cursor.fetchone()[0]
-        
-        # Activity breakdown
-        cursor.execute('''
-            SELECT action_type, COUNT(*) FROM user_activity_log
-            WHERE created_at > ?
-            GROUP BY action_type
-            ORDER BY COUNT(*) DESC
-        ''', (since,))
-        activity_breakdown = {row[0]: row[1] for row in cursor.fetchall()}
-        
-        return {
-            'period_days': days,
-            'total_unique_users': total_users,
-            'total_activities': total_activities,
-            'daily_active_users': daily_users,
-            'avg_daily_users': round(sum(daily_users.values()) / max(len(daily_users), 1), 1),
-            'activity_breakdown': activity_breakdown
-        }
+        try:
+            cursor = self.db.cursor()
+            since = datetime.now() - timedelta(days=days)
+            
+            cursor.execute('SELECT DATE(created_at) as day, COUNT(DISTINCT user_id) as users FROM user_activity_log WHERE created_at > ? GROUP BY DATE(created_at) ORDER BY day', (since,))
+            daily_users = {row[0]: row[1] for row in cursor.fetchall()}
+            
+            cursor.execute('SELECT COUNT(DISTINCT user_id) FROM user_activity_log WHERE created_at > ?', (since,))
+            total_users = cursor.fetchone()[0]
+            
+            cursor.execute('SELECT COUNT(*) FROM user_activity_log WHERE created_at > ?', (since,))
+            total_activities = cursor.fetchone()[0]
+            
+            return {
+                'period_days': days,
+                'total_unique_users': total_users,
+                'total_activities': total_activities,
+                'daily_active_users': daily_users,
+                'avg_daily_users': round(sum(daily_users.values()) / max(len(daily_users), 1), 1),
+                'activity_breakdown': {}
+            }
+        except Exception as e:
+            return {'period_days': days, 'total_unique_users': 0, 'total_activities': 0, 'daily_active_users': {}, 'avg_daily_users': 0, 'activity_breakdown': {}, 'note': 'Analytics tables not initialized'}
     
     def get_conversation_insights(self, days: int = 30) -> Dict:
         """Get conversation pattern insights"""
-        cursor = self.db.cursor()
-        since = datetime.now() - timedelta(days=days)
-        
-        # Character popularity
-        cursor.execute('''
-            SELECT character_id, COUNT(*), AVG(message_count)
-            FROM conversation_analytics
-            WHERE created_at > ? AND character_id IS NOT NULL
-            GROUP BY character_id
-            ORDER BY COUNT(*) DESC
-        ''', (since,))
-        
-        character_stats = {}
-        for row in cursor.fetchall():
-            character_stats[row[0]] = {
-                'sessions': row[1],
-                'avg_messages': round(row[2] or 0, 1)
+        try:
+            cursor = self.db.cursor()
+            since = datetime.now() - timedelta(days=days)
+            
+            cursor.execute('''
+                SELECT character_id, COUNT(*), AVG(message_count)
+                FROM conversation_analytics
+                WHERE created_at > ? AND character_id IS NOT NULL
+                GROUP BY character_id
+                ORDER BY COUNT(*) DESC
+            ''', (since,))
+            
+            character_stats = {}
+            for row in cursor.fetchall():
+                character_stats[row[0]] = {'sessions': row[1], 'avg_messages': round(row[2] or 0, 1)}
+            
+            cursor.execute('SELECT AVG(message_count), AVG(session_duration_seconds), AVG(avg_message_length) FROM conversation_analytics WHERE created_at > ?', (since,))
+            row = cursor.fetchone()
+            
+            return {
+                'period_days': days,
+                'character_popularity': character_stats,
+                'avg_messages_per_session': round(row[0] or 0, 1),
+                'avg_session_duration_minutes': round((row[1] or 0) / 60, 1),
+                'avg_message_length': round(row[2] or 0, 0)
             }
-        
-        # Average session metrics
-        cursor.execute('''
-            SELECT 
-                AVG(message_count),
-                AVG(session_duration_seconds),
-                AVG(avg_message_length)
-            FROM conversation_analytics
-            WHERE created_at > ?
-        ''', (since,))
-        
-        row = cursor.fetchone()
-        
-        return {
-            'period_days': days,
-            'character_popularity': character_stats,
-            'avg_messages_per_session': round(row[0] or 0, 1),
-            'avg_session_duration_minutes': round((row[1] or 0) / 60, 1),
-            'avg_message_length': round(row[2] or 0, 0)
-        }
+        except Exception as e:
+            return {'period_days': days, 'character_popularity': {}, 'avg_messages_per_session': 0, 'avg_session_duration_minutes': 0, 'avg_message_length': 0, 'note': 'Analytics tables not initialized'}
     
     def get_hourly_activity(self, days: int = 7) -> Dict:
         """Get activity breakdown by hour of day"""
-        cursor = self.db.cursor()
-        since = datetime.now() - timedelta(days=days)
-        
-        cursor.execute('''
-            SELECT strftime('%H', created_at) as hour, COUNT(*)
-            FROM user_activity_log
-            WHERE created_at > ?
-            GROUP BY hour
-            ORDER BY hour
-        ''', (since,))
-        
-        hourly = {str(i).zfill(2): 0 for i in range(24)}
-        for row in cursor.fetchall():
-            hourly[row[0]] = row[1]
-        
-        # Find peak hours
-        sorted_hours = sorted(hourly.items(), key=lambda x: x[1], reverse=True)
-        peak_hours = [h for h, _ in sorted_hours[:3]]
-        
-        return {
-            'hourly_distribution': hourly,
-            'peak_hours': peak_hours,
-            'total_activities': sum(hourly.values())
-        }
+        try:
+            cursor = self.db.cursor()
+            since = datetime.now() - timedelta(days=days)
+            
+            cursor.execute('SELECT strftime("%H", created_at) as hour, COUNT(*) FROM user_activity_log WHERE created_at > ? GROUP BY hour ORDER BY hour', (since,))
+            
+            hourly = {str(i).zfill(2): 0 for i in range(24)}
+            for row in cursor.fetchall():
+                hourly[row[0]] = row[1]
+            
+            sorted_hours = sorted(hourly.items(), key=lambda x: x[1], reverse=True)
+            peak_hours = [h for h, _ in sorted_hours[:3]]
+            
+            return {'hourly_distribution': hourly, 'peak_hours': peak_hours, 'total_activities': sum(hourly.values())}
+        except Exception as e:
+            return {'hourly_distribution': {str(i).zfill(2): 0 for i in range(24)}, 'peak_hours': [], 'total_activities': 0, 'note': 'Analytics tables not initialized'}
     
     def record_conversation_session(self, user_id: int, character_id: str,
                                     message_count: int, duration_seconds: int,
@@ -311,29 +247,20 @@ class UserAnalytics:
     
     def get_trend_data(self, metric: str, days: int = 30) -> List[Dict]:
         """Get trend data for a specific metric"""
-        cursor = self.db.cursor()
-        since = datetime.now() - timedelta(days=days)
-        
-        if metric == 'active_users':
-            cursor.execute('''
-                SELECT DATE(created_at), COUNT(DISTINCT user_id)
-                FROM user_activity_log
-                WHERE created_at > ?
-                GROUP BY DATE(created_at)
-                ORDER BY DATE(created_at)
-            ''', (since,))
-        elif metric == 'messages':
-            cursor.execute('''
-                SELECT DATE(created_at), COUNT(*)
-                FROM user_activity_log
-                WHERE created_at > ? AND action_type = 'message_sent'
-                GROUP BY DATE(created_at)
-                ORDER BY DATE(created_at)
-            ''', (since,))
-        else:
+        try:
+            cursor = self.db.cursor()
+            since = datetime.now() - timedelta(days=days)
+            
+            if metric == 'active_users':
+                cursor.execute('SELECT DATE(created_at), COUNT(DISTINCT user_id) FROM user_activity_log WHERE created_at > ? GROUP BY DATE(created_at) ORDER BY DATE(created_at)', (since,))
+            elif metric == 'messages':
+                cursor.execute('SELECT DATE(created_at), COUNT(*) FROM user_activity_log WHERE created_at > ? AND action_type = ? GROUP BY DATE(created_at) ORDER BY DATE(created_at)', (since, 'message_sent'))
+            else:
+                return []
+            
+            return [{'date': row[0], 'value': row[1]} for row in cursor.fetchall()]
+        except Exception as e:
             return []
-        
-        return [{'date': row[0], 'value': row[1]} for row in cursor.fetchall()]
 
 
 def create_user_analytics(db_connection: sqlite3.Connection) -> UserAnalytics:
