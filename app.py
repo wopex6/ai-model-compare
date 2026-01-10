@@ -127,6 +127,16 @@ CORS(app, supports_credentials=True)
 # Initialize integrated database
 integrated_db = IntegratedDatabase()
 
+# Initialize analytics tables at startup
+try:
+    from smart_response.user_analytics import create_user_analytics
+    _analytics_conn = integrated_db.get_connection()
+    _analytics = create_user_analytics(_analytics_conn)
+    _analytics_conn.close()
+    print("[STARTUP] Analytics tables initialized")
+except Exception as e:
+    print(f"[STARTUP] Analytics init warning: {e}")
+
 # Initialize user personalization system (per-user adaptive parameters)
 # Pass integrated_db instance (not connection) for thread-safe access
 user_personalization = UserPersonalization(integrated_db)
