@@ -3724,17 +3724,35 @@ def get_history_stats(character):
 def get_ai_budget_status():
     """Get current AI budget status and usage"""
     try:
+        # Check if user is admin to show correct limit
+        is_admin = False
+        if hasattr(request, 'current_user') and request.current_user:
+            try:
+                user_role = integrated_db.get_user_role(request.current_user['user_id'])
+                is_admin = has_admin_access(user_role)
+            except:
+                pass
+        
         if not ai_budget:
             # Return default values when not initialized
+            daily_limit = 1000 if is_admin else 100
             return jsonify({
                 'daily_usage': 0,
-                'daily_limit': 100,
+                'daily_limit': daily_limit,
                 'monthly_usage': 0,
                 'monthly_limit': 1000,
                 'status': 'not_initialized'
             })
         
         report = ai_budget.get_usage_report()
+        
+        # Override limit based on user role
+        if is_admin:
+            admin_limit = ai_budget.DAILY_CALL_LIMIT_ADMIN
+            report['today']['limit'] = admin_limit
+            report['today']['remaining'] = admin_limit - report['today']['calls']
+            report['today']['percentage_used'] = round((report['today']['calls'] / admin_limit) * 100, 1)
+        
         return jsonify(report)
     except Exception as e:
         print(f"Error in get_ai_budget_status: {e}")
