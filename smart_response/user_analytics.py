@@ -101,13 +101,13 @@ class UserAnalytics:
             cursor = self.db.cursor()
             since = datetime.now() - timedelta(days=days)
             
-            cursor.execute('SELECT COUNT(*) FROM user_activity_log WHERE user_id = ? AND created_at > ?', (user_id, since))
+            cursor.execute('SELECT COUNT(*) FROM user_activity_log WHERE user_id = ? AND last_activity_at > ?', (user_id, since))
             activity_count = cursor.fetchone()[0]
             
-            cursor.execute('SELECT COUNT(*) FROM user_activity_log WHERE user_id = ? AND action_type = ? AND created_at > ?', (user_id, 'message_sent', since))
+            cursor.execute('SELECT COUNT(*) FROM user_activity_log WHERE user_id = ? AND activity_type = ? AND last_activity_at > ?', (user_id, 'message_sent', since))
             message_count = cursor.fetchone()[0]
             
-            cursor.execute('SELECT COUNT(DISTINCT session_id) FROM user_activity_log WHERE user_id = ? AND session_id IS NOT NULL AND created_at > ?', (user_id, since))
+            cursor.execute('SELECT COUNT(DISTINCT user_id) FROM user_activity_log WHERE user_id = ? AND last_activity_at > ?', (user_id, since))
             session_count = cursor.fetchone()[0]
             
             return {
@@ -128,13 +128,13 @@ class UserAnalytics:
             cursor = self.db.cursor()
             since = datetime.now() - timedelta(days=days)
             
-            cursor.execute('SELECT DATE(created_at) as day, COUNT(DISTINCT user_id) as users FROM user_activity_log WHERE created_at > ? GROUP BY DATE(created_at) ORDER BY day', (since,))
+            cursor.execute('SELECT DATE(last_activity_at) as day, COUNT(DISTINCT user_id) as users FROM user_activity_log WHERE last_activity_at > ? GROUP BY DATE(last_activity_at) ORDER BY day', (since,))
             daily_users = {row[0]: row[1] for row in cursor.fetchall()}
             
-            cursor.execute('SELECT COUNT(DISTINCT user_id) FROM user_activity_log WHERE created_at > ?', (since,))
+            cursor.execute('SELECT COUNT(DISTINCT user_id) FROM user_activity_log WHERE last_activity_at > ?', (since,))
             total_users = cursor.fetchone()[0]
             
-            cursor.execute('SELECT COUNT(*) FROM user_activity_log WHERE created_at > ?', (since,))
+            cursor.execute('SELECT COUNT(*) FROM user_activity_log WHERE last_activity_at > ?', (since,))
             total_activities = cursor.fetchone()[0]
             
             return {
@@ -185,7 +185,7 @@ class UserAnalytics:
             cursor = self.db.cursor()
             since = datetime.now() - timedelta(days=days)
             
-            cursor.execute('SELECT strftime("%H", created_at) as hour, COUNT(*) FROM user_activity_log WHERE created_at > ? GROUP BY hour ORDER BY hour', (since,))
+            cursor.execute('SELECT strftime("%H", last_activity_at) as hour, COUNT(*) FROM user_activity_log WHERE last_activity_at > ? GROUP BY hour ORDER BY hour', (since,))
             
             hourly = {str(i).zfill(2): 0 for i in range(24)}
             for row in cursor.fetchall():
