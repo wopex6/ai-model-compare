@@ -3721,17 +3721,17 @@ def get_history_stats(character):
 
 # AI Budget Management Endpoints
 @app.route('/api/ai-budget/status', methods=['GET'])
+@require_auth
 def get_ai_budget_status():
     """Get current AI budget status and usage"""
     try:
         # Check if user is admin to show correct limit
         is_admin = False
-        if hasattr(request, 'current_user') and request.current_user:
-            try:
-                user_role = integrated_db.get_user_role(request.current_user['user_id'])
-                is_admin = has_admin_access(user_role)
-            except:
-                pass
+        try:
+            user_role = integrated_db.get_user_role(request.current_user['user_id'])
+            is_admin = has_admin_access(user_role)
+        except:
+            pass
         
         if not ai_budget:
             # Return default values when not initialized
