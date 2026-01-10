@@ -781,8 +781,28 @@ const DomainCharacters = {
         const item = document.createElement('div');
         item.className = `domain-char-item ${isCoordinator ? 'coordinator' : ''} ${character.id === this.selectedCharacter ? 'selected' : ''}`;
         item.dataset.characterId = character.id;
+        item.title = `${character.display_name} - ${character.domain}`;
+        
+        // Character icons mapping
+        const icons = {
+            'coordinator': '⭐',
+            'life_coach': '🎯',
+            'psychologist': '🧠',
+            'stoic_philosopher': '🏛️',
+            'career_mentor': '💼',
+            'spiritual_guide': '🙏',
+            'health_coach': '💪',
+            'financial_advisor': '💰',
+            'creative_muse': '🎨',
+            'zen_master': '☯️',
+            'scientist': '🔬',
+            'wisdom_sage': '📚'
+        };
+        
+        const icon = icons[character.id] || '👤';
         
         item.innerHTML = `
+            <div class="char-icon">${icon}</div>
             <div class="char-name">${character.display_name}</div>
             <div class="char-domain">${character.domain}</div>
         `;
