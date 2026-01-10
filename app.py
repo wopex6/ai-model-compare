@@ -6305,9 +6305,11 @@ def get_user_analytics(user_id):
     """Get analytics for a specific user"""
     try:
         from smart_response.user_analytics import create_user_analytics
-        analytics = create_user_analytics(db.connection)
+        conn = integrated_db.get_connection()
+        analytics = create_user_analytics(conn)
         days = request.args.get('days', 30, type=int)
         stats = analytics.get_user_stats(user_id, days)
+        conn.close()
         return jsonify(stats)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -6317,9 +6319,11 @@ def get_engagement_analytics():
     """Get overall engagement metrics"""
     try:
         from smart_response.user_analytics import create_user_analytics
-        analytics = create_user_analytics(db.connection)
+        conn = integrated_db.get_connection()
+        analytics = create_user_analytics(conn)
         days = request.args.get('days', 7, type=int)
         metrics = analytics.get_engagement_metrics(days)
+        conn.close()
         return jsonify(metrics)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -6329,9 +6333,11 @@ def get_conversation_analytics():
     """Get conversation pattern insights"""
     try:
         from smart_response.user_analytics import create_user_analytics
-        analytics = create_user_analytics(db.connection)
+        conn = integrated_db.get_connection()
+        analytics = create_user_analytics(conn)
         days = request.args.get('days', 30, type=int)
         insights = analytics.get_conversation_insights(days)
+        conn.close()
         return jsonify(insights)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -6341,9 +6347,11 @@ def get_hourly_analytics():
     """Get hourly activity breakdown"""
     try:
         from smart_response.user_analytics import create_user_analytics
-        analytics = create_user_analytics(db.connection)
+        conn = integrated_db.get_connection()
+        analytics = create_user_analytics(conn)
         days = request.args.get('days', 7, type=int)
         hourly = analytics.get_hourly_activity(days)
+        conn.close()
         return jsonify(hourly)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -6353,9 +6361,11 @@ def get_trend_analytics(metric):
     """Get trend data for a specific metric"""
     try:
         from smart_response.user_analytics import create_user_analytics
-        analytics = create_user_analytics(db.connection)
+        conn = integrated_db.get_connection()
+        analytics = create_user_analytics(conn)
         days = request.args.get('days', 30, type=int)
         trends = analytics.get_trend_data(metric, days)
+        conn.close()
         return jsonify({'metric': metric, 'days': days, 'data': trends})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
