@@ -1268,9 +1268,30 @@ def get_smart_response_analytics():
             except Exception as e:
                 analytics['character_expansion'] = {'error': str(e)}
         
+        # Format response for frontend compatibility
+        explicit_ctx = analytics.get('explicit_context') or {}
+        by_type_list = explicit_ctx.get('by_type', [])
+        # Convert list to dict for frontend: {type: count}
+        by_type_dict = {item['type']: item['count'] for item in by_type_list} if by_type_list else {}
+        
+        char_system = analytics.get('character_system') or {}
+        effectiveness_list = char_system.get('effectiveness_ranking', [])
+        # Convert to dict for frontend: {character_name: score}
+        effectiveness_dict = {item['name']: item['effectiveness'] for item in effectiveness_list} if effectiveness_list else {}
+        
         return jsonify({
             'success': True,
-            'analytics': analytics
+            'analytics': analytics,
+            # Frontend-compatible format
+            'explicit_context_stats': {
+                'total_items': explicit_ctx.get('total_active_items', 0),
+                'users_with_context': explicit_ctx.get('users_with_context', 0),
+                'by_type': by_type_dict
+            },
+            'character_stats': {
+                'total': char_system.get('total_characters', 0),
+                'effectiveness': effectiveness_dict
+            }
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
