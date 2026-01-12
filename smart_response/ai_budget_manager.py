@@ -235,47 +235,56 @@ class AIBudgetManager:
             print(f"Error updating limit {key}: {e}")
             return False
     
-    def can_make_ai_call(self, user_id: Optional[int] = None, is_admin: bool = False, is_background: bool = False) -> Tuple[bool, str]:
+    def can_make_ai_call(self, user_id: Optional[int] = None, is_admin: bool = False, is_background: bool = False, suppress_notifications: bool = False) -> Tuple[bool, str]:
         """
         Request permission to make an AI call
+        
+        Args:
+            suppress_notifications: If True, don't create user-facing notifications (for background calls)
         
         Returns:
             (allowed, reason) - If False, reason explains why denied
         """
         
+        # Suppress notifications for background calls to avoid spamming users
+        should_notify = not suppress_notifications and not is_background
+        
         # CIRCUIT BREAKER CHECK
         if self.circuit_breaker_active:
-            self._notify_user(
-                'circuit_breaker_active',
-                'AI calls temporarily halted due to circuit breaker activation. Manual reset required.',
-                'critical'
-            )
+            if should_notify:
+                self._notify_user(
+                    'circuit_breaker_active',
+                    'AI calls temporarily halted due to circuit breaker activation. Manual reset required.',
+                    'critical'
+                )
             return False, "Circuit breaker active - AI calls temporarily halted"
         
         # Check system-wide cap first (HARD LIMIT)
         system_calls_today = self._get_calls_in_period('day', user_id=None)
         if system_calls_today >= self.SYSTEM_DAILY_CAP:
             self._trigger_circuit_breaker(f"System daily cap reached: {system_calls_today}/{self.SYSTEM_DAILY_CAP} calls")
-            self._notify_user(
-                'system_daily_cap_reached',
-                f'System-wide daily cap reached: {system_calls_today}/{self.SYSTEM_DAILY_CAP} calls today. All users affected.',
-                'critical'
-            )
+            if should_notify:
+                self._notify_user(
+                    'system_daily_cap_reached',
+                    f'System-wide daily cap reached: {system_calls_today}/{self.SYSTEM_DAILY_CAP} calls today. All users affected.',
+                    'critical'
+                )
             return False, f"System daily cap reached: {system_calls_today}/{self.SYSTEM_DAILY_CAP} calls"
         
         # Check daily limit per user (HARD LIMIT)
         user_daily_limit = self.DAILY_CALL_LIMIT_ADMIN if is_admin else self.DAILY_CALL_LIMIT_USER
         calls_today = self._get_calls_in_period('day', user_id)
         if calls_today >= user_daily_limit:
-            self._notify_user(
-                'daily_limit_reached',
-                f'AI call limit reached: {calls_today}/{user_daily_limit} calls today. Using fallback responses.',
-                'critical'
-            )
+            if should_notify:
+                self._notify_user(
+                    'daily_limit_reached',
+                    f'AI call limit reached: {calls_today}/{user_daily_limit} calls today. Using fallback responses.',
+                    'critical'
+                )
             return False, f"Daily limit reached: {calls_today}/{user_daily_limit} calls for user {user_id} ({'admin' if is_admin else 'user'})"
         
-        # WARN at 80% of daily limit
-        if calls_today >= user_daily_limit * 0.8:
+        # WARN at 80% of daily limit (only for interactive calls)
+        if should_notify and calls_today >= user_daily_limit * 0.8:
             remaining = user_daily_limit - calls_today
             self._notify_user(
                 'daily_limit_warning',
@@ -283,8 +292,8 @@ class AIBudgetManager:
                 'warning'
             )
         
-        # WARN at 80% of system cap
-        if system_calls_today >= self.SYSTEM_DAILY_CAP * 0.8:
+        # WARN at 80% of system cap (only for interactive calls)
+        if should_notify and system_calls_today >= self.SYSTEM_DAILY_CAP * 0.8:
             system_remaining = self.SYSTEM_DAILY_CAP - system_calls_today
             self._notify_user(
                 'system_cap_warning',
@@ -296,11 +305,12 @@ class AIBudgetManager:
         calls_this_hour = self._get_calls_in_period('hour', user_id)
         if calls_this_hour >= self.HOURLY_CALL_LIMIT:
             self._trigger_throttle(f"Hourly limit reached: {calls_this_hour}/{self.HOURLY_CALL_LIMIT}")
-            self._notify_user(
-                'hourly_limit_reached',
-                f'AI calls throttled: {calls_this_hour}/{self.HOURLY_CALL_LIMIT} calls this hour. Using cached responses.',
-                'warning'
-            )
+            if should_notify:
+                self._notify_user(
+                    'hourly_limit_reached',
+                    f'AI calls throttled: {calls_this_hour}/{self.HOURLY_CALL_LIMIT} calls this hour. Using cached responses.',
+                    'warning'
+                )
             return False, f"Hourly limit reached: {calls_this_hour}/{self.HOURLY_CALL_LIMIT} calls for user {user_id}"
         
         # Check background limit per user (if background call)
@@ -319,11 +329,12 @@ class AIBudgetManager:
         pattern = self._detect_unusual_pattern()
         if pattern and pattern['severity'] in ['high', 'critical']:
             self._trigger_circuit_breaker(f"Unusual pattern: {pattern['pattern_type']}")
-            self._notify_user(
-                'unusual_pattern',
-                f"Unusual AI usage pattern detected: {pattern['pattern_type']}. System paused for safety.",
-                'critical'
-            )
+            if should_notify:
+                self._notify_user(
+                    'unusual_pattern',
+                    f"Unusual AI usage pattern detected: {pattern['pattern_type']}. System paused for safety.",
+                    'critical'
+                )
             return False, f"Unusual usage pattern detected: {pattern['pattern_type']}"
         
         # APPROVED
