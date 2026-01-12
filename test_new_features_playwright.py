@@ -193,8 +193,106 @@ def test_all_features():
             
         return results
 
+def test_navigation_buttons():
+    """Test navigation buttons (Admin, Settings, Psychology, etc.) for stuck display issues"""
+    
+    with sync_playwright() as p:
+        print("\n🌐 Launching browser...")
+        browser = p.chromium.launch(headless=False)
+        context = browser.new_context()
+        page = context.new_page()
+        
+        errors = []
+        page.on("console", lambda msg: errors.append(msg.text) if "error" in msg.text.lower() else None)
+        
+        results = {
+            "login": False,
+            "nav_admin": False,
+            "nav_settings": False,
+            "nav_psychology": False,
+            "nav_life_companion": False,
+            "nav_chatchat": False
+        }
+        
+        try:
+            # LOGIN
+            print("\n🔐 Logging in...")
+            page.goto(f"{BASE_URL}/chatchat", timeout=15000)
+            page.wait_for_selector("#login-form", timeout=5000)
+            page.fill("#login-username", ADMIN_USER)
+            page.fill("#login-password", ADMIN_PASSWORD)
+            page.click("button[type='submit']")
+            page.wait_for_selector("#dashboard-screen", timeout=10000)
+            print("✅ Login successful")
+            results["login"] = True
+            time.sleep(2)
+            
+            # Test navigation buttons multiple times
+            nav_tests = [
+                ("Admin Analytics", "/admin/analytics", "nav_admin", "#total-users, .stat-card"),
+                ("Settings", "/settings", "nav_settings", ".settings-container, form"),
+                ("Psychology", "/psychology", "nav_psychology", ".psychology-container, .card"),
+                ("Life Companion", "/life-companion", "nav_life_companion", "#chat-container, .chat-container"),
+                ("ChatChat", "/chatchat", "nav_chatchat", "#dashboard-screen, .dashboard"),
+            ]
+            
+            for nav_name, nav_url, result_key, expected_selector in nav_tests:
+                print(f"\n🔄 Testing: {nav_name} ({nav_url})")
+                
+                for attempt in range(3):  # Test each page 3 times
+                    try:
+                        start_time = time.time()
+                        page.goto(f"{BASE_URL}{nav_url}", timeout=15000)
+                        
+                        # Wait for content to load
+                        try:
+                            page.wait_for_selector(expected_selector.split(",")[0].strip(), timeout=8000)
+                            load_time = time.time() - start_time
+                            print(f"  ✅ Attempt {attempt+1}: Loaded in {load_time:.2f}s")
+                            results[result_key] = True
+                        except:
+                            load_time = time.time() - start_time
+                            print(f"  ⚠️ Attempt {attempt+1}: Timeout after {load_time:.2f}s (may be stuck)")
+                            page.screenshot(path=f"nav_stuck_{result_key}_{attempt}.png")
+                        
+                        time.sleep(1)
+                        
+                    except Exception as e:
+                        print(f"  ❌ Attempt {attempt+1}: Error - {e}")
+                
+                time.sleep(1)
+            
+            # Summary
+            print("\n" + "="*60)
+            print("📋 NAVIGATION TEST RESULTS")
+            print("="*60)
+            for test_name, passed in results.items():
+                status = "✅ PASS" if passed else "❌ FAIL"
+                print(f"  {status}: {test_name}")
+            
+            if errors:
+                print(f"\n⚠️ Console errors detected ({len(errors)}):")
+                for err in errors[:5]:
+                    print(f"  - {err[:100]}")
+            
+            print("\n⏸️ Browser open for 10 seconds...")
+            time.sleep(10)
+            
+        except Exception as e:
+            print(f"\n❌ Error: {e}")
+            import traceback
+            traceback.print_exc()
+            page.screenshot(path="nav_test_error.png")
+        
+        finally:
+            browser.close()
+            print("✅ Test complete!")
+        
+        return results
+
+
 if __name__ == "__main__":
     print("="*60)
-    print("🧪 NEW FEATURES TEST SUITE")
+    print("🧪 NAVIGATION BUTTON TEST")
     print("="*60)
-    test_all_features()
+    test_navigation_buttons()
