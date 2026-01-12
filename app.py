@@ -4748,9 +4748,18 @@ def route_to_domain_characters():
         
         user_id = request.current_user.get('user_id')
         
+        # Check if user is admin for AI budget limits
+        is_admin = False
+        try:
+            user_role = integrated_db.get_user_role(user_id)
+            is_admin = has_admin_access(user_role)
+        except:
+            pass
+        
         # Build context for routing
         context = {
             'user_id': user_id,
+            'is_admin': is_admin,
             'timestamp': datetime.now().isoformat()
         }
         

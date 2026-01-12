@@ -366,12 +366,13 @@ class DomainCharacterAI:
             CharacterResponse with AI-generated content
         """
         user_id = context.get('user_id')
+        is_admin = context.get('is_admin', False)
         
         # Check AI budget if available
         if self.ai_budget:
             allowed, deny_reason = self.ai_budget.can_make_ai_call(
                 user_id=user_id,
-                is_admin=False,
+                is_admin=is_admin,
                 is_background=False
             )
             if not allowed:
