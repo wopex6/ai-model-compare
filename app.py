@@ -274,6 +274,17 @@ try:
     print("✓ Developer Analytics initialized")
     print("✓ Personality Context Integrator initialized (Big5 + profile → conversations)")
     
+    # Clear old AI budget notifications on startup (prevents stale notifications)
+    try:
+        cursor = smart_response_conn.cursor()
+        cursor.execute('UPDATE ai_budget_notifications SET acknowledged = 1 WHERE acknowledged = 0')
+        cleared = cursor.rowcount
+        smart_response_conn.commit()
+        if cleared > 0:
+            print(f"✓ Cleared {cleared} old AI budget notifications")
+    except Exception as e:
+        print(f"⚠️ Could not clear old notifications: {e}")
+    
     # Initialize frontend error logging table
     cursor = smart_response_conn.cursor()
     cursor.execute('''
