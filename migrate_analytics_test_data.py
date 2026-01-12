@@ -6,6 +6,7 @@ Migration script to populate test data for analytics dashboard:
 """
 import sqlite3
 import random
+import os
 from datetime import datetime, timedelta
 
 def migrate():
@@ -13,8 +14,19 @@ def migrate():
     print("📊 ANALYTICS TEST DATA MIGRATION")
     print("=" * 60)
     
+    # Find database path (works locally and on PythonAnywhere)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    db_path = os.path.join(script_dir, 'smart_response.db')
+    
+    if not os.path.exists(db_path):
+        print(f"  ⚠️ Database not found at: {db_path}")
+        # Try current directory
+        db_path = 'smart_response.db'
+    
+    print(f"  Using database: {db_path}")
+    
     # Connect to smart_response.db
-    conn = sqlite3.connect('smart_response.db')
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
     # 1. Update character effectiveness with varied values
