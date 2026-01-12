@@ -455,7 +455,11 @@ class IntegratedAIChatbot {
         // Dashboard navigation
         document.querySelectorAll('.nav-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
-                this.switchTab(e.target.dataset.tab);
+                // Use currentTarget (the button) not target (might be icon inside)
+                const tabName = e.currentTarget.dataset.tab;
+                if (tabName) {
+                    this.switchTab(tabName);
+                }
                 // Close mobile menu after selecting a tab
                 const navMenu = document.getElementById('nav-menu');
                 if (navMenu) navMenu.classList.remove('open');
