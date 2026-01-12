@@ -92,12 +92,23 @@ class AIBudgetManager:
                 -- Result
                 success BOOLEAN,
                 error_message TEXT,
+                response_time_ms INTEGER,
                 
                 -- Flags
                 is_background BOOLEAN DEFAULT 0,
                 is_automated BOOLEAN DEFAULT 0
             )
         ''')
+        
+        # Add columns if missing (for existing databases)
+        try:
+            cursor.execute('ALTER TABLE ai_usage_log ADD COLUMN model TEXT')
+        except:
+            pass
+        try:
+            cursor.execute('ALTER TABLE ai_usage_log ADD COLUMN response_time_ms INTEGER')
+        except:
+            pass
         
         cursor.execute('''
             CREATE INDEX IF NOT EXISTS idx_usage_timestamp 
@@ -326,7 +337,8 @@ class AIBudgetManager:
                    input_tokens: int = 0,
                    output_tokens: int = 0,
                    error_message: Optional[str] = None,
-                   model: Optional[str] = None):
+                   model: Optional[str] = None,
+                   response_time_ms: Optional[int] = None):
         """Log every AI call for tracking and analysis"""
         
         # Calculate actual cost based on model and tokens
@@ -337,12 +349,12 @@ class AIBudgetManager:
         cursor.execute('''
             INSERT INTO ai_usage_log
             (call_type, character, user_id, model, estimated_cost, purpose,
-             input_tokens, output_tokens, success, error_message,
+             input_tokens, output_tokens, success, error_message, response_time_ms,
              is_background, is_automated)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             call_type, character, user_id, model, estimated_cost, purpose,
-            input_tokens, output_tokens, success, error_message,
+            input_tokens, output_tokens, success, error_message, response_time_ms,
             is_background, is_background
         ))
         
