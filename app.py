@@ -1357,14 +1357,30 @@ def populate_test_data():
             ''', (task_name, last_run.isoformat(), next_run.isoformat(), status, run_count))
             results['background_tasks'].append({'task': task_name, 'status': status})
         
-        # 3. Update token estimates
+        # 3. Add model column if missing, then update tokens and costs
+        try:
+            cursor.execute('ALTER TABLE ai_usage_log ADD COLUMN model TEXT')
+        except:
+            pass  # Column already exists
+        
+        models = ['gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo', 'claude-3-haiku']
+        model_costs = {
+            'gpt-4o-mini': {'input': 0.00015, 'output': 0.0006},
+            'gpt-4o': {'input': 0.005, 'output': 0.015},
+            'gpt-3.5-turbo': {'input': 0.0005, 'output': 0.0015},
+            'claude-3-haiku': {'input': 0.00025, 'output': 0.00125},
+        }
+        
         cursor.execute('SELECT id, call_type FROM ai_usage_log ORDER BY timestamp DESC LIMIT 50')
         rows = cursor.fetchall()
-        for row_id, call_type in rows:
+        for i, (row_id, call_type) in enumerate(rows):
             in_tok = 120 + random.randint(0, 80)
             out_tok = 200 + random.randint(0, 150)
-            cursor.execute('UPDATE ai_usage_log SET input_tokens = ?, output_tokens = ? WHERE id = ?',
-                          (in_tok, out_tok, row_id))
+            model = models[i % len(models)]
+            costs = model_costs[model]
+            cost = round((in_tok / 1000) * costs['input'] + (out_tok / 1000) * costs['output'], 6)
+            cursor.execute('UPDATE ai_usage_log SET input_tokens = ?, output_tokens = ?, model = ?, estimated_cost = ? WHERE id = ?',
+                          (in_tok, out_tok, model, cost, row_id))
         results['tokens'].append({'updated': len(rows)})
         
         smart_response_conn.commit()

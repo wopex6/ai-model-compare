@@ -35,8 +35,20 @@ class AIBudgetManager:
     # RATE LIMITS
     CALLS_PER_MINUTE = 20  # Max 20 calls/minute
     
-    # COST TRACKING (for reporting)
-    COST_PER_CALL = 0.002  # Approximate cost per call
+    # COST TRACKING
+    # Cost estimation - per 1K tokens by model
+    MODEL_COSTS = {
+        'gpt-4': {'input': 0.03, 'output': 0.06},
+        'gpt-4-turbo': {'input': 0.01, 'output': 0.03},
+        'gpt-4o': {'input': 0.005, 'output': 0.015},
+        'gpt-4o-mini': {'input': 0.00015, 'output': 0.0006},
+        'gpt-3.5-turbo': {'input': 0.0005, 'output': 0.0015},
+        'claude-3-opus': {'input': 0.015, 'output': 0.075},
+        'claude-3-sonnet': {'input': 0.003, 'output': 0.015},
+        'claude-3-haiku': {'input': 0.00025, 'output': 0.00125},
+        'default': {'input': 0.002, 'output': 0.002}  # Fallback
+    }
+    COST_PER_CALL = 0.002  # Fallback average cost
     
     # PATTERN THRESHOLDS
     SPIKE_THRESHOLD = 15  # >15 calls in 5 minutes = spike
@@ -67,6 +79,7 @@ class AIBudgetManager:
                 call_type TEXT NOT NULL,
                 character TEXT,
                 user_id INTEGER,
+                model TEXT,
                 
                 -- Cost tracking
                 estimated_cost FLOAT NOT NULL,
@@ -312,21 +325,23 @@ class AIBudgetManager:
                    is_background: bool = False,
                    input_tokens: int = 0,
                    output_tokens: int = 0,
-                   error_message: Optional[str] = None):
+                   error_message: Optional[str] = None,
+                   model: Optional[str] = None):
         """Log every AI call for tracking and analysis"""
         
-        estimated_cost = self.COST_PER_CALL
+        # Calculate actual cost based on model and tokens
+        estimated_cost = self._calculate_cost(model, input_tokens, output_tokens)
         
         cursor = self.db.cursor()
         
         cursor.execute('''
             INSERT INTO ai_usage_log
-            (call_type, character, user_id, estimated_cost, purpose,
+            (call_type, character, user_id, model, estimated_cost, purpose,
              input_tokens, output_tokens, success, error_message,
              is_background, is_automated)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
-            call_type, character, user_id, estimated_cost, purpose,
+            call_type, character, user_id, model, estimated_cost, purpose,
             input_tokens, output_tokens, success, error_message,
             is_background, is_background
         ))
@@ -342,6 +357,27 @@ class AIBudgetManager:
                     f'Multiple AI call failures detected ({recent_errors} in 5 minutes). Check API status.',
                     'high'
                 )
+    
+    def _calculate_cost(self, model: Optional[str], input_tokens: int, output_tokens: int) -> float:
+        """Calculate actual cost based on model and token usage"""
+        if not model or (input_tokens == 0 and output_tokens == 0):
+            return self.COST_PER_CALL  # Fallback to flat rate
+        
+        # Normalize model name for lookup
+        model_lower = model.lower()
+        
+        # Find matching cost entry
+        costs = self.MODEL_COSTS.get('default')
+        for model_key in self.MODEL_COSTS:
+            if model_key in model_lower:
+                costs = self.MODEL_COSTS[model_key]
+                break
+        
+        # Calculate cost: (tokens / 1000) * rate
+        input_cost = (input_tokens / 1000) * costs['input']
+        output_cost = (output_tokens / 1000) * costs['output']
+        
+        return round(input_cost + output_cost, 6)
     
     def _get_calls_in_period(self, period: str, user_id: Optional[int] = None) -> int:
         """Get number of calls in specified period for a specific user"""
