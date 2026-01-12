@@ -162,6 +162,7 @@ def deploy_via_api():
         f'cd {PROJECT_PATH} && python migrate_all_tables.py',
         f'cd {PROJECT_PATH} && python fix_message_count_column.py',
         f'cd {PROJECT_PATH} && python migrate_analytics_tables.py',
+        f'cd {PROJECT_PATH} && python migrate_analytics_test_data.py',
     ]
     
     for cmd in commands:
