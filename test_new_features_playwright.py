@@ -291,8 +291,201 @@ def test_navigation_buttons():
         return results
 
 
+def test_life_companion_stuck():
+    """Test Life Companion page for stuck/loading issues - clicking between advisors"""
+    
+    with sync_playwright() as p:
+        print("\n🌐 Launching browser...")
+        browser = p.chromium.launch(headless=False, slow_mo=500)  # Slow down for visibility
+        context = browser.new_context()
+        page = context.new_page()
+        
+        errors = []
+        page.on("pageerror", lambda err: errors.append(str(err)))
+        
+        try:
+            # LOGIN
+            print("\n🔐 Logging in...")
+            page.goto(f"{BASE_URL}/chatchat", timeout=15000)
+            page.wait_for_selector("#login-form", timeout=5000)
+            page.fill("#login-username", ADMIN_USER)
+            page.fill("#login-password", ADMIN_PASSWORD)
+            page.click("button[type='submit']")
+            page.wait_for_selector("#dashboard-screen", timeout=10000)
+            print("✅ Login successful")
+            time.sleep(2)
+            
+            # Go to Life Companion
+            print("\n🏠 Testing Life Companion...")
+            page.goto(f"{BASE_URL}/life-companion", timeout=15000)
+            
+            # Wait and observe
+            print("⏳ Waiting 5s for page to load...")
+            time.sleep(5)
+            page.screenshot(path="life_companion_1.png")
+            print("📸 Screenshot 1 saved")
+            
+            # Dismiss budget notice if visible
+            dismiss_btn = page.query_selector("button:has-text('Dismiss'), button:has-text('Got it')")
+            if dismiss_btn:
+                print("  Dismissing budget notice...")
+                dismiss_btn.click()
+                time.sleep(1)
+            
+            # Test clicking through ALL advisors rapidly
+            print("\n🖱️ Testing advisor switching (rapid clicks):")
+            
+            advisors = ["Aria", "Work Advisor", "Relationship Guide", "Mind Wellness", 
+                       "Body Advisor", "Finance Guide", "Learning Mentor", "Creative Muse"]
+            
+            for i, advisor_name in enumerate(advisors):
+                print(f"  {i+1}. Clicking {advisor_name}...")
+                
+                # Find advisor by text
+                advisor_btn = page.query_selector(f"text={advisor_name}")
+                if advisor_btn:
+                    advisor_btn.click()
+                    time.sleep(1.5)  # Wait for page to respond
+                    
+                    # Check if stuck (loading indicator visible for too long)
+                    loading = page.query_selector(".loading-indicator, .spinner")
+                    if loading and loading.is_visible():
+                        print(f"     ⚠️ STUCK - Loading indicator still visible!")
+                        page.screenshot(path=f"stuck_advisor_{i}_{advisor_name}.png")
+                    else:
+                        print(f"     ✅ OK")
+                else:
+                    print(f"     ❌ Button not found")
+            
+            page.screenshot(path="life_companion_after_all_clicks.png")
+            print("\n📸 Screenshot after all advisor clicks")
+            
+            # Now test rapid switching (click multiple times quickly)
+            print("\n🏃 Testing RAPID switching:")
+            for _ in range(3):
+                for advisor_name in ["Aria", "Work Advisor", "Mind Wellness"]:
+                    advisor_btn = page.query_selector(f"text={advisor_name}")
+                    if advisor_btn:
+                        advisor_btn.click()
+                        time.sleep(0.3)  # Very quick clicks
+            
+            time.sleep(3)
+            page.screenshot(path="life_companion_rapid_switch.png")
+            print("📸 Screenshot after rapid switching")
+            
+            if errors:
+                print(f"\n❌ Page errors detected ({len(errors)}):")
+                for err in errors[:5]:
+                    print(f"  - {err[:150]}")
+            else:
+                print("\n✅ No page errors detected")
+            
+            print("\n⏸️ Browser staying open 15s for inspection...")
+            time.sleep(15)
+            
+        except Exception as e:
+            print(f"\n❌ Error: {e}")
+            import traceback
+            traceback.print_exc()
+            page.screenshot(path="life_companion_error.png")
+        
+        finally:
+            browser.close()
+            print("✅ Test complete!")
+
+
+def test_dashboard_navigation():
+    """Test dashboard navigation buttons for stuck issues"""
+    
+    with sync_playwright() as p:
+        print("\n🌐 Launching browser...")
+        browser = p.chromium.launch(headless=False, slow_mo=300)
+        context = browser.new_context()
+        page = context.new_page()
+        
+        try:
+            # LOGIN
+            print("\n🔐 Logging in...")
+            page.goto(f"{BASE_URL}/chatchat", timeout=15000)
+            page.wait_for_selector("#login-form", timeout=5000)
+            page.fill("#login-username", ADMIN_USER)
+            page.fill("#login-password", ADMIN_PASSWORD)
+            page.click("button[type='submit']")
+            page.wait_for_selector("#dashboard-screen", timeout=10000)
+            print("✅ Login successful")
+            time.sleep(2)
+            page.screenshot(path="dashboard_1_initial.png")
+            
+            # Find and click navigation buttons on the dashboard
+            print("\n🖱️ Testing dashboard navigation buttons:")
+            
+            # Look for common navigation elements
+            nav_selectors = [
+                ("Admin button", "text=Admin"),
+                ("Settings button", "text=Settings"),
+                ("Psychology button", "text=Psychology"),
+                ("Life Companion button", "text=Life Companion"),
+                ("Profile button", "text=Profile"),
+                ("Analytics button", "text=Analytics"),
+                ("Any nav link", "nav a"),
+                ("Any button", ".nav-btn, .dashboard-btn"),
+            ]
+            
+            for name, selector in nav_selectors:
+                btn = page.query_selector(selector)
+                if btn:
+                    print(f"  ✅ Found: {name}")
+                else:
+                    print(f"  ❌ Not found: {name}")
+            
+            # Click through ONLY the nav-btn elements with data-tab
+            print("\n🔄 Clicking navigation tabs (data-tab buttons):")
+            
+            # Get nav buttons with data-tab attribute
+            tab_buttons = page.query_selector_all(".nav-btn[data-tab]")
+            print(f"  Found {len(tab_buttons)} tab buttons")
+            
+            for btn in tab_buttons:
+                try:
+                    tab_name = btn.get_attribute("data-tab")
+                    title = btn.get_attribute("title") or tab_name
+                    
+                    if btn.is_visible():
+                        print(f"  Clicking '{title}' (data-tab={tab_name})...")
+                        btn.click()
+                        time.sleep(2)
+                        
+                        # Check if tab content is visible
+                        tab_content = page.query_selector(f"#{tab_name}-tab.active")
+                        if tab_content and tab_content.is_visible():
+                            print(f"      ✅ Tab content visible")
+                        else:
+                            print(f"      ❌ Tab content NOT visible - STUCK!")
+                            page.screenshot(path=f"stuck_tab_{tab_name}.png")
+                    else:
+                        print(f"  ⏭️ Skipping '{title}' (not visible)")
+                        
+                except Exception as e:
+                    print(f"      ⚠️ Error: {e}")
+            
+            page.screenshot(path="after_all_tabs.png")
+            
+            print("\n⏸️ Browser staying open 15s for inspection...")
+            time.sleep(15)
+            
+        except Exception as e:
+            print(f"\n❌ Error: {e}")
+            import traceback
+            traceback.print_exc()
+            page.screenshot(path="dashboard_nav_error.png")
+        
+        finally:
+            browser.close()
+            print("✅ Test complete!")
+
+
 if __name__ == "__main__":
     print("="*60)
-    print("🧪 NAVIGATION BUTTON TEST")
+    print("🧪 DASHBOARD NAVIGATION TEST")
     print("="*60)
-    test_navigation_buttons()
+    test_dashboard_navigation()
