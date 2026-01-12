@@ -368,6 +368,9 @@ class DomainCharacterAI:
         user_id = context.get('user_id')
         is_admin = context.get('is_admin', False)
         
+        # Debug log admin status
+        print(f"[AI-INTEGRATION] User {user_id} is_admin={is_admin} (from context)")
+        
         # Check AI budget if available
         if self.ai_budget:
             allowed, deny_reason = self.ai_budget.can_make_ai_call(
