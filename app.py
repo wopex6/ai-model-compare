@@ -1346,22 +1346,52 @@ def get_background_task_status():
         if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
+        # Get last run times from database if available
+        task_info = {}
+        try:
+            cursor = smart_response_conn.cursor()
+            cursor.execute('''
+                SELECT task_name, last_run, next_run, status, run_count
+                FROM background_task_log
+                ORDER BY last_run DESC
+            ''')
+            for row in cursor.fetchall():
+                task_info[row[0]] = {
+                    'last_run': row[1],
+                    'next_run': row[2],
+                    'status': row[3],
+                    'run_count': row[4],
+                    'running': row[3] == 'running'
+                }
+        except:
+            pass  # Table might not exist
+        
+        # Default tasks with status
+        default_tasks = {
+            'context_maintenance': {'status': 'available', 'running': False},
+            'pattern_expansion': {'status': 'available', 'running': False},
+            'character_expansion': {'status': 'available', 'running': False},
+            'monthly_cleanup': {'status': 'available', 'running': False}
+        }
+        
+        # Merge with actual task info
+        for task_name, info in task_info.items():
+            if task_name in default_tasks:
+                default_tasks[task_name].update(info)
+            else:
+                default_tasks[task_name] = info
+        
         if background_scheduler:
             return jsonify({
                 'success': True,
                 'running': background_scheduler.running,
-                'tasks': {
-                    'context_maintenance': {'status': 'available'},
-                    'pattern_expansion': {'status': 'available'},
-                    'character_expansion': {'status': 'available'},
-                    'monthly_cleanup': {'status': 'available'}
-                }
+                'tasks': default_tasks
             })
         else:
             return jsonify({
                 'success': True,
                 'running': False,
-                'tasks': {}
+                'tasks': default_tasks
             })
     except Exception as e:
         print(f"Error in get_background_task_status: {e}")

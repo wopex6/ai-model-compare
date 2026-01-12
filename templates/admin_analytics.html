@@ -589,11 +589,19 @@
                 let taskHtml = '';
                 const taskList = (tasks && tasks.tasks) ? tasks.tasks : {};
                 for (const [name, info] of Object.entries(taskList)) {
-                    const status = info.running ? 'running' : 'pending';
-                    const icon = info.running ? 'fa-spinner fa-spin' : 'fa-clock';
+                    const isRunning = info.running || info.status === 'running';
+                    const status = isRunning ? 'running' : (info.status || 'available');
+                    const icon = isRunning ? 'fa-spinner fa-spin' : (status === 'completed' ? 'fa-check' : 'fa-clock');
+                    const statusColor = isRunning ? '#f59e0b' : (status === 'completed' ? '#10b981' : '#6b7280');
+                    const lastRun = info.last_run ? new Date(info.last_run).toLocaleDateString() : '';
+                    const runCount = info.run_count || 0;
                     taskHtml += `
-                        <div class="task-badge ${status}">
-                            <i class="fas ${icon}"></i> ${name}
+                        <div class="task-badge" style="background: ${statusColor}20; border: 1px solid ${statusColor}; color: ${statusColor}; padding: 8px 12px; border-radius: 8px; margin: 4px; display: inline-flex; align-items: center; gap: 8px;">
+                            <i class="fas ${icon}"></i>
+                            <div>
+                                <div style="font-weight: 600;">${name.replace(/_/g, ' ')}</div>
+                                ${lastRun ? `<div style="font-size: 0.75rem; opacity: 0.8;">Last: ${lastRun} (${runCount}x)</div>` : ''}
+                            </div>
                         </div>
                     `;
                 }
@@ -616,12 +624,15 @@
                     callsHtml += '<tr style="background:#f8f9fa;"><th style="padding:8px;">Time</th><th>Purpose</th><th>Tokens</th><th>Cost</th></tr>';
                     for (const call of calls) {
                         const time = new Date(call.timestamp).toLocaleTimeString();
+                        const inTok = call.input_tokens || 0;
+                        const outTok = call.output_tokens || 0;
+                        const tokens = (inTok || outTok) ? `${inTok}/${outTok}` : '-';
                         callsHtml += `
                             <tr style="border-bottom: 1px solid #eee;">
                                 <td style="padding:8px;">${time}</td>
-                                <td>${call.purpose || '-'}</td>
-                                <td>${call.tokens_used || '-'}</td>
-                                <td>$${(call.cost || 0).toFixed(4)}</td>
+                                <td>${call.purpose || call.call_type || '-'}</td>
+                                <td>${tokens}</td>
+                                <td>$${(call.estimated_cost || 0).toFixed(4)}</td>
                             </tr>
                         `;
                     }
