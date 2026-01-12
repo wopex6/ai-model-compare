@@ -1024,17 +1024,27 @@
         // Hourly usage chart
         let hourlyChart = null;
         function renderHourlyChart(calls) {
+            const container = document.getElementById('hourly-chart')?.parentElement;
+            if (!container) return;
+            
+            // Destroy existing chart
+            if (hourlyChart) {
+                hourlyChart.destroy();
+                hourlyChart = null;
+            }
+            
+            // Clear container and create fresh canvas
+            container.innerHTML = '<canvas id="hourly-chart" height="150"></canvas>';
             const ctx = document.getElementById('hourly-chart');
-            if (!ctx) return;
             
             // Count calls by hour
             const hourCounts = new Array(24).fill(0);
             for (const call of calls) {
-                const hour = new Date(call.timestamp).getHours();
-                hourCounts[hour]++;
+                if (call && call.timestamp) {
+                    const hour = new Date(call.timestamp).getHours();
+                    hourCounts[hour]++;
+                }
             }
-            
-            if (hourlyChart) hourlyChart.destroy();
             
             hourlyChart = new Chart(ctx, {
                 type: 'bar',
@@ -1051,6 +1061,7 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    animation: false,
                     plugins: { legend: { display: false } },
                     scales: {
                         y: { beginAtZero: true, ticks: { stepSize: 1 } },
