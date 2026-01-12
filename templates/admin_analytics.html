@@ -436,6 +436,9 @@
                         <button onclick="updateAILimits()" class="btn btn-primary" style="margin-top: 15px; width: 100%;">
                             <i class="fas fa-save"></i> Update Limits
                         </button>
+                        <button onclick="populateTestData()" class="btn btn-secondary" style="margin-top: 10px; width: 100%; background: #6366f1;">
+                            <i class="fas fa-database"></i> Populate Test Data
+                        </button>
                         <div id="limits-status" style="margin-top: 10px; font-size: 0.85rem;"></div>
                     </div>
                 </div>
@@ -896,6 +899,35 @@
             setTimeout(() => {
                 statusDiv.innerHTML = '';
             }, 5000);
+        }
+        
+        // Populate test data for analytics
+        async function populateTestData() {
+            const statusDiv = document.getElementById('limits-status');
+            statusDiv.innerHTML = '<span style="color:#6366f1;"><i class="fas fa-spinner fa-spin"></i> Populating test data...</span>';
+            
+            try {
+                const res = await AuthHelper.authenticatedFetch('/api/admin/populate-test-data', {
+                    method: 'POST'
+                });
+                
+                const result = await res.json();
+                
+                if (result.success) {
+                    const chars = result.results?.character_effectiveness?.length || 0;
+                    const tasks = result.results?.background_tasks?.length || 0;
+                    const tokens = result.results?.tokens?.[0]?.updated || 0;
+                    statusDiv.innerHTML = `<span style="color:#10b981;"><i class="fas fa-check"></i> Done! ${chars} characters, ${tasks} tasks, ${tokens} tokens updated</span>`;
+                    // Reload data to show changes
+                    loadAllData();
+                } else {
+                    statusDiv.innerHTML = `<span style="color:#ef4444;"><i class="fas fa-exclamation-triangle"></i> ${result.error}</span>`;
+                }
+            } catch (e) {
+                statusDiv.innerHTML = `<span style="color:#ef4444;"><i class="fas fa-exclamation-triangle"></i> Error: ${e.message}</span>`;
+            }
+            
+            setTimeout(() => { statusDiv.innerHTML = ''; }, 8000);
         }
         
         // Load on page load
