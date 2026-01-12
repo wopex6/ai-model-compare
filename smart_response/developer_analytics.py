@@ -166,7 +166,7 @@ class DeveloperAnalytics:
         cursor = self.db.cursor()
         
         query = '''
-            SELECT id, timestamp, call_type, character, user_id, 
+            SELECT id, timestamp, call_type, character, user_id, model,
                    estimated_cost, purpose, input_tokens, output_tokens,
                    success, error_message, is_background
             FROM ai_usage_log
@@ -200,7 +200,7 @@ class DeveloperAnalytics:
         
         cursor.execute(query, params)
         
-        columns = ['id', 'timestamp', 'call_type', 'character', 'user_id',
+        columns = ['id', 'timestamp', 'call_type', 'character', 'user_id', 'model',
                   'estimated_cost', 'purpose', 'input_tokens', 'output_tokens',
                   'success', 'error_message', 'is_background']
         

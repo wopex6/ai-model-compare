@@ -624,16 +624,19 @@
                 
                 if (calls && calls.length > 0) {
                     let callsHtml = '<table style="width:100%; font-size: 0.85rem;">';
-                    callsHtml += '<tr style="background:#f8f9fa;"><th style="padding:8px;">Time</th><th>Purpose</th><th>Tokens</th><th>Cost</th></tr>';
+                    callsHtml += '<tr style="background:#f8f9fa;"><th style="padding:8px;">Date/Time</th><th>Purpose</th><th>Model</th><th>Tokens</th><th>Cost</th></tr>';
                     for (const call of calls) {
-                        const time = new Date(call.timestamp).toLocaleTimeString();
+                        const dt = new Date(call.timestamp);
+                        const dateTime = dt.toLocaleDateString('en-AU', {day:'2-digit', month:'short'}) + ' ' + dt.toLocaleTimeString('en-AU', {hour:'2-digit', minute:'2-digit'});
                         const inTok = call.input_tokens || 0;
                         const outTok = call.output_tokens || 0;
                         const tokens = (inTok || outTok) ? `${inTok}/${outTok}` : '-';
+                        const model = call.model ? call.model.replace('gpt-', '').replace('claude-', '') : '-';
                         callsHtml += `
                             <tr style="border-bottom: 1px solid #eee;">
-                                <td style="padding:8px;">${time}</td>
+                                <td style="padding:8px; white-space:nowrap;">${dateTime}</td>
                                 <td>${call.purpose || call.call_type || '-'}</td>
+                                <td style="font-size:0.75rem;">${model}</td>
                                 <td>${tokens}</td>
                                 <td>$${(call.estimated_cost || 0).toFixed(4)}</td>
                             </tr>
