@@ -1268,6 +1268,33 @@ def get_smart_response_analytics():
             except Exception as e:
                 analytics['character_expansion'] = {'error': str(e)}
         
+        # Domain character usage stats
+        domain_char_stats = {}
+        try:
+            cursor = smart_response_conn.cursor()
+            cursor.execute('''
+                SELECT character, COUNT(*) as uses, 
+                       SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as successes,
+                       AVG(response_time_ms) as avg_response
+                FROM ai_usage_log
+                WHERE character IS NOT NULL
+                AND timestamp > datetime('now', '-30 days')
+                GROUP BY character
+                ORDER BY uses DESC
+            ''')
+            for row in cursor.fetchall():
+                char_name = row[0]
+                uses = row[1]
+                successes = row[2] or 0
+                avg_resp = row[3]
+                domain_char_stats[char_name] = {
+                    'uses': uses,
+                    'success_rate': round((successes / uses) * 100, 1) if uses > 0 else 0,
+                    'avg_response_ms': round(avg_resp) if avg_resp else None
+                }
+        except Exception as e:
+            print(f"Domain char stats error: {e}")
+        
         # Format response for frontend compatibility
         explicit_ctx = analytics.get('explicit_context') or {}
         by_type_list = explicit_ctx.get('by_type', [])
@@ -1291,7 +1318,8 @@ def get_smart_response_analytics():
             'character_stats': {
                 'total': char_system.get('total_characters', 0),
                 'effectiveness': effectiveness_dict
-            }
+            },
+            'domain_character_stats': domain_char_stats
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1432,6 +1460,38 @@ def run_background_task():
         else:
             return jsonify({'error': 'Background scheduler not available'}), 500
             
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/cost-alert', methods=['POST'])
+@require_auth
+def set_cost_alert():
+    """Set cost alert threshold (admin only)"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        data = request.get_json() or {}
+        threshold = data.get('threshold', 1.0)
+        
+        if threshold < 0.10:
+            return jsonify({'error': 'Minimum threshold is $0.10'}), 400
+        
+        # Store in settings
+        cursor = smart_response_conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS admin_settings (
+                key TEXT PRIMARY KEY, value TEXT, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        cursor.execute('''
+            INSERT OR REPLACE INTO admin_settings (key, value, updated_at)
+            VALUES ('cost_alert_threshold', ?, CURRENT_TIMESTAMP)
+        ''', (str(threshold),))
+        smart_response_conn.commit()
+        
+        return jsonify({'success': True, 'threshold': threshold})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -6172,6 +6232,13 @@ def get_developer_ai_calls():
         
         limit = request.args.get('limit', 100, type=int)
         filters = {}
+        
+        # Support days parameter for date range
+        days = request.args.get('days', type=int)
+        if days:
+            from datetime import datetime, timedelta
+            filters['date_from'] = (datetime.now() - timedelta(days=days)).strftime('%Y-%m-%d')
+        
         if request.args.get('date_from'):
             filters['date_from'] = request.args.get('date_from')
         if request.args.get('date_to'):

@@ -457,22 +457,56 @@
             </div>
         </div>
         
-        <!-- Character Effectiveness -->
+        <!-- Character Effectiveness + Domain Character Usage -->
         <div class="row">
-            <div class="col-md-8">
+            <div class="col-md-6">
                 <div class="chart-card">
-                    <h3><i class="fas fa-theater-masks"></i> Character Effectiveness</h3>
+                    <h3><i class="fas fa-theater-masks"></i> Character Effectiveness (Style)</h3>
                     <div class="character-effectiveness" id="char-effectiveness">
                         <div class="loading">Loading character data...</div>
                     </div>
                 </div>
             </div>
+            <div class="col-md-6">
+                <div class="chart-card">
+                    <h3><i class="fas fa-users"></i> Domain Character Usage</h3>
+                    <div class="domain-char-usage" id="domain-char-usage">
+                        <div class="loading">Loading domain usage...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Context + Cost Alert -->
+        <div class="row">
             <div class="col-md-4">
                 <div class="chart-card">
                     <h3><i class="fas fa-lightbulb"></i> Explicit Context by Type</h3>
                     <div class="context-type-grid" id="context-types">
                         <div class="loading">Loading...</div>
                     </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="chart-card">
+                    <h3><i class="fas fa-bell"></i> Cost Alert Threshold</h3>
+                    <div style="padding: 10px;">
+                        <label style="font-size: 0.85rem; color: #666;">Alert when daily cost exceeds:</label>
+                        <div style="display: flex; gap: 10px; margin-top: 8px;">
+                            <input type="number" id="cost-alert-threshold" step="0.10" min="0.10" value="1.00" 
+                                   style="width: 80px; padding: 8px; border: 1px solid #ddd; border-radius: 6px;">
+                            <button onclick="setCostAlert()" class="btn btn-primary" style="padding: 8px 15px;">
+                                <i class="fas fa-save"></i> Set
+                            </button>
+                        </div>
+                        <div id="cost-alert-status" style="margin-top: 10px; font-size: 0.85rem;"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="chart-card">
+                    <h3><i class="fas fa-clock"></i> Usage by Hour</h3>
+                    <canvas id="hourly-chart" height="150"></canvas>
                 </div>
             </div>
         </div>
@@ -494,11 +528,16 @@
     <script>
         async function loadAllData() {
             try {
+                // Get filter values
+                const dateRange = document.getElementById('date-range')?.value || '7';
+                const userFilter = document.getElementById('user-filter')?.value || '';
+                const filterParams = `days=${dateRange}${userFilter ? '&user_id=' + userFilter : ''}`;
+                
                 // Load all data in parallel with individual error handling
                 const results = await Promise.allSettled([
-                    AuthHelper.authenticatedFetch('/api/admin/statistics'),
-                    AuthHelper.authenticatedFetch('/api/ai-budget/status'),
-                    AuthHelper.authenticatedFetch('/api/admin/smart-response-analytics'),
+                    AuthHelper.authenticatedFetch(`/api/admin/statistics?${filterParams}`),
+                    AuthHelper.authenticatedFetch(`/api/ai-budget/status?${filterParams}`),
+                    AuthHelper.authenticatedFetch(`/api/admin/smart-response-analytics?${filterParams}`),
                     AuthHelper.authenticatedFetch('/api/admin/background-tasks/status')
                 ]);
                 
@@ -588,6 +627,24 @@
                 }
                 document.getElementById('char-effectiveness').innerHTML = charHtml || '<p style="color:#888;">No character data</p>';
                 
+                // Domain character usage
+                const domainStats = analytics.domain_character_stats || {};
+                let domainHtml = '';
+                for (const [char, data] of Object.entries(domainStats)) {
+                    const successColor = data.success_rate >= 90 ? '#10b981' : data.success_rate >= 70 ? '#f59e0b' : '#ef4444';
+                    domainHtml += `
+                        <div style="display: flex; justify-content: space-between; padding: 8px; border-bottom: 1px solid #eee;">
+                            <span style="font-weight: 500;">${char}</span>
+                            <span>
+                                <span style="color: #666;">${data.uses} uses</span>
+                                <span style="color: ${successColor}; margin-left: 10px;">${data.success_rate}%</span>
+                                ${data.avg_response_ms ? `<span style="color: #888; margin-left: 10px;">${data.avg_response_ms}ms</span>` : ''}
+                            </span>
+                        </div>
+                    `;
+                }
+                document.getElementById('domain-char-usage').innerHTML = domainHtml || '<p style="color:#888;">No domain usage data</p>';
+                
                 // Update tasks
                 let taskHtml = '';
                 const taskList = (tasks && tasks.tasks) ? tasks.tasks : {};
@@ -610,10 +667,10 @@
                 }
                 document.getElementById('task-status').innerHTML = taskHtml || '<p style="color:#888;">No tasks configured</p>';
                 
-                // Load recent AI calls
+                // Load recent AI calls with filters
                 let calls = [];
                 try {
-                    const callsRes = await AuthHelper.authenticatedFetch('/api/developer/ai-calls?limit=10');
+                    const callsRes = await AuthHelper.authenticatedFetch(`/api/developer/ai-calls?limit=20&${filterParams}`);
                     const callsData = await callsRes.json();
                     // Handle both array response and error object
                     calls = Array.isArray(callsData) ? callsData : [];
@@ -650,6 +707,7 @@
                 
                 // Render Charts
                 renderCharts(calls || [], byType);
+                renderHourlyChart(calls || []);
                 
             } catch (error) {
                 console.error('Error loading analytics:', error);
@@ -931,6 +989,75 @@
             }
             
             setTimeout(() => { statusDiv.innerHTML = ''; }, 8000);
+        }
+        
+        // Cost alert threshold
+        async function setCostAlert() {
+            const threshold = parseFloat(document.getElementById('cost-alert-threshold').value);
+            const statusDiv = document.getElementById('cost-alert-status');
+            
+            if (isNaN(threshold) || threshold < 0.10) {
+                statusDiv.innerHTML = '<span style="color:#ef4444;">Minimum threshold is $0.10</span>';
+                return;
+            }
+            
+            try {
+                const res = await AuthHelper.authenticatedFetch('/api/admin/cost-alert', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ threshold })
+                });
+                const result = await res.json();
+                
+                if (result.success) {
+                    statusDiv.innerHTML = `<span style="color:#10b981;"><i class="fas fa-check"></i> Alert set at $${threshold.toFixed(2)}</span>`;
+                } else {
+                    statusDiv.innerHTML = `<span style="color:#ef4444;">${result.error}</span>`;
+                }
+            } catch (e) {
+                statusDiv.innerHTML = `<span style="color:#ef4444;">Error: ${e.message}</span>`;
+            }
+            
+            setTimeout(() => { statusDiv.innerHTML = ''; }, 5000);
+        }
+        
+        // Hourly usage chart
+        let hourlyChart = null;
+        function renderHourlyChart(calls) {
+            const ctx = document.getElementById('hourly-chart');
+            if (!ctx) return;
+            
+            // Count calls by hour
+            const hourCounts = new Array(24).fill(0);
+            for (const call of calls) {
+                const hour = new Date(call.timestamp).getHours();
+                hourCounts[hour]++;
+            }
+            
+            if (hourlyChart) hourlyChart.destroy();
+            
+            hourlyChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Array.from({length: 24}, (_, i) => `${i}:00`),
+                    datasets: [{
+                        label: 'Calls',
+                        data: hourCounts,
+                        backgroundColor: '#667eea80',
+                        borderColor: '#667eea',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { stepSize: 1 } },
+                        x: { ticks: { maxRotation: 45, minRotation: 45, font: { size: 9 } } }
+                    }
+                }
+            });
         }
         
         // Load on page load

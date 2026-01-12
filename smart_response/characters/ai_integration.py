@@ -337,11 +337,11 @@ class DomainCharacterAI:
         for try_provider in providers_to_try:
             try:
                 if try_provider == 'anthropic' and self.anthropic_client:
-                    response = self._generate_anthropic(system_prompt, user_message, {})
+                    response, metadata = self._generate_anthropic(system_prompt, user_message, {})
                     self._mark_provider_success('anthropic')
                     return response
                 elif try_provider == 'openai' and self.openai_client:
-                    response = self._generate_openai(system_prompt, user_message, {})
+                    response, metadata = self._generate_openai(system_prompt, user_message, {})
                     self._mark_provider_success('openai')
                     return response
             except Exception as e:
@@ -404,18 +404,19 @@ class DomainCharacterAI:
             providers_to_try.append(fallback)
         
         ai_response = None
+        ai_metadata = {}
         used_provider = None
         last_error = None
         
         for try_provider in providers_to_try:
             try:
                 if try_provider == 'anthropic' and self.anthropic_client:
-                    ai_response = self._generate_anthropic(full_system_prompt, message, context)
+                    ai_response, ai_metadata = self._generate_anthropic(full_system_prompt, message, context)
                     used_provider = 'anthropic'
                     self._mark_provider_success('anthropic')
                     break
                 elif try_provider == 'openai' and self.openai_client:
-                    ai_response = self._generate_openai(full_system_prompt, message, context)
+                    ai_response, ai_metadata = self._generate_openai(full_system_prompt, message, context)
                     used_provider = 'openai'
                     self._mark_provider_success('openai')
                     break
@@ -441,7 +442,11 @@ class DomainCharacterAI:
                 success=True,
                 user_id=user_id,
                 character=character.character_id,
-                is_background=False
+                is_background=False,
+                input_tokens=ai_metadata.get('input_tokens', 0),
+                output_tokens=ai_metadata.get('output_tokens', 0),
+                model=ai_metadata.get('model'),
+                response_time_ms=ai_metadata.get('response_time_ms')
             )
         
         # Create character response
@@ -515,8 +520,9 @@ class DomainCharacterAI:
         return "\n".join(parts)
     
     def _generate_openai(self, system_prompt: str, message: str, 
-                        context: Dict) -> str:
-        """Generate response using OpenAI"""
+                        context: Dict) -> Tuple[str, Dict]:
+        """Generate response using OpenAI. Returns (response, metadata)"""
+        model = "gpt-4o-mini"  # Cost-effective model
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": message}
@@ -536,22 +542,38 @@ class DomainCharacterAI:
         history_tokens = context.get('history_token_estimate', 0)
         print(f"[TOKENS] OpenAI request: ~{prompt_tokens} prompt tokens (history: ~{history_tokens})")
         
+        import time
+        start_time = time.time()
+        
         response = self.openai_client.chat.completions.create(
-            model="gpt-4o-mini",  # Cost-effective model
+            model=model,
             messages=messages,
             max_tokens=500,
             temperature=0.7
         )
         
-        # Log actual token usage if available
-        if hasattr(response, 'usage') and response.usage:
-            print(f"[TOKENS] OpenAI actual: {response.usage.prompt_tokens} in, {response.usage.completion_tokens} out")
+        response_time_ms = int((time.time() - start_time) * 1000)
         
-        return response.choices[0].message.content
+        # Get actual token usage
+        input_tokens = response.usage.prompt_tokens if hasattr(response, 'usage') and response.usage else 0
+        output_tokens = response.usage.completion_tokens if hasattr(response, 'usage') and response.usage else 0
+        
+        if input_tokens or output_tokens:
+            print(f"[TOKENS] OpenAI actual: {input_tokens} in, {output_tokens} out ({response_time_ms}ms)")
+        
+        metadata = {
+            'model': model,
+            'input_tokens': input_tokens,
+            'output_tokens': output_tokens,
+            'response_time_ms': response_time_ms
+        }
+        
+        return response.choices[0].message.content, metadata
     
     def _generate_anthropic(self, system_prompt: str, message: str,
-                           context: Dict) -> str:
-        """Generate response using Anthropic Claude"""
+                           context: Dict) -> Tuple[str, Dict]:
+        """Generate response using Anthropic Claude. Returns (response, metadata)"""
+        model = "claude-3-haiku-20240307"  # Cost-effective model
         messages = [{"role": "user", "content": message}]
         
         # Add conversation history if available (use all provided history)
@@ -569,18 +591,33 @@ class DomainCharacterAI:
         history_tokens = context.get('history_token_estimate', 0)
         print(f"[TOKENS] Anthropic request: ~{prompt_tokens} prompt tokens (history: ~{history_tokens})")
         
+        import time
+        start_time = time.time()
+        
         response = self.anthropic_client.messages.create(
-            model="claude-3-haiku-20240307",  # Cost-effective model
+            model=model,
             max_tokens=500,
             system=system_prompt,
             messages=messages
         )
         
-        # Log actual token usage if available
-        if hasattr(response, 'usage') and response.usage:
-            print(f"[TOKENS] Anthropic actual: {response.usage.input_tokens} in, {response.usage.output_tokens} out")
+        response_time_ms = int((time.time() - start_time) * 1000)
         
-        return response.content[0].text
+        # Get actual token usage
+        input_tokens = response.usage.input_tokens if hasattr(response, 'usage') and response.usage else 0
+        output_tokens = response.usage.output_tokens if hasattr(response, 'usage') and response.usage else 0
+        
+        if input_tokens or output_tokens:
+            print(f"[TOKENS] Anthropic actual: {input_tokens} in, {output_tokens} out ({response_time_ms}ms)")
+        
+        metadata = {
+            'model': model,
+            'input_tokens': input_tokens,
+            'output_tokens': output_tokens,
+            'response_time_ms': response_time_ms
+        }
+        
+        return response.content[0].text, metadata
     
     def _generate_summary(self, full_response: str, provider: str) -> Optional[str]:
         """Generate a concise summary with action items from a long AI response"""
