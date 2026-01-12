@@ -165,10 +165,22 @@ class DeveloperAnalytics:
         """Get detailed AI call logs for analysis"""
         cursor = self.db.cursor()
         
-        query = '''
-            SELECT id, timestamp, call_type, character, user_id, model,
-                   estimated_cost, purpose, input_tokens, output_tokens,
-                   success, error_message, is_background
+        # Check if model column exists
+        cursor.execute("PRAGMA table_info(ai_usage_log)")
+        columns_info = cursor.fetchall()
+        has_model = any(col[1] == 'model' for col in columns_info)
+        has_response_time = any(col[1] == 'response_time_ms' for col in columns_info)
+        
+        # Build query based on available columns
+        select_cols = 'id, timestamp, call_type, character, user_id'
+        if has_model:
+            select_cols += ', model'
+        if has_response_time:
+            select_cols += ', response_time_ms'
+        select_cols += ', estimated_cost, purpose, input_tokens, output_tokens, success, error_message, is_background'
+        
+        query = f'''
+            SELECT {select_cols}
             FROM ai_usage_log
         '''
         
@@ -200,11 +212,25 @@ class DeveloperAnalytics:
         
         cursor.execute(query, params)
         
-        columns = ['id', 'timestamp', 'call_type', 'character', 'user_id', 'model',
-                  'estimated_cost', 'purpose', 'input_tokens', 'output_tokens',
-                  'success', 'error_message', 'is_background']
+        # Build columns list to match query
+        columns = ['id', 'timestamp', 'call_type', 'character', 'user_id']
+        if has_model:
+            columns.append('model')
+        if has_response_time:
+            columns.append('response_time_ms')
+        columns.extend(['estimated_cost', 'purpose', 'input_tokens', 'output_tokens',
+                       'success', 'error_message', 'is_background'])
         
-        return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        results = []
+        for row in cursor.fetchall():
+            item = dict(zip(columns, row))
+            # Add defaults for missing columns
+            if not has_model:
+                item['model'] = None
+            if not has_response_time:
+                item['response_time_ms'] = None
+            results.append(item)
+        return results
     
     def get_user_context_analysis(self, user_id: int = None) -> Dict[str, Any]:
         """Get detailed user context analysis"""

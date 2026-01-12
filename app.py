@@ -1357,11 +1357,15 @@ def populate_test_data():
             ''', (task_name, last_run.isoformat(), next_run.isoformat(), status, run_count))
             results['background_tasks'].append({'task': task_name, 'status': status})
         
-        # 3. Add model column if missing, then update tokens and costs
+        # 3. Add missing columns, then update tokens and costs
         try:
             cursor.execute('ALTER TABLE ai_usage_log ADD COLUMN model TEXT')
         except:
-            pass  # Column already exists
+            pass
+        try:
+            cursor.execute('ALTER TABLE ai_usage_log ADD COLUMN response_time_ms INTEGER')
+        except:
+            pass
         
         models = ['gpt-4o-mini', 'gpt-4o', 'gpt-3.5-turbo', 'claude-3-haiku']
         model_costs = {
@@ -1379,8 +1383,9 @@ def populate_test_data():
             model = models[i % len(models)]
             costs = model_costs[model]
             cost = round((in_tok / 1000) * costs['input'] + (out_tok / 1000) * costs['output'], 6)
-            cursor.execute('UPDATE ai_usage_log SET input_tokens = ?, output_tokens = ?, model = ?, estimated_cost = ? WHERE id = ?',
-                          (in_tok, out_tok, model, cost, row_id))
+            response_time = 800 + random.randint(0, 1200)  # 800-2000ms
+            cursor.execute('UPDATE ai_usage_log SET input_tokens = ?, output_tokens = ?, model = ?, estimated_cost = ?, response_time_ms = ? WHERE id = ?',
+                          (in_tok, out_tok, model, cost, response_time, row_id))
         results['tokens'].append({'updated': len(rows)})
         
         smart_response_conn.commit()
@@ -3898,6 +3903,18 @@ def get_ai_budget_status():
             report['today']['limit'] = admin_limit
             report['today']['remaining'] = admin_limit - report['today']['calls']
             report['today']['percentage_used'] = round((report['today']['calls'] / admin_limit) * 100, 1)
+        
+        # Add avg response time
+        try:
+            cursor = smart_response_conn.cursor()
+            cursor.execute('''
+                SELECT AVG(response_time_ms) FROM ai_usage_log 
+                WHERE DATE(timestamp) = DATE('now') AND response_time_ms IS NOT NULL
+            ''')
+            avg_ms = cursor.fetchone()[0]
+            report['avg_response_ms'] = round(avg_ms) if avg_ms else None
+        except:
+            report['avg_response_ms'] = None
         
         return jsonify(report)
     except Exception as e:
