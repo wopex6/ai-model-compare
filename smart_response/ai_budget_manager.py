@@ -274,7 +274,12 @@ class AIBudgetManager:
         # Check daily limit per user (HARD LIMIT)
         user_daily_limit = self.DAILY_CALL_LIMIT_ADMIN if is_admin else self.DAILY_CALL_LIMIT_USER
         calls_today = self._get_calls_in_period('day', user_id)
+        
+        # Debug log for tracking
+        print(f"[AI-BUDGET] Check: user={user_id}, is_admin={is_admin}, calls_today={calls_today}, limit={user_daily_limit}, is_background={is_background}")
+        
         if calls_today >= user_daily_limit:
+            print(f"[AI-BUDGET] ❌ LIMIT REACHED: {calls_today} >= {user_daily_limit}")
             if should_notify:
                 self._notify_user(
                     'daily_limit_reached',
