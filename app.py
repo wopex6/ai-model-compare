@@ -3996,6 +3996,26 @@ def get_ai_notifications():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/ai-budget/notifications/clear', methods=['POST'])
+@require_auth
+def clear_ai_notifications():
+    """Clear all AI budget notifications (admin only)"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        if not ai_budget:
+            return jsonify({'error': 'AI Budget Manager not initialized'}), 500
+        
+        cursor = smart_response_conn.cursor()
+        cursor.execute('UPDATE ai_budget_notifications SET acknowledged = 1')
+        smart_response_conn.commit()
+        
+        return jsonify({'success': True, 'message': 'All notifications cleared'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/ai-budget/notifications/acknowledge', methods=['POST'])
 def acknowledge_ai_notifications():
     """Acknowledge AI budget notifications"""
@@ -4753,8 +4773,9 @@ def route_to_domain_characters():
         try:
             user_role = integrated_db.get_user_role(user_id)
             is_admin = has_admin_access(user_role)
-        except:
-            pass
+            print(f"[DOMAIN-CHAT] User {user_id} role={user_role} is_admin={is_admin}")
+        except Exception as e:
+            print(f"[DOMAIN-CHAT] Error getting user role: {e}")
         
         # Build context for routing
         context = {
@@ -4762,6 +4783,7 @@ def route_to_domain_characters():
             'is_admin': is_admin,
             'timestamp': datetime.now().isoformat()
         }
+        print(f"[DOMAIN-CHAT] Context built with is_admin={is_admin}")
         
         # If replying to a specific message, fetch it and add to context
         reply_context = None
