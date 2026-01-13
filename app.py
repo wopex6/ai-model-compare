@@ -5308,9 +5308,11 @@ def get_cross_domain_insights():
             domain_insights = []
         
         # Get silent observer insights (characters that noticed but didn't respond)
+        # Lower threshold to 0.1 to show more perspectives
         silent_observers = []
         for insight in domain_insights:
-            if insight['is_relevant'] and insight['concern_level'] < 0.7:
+            # Show if concern > 0.1 (noticed something) but < 0.7 (didn't respond)
+            if insight['concern_level'] >= 0.1 and insight['concern_level'] < 0.7:
                 silent_observers.append({
                     'character': insight['display_name'],
                     'domain': insight['domain'],

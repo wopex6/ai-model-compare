@@ -559,7 +559,7 @@ class CoordinatorCharacter(BaseCharacter):
                     'domain': getattr(character, 'domain', 'general'),
                     'concern_level': concern_level,
                     'interpretation': interpretation,
-                    'is_relevant': concern_level >= 0.3
+                    'is_relevant': concern_level >= 0.1  # Lower threshold to show more perspectives
                 })
             except Exception as e:
                 print(f"[COORDINATOR] Error getting insight from {char_id}: {e}")
