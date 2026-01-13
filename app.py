@@ -281,9 +281,9 @@ try:
         cursor.execute('DELETE FROM ai_budget_notifications')
         deleted = cursor.rowcount
         smart_response_conn.commit()
-        print(f"✓ Deleted ALL {deleted} AI budget notifications on startup")
+        print(f"✓ Deleted ALL {deleted} AI budget notifications on startup", flush=True)
     except Exception as e:
-        print(f"⚠️ Could not clear notifications: {e}")
+        print(f"⚠️ Could not clear notifications: {e}", flush=True)
     
     # Initialize frontend error logging table
     cursor = smart_response_conn.cursor()
