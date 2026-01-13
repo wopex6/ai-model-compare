@@ -505,7 +505,7 @@
             </div>
             <div class="col-md-4">
                 <div class="chart-card">
-                    <h3><i class="fas fa-clock"></i> Usage by Hour</h3>
+                    <h3><i class="fas fa-clock"></i> Usage by Hour <span id="hourly-date" style="font-weight: normal; color: #888;"></span></h3>
                     <div id="hourly-chart-container" style="height: 150px;">
                         <canvas id="hourly-chart"></canvas>
                     </div>
@@ -1041,6 +1041,13 @@
             // Clear container and create fresh canvas
             container.innerHTML = '<canvas id="hourly-chart"></canvas>';
             const ctx = document.getElementById('hourly-chart');
+            
+            // Set today's date in title
+            const dateSpan = document.getElementById('hourly-date');
+            if (dateSpan) {
+                const today = new Date();
+                dateSpan.textContent = `(${today.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' })})`;
+            }
             
             // Count calls by hour
             const hourCounts = new Array(24).fill(0);
