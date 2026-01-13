@@ -6066,6 +6066,70 @@ def get_ai_usage_summary():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/admin/ai-usage/daily-chart')
+@require_auth
+def get_daily_chart_data():
+    """Get daily AI usage for last 7 days with interactive vs background breakdown"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        conn = sqlite3.connect('integrated_users.db')
+        cursor = conn.cursor()
+        
+        # Get daily breakdown for last 7 days
+        cursor.execute('''
+            SELECT 
+                DATE(timestamp) as call_date,
+                COUNT(CASE WHEN (is_background = 0 AND is_automated = 0) THEN 1 END) as interactive_calls,
+                COUNT(CASE WHEN (is_background = 1 OR is_automated = 1) THEN 1 END) as background_calls,
+                COUNT(*) as total_calls
+            FROM ai_usage_log
+            WHERE timestamp >= DATE('now', '-7 days')
+            AND success = 1
+            GROUP BY DATE(timestamp)
+            ORDER BY call_date ASC
+        ''')
+        
+        rows = cursor.fetchall()
+        conn.close()
+        
+        # Build response with all 7 days (fill missing days with 0)
+        from datetime import datetime, timedelta
+        result = []
+        today = datetime.now().date()
+        
+        for i in range(6, -1, -1):
+            day = today - timedelta(days=i)
+            day_str = day.strftime('%Y-%m-%d')
+            day_label = day.strftime('%a %d/%m')
+            
+            # Find matching row
+            matching = next((r for r in rows if r[0] == day_str), None)
+            if matching:
+                result.append({
+                    'date': day_str,
+                    'label': day_label,
+                    'interactive': matching[1],
+                    'background': matching[2],
+                    'total': matching[3]
+                })
+            else:
+                result.append({
+                    'date': day_str,
+                    'label': day_label,
+                    'interactive': 0,
+                    'background': 0,
+                    'total': 0
+                })
+        
+        return jsonify(result)
+    except Exception as e:
+        print(f"❌ Error in get_daily_chart_data: {str(e)}", flush=True)
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/admin/ai-usage/daily')
 @require_auth
 def get_daily_ai_usage():

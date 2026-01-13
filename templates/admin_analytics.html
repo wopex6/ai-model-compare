@@ -724,12 +724,12 @@
         let usageChart = null;
         let contextChart = null;
         
-        function renderCharts(calls, contextByType) {
+        async function renderCharts(calls, contextByType) {
             // Ensure calls is an array and contextByType is an object
             const callsArray = Array.isArray(calls) ? calls : [];
             const contextData = (contextByType && typeof contextByType === 'object') ? contextByType : {};
             
-            // 1. Usage Chart - Line chart showing AI calls over time
+            // 1. Usage Chart - Stacked bar chart showing Interactive vs Background calls
             const usageContainer = document.getElementById('usage-chart-container');
             if (usageContainer) {
                 // Destroy existing chart
@@ -742,55 +742,58 @@
                 usageContainer.innerHTML = '<canvas id="usage-chart"></canvas>';
                 const usageCanvas = document.getElementById('usage-chart');
                 
-                // Group calls by date (last 7 days)
-                const today = new Date();
-                const labels = [];
-                const dataPoints = [];
-                
-                for (let i = 6; i >= 0; i--) {
-                    const date = new Date(today);
-                    date.setDate(today.getDate() - i);
-                    const dateStr = date.toLocaleDateString('en-US', { weekday: 'short' });
-                    labels.push(dateStr);
-                    
-                    // Count calls for this day
-                    const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
-                    const dayEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
-                    const count = callsArray.filter(c => {
-                        if (!c || !c.timestamp) return false;
-                        const callDate = new Date(c.timestamp);
-                        return callDate >= dayStart && callDate <= dayEnd;
-                    }).length;
-                    dataPoints.push(count);
+                // Fetch daily chart data from new endpoint
+                let chartData = [];
+                try {
+                    const res = await AuthHelper.authenticatedFetch('/api/admin/ai-usage/daily-chart');
+                    chartData = await res.json();
+                } catch (e) {
+                    console.warn('Could not load daily chart data:', e);
                 }
                 
-                const maxVal = Math.max(...dataPoints, 1);
+                const labels = chartData.map(d => d.label);
+                const interactiveData = chartData.map(d => d.interactive);
+                const backgroundData = chartData.map(d => d.background);
+                
+                const maxVal = Math.max(...chartData.map(d => d.total), 1);
                 usageChart = new Chart(usageCanvas, {
-                    type: 'line',
+                    type: 'bar',
                     data: {
                         labels: labels,
-                        datasets: [{
-                            label: 'AI Calls',
-                            data: dataPoints,
-                            borderColor: '#667eea',
-                            backgroundColor: 'rgba(102, 126, 234, 0.1)',
-                            fill: true,
-                            tension: 0.4
-                        }]
+                        datasets: [
+                            {
+                                label: 'Interactive',
+                                data: interactiveData,
+                                backgroundColor: '#667eea',
+                                borderRadius: 4
+                            },
+                            {
+                                label: 'Background',
+                                data: backgroundData,
+                                backgroundColor: '#94a3b8',
+                                borderRadius: 4
+                            }
+                        ]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
                         animation: false,
                         plugins: {
-                            legend: { display: false }
+                            legend: { 
+                                display: true,
+                                position: 'top',
+                                labels: { boxWidth: 12, padding: 8, font: { size: 10 } }
+                            }
                         },
                         scales: {
+                            x: { stacked: true },
                             y: { 
+                                stacked: true,
                                 beginAtZero: true,
-                                max: maxVal + 2,
+                                max: maxVal + 5,
                                 ticks: {
-                                    stepSize: 1,
+                                    stepSize: Math.ceil(maxVal / 5) || 1,
                                     precision: 0
                                 }
                             }
