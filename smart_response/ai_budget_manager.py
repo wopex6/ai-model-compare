@@ -158,6 +158,20 @@ class AIBudgetManager:
             )
         ''')
         
+        # Track ALL call denials (including background) for monitoring
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS ai_budget_denials (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                denied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                user_id INTEGER,
+                is_background BOOLEAN DEFAULT 0,
+                is_admin BOOLEAN DEFAULT 0,
+                denial_reason TEXT NOT NULL,
+                call_type TEXT,
+                calls_at_denial INTEGER
+            )
+        ''')
+        
         self.db.commit()
         print("✓ AI Budget Manager initialized (Users: 100/day, Admins: 1000/day, System cap: 2000/day)")
     
@@ -257,7 +271,9 @@ class AIBudgetManager:
                     'AI calls temporarily halted due to circuit breaker activation. Manual reset required.',
                     'critical'
                 )
-            return False, "Circuit breaker active - AI calls temporarily halted"
+            reason = "Circuit breaker active - AI calls temporarily halted"
+            self._log_denial(user_id, is_background, is_admin, reason, 'circuit_breaker')
+            return False, reason
         
         # Check system-wide cap first (HARD LIMIT)
         system_calls_today = self._get_calls_in_period('day', user_id=None)
@@ -269,7 +285,9 @@ class AIBudgetManager:
                     f'System-wide daily cap reached: {system_calls_today}/{self.SYSTEM_DAILY_CAP} calls today. All users affected.',
                     'critical'
                 )
-            return False, f"System daily cap reached: {system_calls_today}/{self.SYSTEM_DAILY_CAP} calls"
+            reason = f"System daily cap reached: {system_calls_today}/{self.SYSTEM_DAILY_CAP} calls"
+            self._log_denial(user_id, is_background, is_admin, reason, 'system_cap', system_calls_today)
+            return False, reason
         
         # Check daily limit per user (HARD LIMIT)
         user_daily_limit = self.DAILY_CALL_LIMIT_ADMIN if is_admin else self.DAILY_CALL_LIMIT_USER
@@ -286,7 +304,9 @@ class AIBudgetManager:
                     f'AI call limit reached: {calls_today}/{user_daily_limit} calls today. Using fallback responses.',
                     'critical'
                 )
-            return False, f"Daily limit reached: {calls_today}/{user_daily_limit} calls for user {user_id} ({'admin' if is_admin else 'user'})"
+            reason = f"Daily limit reached: {calls_today}/{user_daily_limit} calls for user {user_id} ({'admin' if is_admin else 'user'})"
+            self._log_denial(user_id, is_background, is_admin, reason, 'daily_limit', calls_today)
+            return False, reason
         
         # WARN at 80% of daily limit (only for interactive calls)
         if should_notify and calls_today >= user_daily_limit * 0.8:
@@ -316,19 +336,25 @@ class AIBudgetManager:
                     f'AI calls throttled: {calls_this_hour}/{self.HOURLY_CALL_LIMIT} calls this hour. Using cached responses.',
                     'warning'
                 )
-            return False, f"Hourly limit reached: {calls_this_hour}/{self.HOURLY_CALL_LIMIT} calls for user {user_id}"
+            reason = f"Hourly limit reached: {calls_this_hour}/{self.HOURLY_CALL_LIMIT} calls for user {user_id}"
+            self._log_denial(user_id, is_background, is_admin, reason, 'hourly_limit', calls_this_hour)
+            return False, reason
         
         # Check background limit per user (if background call)
         if is_background:
             background_today = self._get_background_calls_today(user_id)
             if background_today >= self.BACKGROUND_CALL_LIMIT:
-                return False, f"Background limit reached: {background_today}/{self.BACKGROUND_CALL_LIMIT} calls for user {user_id}"
+                reason = f"Background limit reached: {background_today}/{self.BACKGROUND_CALL_LIMIT} calls for user {user_id}"
+                self._log_denial(user_id, is_background, is_admin, reason, 'background_limit', background_today)
+                return False, reason
         
         # Check rate limits (prevent rapid firing)
         calls_last_minute = self._get_calls_last_n_minutes(1)
         if calls_last_minute >= self.CALLS_PER_MINUTE:
             self._trigger_throttle("Rate limit: calls per minute")
-            return False, f"Rate limit: {calls_last_minute} calls in last minute (max {self.CALLS_PER_MINUTE})"
+            reason = f"Rate limit: {calls_last_minute} calls in last minute (max {self.CALLS_PER_MINUTE})"
+            self._log_denial(user_id, is_background, is_admin, reason, 'rate_limit', calls_last_minute)
+            return False, reason
         
         # Check for unusual patterns
         pattern = self._detect_unusual_pattern()
@@ -340,7 +366,9 @@ class AIBudgetManager:
                     f"Unusual AI usage pattern detected: {pattern['pattern_type']}. System paused for safety.",
                     'critical'
                 )
-            return False, f"Unusual usage pattern detected: {pattern['pattern_type']}"
+            reason = f"Unusual usage pattern detected: {pattern['pattern_type']}"
+            self._log_denial(user_id, is_background, is_admin, reason, 'unusual_pattern')
+            return False, reason
         
         # APPROVED
         return True, "OK"
@@ -627,6 +655,21 @@ class AIBudgetManager:
         print(f"   {message}\n")
         
         # In production: Also send email, SMS, Slack, etc.
+    
+    def _log_denial(self, user_id: Optional[int], is_background: bool, is_admin: bool, 
+                    reason: str, call_type: str = None, calls_count: int = None):
+        """Log ALL call denials to database for monitoring (including background)"""
+        try:
+            cursor = self.db.cursor()
+            cursor.execute('''
+                INSERT INTO ai_budget_denials
+                (user_id, is_background, is_admin, denial_reason, call_type, calls_at_denial)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (user_id, is_background, is_admin, reason, call_type, calls_count))
+            self.db.commit()
+            print(f"[AI-BUDGET] 📝 Denial logged: user={user_id}, bg={is_background}, reason={reason[:50]}...", flush=True)
+        except Exception as e:
+            print(f"[AI-BUDGET] Warning: Could not log denial: {e}", flush=True)
     
     def reset_circuit_breaker(self, reason: str = "Manual reset"):
         """
