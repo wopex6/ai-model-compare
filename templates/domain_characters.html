@@ -1090,10 +1090,12 @@
                 const content = document.getElementById('silent-observers-content');
                 content.innerHTML = '<p class="panel-empty">Analyzing perspectives...</p>';
                 
-                // Get the last message from chat
-                const messages = document.querySelectorAll('#domain-chat-messages .message.user');
+                // Get the last message from chat (class is "message user-message")
+                const messages = document.querySelectorAll('#domain-chat-messages .user-message');
                 const lastUserMsg = messages[messages.length - 1];
-                const message = lastUserMsg ? lastUserMsg.querySelector('.message-content')?.textContent : '';
+                // Extract text, removing "You:" prefix
+                let message = lastUserMsg ? lastUserMsg.querySelector('.message-content')?.textContent : '';
+                if (message) message = message.replace(/^You:\s*/, '').trim();
                 
                 if (!message) {
                     content.innerHTML = '<p class="panel-empty">Send a message to see other perspectives</p>';
