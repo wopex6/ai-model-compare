@@ -470,7 +470,7 @@
             <div class="col-md-6">
                 <div class="chart-card">
                     <h3><i class="fas fa-users"></i> Domain Character Usage</h3>
-                    <div class="domain-char-usage" id="domain-char-usage">
+                    <div class="domain-char-usage" id="domain-char-usage" style="overflow-x: auto;">
                         <div class="loading">Loading domain usage...</div>
                     </div>
                 </div>
@@ -632,21 +632,22 @@
                 // Domain character usage
                 const domainStats = analytics.domain_character_stats || {};
                 let domainHtml = `
-                    <div style="display: flex; padding: 8px; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.85rem; color: #666;">
+                    <div style="display: flex; padding: 8px; border-bottom: 2px solid #ddd; font-weight: 600; font-size: 0.85rem; color: #666; min-width: 350px;">
                         <span style="flex: 2;">Character</span>
                         <span style="flex: 1; text-align: right;">Uses</span>
                         <span style="flex: 1; text-align: right;">Success</span>
-                        <span style="flex: 1; text-align: right;">Avg Time</span>
+                        <span style="flex: 1; text-align: right;">Time</span>
                     </div>
                 `;
                 for (const [char, data] of Object.entries(domainStats)) {
                     const successColor = data.success_rate >= 90 ? '#10b981' : data.success_rate >= 70 ? '#f59e0b' : '#ef4444';
+                    const avgTime = data.avg_response_ms ? `${data.avg_response_ms}ms` : '-';
                     domainHtml += `
-                        <div style="display: flex; padding: 8px; border-bottom: 1px solid #eee; align-items: center;">
+                        <div style="display: flex; padding: 8px; border-bottom: 1px solid #eee; align-items: center; min-width: 350px;">
                             <span style="flex: 2; font-weight: 500;">${char}</span>
-                            <span style="flex: 1; text-align: right; color: #666;">${data.uses} uses</span>
+                            <span style="flex: 1; text-align: right; color: #666;">${data.uses}</span>
                             <span style="flex: 1; text-align: right; color: ${successColor};">${data.success_rate}%</span>
-                            <span style="flex: 1; text-align: right; color: #888;">${data.avg_response_ms || '-'}ms</span>
+                            <span style="flex: 1; text-align: right; color: #888;">${avgTime}</span>
                         </div>
                     `;
                 }
