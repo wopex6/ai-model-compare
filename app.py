@@ -6079,11 +6079,22 @@ def get_daily_chart_data():
         cursor = conn.cursor()
         
         # Get daily breakdown for last 7 days
+        # Infer background from purpose field for historical data where is_background wasn't set
         cursor.execute('''
             SELECT 
                 DATE(timestamp) as call_date,
-                COUNT(CASE WHEN (is_background = 0 AND is_automated = 0) THEN 1 END) as interactive_calls,
-                COUNT(CASE WHEN (is_background = 1 OR is_automated = 1) THEN 1 END) as background_calls,
+                COUNT(CASE WHEN (is_background = 0 AND is_automated = 0 
+                    AND purpose NOT LIKE '%greeting%' 
+                    AND purpose NOT LIKE '%summary%'
+                    AND purpose NOT LIKE '%context_prompt%'
+                    AND purpose NOT LIKE '%character_expansion%'
+                    AND call_type = 'user_chat') THEN 1 END) as interactive_calls,
+                COUNT(CASE WHEN (is_background = 1 OR is_automated = 1
+                    OR purpose LIKE '%greeting%' 
+                    OR purpose LIKE '%summary%'
+                    OR purpose LIKE '%context_prompt%'
+                    OR purpose LIKE '%character_expansion%'
+                    OR call_type != 'user_chat') THEN 1 END) as background_calls,
                 COUNT(*) as total_calls
             FROM ai_usage_log
             WHERE timestamp >= DATE('now', '-7 days')
