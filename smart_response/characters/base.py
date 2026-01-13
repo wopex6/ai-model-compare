@@ -238,6 +238,68 @@ class BaseCharacter(ABC):
         
         return min(concern, 1.0)
     
+    def update_threshold_from_feedback(self, user_id: int, was_helpful: bool, 
+                                        concern_level: float) -> None:
+        """
+        Adaptively adjust threshold based on user feedback
+        
+        If user found response helpful when concern was low → lower threshold
+        If user found response unhelpful when concern was high → raise threshold
+        """
+        if not self.db or not user_id:
+            return
+        
+        try:
+            cursor = self.db.cursor()
+            
+            # Calculate adjustment
+            adjustment = 0.0
+            if was_helpful and concern_level < self.threshold_config.base_threshold:
+                # Response was helpful even though concern was below threshold
+                # → lower threshold to respond more often
+                adjustment = -0.05
+            elif not was_helpful and concern_level >= self.threshold_config.base_threshold:
+                # Response was not helpful even though concern was above threshold
+                # → raise threshold to respond less often
+                adjustment = 0.05
+            
+            if adjustment == 0.0:
+                return
+            
+            # Get current personalized threshold
+            cursor.execute('''
+                SELECT parameters FROM user_personalization WHERE user_id = ?
+            ''', (user_id,))
+            row = cursor.fetchone()
+            
+            if row:
+                params = json.loads(row[0])
+            else:
+                params = {'routing': {}}
+            
+            if 'routing' not in params:
+                params['routing'] = {}
+            
+            threshold_key = f'{self.character_id}_threshold'
+            current_threshold = params['routing'].get(threshold_key, self.threshold_config.base_threshold)
+            new_threshold = max(0.3, min(0.95, current_threshold + adjustment))
+            params['routing'][threshold_key] = new_threshold
+            
+            # Save updated threshold
+            cursor.execute('''
+                INSERT INTO user_personalization (user_id, parameters)
+                VALUES (?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET 
+                    parameters = ?,
+                    updated_at = CURRENT_TIMESTAMP
+            ''', (user_id, json.dumps(params), json.dumps(params)))
+            
+            self.db.commit()
+            print(f"[ADAPTIVE] {self.character_id} threshold for user {user_id}: {current_threshold:.2f} → {new_threshold:.2f}")
+            
+        except Exception as e:
+            print(f"[ADAPTIVE] Error updating threshold: {e}")
+    
     def _get_user_preference(self, user_id: int) -> float:
         """Get user's preference weight for this character"""
         if not self.db:
@@ -474,12 +536,37 @@ class CoordinatorCharacter(BaseCharacter):
         return domains_detected
     
     def _get_domain_insights(self, context: Dict) -> List[Dict]:
-        """Get insights from domain characters"""
+        """
+        Get insights from domain characters based on recent interpretations
+        
+        Returns list of domain insights with concern levels and key themes
+        """
         if not self.character_manager:
             return []
         
-        # This will be implemented when CharacterManager is complete
-        return []
+        insights = []
+        message = context.get('message', '')
+        
+        # Get analysis from each domain character
+        for char_id, character in self.character_manager.domain_characters.items():
+            try:
+                concern_level = character.analyze_context(message, context)
+                interpretation = character.interpret_context(message, context)
+                
+                insights.append({
+                    'character_id': char_id,
+                    'display_name': character.display_name,
+                    'domain': getattr(character, 'domain', 'general'),
+                    'concern_level': concern_level,
+                    'interpretation': interpretation,
+                    'is_relevant': concern_level >= 0.3
+                })
+            except Exception as e:
+                print(f"[COORDINATOR] Error getting insight from {char_id}: {e}")
+        
+        # Sort by concern level (highest first)
+        insights.sort(key=lambda x: x['concern_level'], reverse=True)
+        return insights
     
     def synthesize_perspectives(self, responses: List[CharacterResponse]) -> str:
         """
@@ -523,5 +610,77 @@ class CoordinatorCharacter(BaseCharacter):
         if not self.character_manager:
             return None
         
-        # This will be implemented when CharacterManager is complete
-        return None
+        # Find character by domain
+        target_char_id = f"domain_{domain}"
+        character = self.character_manager.domain_characters.get(target_char_id)
+        
+        if not character:
+            # Try to find by matching domain attribute
+            for char_id, char in self.character_manager.domain_characters.items():
+                if getattr(char, 'domain', '').lower() == domain.lower():
+                    character = char
+                    break
+        
+        if not character:
+            print(f"[COORDINATOR] No domain character found for domain: {domain}")
+            return None
+        
+        try:
+            # Generate response from the domain character
+            response = character.generate_response(message, context)
+            print(f"[COORDINATOR] Got input from {character.display_name} for domain {domain}")
+            return response
+        except Exception as e:
+            print(f"[COORDINATOR] Error requesting input from {domain}: {e}")
+            return None
+    
+    def get_cross_domain_insights(self, message: str, context: Dict) -> Dict:
+        """
+        Detect cross-domain patterns and correlations
+        
+        Returns insights about how different life domains are interconnected
+        """
+        insights = self._get_domain_insights({**context, 'message': message})
+        relevant = [i for i in insights if i['is_relevant']]
+        
+        cross_domain_patterns = {
+            'domains_affected': [i['domain'] for i in relevant],
+            'primary_domain': relevant[0]['domain'] if relevant else None,
+            'secondary_domains': [i['domain'] for i in relevant[1:3]] if len(relevant) > 1 else [],
+            'total_concern': sum(i['concern_level'] for i in relevant),
+            'is_multi_domain': len(relevant) >= 2,
+            'correlations': []
+        }
+        
+        # Detect common cross-domain correlations
+        domains_set = set(cross_domain_patterns['domains_affected'])
+        
+        if {'work', 'mental_health'}.issubset(domains_set):
+            cross_domain_patterns['correlations'].append({
+                'type': 'work_stress',
+                'description': 'Work-related stress affecting mental health',
+                'domains': ['work', 'mental_health']
+            })
+        
+        if {'relationships', 'mental_health'}.issubset(domains_set):
+            cross_domain_patterns['correlations'].append({
+                'type': 'relationship_wellbeing',
+                'description': 'Relationship dynamics affecting emotional state',
+                'domains': ['relationships', 'mental_health']
+            })
+        
+        if {'finance', 'mental_health'}.issubset(domains_set):
+            cross_domain_patterns['correlations'].append({
+                'type': 'financial_stress',
+                'description': 'Financial concerns affecting mental wellbeing',
+                'domains': ['finance', 'mental_health']
+            })
+        
+        if {'work', 'relationships'}.issubset(domains_set):
+            cross_domain_patterns['correlations'].append({
+                'type': 'work_life_balance',
+                'description': 'Work demands affecting personal relationships',
+                'domains': ['work', 'relationships']
+            })
+        
+        return cross_domain_patterns
