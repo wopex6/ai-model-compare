@@ -662,9 +662,13 @@ Respond in JSON format:
                 print("[SUMMARY] No OpenAI API key available")
                 return None
             
-            # Check budget (AIBudgetManager)
+            # Check budget (AIBudgetManager) - background call, suppress notifications
             if self.ai_client and hasattr(self.ai_client, 'can_make_ai_call'):
-                allowed, reason = self.ai_client.can_make_ai_call(user_id=user_id, is_background=True)
+                allowed, reason = self.ai_client.can_make_ai_call(
+                    user_id=user_id, 
+                    is_background=True,
+                    suppress_notifications=True  # Don't show notifications for background summaries
+                )
                 if not allowed:
                     print(f"[SUMMARY] Skipping summary: {reason}")
                     return None

@@ -149,9 +149,14 @@ def greeting_ai_call(system_prompt: str, user_message: str, purpose: str = 'gree
         if not domain_character_ai:
             return None
         
-        # Check budget before AI call
+        # Check budget before AI call (system call - suppress notifications)
         if ai_budget:
-            allowed, reason = ai_budget.can_make_ai_call(user_id=None, is_admin=False, is_background=True)
+            allowed, reason = ai_budget.can_make_ai_call(
+                user_id=None, 
+                is_admin=True,  # System calls use admin limits
+                is_background=True,
+                suppress_notifications=True  # Never show notifications for greeting calls
+            )
             if not allowed:
                 print(f"⏭️ AI greeting call denied: {reason}")
                 return None

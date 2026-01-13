@@ -291,12 +291,13 @@ class CharacterExpansionSystem:
         Returns:
             CharacterCandidate if successful, None if budget exceeded or failed
         """
-        # Check budget if AI generation requested
+        # Check budget if AI generation requested (system call - suppress notifications)
         if ai_generate_func and self.ai_budget:
             allowed, reason = self.ai_budget.can_make_ai_call(
                 user_id=0,  # System call
-                is_admin=False,
-                is_background=True  # Background task - limited to 10/day
+                is_admin=True,  # System calls use admin limits
+                is_background=True,  # Background task
+                suppress_notifications=True  # Don't show notifications for system calls
             )
             if not allowed:
                 print(f"⛔ Character generation denied: {reason}")
