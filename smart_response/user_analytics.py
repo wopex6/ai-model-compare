@@ -35,7 +35,7 @@ class UserAnalytics:
                 CREATE TABLE IF NOT EXISTS user_activity_log (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
-                    action_type TEXT NOT NULL,
+                    activity_type TEXT NOT NULL,
                     action_data TEXT,
                     page TEXT,
                     session_id TEXT,
@@ -87,7 +87,7 @@ class UserAnalytics:
         try:
             cursor = self.db.cursor()
             cursor.execute('''
-                INSERT INTO user_activity_log (user_id, action_type, action_data, page, session_id)
+                INSERT INTO user_activity_log (user_id, activity_type, action_data, page, session_id)
                 VALUES (?, ?, ?, ?, ?)
             ''', (user_id, action_type, json.dumps(action_data) if action_data else None, 
                   page, session_id))
@@ -230,7 +230,7 @@ class UserAnalytics:
         
         cursor.execute('''
             SELECT COUNT(*) FROM user_activity_log
-            WHERE DATE(created_at) = ? AND action_type = 'message_sent'
+            WHERE DATE(created_at) = ? AND activity_type = 'message_sent'
         ''', (today,))
         total_messages = cursor.fetchone()[0]
         
@@ -254,7 +254,7 @@ class UserAnalytics:
             if metric == 'active_users':
                 cursor.execute('SELECT DATE(created_at), COUNT(DISTINCT user_id) FROM user_activity_log WHERE created_at > ? GROUP BY DATE(created_at) ORDER BY DATE(created_at)', (since,))
             elif metric == 'messages':
-                cursor.execute('SELECT DATE(created_at), COUNT(*) FROM user_activity_log WHERE created_at > ? AND action_type = ? GROUP BY DATE(created_at) ORDER BY DATE(created_at)', (since, 'message_sent'))
+                cursor.execute('SELECT DATE(created_at), COUNT(*) FROM user_activity_log WHERE created_at > ? AND activity_type = ? GROUP BY DATE(created_at) ORDER BY DATE(created_at)', (since, 'message_sent'))
             else:
                 return []
             
