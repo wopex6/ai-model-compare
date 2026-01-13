@@ -5278,6 +5278,59 @@ def get_character_interpretations(history_id):
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/domain-characters/cross-domain', methods=['POST'])
+@require_auth
+def get_cross_domain_insights():
+    """
+    Get cross-domain insights for a message.
+    Returns correlations between domains and multi-domain patterns.
+    """
+    try:
+        if not domain_character_manager:
+            return jsonify({'error': 'Domain character system not initialized'}), 500
+        
+        data = request.get_json()
+        message = data.get('message', '')
+        
+        if not message:
+            return jsonify({'error': 'Message required'}), 400
+        
+        user_id = request.current_user['user_id']
+        context = {'user_id': user_id}
+        
+        # Get coordinator's cross-domain analysis
+        coordinator = domain_character_manager.coordinator
+        if coordinator:
+            cross_domain = coordinator.get_cross_domain_insights(message, context)
+            domain_insights = coordinator._get_domain_insights({**context, 'message': message})
+        else:
+            cross_domain = {'domains_affected': [], 'correlations': []}
+            domain_insights = []
+        
+        # Get silent observer insights (characters that noticed but didn't respond)
+        silent_observers = []
+        for insight in domain_insights:
+            if insight['is_relevant'] and insight['concern_level'] < 0.7:
+                silent_observers.append({
+                    'character': insight['display_name'],
+                    'domain': insight['domain'],
+                    'concern_level': round(insight['concern_level'], 2),
+                    'noticed': f"{insight['display_name']} noticed this relates to {insight['domain']}"
+                })
+        
+        return jsonify({
+            'success': True,
+            'cross_domain': cross_domain,
+            'silent_observers': silent_observers,
+            'domain_insights': domain_insights
+        })
+    except Exception as e:
+        print(f"Error in cross-domain insights: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/domain-characters/feedback', methods=['POST'])
 @require_auth
 def submit_character_feedback():
