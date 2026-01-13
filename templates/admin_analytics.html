@@ -506,7 +506,9 @@
             <div class="col-md-4">
                 <div class="chart-card">
                     <h3><i class="fas fa-clock"></i> Usage by Hour</h3>
-                    <canvas id="hourly-chart" height="150"></canvas>
+                    <div id="hourly-chart-container" style="height: 150px;">
+                        <canvas id="hourly-chart"></canvas>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1027,7 +1029,7 @@
         // Hourly usage chart
         let hourlyChart = null;
         function renderHourlyChart(calls) {
-            const container = document.getElementById('hourly-chart')?.parentElement;
+            const container = document.getElementById('hourly-chart-container');
             if (!container) return;
             
             // Destroy existing chart
@@ -1037,7 +1039,7 @@
             }
             
             // Clear container and create fresh canvas
-            container.innerHTML = '<canvas id="hourly-chart" height="150"></canvas>';
+            container.innerHTML = '<canvas id="hourly-chart"></canvas>';
             const ctx = document.getElementById('hourly-chart');
             
             // Count calls by hour
