@@ -4818,9 +4818,12 @@ def route_to_domain_characters():
         # Store user message using centralized integrated_db (same as regular characters)
         target_character = requested_character or 'coordinator'
         try:
-            integrated_db.save_character_message(user_id, target_character, 'user', message, 
+            message_id = integrated_db.save_character_message(user_id, target_character, 'user', message, 
                                                   reply_to_message_id=reply_to_message_id)
-            print(f"[HISTORY] ✓ Saved user message for {target_character}")
+            # CRITICAL: Set history_id in context so interpretations can be stored
+            if message_id:
+                context['history_id'] = message_id
+            print(f"[HISTORY] ✓ Saved user message for {target_character} (id={message_id})")
             
             # Log activity for analytics
             try:
