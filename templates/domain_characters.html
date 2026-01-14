@@ -1110,7 +1110,10 @@
                     });
                     const data = await response.json();
                     
-                    if (data.success && data.silent_observers && data.silent_observers.length > 0) {
+                    const hasResponded = data.responded && data.responded.length > 0;
+                    const hasSilent = data.silent_observers && data.silent_observers.length > 0;
+                    
+                    if (data.success && (hasResponded || hasSilent)) {
                         let html = '<div style="font-size: 0.9rem;">';
                         
                         // Show cross-domain correlations if any
@@ -1123,23 +1126,38 @@
                             html += '</div>';
                         }
                         
-                        // Show silent observers
-                        html += '<div style="color: #666; margin-bottom: 8px;">Characters who noticed but didn\'t respond:</div>';
-                        data.silent_observers.forEach(obs => {
-                            const concernPct = Math.round(obs.concern_level * 100);
-                            html += `
-                                <div style="padding: 8px; margin-bottom: 6px; background: white; border-radius: 8px; border-left: 3px solid #667eea;">
-                                    <strong>${obs.character}</strong> <span style="color: #888; font-size: 0.8rem;">(${obs.domain})</span>
-                                    <div style="font-size: 0.85rem; color: #666; margin-top: 4px;">
-                                        Concern: ${concernPct}% - ${obs.noticed}
+                        // Group 1: Characters who responded
+                        if (hasResponded) {
+                            html += '<div style="color: #10b981; margin-bottom: 6px; font-weight: 600;">✓ Responded:</div>';
+                            data.responded.forEach(char => {
+                                const concernPct = Math.round(char.concern_level * 100);
+                                html += `
+                                    <div style="padding: 6px 8px; margin-bottom: 4px; background: #ecfdf5; border-radius: 6px; border-left: 3px solid #10b981;">
+                                        <strong>${char.character}</strong> <span style="color: #888; font-size: 0.8rem;">(${char.domain})</span>
+                                        <span style="float: right; font-size: 0.8rem; color: #10b981;">${concernPct}%</span>
                                     </div>
-                                </div>
-                            `;
-                        });
+                                `;
+                            });
+                        }
+                        
+                        // Group 2: Characters who noticed but didn't respond
+                        if (hasSilent) {
+                            html += '<div style="color: #888; margin-top: 10px; margin-bottom: 6px; font-weight: 600;">👁️ Noticed but didn\'t respond:</div>';
+                            data.silent_observers.forEach(obs => {
+                                const concernPct = Math.round(obs.concern_level * 100);
+                                html += `
+                                    <div style="padding: 6px 8px; margin-bottom: 4px; background: #f5f5f5; border-radius: 6px; border-left: 3px solid #ccc;">
+                                        <strong>${obs.character}</strong> <span style="color: #888; font-size: 0.8rem;">(${obs.domain})</span>
+                                        <span style="float: right; font-size: 0.8rem; color: #999;">${concernPct}%</span>
+                                    </div>
+                                `;
+                            });
+                        }
+                        
                         html += '</div>';
                         content.innerHTML = html;
                     } else {
-                        content.innerHTML = '<p class="panel-empty">No other characters noticed anything relevant</p>';
+                        content.innerHTML = '<p class="panel-empty">No characters detected relevance to this message</p>';
                     }
                 } catch (err) {
                     console.error('Error loading silent observers:', err);

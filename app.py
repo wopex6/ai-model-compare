@@ -5307,22 +5307,33 @@ def get_cross_domain_insights():
             cross_domain = {'domains_affected': [], 'correlations': []}
             domain_insights = []
         
-        # Get silent observer insights (characters that noticed but didn't respond)
-        # Lower threshold to 0.1 to show more perspectives
+        # Separate characters into responded vs silent observers
+        # Threshold for responding is typically 0.15 (from character config)
+        response_threshold = 0.15
+        
+        responded = []
         silent_observers = []
+        
         for insight in domain_insights:
-            # Show if concern > 0.1 (noticed something) but < 0.7 (didn't respond)
-            if insight['concern_level'] >= 0.1 and insight['concern_level'] < 0.7:
-                silent_observers.append({
-                    'character': insight['display_name'],
-                    'domain': insight['domain'],
-                    'concern_level': round(insight['concern_level'], 2),
-                    'noticed': f"{insight['display_name']} noticed this relates to {insight['domain']}"
-                })
+            char_info = {
+                'character': insight['display_name'],
+                'domain': insight['domain'],
+                'concern_level': round(insight['concern_level'], 2)
+            }
+            
+            if insight['concern_level'] >= response_threshold:
+                # This character would have responded
+                char_info['status'] = 'responded'
+                responded.append(char_info)
+            elif insight['concern_level'] >= 0.05:
+                # Noticed but didn't respond (below threshold but still detected something)
+                char_info['status'] = 'noticed'
+                silent_observers.append(char_info)
         
         return jsonify({
             'success': True,
             'cross_domain': cross_domain,
+            'responded': responded,
             'silent_observers': silent_observers,
             'domain_insights': domain_insights
         })
