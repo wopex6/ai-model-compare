@@ -419,16 +419,87 @@ class DomainCharacter(BaseCharacter):
         )
     
     def interpret_context(self, message: str, context: Dict) -> Dict:
-        """Generate domain-specific interpretation"""
+        """Generate domain-specific interpretation with rich context for future reference"""
+        message_lower = message.lower()
+        
+        # Detect emotional indicators
+        emotional_indicators = {
+            'stressed': ['stress', 'overwhelm', 'pressure', 'anxious', 'worried'],
+            'frustrated': ['frustrat', 'annoy', 'angry', 'upset', 'irritat'],
+            'hopeful': ['hope', 'excited', 'looking forward', 'optimistic', 'eager'],
+            'sad': ['sad', 'down', 'depress', 'lonely', 'miss'],
+            'confused': ['confus', 'unsure', 'don\'t know', 'uncertain', 'lost']
+        }
+        detected_emotions = [emotion for emotion, keywords in emotional_indicators.items()
+                            if any(kw in message_lower for kw in keywords)]
+        
+        # Detect focus areas
+        focus_areas_detected = [a for a in self.focus_areas if a.lower() in message_lower]
+        
+        # Generate character's unique perspective based on domain
+        perspective = self._generate_perspective(message, focus_areas_detected, detected_emotions)
+        
+        # Generate potential advice (what character would suggest)
+        potential_advice = self._generate_potential_advice(message, focus_areas_detected)
+        
         return {
             'domain': self.domain,
             'relevance': self.is_domain_relevant(message, context),
-            'focus_areas_detected': [a for a in self.focus_areas 
-                                    if a.lower() in message.lower()],
-            'sentiment': 'neutral',  # To be enhanced with AI
-            'key_themes': [],  # To be enhanced with AI
+            'focus_areas_detected': focus_areas_detected,
+            'detected_emotions': detected_emotions,
+            'user_emotional_state': detected_emotions[0] if detected_emotions else 'neutral',
+            'character_perspective': perspective,
+            'potential_advice': potential_advice,
+            'key_themes': focus_areas_detected[:3],  # Top 3 themes
+            'continuity_tags': self._get_continuity_tags(message, context),
             'timestamp': datetime.now().isoformat()
         }
+    
+    def _generate_perspective(self, message: str, focus_areas: List[str], emotions: List[str]) -> str:
+        """Generate character's unique viewpoint on the situation"""
+        if not focus_areas:
+            return f"From a {self.domain} perspective, this seems tangentially related."
+        
+        emotion_context = f" The user seems {emotions[0]}." if emotions else ""
+        return f"From a {self.domain} perspective, this relates to {', '.join(focus_areas)}.{emotion_context}"
+    
+    def _generate_potential_advice(self, message: str, focus_areas: List[str]) -> str:
+        """Generate what this character would advise (even if not responding)"""
+        if not focus_areas:
+            return ""
+        
+        advice_templates = {
+            'work': "Consider setting boundaries and prioritizing tasks.",
+            'relationships': "Open communication might help address this.",
+            'mental_health': "Taking time for self-care could be beneficial.",
+            'finance': "Creating a budget or financial plan might help.",
+            'learning': "Breaking this into smaller learning goals could help.",
+            'creativity': "Exploring creative outlets might provide relief."
+        }
+        return advice_templates.get(self.domain, "Reflecting on this area might be helpful.")
+    
+    def _get_continuity_tags(self, message: str, context: Dict) -> List[str]:
+        """Generate tags for tracking conversation themes over time"""
+        tags = []
+        message_lower = message.lower()
+        
+        # Add domain tag
+        tags.append(f"domain:{self.domain}")
+        
+        # Add topic tags based on common themes
+        topic_keywords = {
+            'career': ['job', 'career', 'work', 'boss', 'colleague'],
+            'health': ['health', 'exercise', 'sleep', 'tired', 'energy'],
+            'relationships': ['partner', 'friend', 'family', 'relationship'],
+            'goals': ['goal', 'plan', 'future', 'want to', 'trying to'],
+            'challenges': ['problem', 'issue', 'struggle', 'difficult', 'hard']
+        }
+        
+        for topic, keywords in topic_keywords.items():
+            if any(kw in message_lower for kw in keywords):
+                tags.append(f"topic:{topic}")
+        
+        return tags
 
 
 class CoordinatorCharacter(BaseCharacter):
