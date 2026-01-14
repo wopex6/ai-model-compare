@@ -709,6 +709,10 @@
                             class="header-action-btn" title="Character insights (dev)" style="padding: 6px 10px; font-size: 16px;">
                             📊
                         </button>
+                        <button id="userInsightsBtn" onclick="toggleUserInsights()" 
+                            class="header-action-btn" title="What characters know about you" style="padding: 6px 10px; font-size: 16px;">
+                            🎯
+                        </button>
                         <label id="analysisBtn" class="header-action-btn" title="Show AI character analysis" 
                             style="padding: 6px 10px; font-size: 14px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
                             <input type="checkbox" id="showAnalysis" style="margin: 0; cursor: pointer;"> 📊
@@ -768,6 +772,17 @@
                     </div>
                     <div id="character-insights-content" class="panel-content" style="max-height: 400px; overflow-y: auto;">
                         <p class="panel-empty">Loading character perspectives...</p>
+                    </div>
+                </div>
+                
+                <!-- User Insights Panel (What characters know about you) -->
+                <div id="user-insights-panel" class="action-panel" style="display: none; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);">
+                    <div class="panel-header" style="background: #d97706; color: white; border-radius: 8px 8px 0 0;">
+                        <h4 style="margin: 0;">🎯 What Characters Know About You</h4>
+                        <button onclick="toggleUserInsights()" class="panel-close" style="color: white;">✕</button>
+                    </div>
+                    <div id="user-insights-content" class="panel-content" style="max-height: 450px; overflow-y: auto;">
+                        <p class="panel-empty">Loading accumulated insights...</p>
                     </div>
                 </div>
                 
@@ -1269,6 +1284,108 @@
                     }
                 } catch (err) {
                     console.error('Error loading character insights:', err);
+                    content.innerHTML = '<p class="panel-empty">Error loading insights</p>';
+                }
+            }
+            
+            // User Insights Panel (What characters know about you)
+            window.toggleUserInsights = function() {
+                const panel = document.getElementById('user-insights-panel');
+                const btn = document.getElementById('userInsightsBtn');
+                if (panel.style.display === 'none') {
+                    panel.style.display = 'block';
+                    btn.classList.add('active');
+                    loadUserInsights();
+                } else {
+                    panel.style.display = 'none';
+                    btn.classList.remove('active');
+                }
+            };
+            
+            async function loadUserInsights() {
+                const content = document.getElementById('user-insights-content');
+                content.innerHTML = '<p class="panel-empty">Loading accumulated insights...</p>';
+                
+                try {
+                    const response = await AuthHelper.authenticatedFetch('/api/domain-characters/user-insights');
+                    const data = await response.json();
+                    
+                    if (data.success && data.insights && Object.keys(data.insights).length > 0) {
+                        let html = '<div style="font-size: 0.85rem;">';
+                        
+                        // Sort by total interactions (most engaged first)
+                        const sortedInsights = Object.entries(data.insights)
+                            .sort((a, b) => b[1].total_interactions - a[1].total_interactions);
+                        
+                        for (const [charId, insight] of sortedInsights) {
+                            const engagementColor = insight.engagement_rate > 50 ? '#10b981' : 
+                                                   insight.engagement_rate > 20 ? '#f59e0b' : '#6b7280';
+                            
+                            html += `
+                                <div style="margin-bottom: 14px; padding: 12px; background: white; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                        <strong style="color: #333; font-size: 1rem;">${insight.display_name}</strong>
+                                        <span style="background: #e0e7ff; color: #4f46e5; padding: 3px 8px; border-radius: 12px; font-size: 0.75rem;">${insight.domain}</span>
+                                    </div>
+                                    
+                                    <div style="display: flex; gap: 12px; margin-bottom: 10px; font-size: 0.8rem;">
+                                        <div style="text-align: center; padding: 6px 10px; background: #f3f4f6; border-radius: 8px;">
+                                            <div style="font-weight: 600; color: #333;">${insight.total_interactions}</div>
+                                            <div style="color: #666; font-size: 0.7rem;">interactions</div>
+                                        </div>
+                                        <div style="text-align: center; padding: 6px 10px; background: #f3f4f6; border-radius: 8px;">
+                                            <div style="font-weight: 600; color: ${engagementColor};">${insight.engagement_rate}%</div>
+                                            <div style="color: #666; font-size: 0.7rem;">engagement</div>
+                                        </div>
+                                        <div style="text-align: center; padding: 6px 10px; background: #f3f4f6; border-radius: 8px;">
+                                            <div style="font-weight: 600; color: #333;">${insight.avg_concern}%</div>
+                                            <div style="color: #666; font-size: 0.7rem;">avg concern</div>
+                                        </div>
+                                    </div>
+                                    
+                                    ${insight.common_emotions && insight.common_emotions.length > 0 ? `
+                                    <div style="margin-bottom: 8px;">
+                                        <span style="color: #666; font-size: 0.75rem;">Common emotions:</span>
+                                        <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;">
+                                            ${insight.common_emotions.map(e => 
+                                                `<span style="background: #fef3c7; color: #d97706; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem;">${e.emotion} (${e.count})</span>`
+                                            ).join('')}
+                                        </div>
+                                    </div>
+                                    ` : ''}
+                                    
+                                    ${insight.common_themes && insight.common_themes.length > 0 ? `
+                                    <div style="margin-bottom: 8px;">
+                                        <span style="color: #666; font-size: 0.75rem;">Recurring themes:</span>
+                                        <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;">
+                                            ${insight.common_themes.map(t => 
+                                                `<span style="background: #dbeafe; color: #2563eb; padding: 2px 8px; border-radius: 12px; font-size: 0.7rem;">${t.theme} (${t.count})</span>`
+                                            ).join('')}
+                                        </div>
+                                    </div>
+                                    ` : ''}
+                                    
+                                    ${insight.common_tags && insight.common_tags.length > 0 ? `
+                                    <div>
+                                        <span style="color: #666; font-size: 0.75rem;">Topics tracked:</span>
+                                        <div style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;">
+                                            ${insight.common_tags.slice(0, 5).map(t => 
+                                                `<span style="background: #f3f4f6; color: #6b7280; padding: 2px 6px; border-radius: 8px; font-size: 0.65rem;">${t.tag}</span>`
+                                            ).join('')}
+                                        </div>
+                                    </div>
+                                    ` : ''}
+                                </div>
+                            `;
+                        }
+                        
+                        html += '</div>';
+                        content.innerHTML = html;
+                    } else {
+                        content.innerHTML = '<p class="panel-empty">No accumulated insights yet. Keep chatting to build your profile!</p>';
+                    }
+                } catch (err) {
+                    console.error('Error loading user insights:', err);
                     content.innerHTML = '<p class="panel-empty">Error loading insights</p>';
                 }
             }

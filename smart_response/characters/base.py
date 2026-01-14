@@ -337,6 +337,116 @@ class BaseCharacter(ABC):
         except Exception as e:
             print(f"Error storing interpretation: {e}")
     
+    def get_user_history_insights(self, user_id: int, limit: int = 20) -> Dict:
+        """
+        Retrieve historical insights about a user from past interpretations.
+        Returns aggregated patterns, common themes, and emotional trends.
+        """
+        if not self.db or not user_id:
+            return {}
+        
+        try:
+            cursor = self.db.cursor()
+            
+            # Get recent interpretations for this character and user
+            cursor.execute('''
+                SELECT ci.interpretation, ci.concern_level, ci.responded, ci.created_at
+                FROM character_interpretations ci
+                JOIN history_primary hp ON ci.primary_history_id = hp.id
+                WHERE ci.character_id = ? AND hp.user_id = ?
+                ORDER BY ci.created_at DESC
+                LIMIT ?
+            ''', (self.character_id, user_id, limit))
+            
+            rows = cursor.fetchall()
+            
+            if not rows:
+                return {}
+            
+            # Aggregate insights
+            all_emotions = []
+            all_themes = []
+            all_tags = []
+            concern_levels = []
+            responded_count = 0
+            
+            for row in rows:
+                interp_json, concern, responded, created_at = row
+                try:
+                    interp = json.loads(interp_json) if interp_json else {}
+                except:
+                    interp = {}
+                
+                concern_levels.append(concern)
+                if responded:
+                    responded_count += 1
+                
+                # Collect emotions
+                emotions = interp.get('detected_emotions', [])
+                all_emotions.extend(emotions)
+                
+                # Collect themes
+                themes = interp.get('key_themes', [])
+                all_themes.extend(themes)
+                
+                # Collect continuity tags
+                tags = interp.get('continuity_tags', [])
+                all_tags.extend(tags)
+            
+            # Count frequencies
+            from collections import Counter
+            emotion_counts = Counter(all_emotions)
+            theme_counts = Counter(all_themes)
+            tag_counts = Counter(all_tags)
+            
+            return {
+                'total_interactions': len(rows),
+                'responded_count': responded_count,
+                'avg_concern': sum(concern_levels) / len(concern_levels) if concern_levels else 0,
+                'common_emotions': emotion_counts.most_common(5),
+                'common_themes': theme_counts.most_common(5),
+                'common_tags': tag_counts.most_common(10),
+                'engagement_rate': responded_count / len(rows) if rows else 0
+            }
+        except Exception as e:
+            print(f"Error getting user history insights: {e}")
+            return {}
+    
+    def get_personalization_context(self, user_id: int) -> str:
+        """
+        Generate a personalization context string for AI prompts based on user history.
+        """
+        insights = self.get_user_history_insights(user_id)
+        
+        if not insights or insights.get('total_interactions', 0) < 2:
+            return ""
+        
+        context_parts = []
+        
+        # Add emotional patterns
+        if insights.get('common_emotions'):
+            emotions = [e[0] for e in insights['common_emotions'][:3]]
+            if emotions:
+                context_parts.append(f"This user often expresses: {', '.join(emotions)}")
+        
+        # Add common themes
+        if insights.get('common_themes'):
+            themes = [t[0] for t in insights['common_themes'][:3]]
+            if themes:
+                context_parts.append(f"Recurring topics: {', '.join(themes)}")
+        
+        # Add engagement level
+        engagement = insights.get('engagement_rate', 0)
+        if engagement > 0.5:
+            context_parts.append(f"User frequently engages with {self.domain} topics")
+        elif engagement > 0.2:
+            context_parts.append(f"User occasionally discusses {self.domain} matters")
+        
+        if context_parts:
+            return "USER CONTEXT (from past conversations): " + ". ".join(context_parts) + "."
+        
+        return ""
+    
     def get_style_instructions(self) -> str:
         """Generate style instructions for AI prompt"""
         style = self.style_config
