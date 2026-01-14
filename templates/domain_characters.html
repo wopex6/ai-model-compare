@@ -717,6 +717,10 @@
                             class="header-action-btn" title="Privacy & Data Control" style="padding: 6px 10px; font-size: 16px;">
                             🔒
                         </button>
+                        <a id="adminSettingsBtn" href="/admin/settings" 
+                            class="header-action-btn" title="Admin Settings" style="padding: 6px 10px; font-size: 16px; display: none; text-decoration: none;">
+                            ⚙️
+                        </a>
                         <label id="analysisBtn" class="header-action-btn" title="Show AI character analysis" 
                             style="padding: 6px 10px; font-size: 14px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
                             <input type="checkbox" id="showAnalysis" style="margin: 0; cursor: pointer;"> 📊
@@ -946,6 +950,17 @@
                 const currentChar = DomainCharacters.selectedCharacter || 'coordinator';
                 await DomainCharacters.loadCharacterHistory(currentChar);
             });
+            
+            // Show admin settings button for admin users
+            const token = localStorage.getItem('authToken');
+            if (token) {
+                try {
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    if (payload.username === 'admin') {
+                        document.getElementById('adminSettingsBtn').style.display = 'flex';
+                    }
+                } catch (e) {}
+            }
             
             // Initialize search functionality (uses ConversationBox search UI)
             ConversationBox.initSearchOnly();
