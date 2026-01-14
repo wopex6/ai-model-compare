@@ -713,6 +713,10 @@
                             class="header-action-btn" title="What characters know about you" style="padding: 6px 10px; font-size: 16px;">
                             🎯
                         </button>
+                        <button id="privacyBtn" onclick="togglePrivacyPanel()" 
+                            class="header-action-btn" title="Privacy & Data Control" style="padding: 6px 10px; font-size: 16px;">
+                            🔒
+                        </button>
                         <label id="analysisBtn" class="header-action-btn" title="Show AI character analysis" 
                             style="padding: 6px 10px; font-size: 14px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
                             <input type="checkbox" id="showAnalysis" style="margin: 0; cursor: pointer;"> 📊
@@ -783,6 +787,57 @@
                     </div>
                     <div id="user-insights-content" class="panel-content" style="max-height: 450px; overflow-y: auto;">
                         <p class="panel-empty">Loading accumulated insights...</p>
+                    </div>
+                </div>
+                
+                <!-- Privacy & Data Control Panel -->
+                <div id="privacy-panel" class="action-panel" style="display: none; background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);">
+                    <div class="panel-header" style="background: #475569; color: white;">
+                        <h4 style="margin: 0;">🔒 Privacy & Data Control</h4>
+                        <button onclick="togglePrivacyPanel()" class="panel-close" style="color: white;">✕</button>
+                    </div>
+                    <div id="privacy-content" class="panel-content" style="max-height: 450px; overflow-y: auto; padding: 16px;">
+                        <div style="margin-bottom: 20px;">
+                            <h5 style="margin: 0 0 8px 0; color: #333;">📊 Your Data Summary</h5>
+                            <p style="font-size: 0.85rem; color: #666; margin: 0;">
+                                Characters learn from your conversations to provide better, personalized advice.
+                                You have full control over this data.
+                            </p>
+                        </div>
+                        
+                        <div id="privacy-stats" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px;">
+                            <div style="background: white; padding: 12px; border-radius: 8px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                <div id="stat-interpretations" style="font-size: 1.5rem; font-weight: 700; color: #4f46e5;">-</div>
+                                <div style="font-size: 0.75rem; color: #666;">Stored Insights</div>
+                            </div>
+                            <div style="background: white; padding: 12px; border-radius: 8px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                <div id="stat-context" style="font-size: 1.5rem; font-weight: 700; color: #10b981;">-</div>
+                                <div style="font-size: 0.75rem; color: #666;">Context Items</div>
+                            </div>
+                        </div>
+                        
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            <button onclick="viewMyData()" style="padding: 12px; background: #e0e7ff; color: #4f46e5; border: none; border-radius: 8px; cursor: pointer; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                                <i class="fas fa-eye"></i> View My Data
+                            </button>
+                            <button onclick="exportMyData()" style="padding: 12px; background: #d1fae5; color: #059669; border: none; border-radius: 8px; cursor: pointer; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                                <i class="fas fa-download"></i> Export My Data (JSON)
+                            </button>
+                            <button onclick="deleteMyData()" style="padding: 12px; background: #fee2e2; color: #dc2626; border: none; border-radius: 8px; cursor: pointer; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 8px;">
+                                <i class="fas fa-trash"></i> Delete My Insight Data
+                            </button>
+                        </div>
+                        
+                        <div id="privacy-data-view" style="display: none; margin-top: 16px; background: white; border-radius: 8px; padding: 12px; max-height: 200px; overflow-y: auto;">
+                            <pre style="margin: 0; font-size: 0.75rem; white-space: pre-wrap;"></pre>
+                        </div>
+                        
+                        <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e2e8f0;">
+                            <p style="font-size: 0.75rem; color: #94a3b8; margin: 0;">
+                                <i class="fas fa-info-circle"></i> Data is retained for 3 years by default. 
+                                Contact admin for more privacy options.
+                            </p>
+                        </div>
                     </div>
                 </div>
                 
@@ -1395,6 +1450,89 @@
             DomainCharacters.selectCharacter = async function(charId) {
                 await origSelectCharForContext.call(DomainCharacters, charId);
                 ExplicitContextUI.setCharacter(charId);
+            };
+            
+            // Privacy & Data Control Panel Functions
+            window.togglePrivacyPanel = function() {
+                const panel = document.getElementById('privacy-panel');
+                const btn = document.getElementById('privacyBtn');
+                if (panel.style.display === 'none') {
+                    panel.style.display = 'block';
+                    btn.classList.add('active');
+                    loadPrivacyStats();
+                } else {
+                    panel.style.display = 'none';
+                    btn.classList.remove('active');
+                }
+            };
+            
+            async function loadPrivacyStats() {
+                try {
+                    const response = await AuthHelper.authenticatedFetch('/api/user/my-data');
+                    const data = await response.json();
+                    
+                    if (data.success && data.data) {
+                        const interpCount = data.data.data?.interpretations?.length || 0;
+                        const contextCount = data.data.data?.context?.length || 0;
+                        
+                        document.getElementById('stat-interpretations').textContent = interpCount;
+                        document.getElementById('stat-context').textContent = contextCount;
+                    }
+                } catch (err) {
+                    console.error('Error loading privacy stats:', err);
+                }
+            }
+            
+            window.viewMyData = async function() {
+                const dataView = document.getElementById('privacy-data-view');
+                const pre = dataView.querySelector('pre');
+                
+                try {
+                    const response = await AuthHelper.authenticatedFetch('/api/user/my-data');
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        pre.textContent = JSON.stringify(data.data, null, 2);
+                        dataView.style.display = 'block';
+                    } else {
+                        pre.textContent = 'Error: ' + (data.error || 'Failed to load data');
+                        dataView.style.display = 'block';
+                    }
+                } catch (err) {
+                    pre.textContent = 'Error loading data: ' + err.message;
+                    dataView.style.display = 'block';
+                }
+            };
+            
+            window.exportMyData = function() {
+                window.location.href = '/api/user/my-data/export';
+            };
+            
+            window.deleteMyData = async function() {
+                if (!confirm('Are you sure you want to delete all your insight data? This action cannot be undone.')) {
+                    return;
+                }
+                
+                if (!confirm('This will remove all character interpretations and personalization data. Are you absolutely sure?')) {
+                    return;
+                }
+                
+                try {
+                    const response = await AuthHelper.authenticatedFetch('/api/user/my-data/delete', {
+                        method: 'DELETE'
+                    });
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        alert('Your insight data has been deleted successfully.');
+                        loadPrivacyStats(); // Refresh stats
+                        document.getElementById('privacy-data-view').style.display = 'none';
+                    } else {
+                        alert('Error: ' + (data.error || 'Failed to delete data'));
+                    }
+                } catch (err) {
+                    alert('Error deleting data: ' + err.message);
+                }
             };
             
             console.log('✅ Domain Characters page initialized');

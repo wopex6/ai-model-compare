@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Settings - AI Life Companion</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='multi_user_styles.css') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        .settings-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .settings-header {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+        
+        .settings-header h1 {
+            margin: 0 0 8px 0;
+            color: #333;
+            font-size: 1.8rem;
+        }
+        
+        .settings-header p {
+            margin: 0;
+            color: #666;
+        }
+        
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: #667eea;
+            text-decoration: none;
+            margin-bottom: 16px;
+            font-weight: 500;
+        }
+        
+        .back-link:hover {
+            text-decoration: underline;
+        }
+        
+        .category-tabs {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 24px;
+        }
+        
+        .category-tab {
+            padding: 12px 20px;
+            background: white;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            color: #666;
+            transition: all 0.2s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+        
+        .category-tab:hover {
+            background: #f0f4ff;
+            color: #667eea;
+        }
+        
+        .category-tab.active {
+            background: #667eea;
+            color: white;
+        }
+        
+        .category-tab .icon {
+            margin-right: 8px;
+        }
+        
+        .settings-panel {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            margin-bottom: 24px;
+        }
+        
+        .settings-panel h2 {
+            margin: 0 0 8px 0;
+            color: #333;
+            font-size: 1.3rem;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .settings-panel .description {
+            color: #666;
+            margin-bottom: 24px;
+            font-size: 0.9rem;
+        }
+        
+        .setting-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            padding: 16px 0;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .setting-item:last-child {
+            border-bottom: none;
+        }
+        
+        .setting-info {
+            flex: 1;
+            margin-right: 20px;
+        }
+        
+        .setting-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 4px;
+        }
+        
+        .setting-description {
+            font-size: 0.85rem;
+            color: #888;
+        }
+        
+        .setting-control {
+            min-width: 200px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .setting-control input[type="number"],
+        .setting-control input[type="text"],
+        .setting-control select {
+            padding: 10px 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            width: 100%;
+            transition: border-color 0.2s;
+        }
+        
+        .setting-control input:focus,
+        .setting-control select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .setting-control textarea {
+            padding: 10px 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            width: 100%;
+            min-height: 80px;
+            resize: vertical;
+        }
+        
+        .toggle-switch {
+            position: relative;
+            width: 56px;
+            height: 30px;
+        }
+        
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: 0.3s;
+            border-radius: 30px;
+        }
+        
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 22px;
+            width: 22px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .toggle-slider {
+            background-color: #667eea;
+        }
+        
+        input:checked + .toggle-slider:before {
+            transform: translateX(26px);
+        }
+        
+        .save-btn {
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+        }
+        
+        .save-btn:hover {
+            background: #5a6fd6;
+        }
+        
+        .save-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .save-btn.saved {
+            background: #10b981;
+        }
+        
+        .cleanup-section {
+            background: #fef3c7;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        .cleanup-section h3 {
+            margin: 0 0 12px 0;
+            color: #92400e;
+        }
+        
+        .cleanup-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        
+        .cleanup-stat {
+            background: white;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .cleanup-stat .value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #333;
+        }
+        
+        .cleanup-stat .label {
+            font-size: 0.8rem;
+            color: #666;
+        }
+        
+        .cleanup-actions {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .cleanup-btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+        
+        .cleanup-btn.dry-run {
+            background: #e0e7ff;
+            color: #4f46e5;
+        }
+        
+        .cleanup-btn.execute {
+            background: #dc2626;
+            color: white;
+        }
+        
+        .cleanup-btn:hover {
+            opacity: 0.9;
+        }
+        
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 16px 24px;
+            background: #333;
+            color: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            z-index: 1000;
+            display: none;
+        }
+        
+        .toast.success {
+            background: #10b981;
+        }
+        
+        .toast.error {
+            background: #dc2626;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .loading i {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="settings-container">
+        <div class="settings-header">
+            <a href="/life-companion" class="back-link">
+                <i class="fas fa-arrow-left"></i> Back to Life Companion
+            </a>
+            <h1>⚙️ Admin Settings</h1>
+            <p>Configure system behavior, data retention, and AI parameters. Changes take effect immediately.</p>
+        </div>
+        
+        <div class="category-tabs" id="categoryTabs">
+            <!-- Tabs will be populated by JavaScript -->
+        </div>
+        
+        <div id="settingsContent">
+            <div class="loading">
+                <i class="fas fa-spinner"></i>
+                <p>Loading settings...</p>
+            </div>
+        </div>
+    </div>
+    
+    <div id="toast" class="toast"></div>
+    
+    <script src="{{ url_for('static', filename='auth_helper.js') }}"></script>
+    <script>
+        let allSettings = {};
+        let categories = {};
+        let activeCategory = 'data_retention';
+        
+        async function loadSettings() {
+            try {
+                const response = await AuthHelper.authenticatedFetch('/api/admin/settings');
+                const data = await response.json();
+                
+                if (data.success) {
+                    allSettings = data.settings;
+                    categories = data.categories;
+                    renderCategoryTabs();
+                    renderSettings();
+                } else {
+                    showToast(data.error || 'Failed to load settings', 'error');
+                    if (data.error === 'Admin access required') {
+                        window.location.href = '/life-companion';
+                    }
+                }
+            } catch (err) {
+                console.error('Error loading settings:', err);
+                showToast('Error loading settings', 'error');
+            }
+        }
+        
+        function renderCategoryTabs() {
+            const container = document.getElementById('categoryTabs');
+            container.innerHTML = '';
+            
+            for (const [catId, cat] of Object.entries(categories)) {
+                const btn = document.createElement('button');
+                btn.className = `category-tab ${catId === activeCategory ? 'active' : ''}`;
+                btn.innerHTML = `<span class="icon">${cat.icon}</span>${cat.label}`;
+                btn.onclick = () => {
+                    activeCategory = catId;
+                    document.querySelectorAll('.category-tab').forEach(b => b.classList.remove('active'));
+                    btn.classList.add('active');
+                    renderSettings();
+                };
+                container.appendChild(btn);
+            }
+        }
+        
+        function renderSettings() {
+            const container = document.getElementById('settingsContent');
+            const cat = categories[activeCategory];
+            
+            // Filter settings by category
+            const categorySettings = Object.entries(allSettings).filter(
+                ([key, setting]) => setting.category === activeCategory
+            );
+            
+            let html = `
+                <div class="settings-panel">
+                    <h2>${cat.icon} ${cat.label}</h2>
+                    <p class="description">${cat.description}</p>
+            `;
+            
+            for (const [key, setting] of categorySettings) {
+                html += renderSettingItem(key, setting);
+            }
+            
+            html += '</div>';
+            
+            // Add cleanup section for data_retention category
+            if (activeCategory === 'data_retention') {
+                html += `
+                    <div class="settings-panel">
+                        <h2>🧹 Data Cleanup</h2>
+                        <p class="description">View and manage expired data cleanup</p>
+                        <div id="cleanupStats" class="cleanup-section">
+                            <div class="loading">
+                                <i class="fas fa-spinner"></i>
+                                <p>Loading cleanup stats...</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            container.innerHTML = html;
+            
+            // Load cleanup stats if on data retention tab
+            if (activeCategory === 'data_retention') {
+                loadCleanupStats();
+            }
+        }
+        
+        function renderSettingItem(key, setting) {
+            let controlHtml = '';
+            
+            if (setting.type === 'boolean') {
+                controlHtml = `
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="${key}" ${setting.value ? 'checked' : ''} 
+                               onchange="saveSetting('${key}', this.checked)">
+                        <span class="toggle-slider"></span>
+                    </label>
+                `;
+            } else if (setting.type === 'select' && setting.options) {
+                controlHtml = `
+                    <select id="${key}" onchange="saveSetting('${key}', this.value)">
+                        ${setting.options.map(opt => 
+                            `<option value="${opt}" ${setting.value === opt ? 'selected' : ''}>${opt}</option>`
+                        ).join('')}
+                    </select>
+                `;
+            } else if (setting.type === 'text' && setting.value && setting.value.length > 50) {
+                controlHtml = `
+                    <textarea id="${key}" onblur="saveSetting('${key}', this.value)">${setting.value}</textarea>
+                    <button class="save-btn" onclick="saveSetting('${key}', document.getElementById('${key}').value)">Save</button>
+                `;
+            } else if (setting.type === 'integer' || setting.type === 'float') {
+                const step = setting.type === 'float' ? '0.01' : '1';
+                controlHtml = `
+                    <input type="number" id="${key}" value="${setting.value}" 
+                           step="${step}"
+                           ${setting.min !== null ? `min="${setting.min}"` : ''}
+                           ${setting.max !== null ? `max="${setting.max}"` : ''}>
+                    <button class="save-btn" id="save_${key}" onclick="saveSetting('${key}', document.getElementById('${key}').value)">Save</button>
+                `;
+            } else {
+                controlHtml = `
+                    <input type="text" id="${key}" value="${setting.value}">
+                    <button class="save-btn" id="save_${key}" onclick="saveSetting('${key}', document.getElementById('${key}').value)">Save</button>
+                `;
+            }
+            
+            return `
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <div class="setting-label">${setting.label}</div>
+                        <div class="setting-description">${setting.description}</div>
+                    </div>
+                    <div class="setting-control">
+                        ${controlHtml}
+                    </div>
+                </div>
+            `;
+        }
+        
+        async function saveSetting(key, value) {
+            const saveBtn = document.getElementById(`save_${key}`);
+            if (saveBtn) {
+                saveBtn.disabled = true;
+                saveBtn.textContent = 'Saving...';
+            }
+            
+            try {
+                const response = await AuthHelper.authenticatedFetch(`/api/admin/settings/${key}`, {
+                    method: 'PUT',
+                    body: JSON.stringify({ value })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showToast('Setting saved successfully', 'success');
+                    allSettings[key].value = value;
+                    
+                    if (saveBtn) {
+                        saveBtn.textContent = '✓ Saved';
+                        saveBtn.classList.add('saved');
+                        setTimeout(() => {
+                            saveBtn.textContent = 'Save';
+                            saveBtn.classList.remove('saved');
+                            saveBtn.disabled = false;
+                        }, 2000);
+                    }
+                } else {
+                    showToast(data.error || 'Failed to save setting', 'error');
+                    if (saveBtn) {
+                        saveBtn.textContent = 'Save';
+                        saveBtn.disabled = false;
+                    }
+                }
+            } catch (err) {
+                console.error('Error saving setting:', err);
+                showToast('Error saving setting', 'error');
+                if (saveBtn) {
+                    saveBtn.textContent = 'Save';
+                    saveBtn.disabled = false;
+                }
+            }
+        }
+        
+        async function loadCleanupStats() {
+            try {
+                const response = await AuthHelper.authenticatedFetch('/api/admin/data-cleanup/stats');
+                const data = await response.json();
+                
+                if (data.success) {
+                    renderCleanupStats(data.stats);
+                } else {
+                    document.getElementById('cleanupStats').innerHTML = 
+                        '<p style="color: #dc2626;">Error loading cleanup stats</p>';
+                }
+            } catch (err) {
+                console.error('Error loading cleanup stats:', err);
+            }
+        }
+        
+        function renderCleanupStats(stats) {
+            const container = document.getElementById('cleanupStats');
+            const interpStats = stats.tables?.character_interpretations || {};
+            
+            container.innerHTML = `
+                <h3>📊 Current Data Statistics</h3>
+                <div class="cleanup-stats">
+                    <div class="cleanup-stat">
+                        <div class="value">${interpStats.total_records || 0}</div>
+                        <div class="label">Total Records</div>
+                    </div>
+                    <div class="cleanup-stat">
+                        <div class="value">${interpStats.expired_records || 0}</div>
+                        <div class="label">Expired Records</div>
+                    </div>
+                    <div class="cleanup-stat">
+                        <div class="value">${stats.retention_years || 3}y</div>
+                        <div class="label">Retention Period</div>
+                    </div>
+                    <div class="cleanup-stat">
+                        <div class="value">${stats.cutoff_date || 'N/A'}</div>
+                        <div class="label">Cutoff Date</div>
+                    </div>
+                </div>
+                <div class="cleanup-actions">
+                    <button class="cleanup-btn dry-run" onclick="runCleanup(true)">
+                        <i class="fas fa-eye"></i> Preview Cleanup (Dry Run)
+                    </button>
+                    <button class="cleanup-btn execute" onclick="runCleanup(false)" 
+                            ${interpStats.expired_records === 0 ? 'disabled' : ''}>
+                        <i class="fas fa-trash"></i> Execute Cleanup
+                    </button>
+                </div>
+            `;
+        }
+        
+        async function runCleanup(dryRun) {
+            if (!dryRun && !confirm('Are you sure you want to permanently delete expired data? This cannot be undone.')) {
+                return;
+            }
+            
+            try {
+                const response = await AuthHelper.authenticatedFetch('/api/admin/data-cleanup/run', {
+                    method: 'POST',
+                    body: JSON.stringify({ dry_run: dryRun })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    const result = data.result;
+                    const interpResult = result.deleted?.character_interpretations || {};
+                    
+                    if (dryRun) {
+                        showToast(`Dry run complete: ${interpResult.found || 0} records would be deleted`, 'success');
+                    } else {
+                        showToast(`Cleanup complete: ${interpResult.deleted || 0} records deleted`, 'success');
+                        loadCleanupStats(); // Refresh stats
+                    }
+                } else {
+                    showToast(data.error || 'Cleanup failed', 'error');
+                }
+            } catch (err) {
+                console.error('Error running cleanup:', err);
+                showToast('Error running cleanup', 'error');
+            }
+        }
+        
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = `toast ${type}`;
+            toast.style.display = 'block';
+            
+            setTimeout(() => {
+                toast.style.display = 'none';
+            }, 3000);
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', loadSettings);
+    </script>
+</body>
+</html>

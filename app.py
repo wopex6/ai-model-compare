@@ -3228,6 +3228,12 @@ def life_companion_interface():
     """Domain characters life companion interface"""
     return render_template('domain_characters.html')
 
+
+@app.route('/admin/settings')
+def admin_settings_page():
+    """Admin settings configuration page"""
+    return render_template('admin_settings.html')
+
 @app.route('/user_logon')
 def user_logon_interface():
     """User login interface - same as chatchat but without signup option"""
@@ -5422,6 +5428,207 @@ def get_user_insights():
         print(f"Error getting user insights: {e}")
         import traceback
         traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+# =============================================================================
+# ADMIN SETTINGS API
+# =============================================================================
+
+@app.route('/api/admin/settings', methods=['GET'])
+@require_auth
+def get_admin_settings():
+    """Get all admin settings (admin only)"""
+    try:
+        user = request.current_user
+        if user.get('username') != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        from smart_response.admin_settings import get_admin_settings as get_settings_instance
+        settings = get_settings_instance()
+        
+        return jsonify({
+            'success': True,
+            'settings': settings.get_all(),
+            'categories': settings.get_categories()
+        })
+    except Exception as e:
+        print(f"Error getting admin settings: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/settings/<key>', methods=['PUT'])
+@require_auth
+def update_admin_setting(key):
+    """Update a single admin setting (admin only)"""
+    try:
+        user = request.current_user
+        if user.get('username') != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        data = request.get_json()
+        value = data.get('value')
+        
+        if value is None:
+            return jsonify({'error': 'Value is required'}), 400
+        
+        from smart_response.admin_settings import get_admin_settings as get_settings_instance
+        settings = get_settings_instance()
+        
+        # Validate the setting
+        is_valid, error = settings.validate_setting(key, value)
+        if not is_valid:
+            return jsonify({'error': error}), 400
+        
+        # Update the setting
+        success = settings.set(key, value, updated_by=user.get('username'))
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': f'Setting {key} updated successfully'
+            })
+        else:
+            return jsonify({'error': 'Setting not found'}), 404
+            
+    except Exception as e:
+        print(f"Error updating admin setting: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/data-cleanup/stats', methods=['GET'])
+@require_auth
+def get_data_cleanup_stats():
+    """Get data cleanup statistics (admin only)"""
+    try:
+        user = request.current_user
+        if user.get('username') != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        from smart_response.data_cleanup import get_cleanup_manager
+        cleanup = get_cleanup_manager()
+        
+        return jsonify({
+            'success': True,
+            'stats': cleanup.get_cleanup_stats()
+        })
+    except Exception as e:
+        print(f"Error getting cleanup stats: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/data-cleanup/run', methods=['POST'])
+@require_auth
+def run_data_cleanup():
+    """Run data cleanup (admin only)"""
+    try:
+        user = request.current_user
+        if user.get('username') != 'admin':
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        data = request.get_json() or {}
+        dry_run = data.get('dry_run', True)  # Default to dry run for safety
+        
+        from smart_response.data_cleanup import get_cleanup_manager
+        cleanup = get_cleanup_manager()
+        
+        result = cleanup.cleanup_expired_interpretations(dry_run=dry_run)
+        
+        return jsonify({
+            'success': True,
+            'result': result
+        })
+    except Exception as e:
+        print(f"Error running cleanup: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# =============================================================================
+# USER DATA CONTROL API (Privacy/GDPR)
+# =============================================================================
+
+@app.route('/api/user/my-data', methods=['GET'])
+@require_auth
+def get_user_data():
+    """Get user's own data (for viewing/export)"""
+    try:
+        from smart_response.admin_settings import get_setting
+        
+        # Check if viewing is enabled
+        if not get_setting('user_can_view_insights', True):
+            return jsonify({'error': 'This feature is currently disabled'}), 403
+        
+        user_id = request.current_user.get('user_id')
+        
+        from smart_response.data_cleanup import get_cleanup_manager
+        cleanup = get_cleanup_manager()
+        
+        export_data = cleanup.export_user_data(user_id)
+        
+        return jsonify({
+            'success': True,
+            'data': export_data
+        })
+    except Exception as e:
+        print(f"Error getting user data: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/user/my-data/export', methods=['GET'])
+@require_auth
+def export_user_data():
+    """Export user's own data as JSON download"""
+    try:
+        from smart_response.admin_settings import get_setting
+        
+        # Check if export is enabled
+        if not get_setting('user_can_export_data', True):
+            return jsonify({'error': 'Data export is currently disabled'}), 403
+        
+        user_id = request.current_user.get('user_id')
+        username = request.current_user.get('username', 'user')
+        
+        from smart_response.data_cleanup import get_cleanup_manager
+        cleanup = get_cleanup_manager()
+        
+        export_data = cleanup.export_user_data(user_id)
+        
+        # Return as downloadable JSON
+        response = make_response(json.dumps(export_data, indent=2))
+        response.headers['Content-Type'] = 'application/json'
+        response.headers['Content-Disposition'] = f'attachment; filename={username}_data_export.json'
+        
+        return response
+    except Exception as e:
+        print(f"Error exporting user data: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/user/my-data/delete', methods=['DELETE'])
+@require_auth
+def delete_user_insights():
+    """Delete user's interpretation/insight data"""
+    try:
+        from smart_response.admin_settings import get_setting
+        
+        # Check if deletion is enabled
+        if not get_setting('user_can_delete_insights', True):
+            return jsonify({'error': 'Data deletion is currently disabled'}), 403
+        
+        user_id = request.current_user.get('user_id')
+        
+        from smart_response.data_cleanup import get_cleanup_manager
+        cleanup = get_cleanup_manager()
+        
+        result = cleanup.cleanup_user_data(user_id)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Your insight data has been deleted',
+            'details': result
+        })
+    except Exception as e:
+        print(f"Error deleting user data: {e}")
         return jsonify({'error': str(e)}), 500
 
 
