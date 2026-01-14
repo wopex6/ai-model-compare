@@ -4924,6 +4924,24 @@ def route_to_domain_characters():
         except Exception as e:
             print(f"Warning: File attachment context failed: {e}")
         
+        # CHARACTER HISTORY INSIGHTS: Add historical patterns from past interpretations
+        # This helps characters remember and personalize based on user's history
+        if domain_character_manager:
+            try:
+                target_char = requested_character or 'coordinator'
+                character = domain_character_manager.characters.get(target_char) or domain_character_manager.coordinator
+                if character and hasattr(character, 'get_personalization_context'):
+                    personalization = character.get_personalization_context(user_id)
+                    if personalization:
+                        existing_profile = context.get('user_profile', '')
+                        if existing_profile:
+                            context['user_profile'] = f"{existing_profile}\n\n{personalization}"
+                        else:
+                            context['user_profile'] = personalization
+                        print(f"[HISTORY_INSIGHTS] Added personalization from past interpretations")
+            except Exception as e:
+                print(f"Warning: Character history insights failed: {e}")
+        
         # Configurable: Number of conversation exchanges to include for AI context
         # Can be set via environment variable AI_CONTEXT_EXCHANGES (default: 5)
         # Expand if user references past conversation
@@ -5339,6 +5357,66 @@ def get_cross_domain_insights():
         })
     except Exception as e:
         print(f"Error in cross-domain insights: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/domain-characters/user-insights', methods=['GET'])
+@require_auth
+def get_user_insights():
+    """
+    Get accumulated insights about the user from all characters.
+    Shows what each character has learned about the user over time.
+    """
+    try:
+        if not domain_character_manager:
+            return jsonify({'error': 'Domain character system not initialized'}), 500
+        
+        user_id = request.current_user['user_id']
+        
+        all_insights = {}
+        
+        # Get insights from each domain character
+        for char_id, character in domain_character_manager.domain_characters.items():
+            if hasattr(character, 'get_user_history_insights'):
+                insights = character.get_user_history_insights(user_id)
+                if insights and insights.get('total_interactions', 0) > 0:
+                    all_insights[char_id] = {
+                        'display_name': character.display_name,
+                        'domain': getattr(character, 'domain', 'general'),
+                        'total_interactions': insights.get('total_interactions', 0),
+                        'responded_count': insights.get('responded_count', 0),
+                        'engagement_rate': round(insights.get('engagement_rate', 0) * 100),
+                        'avg_concern': round(insights.get('avg_concern', 0) * 100),
+                        'common_emotions': [{'emotion': e[0], 'count': e[1]} for e in insights.get('common_emotions', [])],
+                        'common_themes': [{'theme': t[0], 'count': t[1]} for t in insights.get('common_themes', [])],
+                        'common_tags': [{'tag': t[0], 'count': t[1]} for t in insights.get('common_tags', [])]
+                    }
+        
+        # Get coordinator insights too
+        if domain_character_manager.coordinator and hasattr(domain_character_manager.coordinator, 'get_user_history_insights'):
+            coord_insights = domain_character_manager.coordinator.get_user_history_insights(user_id)
+            if coord_insights and coord_insights.get('total_interactions', 0) > 0:
+                all_insights['coordinator'] = {
+                    'display_name': domain_character_manager.coordinator.display_name,
+                    'domain': 'coordinator',
+                    'total_interactions': coord_insights.get('total_interactions', 0),
+                    'responded_count': coord_insights.get('responded_count', 0),
+                    'engagement_rate': round(coord_insights.get('engagement_rate', 0) * 100),
+                    'avg_concern': round(coord_insights.get('avg_concern', 0) * 100),
+                    'common_emotions': [{'emotion': e[0], 'count': e[1]} for e in coord_insights.get('common_emotions', [])],
+                    'common_themes': [{'theme': t[0], 'count': t[1]} for t in coord_insights.get('common_themes', [])],
+                    'common_tags': [{'tag': t[0], 'count': t[1]} for t in coord_insights.get('common_tags', [])]
+                }
+        
+        return jsonify({
+            'success': True,
+            'user_id': user_id,
+            'insights': all_insights
+        })
+    except Exception as e:
+        print(f"Error getting user insights: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
