@@ -14,6 +14,13 @@ from datetime import datetime
 import json
 import sqlite3
 
+# Import admin settings for configurable parameters
+try:
+    from smart_response.admin_settings import get_setting
+except ImportError:
+    def get_setting(key, default=None):
+        return default
+
 
 @dataclass
 class CharacterResponse:
@@ -213,16 +220,20 @@ class BaseCharacter(ABC):
         
         This is the default implementation that can be overridden.
         Uses gradual scaling to allow for "noticed but didn't respond" scenarios.
+        Settings are configurable via admin UI.
         """
         concern = 0.0
         message_lower = message.lower()
         
-        # Check domain keywords - gradual scaling (0.08 per match)
+        # Get configurable concern per keyword (default 0.08)
+        concern_per_keyword = get_setting('concern_per_keyword', 0.08)
+        
+        # Check domain keywords - gradual scaling
         # 1 match = 8%, 2 matches = 16%, allows for partial detection
         keyword_matches = sum(1 for kw in self.threshold_config.domain_keywords 
                              if kw.lower() in message_lower)
         if keyword_matches > 0:
-            concern += min(keyword_matches * 0.08, 0.4)
+            concern += min(keyword_matches * concern_per_keyword, 0.4)
         
         # Check emotional triggers (high priority - 0.2 per match)
         trigger_matches = sum(1 for trigger in self.threshold_config.emotional_triggers
@@ -532,16 +543,26 @@ class DomainCharacter(BaseCharacter):
         """Generate domain-specific interpretation with rich context for future reference"""
         message_lower = message.lower()
         
-        # Detect emotional indicators
+        # Get emotion detection method from settings (keyword, ai, or hybrid)
+        detection_method = get_setting('emotion_detection_method', 'hybrid')
+        
+        # Build emotional indicators from configurable keywords
+        stress_keywords = get_setting('emotion_keywords_stress', 'stress,overwhelm,pressure,anxious,worried').split(',')
+        positive_keywords = get_setting('emotion_keywords_positive', 'happy,excited,grateful,hopeful,confident').split(',')
+        negative_keywords = get_setting('emotion_keywords_negative', 'sad,angry,frustrated,disappointed,lonely').split(',')
+        
         emotional_indicators = {
-            'stressed': ['stress', 'overwhelm', 'pressure', 'anxious', 'worried'],
+            'stressed': [kw.strip() for kw in stress_keywords],
             'frustrated': ['frustrat', 'annoy', 'angry', 'upset', 'irritat'],
-            'hopeful': ['hope', 'excited', 'looking forward', 'optimistic', 'eager'],
+            'hopeful': [kw.strip() for kw in positive_keywords[:5]],
             'sad': ['sad', 'down', 'depress', 'lonely', 'miss'],
             'confused': ['confus', 'unsure', 'don\'t know', 'uncertain', 'lost']
         }
-        detected_emotions = [emotion for emotion, keywords in emotional_indicators.items()
-                            if any(kw in message_lower for kw in keywords)]
+        
+        detected_emotions = []
+        if detection_method in ('keyword', 'hybrid'):
+            detected_emotions = [emotion for emotion, keywords in emotional_indicators.items()
+                                if any(kw in message_lower for kw in keywords)]
         
         # Detect focus areas
         focus_areas_detected = [a for a in self.focus_areas if a.lower() in message_lower]
