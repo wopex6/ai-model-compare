@@ -705,6 +705,10 @@
                             class="header-action-btn" title="Other perspectives" style="padding: 6px 10px; font-size: 16px;">
                             👁️
                         </button>
+                        <button id="insightsBtn" onclick="toggleCharacterInsights()" 
+                            class="header-action-btn" title="Character insights (dev)" style="padding: 6px 10px; font-size: 16px;">
+                            📊
+                        </button>
                         <label id="analysisBtn" class="header-action-btn" title="Show AI character analysis" 
                             style="padding: 6px 10px; font-size: 14px; display: flex; align-items: center; gap: 4px; cursor: pointer;">
                             <input type="checkbox" id="showAnalysis" style="margin: 0; cursor: pointer;"> 📊
@@ -753,6 +757,17 @@
                     </div>
                     <div id="silent-observers-content" class="panel-content">
                         <p class="panel-empty">Characters who noticed but didn't respond...</p>
+                    </div>
+                </div>
+                
+                <!-- Character Insights Panel (Development/Feedback) -->
+                <div id="character-insights-panel" class="action-panel" style="display: none; background: linear-gradient(135deg, #f5f7fa 0%, #e4e8f0 100%);">
+                    <div class="panel-header" style="background: #667eea; color: white; border-radius: 8px 8px 0 0;">
+                        <h4 style="margin: 0;">🧠 Character Insights</h4>
+                        <button onclick="toggleCharacterInsights()" class="panel-close" style="color: white;">✕</button>
+                    </div>
+                    <div id="character-insights-content" class="panel-content" style="max-height: 400px; overflow-y: auto;">
+                        <p class="panel-empty">Loading character perspectives...</p>
                     </div>
                 </div>
                 
@@ -1162,6 +1177,99 @@
                 } catch (err) {
                     console.error('Error loading silent observers:', err);
                     content.innerHTML = '<p class="panel-empty">Error loading perspectives</p>';
+                }
+            }
+            
+            // Character Insights Panel (Development/Feedback)
+            window.toggleCharacterInsights = function() {
+                const panel = document.getElementById('character-insights-panel');
+                const btn = document.getElementById('insightsBtn');
+                if (panel.style.display === 'none') {
+                    panel.style.display = 'block';
+                    btn.classList.add('active');
+                    loadCharacterInsights();
+                } else {
+                    panel.style.display = 'none';
+                    btn.classList.remove('active');
+                }
+            };
+            
+            async function loadCharacterInsights() {
+                const content = document.getElementById('character-insights-content');
+                content.innerHTML = '<p class="panel-empty">Loading character insights...</p>';
+                
+                // Get the last message from chat
+                const messages = document.querySelectorAll('#domain-chat-messages .user-message');
+                const lastUserMsg = messages[messages.length - 1];
+                let message = lastUserMsg ? lastUserMsg.querySelector('.message-content')?.textContent : '';
+                if (message) message = message.replace(/^You:\s*/, '').trim();
+                
+                if (!message) {
+                    content.innerHTML = '<p class="panel-empty">Send a message to see character insights</p>';
+                    return;
+                }
+                
+                try {
+                    const response = await AuthHelper.authenticatedFetch('/api/domain-characters/cross-domain', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ message })
+                    });
+                    const data = await response.json();
+                    
+                    if (data.success && data.domain_insights) {
+                        let html = '<div style="font-size: 0.85rem;">';
+                        
+                        // Show each character's full interpretation
+                        data.domain_insights.forEach(insight => {
+                            if (insight.concern_level > 0) {
+                                const interp = insight.interpretation || {};
+                                const concernPct = Math.round(insight.concern_level * 100);
+                                const emotions = interp.detected_emotions || [];
+                                const responded = insight.concern_level >= 0.15;
+                                const statusColor = responded ? '#10b981' : '#f59e0b';
+                                const statusIcon = responded ? '✓' : '👁️';
+                                
+                                html += `
+                                    <div style="margin-bottom: 12px; padding: 10px; background: white; border-radius: 8px; border-left: 4px solid ${statusColor}; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+                                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                            <strong style="color: #333;">${statusIcon} ${insight.display_name}</strong>
+                                            <span style="background: ${statusColor}20; color: ${statusColor}; padding: 2px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: 600;">${concernPct}%</span>
+                                        </div>
+                                        <div style="color: #666; font-size: 0.8rem; margin-bottom: 6px;">
+                                            <span style="background: #e0e7ff; color: #4f46e5; padding: 2px 6px; border-radius: 4px; margin-right: 4px;">${interp.domain || insight.domain}</span>
+                                            ${emotions.map(e => `<span style="background: #fef3c7; color: #d97706; padding: 2px 6px; border-radius: 4px; margin-right: 4px;">${e}</span>`).join('')}
+                                        </div>
+                                        <div style="color: #555; margin-bottom: 4px;">
+                                            <strong>Perspective:</strong> ${interp.character_perspective || 'N/A'}
+                                        </div>
+                                        ${interp.potential_advice ? `
+                                        <div style="color: #059669; font-style: italic;">
+                                            <strong>💡 Advice:</strong> ${interp.potential_advice}
+                                        </div>
+                                        ` : ''}
+                                        ${interp.continuity_tags && interp.continuity_tags.length > 0 ? `
+                                        <div style="margin-top: 6px;">
+                                            ${interp.continuity_tags.map(tag => `<span style="background: #f3f4f6; color: #6b7280; padding: 1px 6px; border-radius: 4px; font-size: 0.7rem; margin-right: 4px;">${tag}</span>`).join('')}
+                                        </div>
+                                        ` : ''}
+                                    </div>
+                                `;
+                            }
+                        });
+                        
+                        if (html === '<div style="font-size: 0.85rem;">') {
+                            html += '<p class="panel-empty">No characters detected relevance</p>';
+                        }
+                        
+                        html += '</div>';
+                        content.innerHTML = html;
+                    } else {
+                        content.innerHTML = '<p class="panel-empty">No character insights available</p>';
+                    }
+                } catch (err) {
+                    console.error('Error loading character insights:', err);
+                    content.innerHTML = '<p class="panel-empty">Error loading insights</p>';
                 }
             }
             
