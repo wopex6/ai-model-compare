@@ -212,21 +212,23 @@ class BaseCharacter(ABC):
         Calculate concern level using threshold configuration
         
         This is the default implementation that can be overridden.
+        Uses gradual scaling to allow for "noticed but didn't respond" scenarios.
         """
         concern = 0.0
         message_lower = message.lower()
         
-        # Check domain keywords
+        # Check domain keywords - gradual scaling (0.08 per match)
+        # 1 match = 8%, 2 matches = 16%, allows for partial detection
         keyword_matches = sum(1 for kw in self.threshold_config.domain_keywords 
                              if kw.lower() in message_lower)
         if keyword_matches > 0:
-            concern += min(keyword_matches * 0.15, 0.5)
+            concern += min(keyword_matches * 0.08, 0.4)
         
-        # Check emotional triggers (high priority)
+        # Check emotional triggers (high priority - 0.2 per match)
         trigger_matches = sum(1 for trigger in self.threshold_config.emotional_triggers
                              if trigger.lower() in message_lower)
         if trigger_matches > 0:
-            concern += min(trigger_matches * 0.3, 0.6)
+            concern += min(trigger_matches * 0.2, 0.5)
         
         # Apply urgency multiplier
         concern *= self.threshold_config.urgency_multiplier
