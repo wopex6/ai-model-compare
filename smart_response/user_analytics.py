@@ -36,10 +36,9 @@ class UserAnalytics:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     user_id INTEGER NOT NULL,
                     activity_type TEXT NOT NULL,
-                    action_data TEXT,
-                    page TEXT,
-                    session_id TEXT,
-                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    last_activity_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    metadata TEXT,
+                    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
                 )
             ''')
             
@@ -73,7 +72,7 @@ class UserAnalytics:
             ''')
             
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_activity_user ON user_activity_log(user_id)')
-            cursor.execute('CREATE INDEX IF NOT EXISTS idx_activity_date ON user_activity_log(created_at)')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_activity_date ON user_activity_log(last_activity_at)')
             cursor.execute('CREATE INDEX IF NOT EXISTS idx_conv_user ON conversation_analytics(user_id)')
             
             self.db.commit()
@@ -86,11 +85,16 @@ class UserAnalytics:
         """Log a user activity"""
         try:
             cursor = self.db.cursor()
+            # Combine action_data, page, session_id into metadata JSON
+            metadata = {
+                'action_data': action_data,
+                'page': page,
+                'session_id': session_id
+            }
             cursor.execute('''
-                INSERT INTO user_activity_log (user_id, activity_type, action_data, page, session_id)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (user_id, action_type, json.dumps(action_data) if action_data else None, 
-                  page, session_id))
+                INSERT INTO user_activity_log (user_id, activity_type, metadata)
+                VALUES (?, ?, ?)
+            ''', (user_id, action_type, json.dumps(metadata) if any([action_data, page, session_id]) else None))
             self.db.commit()
         except Exception as e:
             print(f"Error logging activity: {e}")
@@ -224,13 +228,13 @@ class UserAnalytics:
         # Get today's stats
         cursor.execute('''
             SELECT COUNT(DISTINCT user_id) FROM user_activity_log
-            WHERE DATE(created_at) = ?
+            WHERE DATE(last_activity_at) = ?
         ''', (today,))
         active_users = cursor.fetchone()[0]
         
         cursor.execute('''
             SELECT COUNT(*) FROM user_activity_log
-            WHERE DATE(created_at) = ? AND activity_type = 'message_sent'
+            WHERE DATE(last_activity_at) = ? AND activity_type = 'message_sent'
         ''', (today,))
         total_messages = cursor.fetchone()[0]
         
@@ -252,9 +256,9 @@ class UserAnalytics:
             since = datetime.now() - timedelta(days=days)
             
             if metric == 'active_users':
-                cursor.execute('SELECT DATE(created_at), COUNT(DISTINCT user_id) FROM user_activity_log WHERE created_at > ? GROUP BY DATE(created_at) ORDER BY DATE(created_at)', (since,))
+                cursor.execute('SELECT DATE(last_activity_at), COUNT(DISTINCT user_id) FROM user_activity_log WHERE last_activity_at > ? GROUP BY DATE(last_activity_at) ORDER BY DATE(last_activity_at)', (since,))
             elif metric == 'messages':
-                cursor.execute('SELECT DATE(created_at), COUNT(*) FROM user_activity_log WHERE created_at > ? AND activity_type = ? GROUP BY DATE(created_at) ORDER BY DATE(created_at)', (since, 'message_sent'))
+                cursor.execute('SELECT DATE(last_activity_at), COUNT(*) FROM user_activity_log WHERE last_activity_at > ? AND activity_type = ? GROUP BY DATE(last_activity_at) ORDER BY DATE(last_activity_at)', (since, 'message_sent'))
             else:
                 return []
             

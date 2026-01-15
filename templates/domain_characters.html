@@ -1502,16 +1502,29 @@
                 const dataView = document.getElementById('privacy-data-view');
                 const pre = dataView.querySelector('pre');
                 
+                // Show loading state
+                pre.textContent = 'Loading...';
+                dataView.style.display = 'block';
+                
                 try {
                     const response = await AuthHelper.authenticatedFetch('/api/user/my-data');
+                    
+                    if (!response.ok) {
+                        pre.textContent = 'Error: HTTP ' + response.status;
+                        return;
+                    }
+                    
                     const data = await response.json();
                     
                     if (data.success) {
-                        pre.textContent = JSON.stringify(data.data, null, 2);
-                        dataView.style.display = 'block';
+                        const userData = data.data;
+                        if (!userData.data.interpretations?.length && !userData.data.context?.length) {
+                            pre.textContent = 'No data stored yet. Your personalization data will appear here after you have some conversations.';
+                        } else {
+                            pre.textContent = JSON.stringify(userData, null, 2);
+                        }
                     } else {
                         pre.textContent = 'Error: ' + (data.error || 'Failed to load data');
-                        dataView.style.display = 'block';
                     }
                 } catch (err) {
                     pre.textContent = 'Error loading data: ' + err.message;
