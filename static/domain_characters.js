@@ -787,11 +787,11 @@ const DomainCharacters = {
         const icons = {
             'coordinator': '⭐',
             // Domain characters with unique face icons
-            'domain_work': '👨‍💼',
-            'domain_relationships': '👩‍❤️‍👨',
+            'domain_work': '👔',
+            'domain_relationships': '💑',
             'domain_mental_health': '🧘',
             'domain_physical_health': '🏃',
-            'domain_finance': '🧑‍💼',
+            'domain_finance': '💰',
             'domain_learning': '👨‍🎓',
             'domain_creativity': '👩‍🎨',
             // Legacy character IDs (if any)
