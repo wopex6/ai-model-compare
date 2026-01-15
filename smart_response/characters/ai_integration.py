@@ -521,6 +521,25 @@ class DomainCharacterAI:
         if context.get('file_attachments'):
             parts.append(f"\n{context['file_attachments']}")
         
+        # ADAPTIVE COMPANION CONTEXT - understanding implicit needs & adapting tone
+        if context.get('adaptive_context'):
+            ac = context['adaptive_context']
+            
+            # Response strategy based on implicit needs
+            if ac.get('response_strategy'):
+                parts.append(f"\n🎯 RESPONSE APPROACH:\n{ac['response_strategy']}")
+            
+            # Tone guidance based on user's style
+            if ac.get('tone_guidance'):
+                parts.append(f"\n💬 COMMUNICATION STYLE:\n{ac['tone_guidance']}")
+            
+            # Suggested micro-steps (if user is ready for action)
+            if ac.get('suggested_micro_steps'):
+                steps = ac['suggested_micro_steps']
+                steps_text = "\n".join([f"  - {s['action']} ({s.get('time', '5 min')})" for s in steps[:3]])
+                parts.append(f"\n✨ SMALL ACHIEVABLE STEPS you could suggest:\n{steps_text}")
+                parts.append("(Only share these if appropriate - sometimes they just need to be heard first)")
+        
         return "\n".join(parts)
     
     def _generate_openai(self, system_prompt: str, message: str, 

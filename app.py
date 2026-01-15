@@ -4951,6 +4951,23 @@ def route_to_domain_characters():
             except Exception as e:
                 print(f"Warning: Character history insights failed: {e}")
         
+        # ADAPTIVE COMPANION: Understand implicit needs, adapt tone, suggest micro-steps
+        # Core philosophy: Truly understand users and inspire them with achievable actions
+        try:
+            from smart_response.adaptive_companion import get_adaptive_companion
+            adaptive = get_adaptive_companion(smart_response_conn)
+            target_char = requested_character or 'coordinator'
+            adaptive_context = adaptive.build_adaptive_context(
+                user_id, message, target_char,
+                user_history=context.get('message_history', [])
+            )
+            if adaptive_context:
+                context['adaptive_context'] = adaptive_context
+                implicit_need = adaptive_context.get('implicit_needs', {}).get('primary_need', 'unknown')
+                print(f"[ADAPTIVE] Detected implicit need: {implicit_need}")
+        except Exception as e:
+            print(f"Warning: Adaptive companion failed: {e}")
+        
         # Configurable: Number of conversation exchanges to include for AI context
         # Can be set via environment variable AI_CONTEXT_EXCHANGES (default: 5)
         # Expand if user references past conversation
