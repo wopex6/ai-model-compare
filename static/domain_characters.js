@@ -783,9 +783,18 @@ const DomainCharacters = {
         item.dataset.characterId = character.id;
         item.title = `${character.display_name} - ${character.domain}`;
         
-        // Character icons mapping
+        // Character icons mapping - unique face/head avatars for each domain
         const icons = {
             'coordinator': '⭐',
+            // Domain characters with unique face icons
+            'domain_work': '👨‍💼',
+            'domain_relationships': '👩‍❤️‍👨',
+            'domain_mental_health': '🧘',
+            'domain_physical_health': '🏃',
+            'domain_finance': '🧑‍💼',
+            'domain_learning': '👨‍🎓',
+            'domain_creativity': '👩‍🎨',
+            // Legacy character IDs (if any)
             'life_coach': '🎯',
             'psychologist': '🧠',
             'stoic_philosopher': '🏛️',
