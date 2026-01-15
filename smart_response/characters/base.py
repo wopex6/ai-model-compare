@@ -361,11 +361,11 @@ class BaseCharacter(ABC):
             
             # Get recent interpretations for this character and user
             cursor.execute('''
-                SELECT ci.interpretation, ci.concern_level, ci.responded, ci.created_at
+                SELECT ci.interpretation, ci.concern_level, ci.responded, ci.timestamp
                 FROM character_interpretations ci
                 JOIN history_primary hp ON ci.primary_history_id = hp.id
                 WHERE ci.character_id = ? AND hp.user_id = ?
-                ORDER BY ci.created_at DESC
+                ORDER BY ci.timestamp DESC
                 LIMIT ?
             ''', (self.character_id, user_id, limit))
             
