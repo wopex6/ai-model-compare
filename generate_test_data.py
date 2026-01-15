@@ -275,6 +275,23 @@ def generate_test_data(user_id: int, count: int = 50, use_ai: bool = False):
     print(f"{'='*60}\n")
 
 
+def list_users():
+    """List all users in the database."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('SELECT id, username FROM users ORDER BY id')
+    users = cursor.fetchall()
+    conn.close()
+    
+    print(f"\n{'='*40}")
+    print("USERS IN DATABASE")
+    print(f"{'='*40}")
+    for user_id, username in users:
+        print(f"  ID: {user_id:4d}  |  {username}")
+    print(f"{'='*40}")
+    print(f"Total: {len(users)} users\n")
+
+
 def clear_test_data(user_id: int):
     """Clear all generated test data for a user."""
     conn = sqlite3.connect(DB_PATH)
@@ -303,14 +320,23 @@ def clear_test_data(user_id: int):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Generate synthetic test data')
-    parser.add_argument('--user-id', type=int, required=True, help='User ID to generate data for')
+    parser.add_argument('--user-id', type=int, help='User ID to generate data for')
     parser.add_argument('--count', type=int, default=50, help='Number of records to generate')
     parser.add_argument('--use-ai', action='store_true', help='Use AI for more realistic data (costs API credits)')
     parser.add_argument('--clear', action='store_true', help='Clear existing test data instead of generating')
+    parser.add_argument('--list-users', action='store_true', help='List all users in database')
     
     args = parser.parse_args()
     
-    if args.clear:
-        clear_test_data(args.user_id)
+    if args.list_users:
+        list_users()
+    elif args.clear:
+        if not args.user_id:
+            print("❌ Error: --user-id required for --clear")
+        else:
+            clear_test_data(args.user_id)
     else:
-        generate_test_data(args.user_id, args.count, args.use_ai)
+        if not args.user_id:
+            print("❌ Error: --user-id required. Use --list-users to see available users.")
+        else:
+            generate_test_data(args.user_id, args.count, args.use_ai)
