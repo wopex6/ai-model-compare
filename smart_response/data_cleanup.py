@@ -242,17 +242,25 @@ class DataCleanupManager:
                     ORDER BY ci.timestamp DESC
                 ''', history_ids)
                 
-                export_data['data']['interpretations'] = [
-                    {
+                interpretations = []
+                for row in cursor.fetchall():
+                    # Parse interpretation JSON string into object
+                    interp_data = row[2]
+                    try:
+                        import json
+                        interp_data = json.loads(row[2]) if row[2] else {}
+                    except:
+                        interp_data = row[2]
+                    
+                    interpretations.append({
                         'id': row[0],
                         'character_id': row[1],
-                        'interpretation': row[2],
+                        'interpretation': interp_data,
                         'concern_level': row[3],
                         'responded': bool(row[4]),
                         'timestamp': row[5]
-                    }
-                    for row in cursor.fetchall()
-                ]
+                    })
+                export_data['data']['interpretations'] = interpretations
             else:
                 export_data['data']['interpretations'] = []
             
