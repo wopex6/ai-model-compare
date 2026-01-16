@@ -2460,6 +2460,66 @@ def delete_highlight(highlight_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# ==================== FOLLOW-UP SUGGESTIONS ====================
+
+@app.route('/api/user/suggestion-selected', methods=['POST'])
+@require_auth
+def record_suggestion_selection():
+    """
+    Record when user selects a follow-up suggestion.
+    This tracks their choice path to learn implicit preferences over time.
+    """
+    try:
+        user_id = request.current_user['user_id']
+        data = request.get_json()
+        
+        selected_text = data.get('text', '')
+        category = data.get('category')
+        character_id = data.get('character_id')
+        
+        if not selected_text:
+            return jsonify({'error': 'No suggestion text provided'}), 400
+        
+        from smart_response.follow_up_suggestions import get_suggestion_system
+        conn = integrated_db.get_connection()
+        suggestion_system = get_suggestion_system(conn)
+        
+        suggestion_system.record_selection(
+            user_id=user_id,
+            selected_text=selected_text,
+            suggestion_category=category,
+            character_id=character_id
+        )
+        conn.close()
+        
+        return jsonify({'success': True, 'message': 'Selection recorded'})
+    except Exception as e:
+        print(f"Error recording suggestion selection: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/user/preferences', methods=['GET'])
+@require_auth
+def get_learned_preferences():
+    """Get user's learned preferences from their suggestion choices."""
+    try:
+        user_id = request.current_user['user_id']
+        
+        from smart_response.follow_up_suggestions import get_suggestion_system
+        conn = integrated_db.get_connection()
+        suggestion_system = get_suggestion_system(conn)
+        
+        preferences = suggestion_system.get_user_preferences(user_id)
+        journey = suggestion_system.get_user_journey_insights(user_id)
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'preferences': preferences,
+            'journey_insights': journey
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/user/conversations/<session_id>/messages')
 @require_auth
 def get_conversation_messages(session_id):
@@ -4967,6 +5027,25 @@ def route_to_domain_characters():
                 print(f"[ADAPTIVE] Detected implicit need: {implicit_need}")
         except Exception as e:
             print(f"Warning: Adaptive companion failed: {e}")
+        
+        # FOLLOW-UP SUGGESTIONS: Add learned user preferences to AI context
+        # This tracks user's choice paths to understand their implicit needs over time
+        try:
+            from smart_response.follow_up_suggestions import get_suggestion_system
+            suggestion_system = get_suggestion_system(smart_response_conn)
+            # Add db_connection for suggestion storage
+            context['db_connection'] = smart_response_conn
+            # Get learned preferences for AI context
+            pref_summary = suggestion_system.get_preference_summary_for_prompt(user_id)
+            if pref_summary:
+                existing_profile = context.get('user_profile', '')
+                if existing_profile:
+                    context['user_profile'] = f"{existing_profile}\n\n{pref_summary}"
+                else:
+                    context['user_profile'] = pref_summary
+                print(f"[SUGGESTIONS] Added learned preferences to AI context")
+        except Exception as e:
+            print(f"Warning: Suggestion preferences failed: {e}")
         
         # Configurable: Number of conversation exchanges to include for AI context
         # Can be set via environment variable AI_CONTEXT_EXCHANGES (default: 5)

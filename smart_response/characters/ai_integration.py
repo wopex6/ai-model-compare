@@ -462,6 +462,22 @@ class DomainCharacterAI:
         if ai_response and len(ai_response) > 300 and used_provider != 'fallback':
             summary = self._generate_summary(ai_response, used_provider)
         
+        # Generate follow-up suggestions based on conversation
+        follow_up_suggestions = []
+        if ai_response and used_provider != 'fallback':
+            try:
+                from smart_response.follow_up_suggestions import get_suggestion_system
+                suggestion_system = get_suggestion_system(context.get('db_connection'))
+                follow_up_suggestions = suggestion_system.generate_suggestions(
+                    user_id=user_id,
+                    message=message,
+                    ai_response=ai_response,
+                    character_id=character.character_id,
+                    context=context
+                )
+            except Exception as e:
+                print(f"Warning: Could not generate follow-up suggestions: {e}")
+        
         return CharacterResponse(
             character_id=character.character_id,
             display_name=character.display_name,
@@ -475,7 +491,8 @@ class DomainCharacterAI:
                 'ai_generated': used_provider != 'fallback',
                 'failover_used': used_provider != provider if provider else False,
                 'summary': summary,
-                'has_summary': summary is not None
+                'has_summary': summary is not None,
+                'follow_up_suggestions': follow_up_suggestions
             }
         )
     
