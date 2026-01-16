@@ -631,6 +631,11 @@ const DomainCharacters = {
                                 null, 
                                 metadata
                             );
+                            
+                            // Display follow-up suggestions if available
+                            if (metadata.follow_up_suggestions && metadata.follow_up_suggestions.length > 0) {
+                                this._displayFollowUpSuggestions(metadata.follow_up_suggestions, resp.character_id);
+                            }
                         }
                     });
                 }
@@ -699,6 +704,104 @@ const DomainCharacters = {
             console.error('Error analyzing message:', error);
             return null;
         }
+    },
+    
+    /**
+     * Display follow-up suggestions as clickable buttons
+     * @param {Array} suggestions - Array of suggestion objects
+     * @param {string} characterId - Character that provided the response
+     * @private
+     */
+    _displayFollowUpSuggestions(suggestions, characterId) {
+        const messagesContainer = document.getElementById('domain-chat-messages');
+        if (!messagesContainer || !suggestions || suggestions.length === 0) return;
+        
+        // Create suggestions container
+        const suggestionsDiv = document.createElement('div');
+        suggestionsDiv.className = 'follow-up-suggestions';
+        suggestionsDiv.style.cssText = `
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 12px 16px;
+            margin: 8px 0 16px 48px;
+            animation: fadeIn 0.3s ease-out;
+        `;
+        
+        // Add label
+        const label = document.createElement('div');
+        label.style.cssText = `
+            width: 100%;
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 4px;
+        `;
+        label.textContent = '💡 You might want to ask:';
+        suggestionsDiv.appendChild(label);
+        
+        // Create suggestion buttons
+        suggestions.forEach(suggestion => {
+            const btn = document.createElement('button');
+            btn.className = 'suggestion-btn';
+            btn.style.cssText = `
+                background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+                border: 1px solid #dee2e6;
+                border-radius: 20px;
+                padding: 8px 16px;
+                font-size: 13px;
+                color: #495057;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                max-width: 100%;
+                text-align: left;
+                white-space: normal;
+                line-height: 1.4;
+            `;
+            btn.textContent = suggestion.text;
+            btn.title = suggestion.intent || 'Click to ask this';
+            
+            // Hover effects
+            btn.onmouseenter = () => {
+                btn.style.background = 'linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%)';
+                btn.style.borderColor = '#adb5bd';
+                btn.style.transform = 'translateY(-1px)';
+            };
+            btn.onmouseleave = () => {
+                btn.style.background = 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)';
+                btn.style.borderColor = '#dee2e6';
+                btn.style.transform = 'translateY(0)';
+            };
+            
+            // Click handler - send the suggestion as a message
+            btn.onclick = async () => {
+                // Record the selection for learning
+                try {
+                    await AuthHelper.authenticatedFetch('/api/user/suggestion-selected', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            text: suggestion.text,
+                            category: suggestion.category,
+                            character_id: characterId
+                        })
+                    });
+                } catch (e) {
+                    console.log('Could not record suggestion selection:', e);
+                }
+                
+                // Remove suggestions UI
+                suggestionsDiv.remove();
+                
+                // Send the suggestion as a message
+                this.sendMessage(suggestion.text);
+            };
+            
+            suggestionsDiv.appendChild(btn);
+        });
+        
+        messagesContainer.appendChild(suggestionsDiv);
+        
+        // Scroll to show suggestions
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
     },
     
     /**
