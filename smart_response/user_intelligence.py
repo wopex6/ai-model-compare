@@ -6,41 +6,117 @@ Inspired by social media recommendation engines (Instagram, YouTube, Facebook, T
 this system learns user preferences through behavioral signals to provide highly
 personalized and predictive experiences.
 
-KEY LEARNINGS FROM SOCIAL MEDIA PLATFORMS:
-------------------------------------------
+================================================================================
+LIMITATIONS: CONVERSATION-ONLY VS RICH MEDIA
+================================================================================
+
+SOCIAL MEDIA HAS:                    THIS APP HAS:
+─────────────────────────────────    ─────────────────────────────────
+Videos (watch time, completion)      Text conversations only
+Images (dwell time, zoom, save)      No visual content (yet)
+Audio (listen time, skip rate)       No audio content (yet)
+Scroll behavior                      Message-by-message interaction
+Double-tap / swipe gestures          Click-based only
+Ads engagement                       No ads (thankfully)
+Passive consumption                  Active participation required
+
+WHAT WE CAN'T MEASURE (YET):         WHAT WE CAN MEASURE INSTEAD:
+─────────────────────────────────    ─────────────────────────────────
+Watch time on video                  → Conversation duration
+Video completion rate                → Topic resolution rate
+Image dwell time                     → Message read-to-reply time
+Scroll speed                         → Topic switching frequency
+Pause/rewind behavior                → Return to previous topics
+Visual attention                     → Emotional depth in text
+
+================================================================================
+CONVERSATION-SPECIFIC ADVANTAGES (Our Unique Signals)
+================================================================================
+
+1. EMOTIONAL JOURNEY - Track sentiment changes through conversation
+   - Starting emotional state → ending emotional state
+   - Emotional volatility vs stability
+   - Resolution indicators ("that helps", "I feel better")
+
+2. CONVERSATION DEPTH - Unlike passive video watching
+   - Back-and-forth exchanges (dialogue depth)
+   - Question complexity progression
+   - Topic drilling vs topic hopping
+
+3. NEED RESOLUTION - Did we actually help?
+   - Explicit gratitude signals
+   - Implicit resolution (session ended positively)
+   - Return rate on same topic (unresolved = they come back)
+
+4. ACTIVE ENGAGEMENT - Users invest effort
+   - Message length = effort invested (unlike passive video watching)
+   - Thoughtfulness indicators (detailed questions)
+   - Follow-up questions = genuine interest
+
+================================================================================
+FUTURE EXTENSIBILITY: MEDIA TYPE ABSTRACTION
+================================================================================
+
+Designed for when videos/images/audio are added:
+
+MEDIA_TYPE_HANDLERS = {
+    'conversation': ConversationEngagementHandler,  # Current
+    'video': VideoEngagementHandler,                # Future
+    'image': ImageEngagementHandler,                # Future  
+    'audio': AudioEngagementHandler,                # Future
+    'document': DocumentEngagementHandler,          # Future (PDFs, etc.)
+}
+
+Each handler implements:
+- get_engagement_signals(content_id) → List[Signal]
+- calculate_engagement_score(signals) → float
+- get_completion_rate(content_id) → float
+- get_quality_indicators(content_id) → Dict
+
+================================================================================
+KEY LEARNINGS FROM SOCIAL MEDIA PLATFORMS
+================================================================================
 
 1. YOUTUBE - Watch Time & Engagement Depth
    - Tracks not just clicks, but HOW LONG users engage
    - Distinguishes between "tried and bounced" vs "deeply engaged"
    - Uses completion rate as quality signal
+   → OUR EQUIVALENT: Conversation duration, topic completion
 
 2. INSTAGRAM - Interaction Hierarchy
    - Weights actions: Save > Comment > Like > View
    - Tracks time spent on each post
    - Notes what users RETURN to view again
+   → OUR EQUIVALENT: Highlight > Feedback > Suggestion click > Message
 
 3. FACEBOOK - Social & Temporal Patterns
    - When users are active (time-of-day, day-of-week)
    - What contexts trigger engagement
    - Recency vs frequency balance
+   → OUR EQUIVALENT: Peak conversation times, topic triggers
 
 4. TIKTOK - Real-time Adaptation
    - Extremely fast feedback loops
    - "Explore vs Exploit" balance
    - Negative signals matter (skip, not interested)
+   → OUR EQUIVALENT: Real-time tone adaptation, skipped suggestions
 
 5. SPOTIFY - Collaborative Filtering
    - "Users like you also liked..."
    - Context-aware (workout, sleep, focus)
    - Taste profiles that evolve
+   → OUR EQUIVALENT: Similar users' character preferences, mood-based routing
 
-INNOVATIONS FOR AI COMPANION:
------------------------------
-- Emotional state tracking (not just topics)
-- Need fulfillment scoring (was the user helped?)
-- Communication style matching
-- Proactive outreach timing
-- Character-user chemistry scoring
+================================================================================
+INNOVATIONS FOR AI COMPANION
+================================================================================
+- Emotional journey tracking (not just topics)
+- Need fulfillment scoring (was the user actually helped?)
+- Communication style matching (formal/casual, verbose/concise)
+- Proactive outreach timing (optimal contact windows)
+- Character-user chemistry scoring (which advisor works best)
+- Conversation depth metrics (shallow chat vs deep exploration)
+- Resolution rate tracking (did we solve their problem?)
 """
 
 import json
@@ -70,17 +146,80 @@ class UserIntelligenceSystem:
         self.db = db_connection
         self._init_tables()
         
-        # Engagement weights (Instagram-style hierarchy)
+        # =================================================================
+        # ENGAGEMENT WEIGHTS BY MEDIA TYPE
+        # =================================================================
+        # Designed to be extensible for future media types
+        
+        self.media_type = 'conversation'  # Current media type
+        
+        # CONVERSATION-SPECIFIC weights (current)
         self.engagement_weights = {
-            'message_sent': 1.0,          # Basic engagement
-            'suggestion_clicked': 2.0,     # Showed interest
-            'long_message': 1.5,           # Invested effort
-            'follow_up_question': 2.5,     # Deep engagement
-            'returned_to_topic': 3.0,      # Strong interest signal
-            'positive_feedback': 4.0,      # Explicit satisfaction
-            'saved_highlight': 5.0,        # Highest value signal
-            'skipped_suggestion': -0.5,    # Negative signal
-            'quick_exit': -1.0,            # Dissatisfaction signal
+            # === BASIC SIGNALS ===
+            'message_sent': 1.0,              # Basic engagement
+            'message_received': 0.5,          # Passive (AI responded)
+            
+            # === EFFORT SIGNALS (conversation-specific) ===
+            'long_message': 1.5,              # >100 chars = invested effort
+            'very_long_message': 2.0,         # >300 chars = significant effort
+            'detailed_question': 2.0,         # Complex question asked
+            'follow_up_question': 2.5,        # Continued engagement
+            
+            # === INTEREST SIGNALS ===
+            'suggestion_clicked': 2.0,        # Showed interest in follow-up
+            'returned_to_topic': 3.0,         # Came back to same topic
+            'topic_deep_dive': 3.5,           # Multiple exchanges on same topic
+            
+            # === VALUE SIGNALS (highest weight) ===
+            'positive_feedback': 4.0,         # Explicit satisfaction
+            'resolution_indicated': 4.5,      # "That helps", "I understand now"
+            'saved_highlight': 5.0,           # Saved part of conversation
+            'shared_content': 5.0,            # Shared advice (future)
+            
+            # === NEGATIVE SIGNALS ===
+            'skipped_suggestion': -0.5,       # Ignored follow-up options
+            'quick_exit': -1.0,               # Left quickly without resolution
+            'topic_abandoned': -0.5,          # Started topic, never finished
+            'negative_feedback': -2.0,        # Explicit dissatisfaction
+            
+            # === EMOTIONAL JOURNEY SIGNALS ===
+            'emotional_improvement': 3.0,     # Sentiment got better
+            'emotional_decline': -1.5,        # Sentiment got worse
+            'emotional_stability': 1.0,       # Maintained stable state
+        }
+        
+        # FUTURE: Video engagement weights (when videos are added)
+        self.video_engagement_weights = {
+            'video_started': 1.0,
+            'video_25_percent': 1.5,
+            'video_50_percent': 2.0,
+            'video_75_percent': 2.5,
+            'video_completed': 3.0,
+            'video_rewatched': 4.0,
+            'video_paused_resumed': 1.5,      # Indicates attention
+            'video_skipped': -1.0,
+            'video_saved': 5.0,
+            'video_shared': 5.0,
+        }
+        
+        # FUTURE: Image engagement weights (when images are added)
+        self.image_engagement_weights = {
+            'image_viewed': 1.0,
+            'image_zoomed': 2.0,              # Looked closer
+            'image_long_view': 2.5,           # >3 seconds
+            'image_saved': 4.0,
+            'image_shared': 5.0,
+            'image_skipped': -0.5,
+        }
+        
+        # FUTURE: Audio engagement weights (when audio is added)
+        self.audio_engagement_weights = {
+            'audio_started': 1.0,
+            'audio_25_percent': 1.5,
+            'audio_completed': 3.0,
+            'audio_replayed': 3.5,
+            'audio_skipped': -1.0,
+            'audio_saved': 4.0,
         }
         
         # Decay factors for recency (Facebook-style)
@@ -210,6 +349,66 @@ class UserIntelligenceSystem:
                     topics_discussed TEXT,
                     last_interaction DATETIME,
                     UNIQUE(user_id, character_id),
+                    FOREIGN KEY (user_id) REFERENCES users (id)
+                )
+            ''')
+            
+            # ================================================================
+            # MEDIA CONTENT (Future-proof for videos/images/audio)
+            # ================================================================
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS media_content (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    content_id TEXT NOT NULL UNIQUE,
+                    media_type TEXT NOT NULL,
+                    title TEXT,
+                    description TEXT,
+                    duration_seconds INTEGER,
+                    file_path TEXT,
+                    url TEXT,
+                    metadata TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            # ================================================================
+            # MEDIA ENGAGEMENT (Future-proof tracking)
+            # ================================================================
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS media_engagement (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    content_id TEXT NOT NULL,
+                    media_type TEXT NOT NULL,
+                    engagement_type TEXT NOT NULL,
+                    progress_percent REAL,
+                    duration_seconds INTEGER,
+                    context_data TEXT,
+                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (user_id) REFERENCES users (id)
+                )
+            ''')
+            
+            # ================================================================
+            # CONVERSATION METRICS (Conversation-specific analytics)
+            # ================================================================
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS conversation_metrics (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    session_id TEXT,
+                    character_id TEXT,
+                    topic TEXT,
+                    start_sentiment REAL,
+                    end_sentiment REAL,
+                    emotional_journey TEXT,
+                    exchange_count INTEGER DEFAULT 0,
+                    avg_message_length REAL,
+                    topic_depth_score REAL,
+                    resolution_score REAL,
+                    was_resolved INTEGER,
+                    duration_seconds INTEGER,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (user_id) REFERENCES users (id)
                 )
             ''')
@@ -996,6 +1195,310 @@ class UserIntelligenceSystem:
             parts.append(f"May want to discuss: {', '.join(preds['likely_topics'][:2])}.")
         
         return "\n".join(parts) if parts else ""
+    
+    # =========================================================================
+    # 7. CONVERSATION-SPECIFIC METRICS (Our Unique Advantage)
+    # =========================================================================
+    
+    def analyze_conversation_depth(self, user_id: int, session_id: str = None) -> Dict[str, Any]:
+        """
+        Analyze conversation depth - our equivalent to YouTube's watch time.
+        Unlike passive video watching, conversations show active engagement.
+        """
+        if not self.db:
+            return {}
+            
+        try:
+            cursor = self.db.cursor()
+            
+            # Get conversation exchanges
+            query = '''
+                SELECT user_message, assistant_response, timestamp, character
+                FROM history_primary
+                WHERE user_id = ?
+                ORDER BY timestamp DESC
+                LIMIT 100
+            '''
+            cursor.execute(query, (user_id,))
+            rows = cursor.fetchall()
+            
+            if not rows:
+                return {'confidence': 0, 'message': 'No conversation data'}
+            
+            # Calculate metrics
+            total_exchanges = len(rows)
+            total_user_chars = sum(len(r[0] or '') for r in rows)
+            total_ai_chars = sum(len(r[1] or '') for r in rows)
+            
+            # Topic continuity (same character = same topic thread)
+            topic_runs = []
+            current_run = 1
+            prev_char = None
+            for _, _, _, char in rows:
+                if char == prev_char:
+                    current_run += 1
+                else:
+                    if prev_char:
+                        topic_runs.append(current_run)
+                    current_run = 1
+                prev_char = char
+            topic_runs.append(current_run)
+            
+            avg_topic_depth = sum(topic_runs) / len(topic_runs) if topic_runs else 0
+            max_topic_depth = max(topic_runs) if topic_runs else 0
+            
+            # Question depth (follow-up questions indicate engagement)
+            question_count = sum(1 for r in rows if r[0] and '?' in r[0])
+            
+            depth_metrics = {
+                'total_exchanges': total_exchanges,
+                'avg_message_length': total_user_chars / total_exchanges if total_exchanges else 0,
+                'avg_response_length': total_ai_chars / total_exchanges if total_exchanges else 0,
+                'avg_topic_depth': round(avg_topic_depth, 1),
+                'max_topic_depth': max_topic_depth,
+                'question_rate': question_count / total_exchanges if total_exchanges else 0,
+                'depth_score': min(1.0, (avg_topic_depth / 5) * 0.4 + 
+                                       (question_count / total_exchanges) * 0.3 +
+                                       min(total_user_chars / (total_exchanges * 100), 1) * 0.3),
+                'confidence': min(total_exchanges / 20, 1.0)
+            }
+            
+            return depth_metrics
+            
+        except Exception as e:
+            print(f"Warning: Could not analyze conversation depth: {e}")
+            return {}
+    
+    def analyze_emotional_journey(self, user_id: int, recent_messages: int = 20) -> Dict[str, Any]:
+        """
+        Track emotional journey through conversation.
+        Our equivalent to video engagement - but richer because it's active.
+        """
+        if not self.db:
+            return {}
+            
+        try:
+            cursor = self.db.cursor()
+            
+            cursor.execute('''
+                SELECT user_message, timestamp
+                FROM history_primary
+                WHERE user_id = ?
+                ORDER BY timestamp DESC
+                LIMIT ?
+            ''', (user_id, recent_messages))
+            
+            messages = cursor.fetchall()
+            if not messages:
+                return {'confidence': 0}
+            
+            # Simple sentiment indicators
+            positive_words = ['thank', 'helpful', 'great', 'better', 'understand', 
+                            'appreciate', 'good', 'happy', 'relieved', 'clear']
+            negative_words = ['confused', 'frustrated', 'angry', 'upset', 'worried',
+                            'anxious', 'stressed', 'stuck', 'hopeless', 'lost']
+            resolution_words = ['that helps', 'makes sense', 'i see', 'got it',
+                              'i understand', 'feel better', 'thank you']
+            
+            journey = []
+            for msg, ts in reversed(messages):  # Chronological
+                if not msg:
+                    continue
+                msg_lower = msg.lower()
+                
+                pos_count = sum(1 for w in positive_words if w in msg_lower)
+                neg_count = sum(1 for w in negative_words if w in msg_lower)
+                has_resolution = any(r in msg_lower for r in resolution_words)
+                
+                sentiment = (pos_count - neg_count) / max(pos_count + neg_count, 1)
+                journey.append({
+                    'sentiment': sentiment,
+                    'has_resolution': has_resolution
+                })
+            
+            if not journey:
+                return {'confidence': 0}
+            
+            # Calculate journey metrics
+            start_sentiment = journey[0]['sentiment'] if journey else 0
+            end_sentiment = journey[-1]['sentiment'] if journey else 0
+            had_resolution = any(j['has_resolution'] for j in journey)
+            
+            # Emotional trajectory
+            if end_sentiment > start_sentiment + 0.2:
+                trajectory = 'improving'
+            elif end_sentiment < start_sentiment - 0.2:
+                trajectory = 'declining'
+            else:
+                trajectory = 'stable'
+            
+            return {
+                'start_sentiment': round(start_sentiment, 2),
+                'end_sentiment': round(end_sentiment, 2),
+                'trajectory': trajectory,
+                'had_resolution': had_resolution,
+                'sentiment_change': round(end_sentiment - start_sentiment, 2),
+                'journey_length': len(journey),
+                'confidence': min(len(journey) / 10, 1.0)
+            }
+            
+        except Exception as e:
+            print(f"Warning: Could not analyze emotional journey: {e}")
+            return {}
+    
+    def get_resolution_rate(self, user_id: int, days: int = 30) -> Dict[str, Any]:
+        """
+        Calculate topic resolution rate - did we actually help?
+        Our equivalent to video completion rate.
+        """
+        if not self.db:
+            return {}
+            
+        try:
+            cursor = self.db.cursor()
+            cutoff = datetime.now() - timedelta(days=days)
+            
+            # Get all conversations
+            cursor.execute('''
+                SELECT user_message, character, timestamp
+                FROM history_primary
+                WHERE user_id = ? AND timestamp > ?
+                ORDER BY timestamp
+            ''', (user_id, cutoff.isoformat()))
+            
+            rows = cursor.fetchall()
+            if not rows:
+                return {'confidence': 0}
+            
+            resolution_indicators = ['thank', 'helpful', 'makes sense', 'got it',
+                                    'understand', 'feel better', 'that helps']
+            
+            # Group by topic (character sessions)
+            topics = defaultdict(list)
+            for msg, char, ts in rows:
+                topics[char].append(msg or '')
+            
+            resolved_topics = 0
+            total_topics = len(topics)
+            
+            for char, messages in topics.items():
+                # Check if any message indicates resolution
+                for msg in messages:
+                    if any(ind in msg.lower() for ind in resolution_indicators):
+                        resolved_topics += 1
+                        break
+            
+            resolution_rate = resolved_topics / total_topics if total_topics else 0
+            
+            return {
+                'resolution_rate': round(resolution_rate, 2),
+                'resolved_topics': resolved_topics,
+                'total_topics': total_topics,
+                'confidence': min(total_topics / 5, 1.0)
+            }
+            
+        except Exception as e:
+            print(f"Warning: Could not calculate resolution rate: {e}")
+            return {}
+    
+    # =========================================================================
+    # 8. FUTURE MEDIA HANDLERS (Extensibility)
+    # =========================================================================
+    
+    def record_media_engagement(self, user_id: int, content_id: str, 
+                                media_type: str, engagement_type: str,
+                                progress_percent: float = None,
+                                duration_seconds: int = None,
+                                context: Dict = None) -> None:
+        """
+        Record engagement with any media type (future-proof).
+        Ready for when videos/images/audio are added.
+        """
+        if not self.db:
+            return
+            
+        try:
+            cursor = self.db.cursor()
+            
+            # Get appropriate weight based on media type
+            if media_type == 'video':
+                weights = self.video_engagement_weights
+            elif media_type == 'image':
+                weights = self.image_engagement_weights
+            elif media_type == 'audio':
+                weights = self.audio_engagement_weights
+            else:
+                weights = self.engagement_weights
+            
+            weight = weights.get(engagement_type, 1.0)
+            
+            cursor.execute('''
+                INSERT INTO media_engagement
+                (user_id, content_id, media_type, engagement_type, 
+                 progress_percent, duration_seconds, context_data)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                user_id, content_id, media_type, engagement_type,
+                progress_percent, duration_seconds,
+                json.dumps(context) if context else None
+            ))
+            
+            self.db.commit()
+            
+            # Also update interest graph
+            self._update_interest_score(user_id, f'{media_type}_content', content_id, weight)
+            
+        except Exception as e:
+            print(f"Warning: Could not record media engagement: {e}")
+    
+    def get_media_engagement_summary(self, user_id: int, 
+                                     media_type: str = None) -> Dict[str, Any]:
+        """
+        Get engagement summary for media content (future-proof).
+        """
+        if not self.db:
+            return {}
+            
+        try:
+            cursor = self.db.cursor()
+            
+            if media_type:
+                cursor.execute('''
+                    SELECT engagement_type, COUNT(*), AVG(progress_percent)
+                    FROM media_engagement
+                    WHERE user_id = ? AND media_type = ?
+                    GROUP BY engagement_type
+                ''', (user_id, media_type))
+            else:
+                cursor.execute('''
+                    SELECT media_type, engagement_type, COUNT(*), AVG(progress_percent)
+                    FROM media_engagement
+                    WHERE user_id = ?
+                    GROUP BY media_type, engagement_type
+                ''', (user_id,))
+            
+            rows = cursor.fetchall()
+            
+            summary = defaultdict(dict)
+            for row in rows:
+                if media_type:
+                    eng_type, count, avg_progress = row
+                    summary[eng_type] = {
+                        'count': count,
+                        'avg_progress': round(avg_progress or 0, 1)
+                    }
+                else:
+                    m_type, eng_type, count, avg_progress = row
+                    summary[m_type][eng_type] = {
+                        'count': count,
+                        'avg_progress': round(avg_progress or 0, 1)
+                    }
+            
+            return dict(summary)
+            
+        except Exception as e:
+            print(f"Warning: Could not get media engagement summary: {e}")
+            return {}
     
     # =========================================================================
     # HELPER METHODS
