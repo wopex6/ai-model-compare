@@ -774,7 +774,7 @@ const DomainCharacters = {
             
             // Click handler - send the suggestion as a message
             btn.onclick = async () => {
-                // Record the selection for learning
+                // Record the selection for learning (follow-up system)
                 try {
                     await AuthHelper.authenticatedFetch('/api/user/suggestion-selected', {
                         method: 'POST',
@@ -786,6 +786,21 @@ const DomainCharacters = {
                     });
                 } catch (e) {
                     console.log('Could not record suggestion selection:', e);
+                }
+                
+                // Record engagement signal (intelligence system)
+                try {
+                    await AuthHelper.authenticatedFetch('/api/user/intelligence/record', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            signal_type: 'suggestion_clicked',
+                            character_id: characterId,
+                            topic: suggestion.category,
+                            context: { suggestion_text: suggestion.text }
+                        })
+                    });
+                } catch (e) {
+                    console.log('Could not record engagement:', e);
                 }
                 
                 // Remove suggestions UI

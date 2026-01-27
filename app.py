@@ -2530,6 +2530,144 @@ def get_conversation_messages(session_id):
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# ==================== USER INTELLIGENCE (Social Media-inspired) ====================
+
+@app.route('/api/user/intelligence/profile', methods=['GET'])
+@require_auth
+def get_intelligence_profile():
+    """
+    Get user's complete intelligence profile.
+    Like viewing your YouTube/Spotify taste profile.
+    """
+    try:
+        user_id = request.current_user['user_id']
+        
+        from smart_response.user_intelligence import get_intelligence_system
+        conn = integrated_db.get_connection()
+        intel = get_intelligence_system(conn)
+        
+        profile = intel.build_intelligence_context(user_id)
+        conn.close()
+        
+        return jsonify({'success': True, 'profile': profile})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/user/intelligence/engagement', methods=['GET'])
+@require_auth
+def get_engagement_metrics():
+    """Get engagement metrics (YouTube Analytics style)."""
+    try:
+        user_id = request.current_user['user_id']
+        days = request.args.get('days', 30, type=int)
+        
+        from smart_response.user_intelligence import get_intelligence_system
+        conn = integrated_db.get_connection()
+        intel = get_intelligence_system(conn)
+        
+        summary = intel.get_engagement_summary(user_id, days)
+        conn.close()
+        
+        return jsonify({'success': True, 'engagement': summary})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/user/intelligence/patterns', methods=['GET'])
+@require_auth
+def get_behavioral_patterns():
+    """Get discovered behavioral patterns."""
+    try:
+        user_id = request.current_user['user_id']
+        
+        from smart_response.user_intelligence import get_intelligence_system
+        conn = integrated_db.get_connection()
+        intel = get_intelligence_system(conn)
+        
+        patterns = {
+            'temporal': intel.analyze_temporal_patterns(user_id),
+            'communication': intel.analyze_communication_style(user_id),
+            'topics': intel.analyze_topic_patterns(user_id)
+        }
+        conn.close()
+        
+        return jsonify({'success': True, 'patterns': patterns})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/user/intelligence/recommendations', methods=['GET'])
+@require_auth
+def get_character_recommendations():
+    """Get character recommendations based on chemistry scores."""
+    try:
+        user_id = request.current_user['user_id']
+        
+        from smart_response.user_intelligence import get_intelligence_system
+        conn = integrated_db.get_connection()
+        intel = get_intelligence_system(conn)
+        
+        recommendations = intel.get_character_recommendations(user_id)
+        conn.close()
+        
+        return jsonify({'success': True, 'recommendations': recommendations})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/user/intelligence/predictions', methods=['GET'])
+@require_auth
+def get_need_predictions():
+    """Get predictions about user's likely needs (proactive suggestions)."""
+    try:
+        user_id = request.current_user['user_id']
+        
+        from smart_response.user_intelligence import get_intelligence_system
+        conn = integrated_db.get_connection()
+        intel = get_intelligence_system(conn)
+        
+        predictions = intel.predict_user_needs(user_id)
+        proactive = intel.get_proactive_suggestions(user_id)
+        conn.close()
+        
+        return jsonify({
+            'success': True, 
+            'predictions': predictions,
+            'proactive_suggestions': proactive
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/user/intelligence/record', methods=['POST'])
+@require_auth
+def record_engagement_signal():
+    """
+    Record an engagement signal (for frontend to report user actions).
+    Like Instagram tracking saves, shares, time spent.
+    """
+    try:
+        user_id = request.current_user['user_id']
+        data = request.get_json()
+        
+        signal_type = data.get('signal_type', 'message_sent')
+        character_id = data.get('character_id')
+        topic = data.get('topic')
+        context = data.get('context', {})
+        
+        from smart_response.user_intelligence import get_intelligence_system
+        conn = integrated_db.get_connection()
+        intel = get_intelligence_system(conn)
+        
+        intel.record_engagement(
+            user_id=user_id,
+            signal_type=signal_type,
+            context=context,
+            character_id=character_id,
+            topic=topic
+        )
+        conn.close()
+        
+        return jsonify({'success': True, 'message': f'Recorded {signal_type}'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 # ==================== PINNED MESSAGES (WhatsApp-style) ====================
 
 @app.route('/api/user/pinned-messages', methods=['GET'])
@@ -5046,6 +5184,36 @@ def route_to_domain_characters():
                 print(f"[SUGGESTIONS] Added learned preferences to AI context")
         except Exception as e:
             print(f"Warning: Suggestion preferences failed: {e}")
+        
+        # USER INTELLIGENCE: Social-media-inspired behavioral understanding
+        # Learns from engagement patterns, temporal habits, topic interests, character chemistry
+        try:
+            from smart_response.user_intelligence import get_intelligence_system
+            intel_system = get_intelligence_system(smart_response_conn)
+            context['intelligence_system'] = intel_system
+            
+            # Record engagement signal for this message
+            topic = requested_character or 'general'
+            is_long_message = len(message) > 100
+            intel_system.record_engagement(
+                user_id, 
+                'long_message' if is_long_message else 'message_sent',
+                context={'message_length': len(message)},
+                character_id=requested_character,
+                topic=topic
+            )
+            
+            # Get intelligence context for AI prompt
+            intel_context = intel_system.get_ai_prompt_context(user_id)
+            if intel_context:
+                existing_profile = context.get('user_profile', '')
+                if existing_profile:
+                    context['user_profile'] = f"{existing_profile}\n\n{intel_context}"
+                else:
+                    context['user_profile'] = intel_context
+                print(f"[INTELLIGENCE] Added behavioral insights to AI context")
+        except Exception as e:
+            print(f"Warning: User intelligence failed: {e}")
         
         # Configurable: Number of conversation exchanges to include for AI context
         # Can be set via environment variable AI_CONTEXT_EXCHANGES (default: 5)
