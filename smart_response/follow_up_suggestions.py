@@ -111,6 +111,9 @@ class FollowUpSuggestionSystem:
         # Get user's learned preferences to personalize suggestions
         user_prefs = self.get_user_preferences(user_id)
         
+        # Get recently used suggestions to avoid repeats
+        recently_used = self._get_recently_used_suggestions(user_id, message)
+        
         # Analyze conversation to determine suggestion types
         suggestion_types = self._analyze_needed_suggestions(message, ai_response, context)
         
@@ -119,16 +122,42 @@ class FollowUpSuggestionSystem:
         
         for sug_type in suggestion_types[:4]:  # Max 4 suggestions
             suggestion = self._generate_suggestion_for_type(
-                sug_type, message, ai_response, domain, user_prefs
+                sug_type, message, ai_response, domain, user_prefs, recently_used
             )
             if suggestion:
                 suggestions.append(suggestion)
+                # Add to recently_used to avoid duplicates within same generation
+                recently_used.add(suggestion['text'].lower())
         
         # Store suggestions for tracking
         if suggestions and self.db:
             self._store_suggestions(user_id, None, character_id, suggestions, context)
         
         return suggestions
+    
+    def _get_recently_used_suggestions(self, user_id: int, current_message: str) -> set:
+        """Get suggestions that were recently used or match the current message."""
+        recently_used = set()
+        
+        # Always exclude the current message (in case it was a clicked suggestion)
+        recently_used.add(current_message.lower().strip())
+        
+        # Get suggestions selected in the last 5 minutes
+        if self.db:
+            try:
+                cursor = self.db.cursor()
+                cursor.execute('''
+                    SELECT selected_text FROM suggestion_selections
+                    WHERE user_id = ? 
+                    AND selected_at > datetime('now', '-5 minutes')
+                ''', (user_id,))
+                for row in cursor.fetchall():
+                    if row[0]:
+                        recently_used.add(row[0].lower().strip())
+            except Exception:
+                pass
+        
+        return recently_used
     
     def _analyze_needed_suggestions(self, message: str, ai_response: str, 
                                    context: Dict = None) -> List[str]:
@@ -168,8 +197,10 @@ class FollowUpSuggestionSystem:
     
     def _generate_suggestion_for_type(self, sug_type: str, message: str, 
                                      ai_response: str, domain: str,
-                                     user_prefs: Dict) -> Optional[Dict[str, Any]]:
-        """Generate a specific suggestion based on type."""
+                                     user_prefs: Dict, recently_used: set = None) -> Optional[Dict[str, Any]]:
+        """Generate a specific suggestion based on type, excluding recently used ones."""
+        if recently_used is None:
+            recently_used = set()
         
         # Domain-specific suggestion templates
         templates = {
@@ -313,9 +344,20 @@ class FollowUpSuggestionSystem:
                 'related_topic': "How does this connect to other areas?"
             }
             text = fallbacks.get(sug_type, "Tell me more")
+            # Check if fallback is also recently used
+            if text.lower() in recently_used:
+                return None  # Skip this type entirely
         else:
+            # Filter out recently used suggestions before selecting
+            available_templates = [t for t in type_templates if t.lower() not in recently_used]
+            if not available_templates:
+                return None  # All templates for this type were recently used
             # Prefer suggestions that match user preferences
-            text = self._select_best_template(type_templates, user_prefs)
+            text = self._select_best_template(available_templates, user_prefs)
+        
+        # Final check - don't return if somehow still in recently_used
+        if text.lower() in recently_used:
+            return None
         
         return {
             'text': text,
