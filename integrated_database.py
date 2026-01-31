@@ -1171,13 +1171,52 @@ class IntegratedDatabase:
         return None
     
     def get_character_messages(self, user_id: int, character_id: str, limit: int = None) -> List[Dict]:
-        """Get conversation history for user+character"""
+        """Get conversation history for user+character from ALL sessions"""
         try:
-            # Get session for this user+character
-            session_id = self.get_or_create_character_session(user_id, character_id)
+            conn = self.get_connection()
+            cursor = conn.cursor()
             
-            # Get messages using existing method
-            messages = self.get_conversation_messages(session_id, user_id)
+            # Get messages from ALL sessions for this user+character (not just most recent)
+            cursor.execute('''
+                SELECT m.id, m.sender_type, m.content, m.metadata, m.timestamp
+                FROM messages m
+                JOIN ai_conversations c ON m.conversation_id = c.id
+                WHERE c.user_id = ? AND c.character_id = ?
+                ORDER BY m.timestamp ASC
+            ''', (user_id, character_id))
+            
+            messages = []
+            for row in cursor.fetchall():
+                metadata = json.loads(row[3]) if row[3] else {}
+                timestamp = row[4]
+                if timestamp and not timestamp.endswith('Z'):
+                    timestamp = timestamp + 'Z'
+                messages.append({
+                    'id': row[0],
+                    'sender_type': row[1],
+                    'content': row[2],
+                    'metadata': metadata,
+                    'timestamp': timestamp
+                })
+            
+            conn.close()
+            
+            # Filter old generic greetings (keep only most recent)
+            if messages:
+                generic_greeting_indices = []
+                for i, msg in enumerate(messages):
+                    metadata = msg.get('metadata', {})
+                    if metadata.get('is_automated_greeting'):
+                        greeting_type = metadata.get('greeting_type', '')
+                        triggered_by = metadata.get('triggered_by', '')
+                        if triggered_by == 'ai_context' or 'context' in str(triggered_by).lower():
+                            continue
+                        if greeting_type in ['daily', 'inactivity'] or triggered_by in ['scheduled_time', 'inactivity_timeout']:
+                            generic_greeting_indices.append(i)
+                
+                if len(generic_greeting_indices) > 1:
+                    indices_to_remove = set(generic_greeting_indices[:-1])
+                    messages = [msg for i, msg in enumerate(messages) if i not in indices_to_remove]
             
             # Apply limit if specified
             if limit and len(messages) > limit:
