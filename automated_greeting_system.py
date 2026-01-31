@@ -118,7 +118,7 @@ class AutomatedGreetingSystem:
     def get_recent_conversation_context(self, user_id: int, character_id: str = 'coordinator') -> Optional[str]:
         """Extract meaningful topic from recent conversation for context-aware greetings"""
         try:
-            history = self.db.get_character_history(user_id, character_id, limit=10)
+            history = self.db.get_character_messages(user_id, character_id, limit=10)
             
             if not history:
                 return None

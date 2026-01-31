@@ -142,6 +142,10 @@ except Exception as e:
 user_personalization = UserPersonalization(integrated_db)
 print("✓ User personalization system initialized")
 
+# Pre-declare variables used by greeting_ai_call (initialized later in Smart Response section)
+domain_character_ai = None
+ai_budget = None
+
 # AI call wrapper function for greeting system (initialized later after ai_budget is available)
 def greeting_ai_call(system_prompt: str, user_message: str, purpose: str = 'greeting', character: str = 'coordinator'):
     """Wrapper function to call AI for context-aware greeting generation"""
