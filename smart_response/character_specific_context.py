@@ -100,14 +100,22 @@ class CharacterSpecificContext:
         table_exists = cursor.fetchone() is not None
         
         if table_exists:
-            # Migrate: add missing columns if they don't exist
+            # Migrate: add ALL potentially missing columns
             cursor.execute("PRAGMA table_info(character_interpretations)")
             existing_cols = {row[1] for row in cursor.fetchall()}
             
-            if 'user_id' not in existing_cols:
-                cursor.execute('ALTER TABLE character_interpretations ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0')
-            if 'event_text' not in existing_cols:
-                cursor.execute('ALTER TABLE character_interpretations ADD COLUMN event_text TEXT NOT NULL DEFAULT ""')
+            migrations = {
+                'user_id': 'ALTER TABLE character_interpretations ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0',
+                'event_id': 'ALTER TABLE character_interpretations ADD COLUMN event_id TEXT NOT NULL DEFAULT ""',
+                'event_text': 'ALTER TABLE character_interpretations ADD COLUMN event_text TEXT NOT NULL DEFAULT ""',
+                'character_id': 'ALTER TABLE character_interpretations ADD COLUMN character_id TEXT NOT NULL DEFAULT ""',
+                'interpretation_json': 'ALTER TABLE character_interpretations ADD COLUMN interpretation_json TEXT NOT NULL DEFAULT "{}"',
+            }
+            
+            for col, sql in migrations.items():
+                if col not in existing_cols:
+                    cursor.execute(sql)
+                    print(f"  ✓ Migrated: added {col} to character_interpretations")
         else:
             # Create fresh table
             cursor.execute('''
@@ -122,9 +130,15 @@ class CharacterSpecificContext:
                 )
             ''')
         
-        # Index for quick lookups
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_char_interp_user ON character_interpretations(user_id)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_char_interp_event ON character_interpretations(event_id)')
+        # Index for quick lookups (only on columns that exist)
+        try:
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_char_interp_user ON character_interpretations(user_id)')
+        except Exception:
+            pass
+        try:
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_char_interp_event ON character_interpretations(event_id)')
+        except Exception:
+            pass
         
         self.db.commit()
     
