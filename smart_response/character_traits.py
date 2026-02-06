@@ -703,8 +703,554 @@ class CharacterTraitSystem:
     def get_characters_for_domain(self, domain: str) -> List[CharacterProfile]:
         """Get characters specialized for a domain"""
         return [c for c in self.characters.values() if c.domain == domain]
+    
+    # ============================================================
+    # PHASE 5 ENHANCEMENTS
+    # ============================================================
+    
+    # --- Enhancement 1: Personality-Based Character Matching ---
+    
+    # Mapping: Big5 personality traits → character trait weight adjustments
+    # Higher weight = this trait matters MORE for this personality type
+    BIG5_TO_TRAIT_WEIGHTS = {
+        'openness': {
+            'high': {'depth': 1.5, 'verbosity': 1.3, 'formality': 0.7},
+            'low': {'structure': 1.4, 'action_oriented': 1.3, 'depth': 0.7}
+        },
+        'conscientiousness': {
+            'high': {'structure': 1.5, 'action_oriented': 1.3, 'directness': 1.2},
+            'low': {'supportiveness': 1.3, 'empathy': 1.2, 'structure': 0.7}
+        },
+        'extraversion': {
+            'high': {'intensity': 1.4, 'optimism': 1.3, 'verbosity': 1.2},
+            'low': {'stoicism': 1.3, 'depth': 1.3, 'intensity': 0.7}
+        },
+        'agreeableness': {
+            'high': {'supportiveness': 1.5, 'empathy': 1.4, 'directness': 0.7},
+            'low': {'directness': 1.5, 'stoicism': 1.3, 'supportiveness': 0.7}
+        },
+        'neuroticism': {
+            'high': {'empathy': 1.5, 'supportiveness': 1.4, 'intensity': 0.6, 'stoicism': 0.7},
+            'low': {'action_oriented': 1.3, 'directness': 1.2, 'intensity': 1.1}
+        }
+    }
+    
+    def personality_weighted_match(
+        self, 
+        situation: SituationAnalysis,
+        personality: Dict[str, float],
+        user_id: int = None,
+        top_n: int = 3
+    ) -> Dict:
+        """
+        Enhanced character matching that factors in user's Big5 personality.
+        
+        Args:
+            situation: Analyzed user situation
+            personality: Big5 traits dict {openness, conscientiousness, extraversion, agreeableness, neuroticism}
+            user_id: Optional user ID for preference learning
+            top_n: Number of alternatives to return
+            
+        Returns:
+            Dict with best match, alternatives, reasoning, and personality influence details
+        """
+        ideal_traits = situation.get_ideal_traits()
+        
+        # Calculate personality-based trait weights
+        trait_weights = self._compute_personality_weights(personality)
+        
+        # Get user preference bias (if user_id provided)
+        preference_bias = {}
+        if user_id:
+            preference_bias = self._get_user_preference_bias(user_id)
+        
+        # Score all characters
+        scored = []
+        for char_id, profile in self.characters.items():
+            # Weighted distance using personality-derived weights
+            distance = profile.traits.distance_to(ideal_traits, weights=trait_weights)
+            
+            # Effectiveness adjustment (learned from outcomes)
+            eff_factor = 1.0 - (profile.effectiveness_score * 0.2)
+            adjusted_distance = distance * eff_factor
+            
+            # User preference bonus (reduces distance for preferred characters)
+            pref_bonus = preference_bias.get(char_id, 0.0)
+            adjusted_distance *= (1.0 - pref_bonus * 0.15)
+            
+            # Convert to similarity score
+            max_distance = math.sqrt(sum(w for w in trait_weights.values()))
+            similarity = max(0, 1.0 - (adjusted_distance / max_distance)) if max_distance > 0 else 0
+            
+            scored.append({
+                'profile': profile,
+                'similarity': similarity,
+                'raw_distance': distance,
+                'preference_bonus': pref_bonus
+            })
+        
+        # Sort by similarity (highest first)
+        scored.sort(key=lambda x: x['similarity'], reverse=True)
+        
+        best = scored[0]
+        alternatives = scored[1:top_n + 1]
+        
+        # Generate enhanced reasoning
+        reasoning = self._generate_enhanced_reasoning(
+            situation, best['profile'], best['similarity'], 
+            personality, trait_weights, preference_bias
+        )
+        
+        # Log the recommendation
+        if user_id:
+            self._log_recommendation(user_id, best['profile'].character_id, 
+                                     situation, best['similarity'], personality)
+        
+        # Describe personality influence
+        personality_influence = self._describe_personality_influence(personality, trait_weights)
+        
+        return {
+            'best_match': {
+                'character': best['profile'].to_dict(),
+                'similarity': round(best['similarity'], 3),
+                'reasoning': reasoning
+            },
+            'alternatives': [
+                {
+                    'character': s['profile'].to_dict(),
+                    'similarity': round(s['similarity'], 3),
+                    'why_not_top': self._explain_alternative(s['profile'], best['profile'], situation)
+                }
+                for s in alternatives
+            ],
+            'personality_influence': personality_influence,
+            'trait_weights_applied': {k: round(v, 2) for k, v in trait_weights.items()},
+            'situation_summary': {
+                'emotional_state': situation.emotional_state,
+                'goal_type': situation.goal_type,
+                'challenge_type': situation.challenge_type
+            }
+        }
+    
+    def _compute_personality_weights(self, personality: Dict[str, float]) -> Dict[str, float]:
+        """Convert Big5 personality scores into trait matching weights"""
+        weights = {name: 1.0 for name in TRAIT_NAMES}
+        
+        for big5_trait, score in personality.items():
+            if big5_trait not in self.BIG5_TO_TRAIT_WEIGHTS:
+                continue
+            
+            # Determine high/low
+            level = 'high' if score > 0.6 else 'low' if score < 0.4 else None
+            if not level:
+                continue  # Neutral Big5 → no weight change
+            
+            adjustments = self.BIG5_TO_TRAIT_WEIGHTS[big5_trait].get(level, {})
+            for trait_name, multiplier in adjustments.items():
+                if trait_name in weights:
+                    weights[trait_name] *= multiplier
+        
+        return weights
+    
+    def _describe_personality_influence(self, personality: Dict[str, float], 
+                                        weights: Dict[str, float]) -> Dict:
+        """Describe how personality influenced the matching weights"""
+        influences = []
+        for big5_trait, score in personality.items():
+            if big5_trait not in self.BIG5_TO_TRAIT_WEIGHTS:
+                continue
+            level = 'high' if score > 0.6 else 'low' if score < 0.4 else 'neutral'
+            if level == 'neutral':
+                continue
+            influences.append({
+                'trait': big5_trait,
+                'level': level,
+                'score': round(score, 2),
+                'effect': f"{'Increased' if level == 'high' else 'Decreased'} weight on "
+                         f"{', '.join(self.BIG5_TO_TRAIT_WEIGHTS[big5_trait].get(level, {}).keys())}"
+            })
+        
+        # Find most amplified and dampened traits
+        amplified = sorted(weights.items(), key=lambda x: x[1], reverse=True)[:3]
+        dampened = sorted(weights.items(), key=lambda x: x[1])[:3]
+        
+        return {
+            'personality_effects': influences,
+            'most_weighted_traits': [{'trait': t, 'weight': round(w, 2)} for t, w in amplified],
+            'least_weighted_traits': [{'trait': t, 'weight': round(w, 2)} for t, w in dampened]
+        }
+    
+    def _generate_enhanced_reasoning(self, situation: SituationAnalysis,
+                                      character: CharacterProfile, score: float,
+                                      personality: Dict, weights: Dict,
+                                      preference_bias: Dict) -> str:
+        """Generate detailed reasoning incorporating personality"""
+        parts = [f"Selected {character.display_name} (match: {score:.0%})"]
+        
+        if situation.emotional_state != 'neutral':
+            parts.append(f"User seems {situation.emotional_state}")
+        
+        if situation.goal_type != 'general':
+            parts.append(f"Goal: {situation.goal_type}")
+        
+        # Personality-specific reasoning
+        personality_notes = []
+        if personality.get('neuroticism', 0.5) > 0.6:
+            personality_notes.append("high emotional sensitivity → prioritizing empathy")
+        if personality.get('conscientiousness', 0.5) > 0.6:
+            personality_notes.append("detail-oriented → prioritizing structure")
+        if personality.get('extraversion', 0.5) < 0.4:
+            personality_notes.append("introverted → prioritizing depth over intensity")
+        if personality.get('agreeableness', 0.5) < 0.4:
+            personality_notes.append("values directness → prioritizing honesty")
+        if personality.get('openness', 0.5) > 0.6:
+            personality_notes.append("open-minded → prioritizing depth")
+        
+        if personality_notes:
+            parts.append(f"Personality: {'; '.join(personality_notes)}")
+        
+        # Preference note
+        char_pref = preference_bias.get(character.character_id, 0)
+        if char_pref > 0.3:
+            parts.append(f"User has shown preference for this character")
+        
+        parts.append(f"Approach: {character.philosophical_lens}")
+        
+        return " | ".join(parts)
+    
+    def _explain_alternative(self, alt: CharacterProfile, best: CharacterProfile,
+                             situation: SituationAnalysis) -> str:
+        """Explain why an alternative wasn't the top pick"""
+        ideal = situation.get_ideal_traits()
+        alt_dom = alt.traits.get_dominant_traits(2)
+        best_dom = best.traits.get_dominant_traits(2)
+        
+        alt_trait_names = [t[0] for t in alt_dom]
+        best_trait_names = [t[0] for t in best_dom]
+        
+        unique_alt = [t for t in alt_trait_names if t not in best_trait_names]
+        
+        if unique_alt:
+            return f"Strong in {', '.join(unique_alt)}, but {best.display_name} was closer to ideal profile"
+        return f"Similar approach, but {best.display_name} had a slightly better trait alignment"
+    
+    # --- Enhancement 2: User Preference Learning ---
+    
+    def _init_preference_tables(self):
+        """Create tables for user preference tracking"""
+        cursor = self.db.cursor()
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS character_recommendations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                character_id TEXT NOT NULL,
+                match_score REAL,
+                situation_json TEXT,
+                personality_json TEXT,
+                was_accepted BOOLEAN DEFAULT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_character_preferences (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                character_id TEXT NOT NULL,
+                preference_score REAL DEFAULT 0.5,
+                interaction_count INTEGER DEFAULT 0,
+                avg_satisfaction REAL DEFAULT NULL,
+                last_interaction DATETIME,
+                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, character_id)
+            )
+        ''')
+        
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_char_rec_user ON character_recommendations(user_id)')
+        cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_pref_user ON user_character_preferences(user_id)')
+        
+        self.db.commit()
+    
+    def _log_recommendation(self, user_id: int, character_id: str,
+                            situation: SituationAnalysis, match_score: float,
+                            personality: Dict = None):
+        """Log a character recommendation for preference learning"""
+        cursor = self.db.cursor()
+        try:
+            cursor.execute('''
+                INSERT INTO character_recommendations
+                (user_id, character_id, match_score, situation_json, personality_json)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (
+                user_id, character_id, match_score,
+                json.dumps({
+                    'emotional_state': situation.emotional_state,
+                    'goal_type': situation.goal_type,
+                    'challenge_type': situation.challenge_type
+                }),
+                json.dumps(personality) if personality else None
+            ))
+            self.db.commit()
+        except Exception as e:
+            print(f"⚠️ Error logging recommendation: {e}")
+    
+    def record_character_interaction(self, user_id: int, character_id: str,
+                                     satisfaction: float = None):
+        """Record that a user interacted with a character (for preference learning)"""
+        cursor = self.db.cursor()
+        
+        # Upsert preference record
+        cursor.execute('''
+            INSERT INTO user_character_preferences (user_id, character_id, interaction_count, last_interaction)
+            VALUES (?, ?, 1, CURRENT_TIMESTAMP)
+            ON CONFLICT(user_id, character_id) DO UPDATE SET
+                interaction_count = interaction_count + 1,
+                last_interaction = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+        ''', (user_id, character_id))
+        
+        if satisfaction is not None:
+            # Update running average satisfaction
+            cursor.execute('''
+                UPDATE user_character_preferences 
+                SET avg_satisfaction = CASE 
+                    WHEN avg_satisfaction IS NULL THEN ?
+                    ELSE (avg_satisfaction * (interaction_count - 1) + ?) / interaction_count
+                END,
+                preference_score = CASE
+                    WHEN avg_satisfaction IS NULL THEN ? * 0.6 + 0.2
+                    ELSE (avg_satisfaction * (interaction_count - 1) + ?) / interaction_count * 0.6 + 0.2
+                END
+                WHERE user_id = ? AND character_id = ?
+            ''', (satisfaction, satisfaction, satisfaction, satisfaction, user_id, character_id))
+        else:
+            # Boost preference slightly for each interaction (frequency-based)
+            cursor.execute('''
+                UPDATE user_character_preferences
+                SET preference_score = MIN(0.9, preference_score + 0.02)
+                WHERE user_id = ? AND character_id = ?
+            ''', (user_id, character_id))
+        
+        self.db.commit()
+    
+    def _get_user_preference_bias(self, user_id: int) -> Dict[str, float]:
+        """Get user's character preference scores for matching bias"""
+        cursor = self.db.cursor()
+        try:
+            cursor.execute('''
+                SELECT character_id, preference_score
+                FROM user_character_preferences
+                WHERE user_id = ? AND interaction_count >= 2
+            ''', (user_id,))
+            
+            return {row[0]: row[1] for row in cursor.fetchall()}
+        except Exception:
+            return {}
+    
+    def get_user_preferences(self, user_id: int) -> Dict:
+        """Get detailed user preference data"""
+        cursor = self.db.cursor()
+        
+        cursor.execute('''
+            SELECT character_id, preference_score, interaction_count, 
+                   avg_satisfaction, last_interaction
+            FROM user_character_preferences
+            WHERE user_id = ?
+            ORDER BY preference_score DESC
+        ''', (user_id,))
+        
+        preferences = []
+        for row in cursor.fetchall():
+            char = self.characters.get(row[0])
+            preferences.append({
+                'character_id': row[0],
+                'display_name': char.display_name if char else row[0],
+                'preference_score': round(row[1], 3),
+                'interaction_count': row[2],
+                'avg_satisfaction': round(row[3], 2) if row[3] else None,
+                'last_interaction': row[4]
+            })
+        
+        # Recommendation history (last 10)
+        cursor.execute('''
+            SELECT character_id, match_score, situation_json, created_at
+            FROM character_recommendations
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+            LIMIT 10
+        ''', (user_id,))
+        
+        history = []
+        for row in cursor.fetchall():
+            char = self.characters.get(row[0])
+            history.append({
+                'character_id': row[0],
+                'display_name': char.display_name if char else row[0],
+                'match_score': round(row[1], 3) if row[1] else None,
+                'situation': json.loads(row[2]) if row[2] else None,
+                'timestamp': row[3]
+            })
+        
+        return {
+            'user_id': user_id,
+            'preferences': preferences,
+            'recommendation_history': history,
+            'total_interactions': sum(p['interaction_count'] for p in preferences)
+        }
+    
+    # --- Enhancement 3: Trait Space Coverage Analysis ---
+    
+    def analyze_trait_space_coverage(self) -> Dict:
+        """
+        Analyze the trait space to identify gaps and coverage quality.
+        Returns regions that are well-covered and under-served.
+        """
+        if not self.characters:
+            return {'error': 'No characters loaded'}
+        
+        all_traits = {name: [] for name in TRAIT_NAMES}
+        
+        # Collect trait values across all characters
+        for profile in self.characters.values():
+            traits_dict = profile.traits.to_dict()
+            for name in TRAIT_NAMES:
+                all_traits[name].append(traits_dict.get(name, 0.5))
+        
+        # Analyze per-trait coverage
+        trait_analysis = {}
+        for name, values in all_traits.items():
+            avg = sum(values) / len(values)
+            variance = sum((v - avg) ** 2 for v in values) / len(values)
+            spread = math.sqrt(variance)
+            min_val = min(values)
+            max_val = max(values)
+            
+            # Check for gaps in coverage (no character near 0 or 1)
+            has_low = any(v < 0.3 for v in values)
+            has_high = any(v > 0.7 for v in values)
+            has_extreme_low = any(v < 0.15 for v in values)
+            has_extreme_high = any(v > 0.85 for v in values)
+            
+            coverage = 'excellent' if (has_extreme_low and has_extreme_high) else \
+                       'good' if (has_low and has_high) else \
+                       'moderate' if (has_low or has_high) else 'poor'
+            
+            trait_analysis[name] = {
+                'mean': round(avg, 3),
+                'spread': round(spread, 3),
+                'range': [round(min_val, 2), round(max_val, 2)],
+                'coverage': coverage,
+                'gap_at_low': not has_low,
+                'gap_at_high': not has_high
+            }
+        
+        # Identify under-served regions
+        gaps = []
+        for name, analysis in trait_analysis.items():
+            if analysis['gap_at_low']:
+                gaps.append({
+                    'trait': name,
+                    'region': 'low (0.0 - 0.3)',
+                    'suggestion': f"Need a character with low {name} ({TRAIT_DEFINITIONS[name]['description'].split(' vs ')[0]})"
+                })
+            if analysis['gap_at_high']:
+                gaps.append({
+                    'trait': name,
+                    'region': 'high (0.7 - 1.0)',
+                    'suggestion': f"Need a character with high {name} ({TRAIT_DEFINITIONS[name]['description'].split(' vs ')[-1]})"
+                })
+        
+        # Overall coverage score (0-1)
+        coverage_scores = {'excellent': 1.0, 'good': 0.75, 'moderate': 0.5, 'poor': 0.25}
+        overall_score = sum(coverage_scores[a['coverage']] for a in trait_analysis.values()) / len(trait_analysis)
+        
+        # Character clustering - find characters that are too similar
+        clusters = self._find_similar_characters(threshold=0.85)
+        
+        # Diversity score based on average pairwise distance
+        diversity = self._calculate_diversity_score()
+        
+        return {
+            'total_characters': len(self.characters),
+            'trait_dimensions': len(TRAIT_NAMES),
+            'overall_coverage_score': round(overall_score, 3),
+            'diversity_score': round(diversity, 3),
+            'trait_analysis': trait_analysis,
+            'coverage_gaps': gaps,
+            'similar_character_clusters': clusters,
+            'recommendations': self._generate_coverage_recommendations(gaps, clusters, overall_score)
+        }
+    
+    def _find_similar_characters(self, threshold: float = 0.85) -> List[Dict]:
+        """Find character pairs that are very similar (potential redundancy)"""
+        chars = list(self.characters.items())
+        clusters = []
+        
+        for i in range(len(chars)):
+            for j in range(i + 1, len(chars)):
+                id1, p1 = chars[i]
+                id2, p2 = chars[j]
+                similarity = p1.traits.similarity_to(p2.traits)
+                
+                if similarity >= threshold:
+                    clusters.append({
+                        'character_1': {'id': id1, 'name': p1.display_name},
+                        'character_2': {'id': id2, 'name': p2.display_name},
+                        'similarity': round(similarity, 3),
+                        'note': 'Very similar trait profiles - consider differentiating'
+                    })
+        
+        return clusters
+    
+    def _calculate_diversity_score(self) -> float:
+        """Calculate overall diversity score based on average pairwise distance"""
+        chars = list(self.characters.values())
+        if len(chars) < 2:
+            return 0.0
+        
+        total_distance = 0.0
+        pair_count = 0
+        
+        for i in range(len(chars)):
+            for j in range(i + 1, len(chars)):
+                total_distance += chars[i].traits.distance_to(chars[j].traits)
+                pair_count += 1
+        
+        avg_distance = total_distance / pair_count if pair_count > 0 else 0
+        max_possible = math.sqrt(len(TRAIT_NAMES))
+        
+        return avg_distance / max_possible if max_possible > 0 else 0
+    
+    def _generate_coverage_recommendations(self, gaps: List, clusters: List, 
+                                            overall_score: float) -> List[str]:
+        """Generate actionable recommendations for improving trait coverage"""
+        recommendations = []
+        
+        if overall_score < 0.5:
+            recommendations.append("Coverage is low. Consider adding characters with extreme trait values to fill gaps.")
+        elif overall_score < 0.75:
+            recommendations.append("Coverage is moderate. A few targeted character additions would help.")
+        else:
+            recommendations.append("Coverage is good. The character library is well-balanced.")
+        
+        if len(gaps) > 3:
+            trait_names = list(set(g['trait'] for g in gaps))[:3]
+            recommendations.append(
+                f"Priority gaps in: {', '.join(trait_names)}. These traits lack extreme characters."
+            )
+        
+        if clusters:
+            similar_names = [f"{c['character_1']['name']} ↔ {c['character_2']['name']}" for c in clusters[:2]]
+            recommendations.append(
+                f"Similar pairs detected: {'; '.join(similar_names)}. Consider differentiating their traits."
+            )
+        
+        return recommendations
 
 
 def create_character_trait_system(db_connection: sqlite3.Connection) -> CharacterTraitSystem:
     """Factory function"""
-    return CharacterTraitSystem(db_connection)
+    system = CharacterTraitSystem(db_connection)
+    system._init_preference_tables()  # Initialize preference tracking tables
+    return system
