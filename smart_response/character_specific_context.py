@@ -95,18 +95,32 @@ class CharacterSpecificContext:
         """Create tables for multi-perspective interpretations"""
         cursor = self.db.cursor()
         
-        # Store character interpretations for events
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS character_interpretations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                event_id TEXT NOT NULL,
-                event_text TEXT NOT NULL,
-                character_id TEXT NOT NULL,
-                interpretation_json TEXT NOT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
+        # Check if table exists and needs migration
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='character_interpretations'")
+        table_exists = cursor.fetchone() is not None
+        
+        if table_exists:
+            # Migrate: add missing columns if they don't exist
+            cursor.execute("PRAGMA table_info(character_interpretations)")
+            existing_cols = {row[1] for row in cursor.fetchall()}
+            
+            if 'user_id' not in existing_cols:
+                cursor.execute('ALTER TABLE character_interpretations ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0')
+            if 'event_text' not in existing_cols:
+                cursor.execute('ALTER TABLE character_interpretations ADD COLUMN event_text TEXT NOT NULL DEFAULT ""')
+        else:
+            # Create fresh table
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS character_interpretations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    event_id TEXT NOT NULL,
+                    event_text TEXT NOT NULL,
+                    character_id TEXT NOT NULL,
+                    interpretation_json TEXT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
         
         # Index for quick lookups
         cursor.execute('CREATE INDEX IF NOT EXISTS idx_char_interp_user ON character_interpretations(user_id)')
