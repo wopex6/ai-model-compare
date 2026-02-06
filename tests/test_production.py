@@ -86,11 +86,12 @@ class ProductionTests:
                 )
                 if response.status_code == 200:
                     data = response.json()
-                    analysis = data.get('analysis', {})
-                    if 'emotional_state' in analysis:
-                        self.log_pass(f"Analyze → {analysis.get('emotional_state')}")
+                    situation = data.get('situation', {})
+                    if situation:
+                        emotion = situation.get('emotional_state', situation.get('emotional_intensity', 'unknown'))
+                        self.log_pass(f"Analyze → {emotion}")
                     else:
-                        self.log_fail("Analyze", "No emotional_state in response")
+                        self.log_fail("Analyze", "No situation in response")
                 else:
                     self.log_fail("Analyze", f"Status {response.status_code}")
             except Exception as e:
@@ -134,7 +135,7 @@ class ProductionTests:
         try:
             response = self.session.post(
                 f"{BASE_URL}/api/character-context/interpret",
-                json={"event_description": "I failed my job interview today"}
+                json={"event_text": "I failed my job interview today"}
             )
             if response.status_code == 200:
                 data = response.json()
@@ -157,7 +158,7 @@ class ProductionTests:
             response = self.session.post(
                 f"{BASE_URL}/api/character-context/interpret",
                 json={
-                    "event_description": "Production test event - got a raise",
+                    "event_text": "Production test event - got a raise",
                     "store": True
                 }
             )
