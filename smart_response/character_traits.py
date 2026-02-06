@@ -937,38 +937,82 @@ class CharacterTraitSystem:
     # --- Enhancement 2: User Preference Learning ---
     
     def _init_preference_tables(self):
-        """Create tables for user preference tracking"""
+        """Create tables for user preference tracking (with migration support)"""
         cursor = self.db.cursor()
         
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS character_recommendations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                character_id TEXT NOT NULL,
-                match_score REAL,
-                situation_json TEXT,
-                personality_json TEXT,
-                was_accepted BOOLEAN DEFAULT NULL,
-                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
+        # --- character_recommendations ---
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='character_recommendations'")
+        if cursor.fetchone():
+            cursor.execute("PRAGMA table_info(character_recommendations)")
+            existing = {row[1] for row in cursor.fetchall()}
+            migrations = {
+                'user_id': 'ALTER TABLE character_recommendations ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0',
+                'character_id': 'ALTER TABLE character_recommendations ADD COLUMN character_id TEXT NOT NULL DEFAULT ""',
+                'match_score': 'ALTER TABLE character_recommendations ADD COLUMN match_score REAL',
+                'situation_json': 'ALTER TABLE character_recommendations ADD COLUMN situation_json TEXT',
+                'personality_json': 'ALTER TABLE character_recommendations ADD COLUMN personality_json TEXT',
+                'was_accepted': 'ALTER TABLE character_recommendations ADD COLUMN was_accepted BOOLEAN DEFAULT NULL',
+                'created_at': "ALTER TABLE character_recommendations ADD COLUMN created_at DATETIME DEFAULT ''",
+            }
+            for col, sql in migrations.items():
+                if col not in existing:
+                    cursor.execute(sql)
+                    print(f"  ✓ Migrated: added {col} to character_recommendations")
+        else:
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS character_recommendations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    character_id TEXT NOT NULL,
+                    match_score REAL,
+                    situation_json TEXT,
+                    personality_json TEXT,
+                    was_accepted BOOLEAN DEFAULT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
         
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS user_character_preferences (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                character_id TEXT NOT NULL,
-                preference_score REAL DEFAULT 0.5,
-                interaction_count INTEGER DEFAULT 0,
-                avg_satisfaction REAL DEFAULT NULL,
-                last_interaction DATETIME,
-                updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(user_id, character_id)
-            )
-        ''')
+        # --- user_character_preferences ---
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='user_character_preferences'")
+        if cursor.fetchone():
+            cursor.execute("PRAGMA table_info(user_character_preferences)")
+            existing = {row[1] for row in cursor.fetchall()}
+            migrations = {
+                'user_id': 'ALTER TABLE user_character_preferences ADD COLUMN user_id INTEGER NOT NULL DEFAULT 0',
+                'character_id': 'ALTER TABLE user_character_preferences ADD COLUMN character_id TEXT NOT NULL DEFAULT ""',
+                'preference_score': 'ALTER TABLE user_character_preferences ADD COLUMN preference_score REAL DEFAULT 0.5',
+                'interaction_count': 'ALTER TABLE user_character_preferences ADD COLUMN interaction_count INTEGER DEFAULT 0',
+                'avg_satisfaction': 'ALTER TABLE user_character_preferences ADD COLUMN avg_satisfaction REAL DEFAULT NULL',
+                'last_interaction': 'ALTER TABLE user_character_preferences ADD COLUMN last_interaction DATETIME',
+                'updated_at': "ALTER TABLE user_character_preferences ADD COLUMN updated_at DATETIME DEFAULT ''",
+            }
+            for col, sql in migrations.items():
+                if col not in existing:
+                    cursor.execute(sql)
+                    print(f"  ✓ Migrated: added {col} to user_character_preferences")
+        else:
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS user_character_preferences (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    character_id TEXT NOT NULL,
+                    preference_score REAL DEFAULT 0.5,
+                    interaction_count INTEGER DEFAULT 0,
+                    avg_satisfaction REAL DEFAULT NULL,
+                    last_interaction DATETIME,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(user_id, character_id)
+                )
+            ''')
         
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_char_rec_user ON character_recommendations(user_id)')
-        cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_pref_user ON user_character_preferences(user_id)')
+        try:
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_char_rec_user ON character_recommendations(user_id)')
+        except Exception:
+            pass
+        try:
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_user_pref_user ON user_character_preferences(user_id)')
+        except Exception:
+            pass
         
         self.db.commit()
     
