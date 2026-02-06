@@ -263,6 +263,8 @@ try:
     from smart_response.user_context_manager import create_user_context_manager
     from smart_response.proactive_clarification import create_clarification_system
     from smart_response.character_traits import create_character_trait_system
+    from smart_response.character_specific_context import create_character_specific_context
+    from smart_response.character_collaboration import create_collaboration_system
     from smart_response.developer_analytics import create_developer_analytics
     from smart_response.personality_context_integrator import create_personality_integrator
     from smart_response.explicit_context_handler import ExplicitContextHandler
@@ -274,12 +276,16 @@ try:
     user_context_mgr = create_user_context_manager(smart_response_conn, ai_budget)
     clarification_system = create_clarification_system(smart_response_conn)
     character_trait_system = create_character_trait_system(smart_response_conn)
+    character_context = create_character_specific_context(smart_response_conn, character_trait_system)
+    collaboration_system = create_collaboration_system(smart_response_conn, character_trait_system, character_context, ai_budget)
     developer_analytics = create_developer_analytics(smart_response_conn)
     personality_integrator = create_personality_integrator(smart_response_conn, integrated_db)
     explicit_context_handler = ExplicitContextHandler(smart_response_conn)
     print("✓ User Context Manager initialized (preferences, goals, language learning)")
     print("✓ Proactive Clarification System initialized")
     print("✓ Character Trait System initialized (12D trait-space matching)")
+    print("✓ Character-Specific Context initialized (multi-perspective interpretations)")
+    print("✓ Character Collaboration System initialized (Moltbook-style multi-agent)")
     print("✓ Developer Analytics initialized")
     print("✓ Personality Context Integrator initialized (Big5 + profile → conversations)")
     
@@ -341,6 +347,8 @@ except Exception as e:
     user_context_mgr = None
     clarification_system = None
     character_trait_system = None
+    character_context = None
+    collaboration_system = None
     developer_analytics = None
     personality_integrator = None
     explicit_context_handler = None
@@ -4340,6 +4348,408 @@ def update_ai_limits():
             'errors': errors,
             'current_limits': ai_budget.get_limits()
         })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Character Trait System Endpoints (Phase 5)
+@app.route('/api/character-traits/match', methods=['POST'])
+@require_auth
+def match_character_to_situation():
+    """Find the best character match for a given situation or message"""
+    try:
+        if not character_trait_system:
+            return jsonify({'error': 'Character trait system not initialized'}), 500
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        # Can provide either a message to analyze or a pre-analyzed situation
+        message = data.get('message')
+        situation = data.get('situation')
+        
+        if message:
+            # Analyze the message first
+            situation_analysis = character_trait_system.analyze_situation(message)
+        elif situation:
+            # Use provided situation context
+            from smart_response.character_traits import SituationAnalysis
+            situation_analysis = SituationAnalysis(
+                emotional_state=situation.get('emotional_state', 'neutral'),
+                emotional_intensity=situation.get('emotional_intensity', 0.5),
+                goal_type=situation.get('goal_type', 'general'),
+                challenge_type=situation.get('challenge_type', 'none'),
+                urgency=situation.get('urgency', 0.5),
+                needs_action=situation.get('needs_action', False),
+                needs_validation=situation.get('needs_validation', False)
+            )
+        else:
+            return jsonify({'error': 'Provide either message or situation'}), 400
+        
+        # Find best match
+        matched_char, match_score, reasoning = character_trait_system.match_character(situation_analysis)
+        
+        return jsonify({
+            'matched_character': {
+                'id': matched_char.character_id,
+                'display_name': matched_char.display_name,
+                'description': matched_char.description,
+                'philosophical_lens': matched_char.philosophical_lens,
+                'traits': matched_char.traits.to_dict()
+            },
+            'match_score': round(match_score, 3),
+            'reasoning': reasoning,
+            'situation_analysis': {
+                'emotional_state': situation_analysis.emotional_state,
+                'emotional_intensity': situation_analysis.emotional_intensity,
+                'goal_type': situation_analysis.goal_type,
+                'challenge_type': situation_analysis.challenge_type,
+                'urgency': situation_analysis.urgency,
+                'needs_action': situation_analysis.needs_action,
+                'needs_validation': situation_analysis.needs_validation
+            }
+        })
+    except Exception as e:
+        print(f"Error in match_character_to_situation: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/character-traits/characters', methods=['GET'])
+@require_auth
+def get_all_trait_characters():
+    """Get all characters with their trait vectors"""
+    try:
+        if not character_trait_system:
+            return jsonify({'error': 'Character trait system not initialized'}), 500
+        
+        characters = []
+        for char_id, profile in character_trait_system.characters.items():
+            characters.append({
+                'id': char_id,
+                'display_name': profile.display_name,
+                'description': profile.description,
+                'domain': profile.domain,
+                'philosophical_lens': profile.philosophical_lens,
+                'effectiveness_score': profile.effectiveness_score,
+                'usage_count': profile.usage_count,
+                'traits': profile.traits.to_dict()
+            })
+        
+        return jsonify({
+            'count': len(characters),
+            'characters': characters
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/character-traits/analyze', methods=['POST'])
+@require_auth
+def analyze_situation_traits():
+    """Analyze a message to understand the user's situation"""
+    try:
+        if not character_trait_system:
+            return jsonify({'error': 'Character trait system not initialized'}), 500
+        
+        data = request.get_json()
+        message = data.get('message', '')
+        
+        if not message:
+            return jsonify({'error': 'No message provided'}), 400
+        
+        analysis = character_trait_system.analyze_situation(message)
+        ideal_traits = analysis.get_ideal_traits()
+        
+        return jsonify({
+            'situation': {
+                'emotional_state': analysis.emotional_state,
+                'emotional_intensity': analysis.emotional_intensity,
+                'goal_type': analysis.goal_type,
+                'challenge_type': analysis.challenge_type,
+                'urgency': analysis.urgency,
+                'complexity': analysis.complexity,
+                'user_energy': analysis.user_energy,
+                'needs_action': analysis.needs_action,
+                'needs_validation': analysis.needs_validation
+            },
+            'ideal_traits': ideal_traits.to_dict()
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/character-traits/effectiveness', methods=['GET'])
+@require_auth
+def get_character_effectiveness():
+    """Get character effectiveness statistics"""
+    try:
+        if not character_trait_system:
+            return jsonify({'error': 'Character trait system not initialized'}), 500
+        
+        cursor = character_trait_system.db.cursor()
+        
+        # Get effectiveness and usage stats
+        cursor.execute('''
+            SELECT character_id, display_name, effectiveness_score, usage_count
+            FROM character_library
+            ORDER BY effectiveness_score DESC
+        ''')
+        
+        stats = [{
+            'character_id': row[0],
+            'display_name': row[1],
+            'effectiveness_score': row[2],
+            'usage_count': row[3]
+        } for row in cursor.fetchall()]
+        
+        # Get recent outcomes
+        cursor.execute('''
+            SELECT character_id, AVG(user_satisfaction) as avg_satisfaction,
+                   COUNT(*) as total_uses, SUM(CASE WHEN goal_achieved THEN 1 ELSE 0 END) as goals_achieved
+            FROM character_usage_outcomes
+            WHERE created_at > datetime('now', '-30 days')
+            GROUP BY character_id
+        ''')
+        
+        recent_outcomes = {row[0]: {
+            'avg_satisfaction': row[1],
+            'total_uses': row[2],
+            'goals_achieved': row[3]
+        } for row in cursor.fetchall()}
+        
+        return jsonify({
+            'characters': stats,
+            'recent_outcomes': recent_outcomes
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Character-Specific Context Endpoints (Phase 6)
+@app.route('/api/character-context/interpret', methods=['POST'])
+@require_auth
+def get_multi_perspective_interpretation():
+    """Get multiple character perspectives on an event/message"""
+    try:
+        if not character_context:
+            return jsonify({'error': 'Character context system not initialized'}), 500
+        
+        data = request.get_json()
+        if not data or not data.get('event_text'):
+            return jsonify({'error': 'event_text is required'}), 400
+        
+        event_text = data['event_text']
+        max_perspectives = data.get('max_perspectives', 4)
+        
+        # Get multi-perspective interpretations
+        interpretations = character_context.get_multi_perspective_interpretations(
+            event_text, max_perspectives=max_perspectives
+        )
+        
+        # Optionally store them
+        if data.get('store', False):
+            import uuid
+            event_id = data.get('event_id', str(uuid.uuid4()))
+            user_id = request.current_user['user_id']
+            character_context.store_interpretations(user_id, event_id, event_text, interpretations)
+        
+        return jsonify({
+            'event_text': event_text,
+            'perspectives': [{
+                'character_id': i.character_id,
+                'character_name': i.character_name,
+                'interpretation': i.interpretation,
+                'emotional_framing': i.emotional_framing,
+                'action_suggestion': i.action_suggestion,
+                'philosophical_lens': i.philosophical_lens,
+                'dominant_traits': i.dominant_traits,
+                'confidence': round(i.confidence, 3)
+            } for i in interpretations]
+        })
+    except Exception as e:
+        print(f"Error in get_multi_perspective_interpretation: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/character-context/history', methods=['GET'])
+@require_auth
+def get_interpretation_history():
+    """Get user's multi-perspective interpretation history"""
+    try:
+        if not character_context:
+            return jsonify({'error': 'Character context system not initialized'}), 500
+        
+        user_id = request.current_user['user_id']
+        limit = request.args.get('limit', 20, type=int)
+        
+        history = character_context.get_user_interpretation_history(user_id, limit)
+        
+        return jsonify({
+            'user_id': user_id,
+            'count': len(history),
+            'history': history
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/character-context/event/<event_id>', methods=['GET'])
+@require_auth
+def get_event_perspectives(event_id):
+    """Get all stored perspectives for a specific event"""
+    try:
+        if not character_context:
+            return jsonify({'error': 'Character context system not initialized'}), 500
+        
+        user_id = request.current_user['user_id']
+        interpretations = character_context.get_event_interpretations(user_id, event_id)
+        
+        return jsonify({
+            'event_id': event_id,
+            'perspective_count': len(interpretations),
+            'perspectives': [{
+                'character_id': i.character_id,
+                'character_name': i.character_name,
+                'interpretation': i.interpretation,
+                'emotional_framing': i.emotional_framing,
+                'action_suggestion': i.action_suggestion,
+                'philosophical_lens': i.philosophical_lens,
+                'dominant_traits': i.dominant_traits,
+                'confidence': round(i.confidence, 3)
+            } for i in interpretations]
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Character Collaboration Endpoints (Phase 6.5)
+@app.route('/api/collaboration/check', methods=['POST'])
+@require_auth
+def check_collaboration_trigger():
+    """Check if a message should trigger collaboration"""
+    try:
+        if not collaboration_system:
+            return jsonify({'error': 'Collaboration system not initialized'}), 500
+        
+        data = request.get_json()
+        message = data.get('message', '')
+        context = data.get('context', {})
+        
+        should_collab, mode, rule_name = collaboration_system.should_collaborate(message, context)
+        domains = collaboration_system._detect_domains(message) if should_collab else []
+        
+        return jsonify({
+            'should_collaborate': should_collab,
+            'mode': mode,
+            'triggered_rule': rule_name,
+            'detected_domains': domains
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/collaboration/orchestrate', methods=['POST'])
+@require_auth
+def orchestrate_collaboration():
+    """Orchestrate a multi-character collaboration response"""
+    try:
+        if not collaboration_system:
+            return jsonify({'error': 'Collaboration system not initialized'}), 500
+        
+        data = request.get_json()
+        message = data.get('message', '')
+        context = data.get('context', {})
+        mode = data.get('mode', 'silent')
+        
+        if not message:
+            return jsonify({'error': 'message is required'}), 400
+        
+        user_id = request.current_user['user_id']
+        
+        # Check if collaboration is appropriate
+        should_collab, detected_mode, rule_name = collaboration_system.should_collaborate(message, context)
+        
+        if not should_collab and not data.get('force', False):
+            return jsonify({
+                'collaborated': False,
+                'reason': 'No collaboration trigger matched',
+                'detected_domains': collaboration_system._detect_domains(message)
+            })
+        
+        # Use detected mode unless overridden
+        final_mode = data.get('mode') or detected_mode or 'silent'
+        
+        result = collaboration_system.orchestrate_collaboration(
+            message, user_id, context, final_mode, rule_name
+        )
+        
+        if not result:
+            return jsonify({
+                'collaborated': False,
+                'reason': 'Not enough relevant characters for collaboration'
+            })
+        
+        return jsonify({
+            'collaborated': True,
+            'response': result.response,
+            'mode': result.mode,
+            'contributions': result.contributions,
+            'participating_characters': result.participating_characters,
+            'event_id': result.event_id
+        })
+    except Exception as e:
+        print(f"Error in orchestrate_collaboration: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/collaboration/history', methods=['GET'])
+@require_auth
+def get_collaboration_history():
+    """Get user's collaboration history"""
+    try:
+        if not collaboration_system:
+            return jsonify({'error': 'Collaboration system not initialized'}), 500
+        
+        user_id = request.current_user['user_id']
+        limit = request.args.get('limit', 20, type=int)
+        
+        history = collaboration_system.get_collaboration_history(user_id, limit)
+        
+        return jsonify({
+            'user_id': user_id,
+            'count': len(history),
+            'history': history
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/collaboration/stats', methods=['GET'])
+@require_auth
+def get_collaboration_stats():
+    """Get collaboration statistics"""
+    try:
+        if not collaboration_system:
+            return jsonify({'error': 'Collaboration system not initialized'}), 500
+        
+        stats = collaboration_system.get_collaboration_stats()
+        return jsonify(stats)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/collaboration/rules', methods=['GET'])
+@require_auth
+def get_collaboration_rules():
+    """Get all collaboration rules"""
+    try:
+        if not collaboration_system:
+            return jsonify({'error': 'Collaboration system not initialized'}), 500
+        
+        rules = collaboration_system.get_rules()
+        return jsonify({'rules': rules})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/collaboration/domains', methods=['GET'])
+@require_auth
+def get_collaboration_domains():
+    """Get all domain definitions"""
+    try:
+        if not collaboration_system:
+            return jsonify({'error': 'Collaboration system not initialized'}), 500
+        
+        domains = collaboration_system.get_domains()
+        return jsonify({'domains': domains})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
