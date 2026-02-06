@@ -110,7 +110,7 @@ class CharacterSpecificContext:
                 'event_text': 'ALTER TABLE character_interpretations ADD COLUMN event_text TEXT NOT NULL DEFAULT ""',
                 'character_id': 'ALTER TABLE character_interpretations ADD COLUMN character_id TEXT NOT NULL DEFAULT ""',
                 'interpretation_json': 'ALTER TABLE character_interpretations ADD COLUMN interpretation_json TEXT NOT NULL DEFAULT "{}"',
-                'created_at': 'ALTER TABLE character_interpretations ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP',
+                'created_at': "ALTER TABLE character_interpretations ADD COLUMN created_at DATETIME DEFAULT ''",
             }
             
             for col, sql in migrations.items():
