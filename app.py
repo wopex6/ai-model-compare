@@ -4521,6 +4521,129 @@ def get_character_effectiveness():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# Phase 5 Enhancement Endpoints
+
+@app.route('/api/character-traits/personality-match', methods=['POST'])
+@require_auth
+def personality_weighted_match():
+    """Enhanced character matching using Big5 personality profile"""
+    try:
+        if not character_trait_system:
+            return jsonify({'error': 'Character trait system not initialized'}), 500
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+        
+        message = data.get('message')
+        situation_data = data.get('situation')
+        personality = data.get('personality')
+        top_n = data.get('top_n', 3)
+        
+        if not message and not situation_data:
+            return jsonify({'error': 'Provide either message or situation'}), 400
+        
+        # Analyze situation
+        if message:
+            situation_analysis = character_trait_system.analyze_situation(message)
+        else:
+            from smart_response.character_traits import SituationAnalysis
+            situation_analysis = SituationAnalysis(
+                emotional_state=situation_data.get('emotional_state', 'neutral'),
+                emotional_intensity=situation_data.get('emotional_intensity', 0.5),
+                goal_type=situation_data.get('goal_type', 'general'),
+                challenge_type=situation_data.get('challenge_type', 'none'),
+                urgency=situation_data.get('urgency', 0.5),
+                needs_action=situation_data.get('needs_action', False),
+                needs_validation=situation_data.get('needs_validation', False)
+            )
+        
+        # Get personality from request or from personality integrator
+        if not personality:
+            user_id = request.current_user['user_id']
+            if personality_integrator:
+                ctx = personality_integrator.get_personality_context(user_id)
+                personality = {
+                    'openness': ctx.openness,
+                    'conscientiousness': ctx.conscientiousness,
+                    'extraversion': ctx.extraversion,
+                    'agreeableness': ctx.agreeableness,
+                    'neuroticism': ctx.neuroticism
+                }
+            else:
+                personality = {
+                    'openness': 0.5, 'conscientiousness': 0.5,
+                    'extraversion': 0.5, 'agreeableness': 0.5, 'neuroticism': 0.5
+                }
+        
+        user_id = request.current_user['user_id']
+        result = character_trait_system.personality_weighted_match(
+            situation_analysis, personality, user_id=user_id, top_n=top_n
+        )
+        
+        return jsonify(result)
+    except Exception as e:
+        print(f"Error in personality_weighted_match: {e}")
+        import traceback; traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/character-traits/preferences', methods=['GET'])
+@require_auth
+def get_user_character_preferences():
+    """Get user's character preference history and scores"""
+    try:
+        if not character_trait_system:
+            return jsonify({'error': 'Character trait system not initialized'}), 500
+        
+        user_id = request.current_user['user_id']
+        preferences = character_trait_system.get_user_preferences(user_id)
+        
+        return jsonify(preferences)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/character-traits/interact', methods=['POST'])
+@require_auth
+def record_character_interaction():
+    """Record a user interaction with a character for preference learning"""
+    try:
+        if not character_trait_system:
+            return jsonify({'error': 'Character trait system not initialized'}), 500
+        
+        data = request.get_json()
+        if not data or not data.get('character_id'):
+            return jsonify({'error': 'character_id is required'}), 400
+        
+        user_id = request.current_user['user_id']
+        character_id = data['character_id']
+        satisfaction = data.get('satisfaction')
+        
+        character_trait_system.record_character_interaction(
+            user_id, character_id, satisfaction
+        )
+        
+        return jsonify({
+            'status': 'recorded',
+            'user_id': user_id,
+            'character_id': character_id
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/character-traits/coverage', methods=['GET'])
+@require_auth
+def get_trait_space_coverage():
+    """Analyze trait space coverage and identify gaps"""
+    try:
+        if not character_trait_system:
+            return jsonify({'error': 'Character trait system not initialized'}), 500
+        
+        coverage = character_trait_system.analyze_trait_space_coverage()
+        
+        return jsonify(coverage)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 # Character-Specific Context Endpoints (Phase 6)
 @app.route('/api/character-context/interpret', methods=['POST'])
 @require_auth
