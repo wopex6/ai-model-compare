@@ -139,7 +139,7 @@ class ProductionTests:
             )
             if response.status_code == 200:
                 data = response.json()
-                perspectives = data.get('interpretations', [])
+                perspectives = data.get('perspectives', data.get('interpretations', []))
                 count = len(perspectives)
                 if count >= 2:
                     names = [p['character_name'] for p in perspectives]
