@@ -1,7 +1,10 @@
 """
 Character Trait System
-12-dimensional trait-space for dynamic character matching.
+Dynamic N-dimensional trait-space for character matching.
 Characters are points in trait-space, matched to situations via distance calculation.
+
+EXTENSIBILITY: To add new traits, simply add them to TRAIT_DEFINITIONS below.
+All other code adapts automatically.
 """
 
 import math
@@ -13,63 +16,119 @@ from enum import Enum
 from datetime import datetime
 
 
-@dataclass
+# ============================================================
+# TRAIT DEFINITIONS - Add new traits here for easy extension
+# ============================================================
+# Format: 'trait_name': {'default': 0.5, 'description': '...'}
+# To extend from 12D to 30D, just add more entries here!
+
+TRAIT_DEFINITIONS: Dict[str, Dict[str, Any]] = {
+    'stoicism': {'default': 0.5, 'description': 'Emotional detachment vs emotional engagement'},
+    'optimism': {'default': 0.5, 'description': 'Pessimistic vs optimistic outlook'},
+    'directness': {'default': 0.5, 'description': 'Indirect/gentle vs direct/blunt communication'},
+    'supportiveness': {'default': 0.5, 'description': 'Challenging vs supportive approach'},
+    'structure': {'default': 0.5, 'description': 'Flexible/intuitive vs structured/methodical'},
+    'depth': {'default': 0.5, 'description': 'Surface-level vs deep philosophical'},
+    'formality': {'default': 0.5, 'description': 'Casual vs formal tone'},
+    'verbosity': {'default': 0.5, 'description': 'Concise vs verbose responses'},
+    'action_oriented': {'default': 0.5, 'description': 'Reflective vs action-focused'},
+    'present_focus': {'default': 0.5, 'description': 'Past/future focused vs present focused'},
+    'empathy': {'default': 0.5, 'description': 'Analytical vs empathetic'},
+    'intensity': {'default': 0.5, 'description': 'Gentle/calm vs intense/passionate'},
+    # === ADD NEW TRAITS BELOW THIS LINE ===
+    # Example future traits (uncomment to activate):
+    # 'humor': {'default': 0.5, 'description': 'Serious vs humorous approach'},
+    # 'spirituality': {'default': 0.5, 'description': 'Secular vs spiritual perspective'},
+    # 'creativity': {'default': 0.5, 'description': 'Conventional vs creative thinking'},
+    # 'risk_tolerance': {'default': 0.5, 'description': 'Risk-averse vs risk-taking'},
+}
+
+# Derived list of trait names for iteration
+TRAIT_NAMES = list(TRAIT_DEFINITIONS.keys())
+
+
 class TraitVector:
     """
-    12-dimensional trait vector for character positioning.
+    Dynamic N-dimensional trait vector for character positioning.
     All values are 0.0 - 1.0 continuous scale.
+    
+    EXTENSIBILITY: Automatically adapts to TRAIT_DEFINITIONS.
+    Add new traits there, and this class works with them automatically.
     """
-    stoicism: float = 0.5        # Emotional detachment vs emotional engagement
-    optimism: float = 0.5        # Pessimistic vs optimistic outlook
-    directness: float = 0.5      # Indirect/gentle vs direct/blunt communication
-    supportiveness: float = 0.5  # Challenging vs supportive approach
-    structure: float = 0.5       # Flexible/intuitive vs structured/methodical
-    depth: float = 0.5           # Surface-level vs deep philosophical
-    formality: float = 0.5       # Casual vs formal tone
-    verbosity: float = 0.5       # Concise vs verbose responses
-    action_oriented: float = 0.5 # Reflective vs action-focused
-    present_focus: float = 0.5   # Past/future focused vs present focused
-    empathy: float = 0.5         # Analytical vs empathetic
-    intensity: float = 0.5       # Gentle/calm vs intense/passionate
+    
+    def __init__(self, **traits):
+        """Initialize with trait values. Missing traits use defaults."""
+        self._traits: Dict[str, float] = {}
+        for trait_name, trait_info in TRAIT_DEFINITIONS.items():
+            value = traits.get(trait_name, trait_info['default'])
+            # Clamp to 0.0 - 1.0 range
+            self._traits[trait_name] = max(0.0, min(1.0, float(value)))
+    
+    def __getattr__(self, name: str) -> float:
+        """Allow attribute-style access: vector.stoicism"""
+        if name.startswith('_'):
+            raise AttributeError(name)
+        if name in self._traits:
+            return self._traits[name]
+        raise AttributeError(f"'{type(self).__name__}' has no trait '{name}'")
+    
+    def __setattr__(self, name: str, value: float):
+        """Allow attribute-style setting: vector.stoicism = 0.8"""
+        if name.startswith('_'):
+            super().__setattr__(name, value)
+        elif name in TRAIT_DEFINITIONS:
+            self._traits[name] = max(0.0, min(1.0, float(value)))
+        else:
+            super().__setattr__(name, value)
     
     def to_list(self) -> List[float]:
-        """Convert to list for distance calculations"""
-        return [
-            self.stoicism, self.optimism, self.directness, self.supportiveness,
-            self.structure, self.depth, self.formality, self.verbosity,
-            self.action_oriented, self.present_focus, self.empathy, self.intensity
-        ]
+        """Convert to list for distance calculations (ordered by TRAIT_NAMES)"""
+        return [self._traits[name] for name in TRAIT_NAMES]
     
     def to_dict(self) -> Dict[str, float]:
-        return {
-            'stoicism': self.stoicism, 'optimism': self.optimism,
-            'directness': self.directness, 'supportiveness': self.supportiveness,
-            'structure': self.structure, 'depth': self.depth,
-            'formality': self.formality, 'verbosity': self.verbosity,
-            'action_oriented': self.action_oriented, 'present_focus': self.present_focus,
-            'empathy': self.empathy, 'intensity': self.intensity
-        }
+        """Convert to dictionary"""
+        return dict(self._traits)
     
     @classmethod
     def from_dict(cls, d: Dict[str, float]) -> 'TraitVector':
-        return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
+        """Create TraitVector from dictionary"""
+        return cls(**d)
+    
+    @classmethod
+    def neutral(cls) -> 'TraitVector':
+        """Create a neutral trait vector (all defaults)"""
+        return cls()
     
     def distance_to(self, other: 'TraitVector', weights: Dict[str, float] = None) -> float:
         """Calculate weighted Euclidean distance to another trait vector"""
-        self_list = self.to_list()
-        other_list = other.to_list()
-        
-        trait_names = list(self.to_dict().keys())
-        
         if weights:
             weighted_sum = sum(
-                weights.get(trait_names[i], 1.0) * (self_list[i] - other_list[i]) ** 2
-                for i in range(len(self_list))
+                weights.get(name, 1.0) * (self._traits[name] - other._traits[name]) ** 2
+                for name in TRAIT_NAMES
             )
         else:
-            weighted_sum = sum((a - b) ** 2 for a, b in zip(self_list, other_list))
-        
+            weighted_sum = sum(
+                (self._traits[name] - other._traits[name]) ** 2
+                for name in TRAIT_NAMES
+            )
         return math.sqrt(weighted_sum)
+    
+    def similarity_to(self, other: 'TraitVector') -> float:
+        """Calculate similarity score (0-1, higher = more similar)"""
+        max_distance = math.sqrt(len(TRAIT_NAMES))  # Max possible distance
+        distance = self.distance_to(other)
+        return 1.0 - (distance / max_distance)
+    
+    def get_dominant_traits(self, top_n: int = 3) -> List[Tuple[str, float]]:
+        """Get the most extreme traits (furthest from 0.5 neutral)"""
+        extremity = [(name, abs(value - 0.5), value) for name, value in self._traits.items()]
+        extremity.sort(key=lambda x: x[1], reverse=True)
+        return [(name, value) for name, _, value in extremity[:top_n]]
+    
+    def __repr__(self) -> str:
+        top_traits = self.get_dominant_traits(3)
+        traits_str = ', '.join(f"{n}={v:.2f}" for n, v in top_traits)
+        return f"TraitVector({traits_str}, ...)"
 
 
 @dataclass
@@ -285,12 +344,14 @@ BASE_CHARACTERS = {
 class CharacterTraitSystem:
     """
     Manages character trait matching and effectiveness learning.
+    Unified system for both base characters and domain characters.
     """
     
     def __init__(self, db_connection: sqlite3.Connection):
         self.db = db_connection
         self.characters = dict(BASE_CHARACTERS)  # Copy base characters
         self._init_tables()
+        self._load_domain_characters()  # Load domain characters with trait vectors
         self._load_custom_characters()
     
     def _init_tables(self):
@@ -358,6 +419,58 @@ class CharacterTraitSystem:
                 profile.domain, profile.description, profile.philosophical_lens
             ))
         self.db.commit()
+    
+    def _load_domain_characters(self):
+        """Load domain characters from DOMAIN_CHARACTER_CONFIGS with their trait vectors"""
+        try:
+            from .characters.configs import DOMAIN_CHARACTER_CONFIGS
+            
+            cursor = self.db.cursor()
+            
+            for char_id, config in DOMAIN_CHARACTER_CONFIGS.items():
+                # Skip if no trait_vector defined
+                if 'trait_vector' not in config:
+                    continue
+                
+                traits = TraitVector.from_dict(config['trait_vector'])
+                domain = config.get('domain', 'general')
+                display_name = config.get('display_name', char_id)
+                description = config.get('description', '')
+                
+                # Use system_prompt first line as philosophical lens, or create one
+                system_prompt = config.get('system_prompt', '')
+                philosophical_lens = system_prompt.split('\n')[0] if system_prompt else f"Domain expert in {domain}"
+                
+                # Create CharacterProfile
+                profile = CharacterProfile(
+                    character_id=char_id,
+                    display_name=display_name,
+                    traits=traits,
+                    domain=domain,
+                    description=description,
+                    philosophical_lens=philosophical_lens
+                )
+                
+                # Add to in-memory characters
+                self.characters[char_id] = profile
+                
+                # Save to DB (upsert)
+                cursor.execute('''
+                    INSERT OR REPLACE INTO character_library
+                    (character_id, display_name, traits_json, domain, description, 
+                     philosophical_lens, is_base)
+                    VALUES (?, ?, ?, ?, ?, ?, 0)
+                ''', (
+                    char_id, display_name, json.dumps(traits.to_dict()),
+                    domain, description, philosophical_lens
+                ))
+            
+            self.db.commit()
+            print(f"✓ Loaded {len(DOMAIN_CHARACTER_CONFIGS)} domain characters with trait vectors")
+        except ImportError:
+            print("⚠️ DOMAIN_CHARACTER_CONFIGS not found, skipping domain character loading")
+        except Exception as e:
+            print(f"⚠️ Error loading domain characters: {e}")
     
     def _load_custom_characters(self):
         """Load custom characters from DB"""
