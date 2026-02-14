@@ -648,6 +648,7 @@ class CoordinatorCharacter(BaseCharacter):
                  character_manager = None):
         super().__init__(character_id, config, db_connection)
         
+        self.domain = config.get('domain', 'all')
         self.character_manager = character_manager
         self.special_privileges = config.get('special_privileges', [
             'can_see_all_conversations',

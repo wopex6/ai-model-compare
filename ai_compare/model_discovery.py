@@ -168,12 +168,11 @@ class ModelDiscovery:
         if cached_data is not None:
             return cached_data
         
-        # Fast fallback to known working models
+        # Fast fallback to known working models (cheapest first)
         known_models = [
+            "claude-3-haiku-20240307",
+            "claude-3-5-haiku-20241022",
             "claude-3-5-sonnet-20241022",
-            "claude-3-opus-20240229", 
-            "claude-3-sonnet-20240229",
-            "claude-3-haiku-20240307"
         ]
         
         self._set_cache_data('anthropic', known_models)

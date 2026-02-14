@@ -13,11 +13,9 @@ MODEL_VERSIONS = {
         'gpt-3.5-turbo',         # Fallback 4
     ],
     'anthropic': [
-        'claude-3-5-sonnet-20241022',  # Latest Sonnet
-        'claude-3-5-haiku-20241022',   # Latest Haiku
-        'claude-3-haiku-20240307',     # Current fallback
-        'claude-3-sonnet-20240229',    # Older Sonnet
-        'claude-3-opus-20240229',      # Most capable (expensive)
+        'claude-3-haiku-20240307',     # Cheapest, most reliable
+        'claude-3-5-haiku-20241022',   # Newer Haiku (if available)
+        'claude-3-5-sonnet-20241022',  # Sonnet (more expensive)
     ],
     'google': [
         'gemini-2.5-flash',      # Latest fast model (2025)
