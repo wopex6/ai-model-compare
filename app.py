@@ -19,6 +19,12 @@ if sys.platform == 'win32':
         sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
         sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
 
+# Suppress noisy HTTP request logging from AI SDKs (httpx, openai, anthropic)
+import logging
+logging.getLogger('httpx').setLevel(logging.WARNING)
+logging.getLogger('openai').setLevel(logging.WARNING)
+logging.getLogger('anthropic').setLevel(logging.WARNING)
+
 # Now import everything else
 from flask import Flask, render_template, request, jsonify, session, redirect, send_from_directory
 from flask_cors import CORS
