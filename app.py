@@ -103,6 +103,19 @@ except ImportError as e:
     def track_error(*args, **kwargs): pass
 import sqlite3
 
+# Database path configuration (override via environment variables)
+DB_PATH_INTEGRATED = os.environ.get('DB_PATH_INTEGRATED', 'integrated_users.db')
+DB_PATH_SMART_RESPONSE = os.environ.get('DB_PATH_SMART_RESPONSE',
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), 'smart_response.db'))
+
+def get_db_conn(db_path=None, check_same_thread=True):
+    """Create a SQLite connection with WAL mode and busy timeout."""
+    path = db_path or DB_PATH_INTEGRATED
+    conn = sqlite3.connect(path, check_same_thread=check_same_thread)
+    conn.execute('PRAGMA journal_mode=WAL')
+    conn.execute('PRAGMA busy_timeout=5000')
+    return conn
+
 # Disable auto-docs in production
 os.environ['DISABLE_AUTO_DOCS'] = 'true'
 
@@ -292,9 +305,7 @@ try:
     from smart_response.personality_context_integrator import create_personality_integrator
     from smart_response.explicit_context_handler import ExplicitContextHandler
     from smart_response.character_effectiveness_learner import create_effectiveness_learner
-    smart_response_conn = sqlite3.connect('integrated_users.db', check_same_thread=False)
-    smart_response_conn.execute('PRAGMA journal_mode=WAL')
-    smart_response_conn.execute('PRAGMA busy_timeout=5000')
+    smart_response_conn = get_db_conn(DB_PATH_INTEGRATED, check_same_thread=False)
     smart_handler = SmartResponseHandler(smart_response_conn)
     context_manager = ConversationContextManager(smart_response_conn)
     history_system = DualLayerHistorySystem(smart_response_conn)
@@ -359,7 +370,7 @@ try:
     # Initialize Background Scheduler with character expansion
     from smart_response.background_scheduler import BackgroundScheduler
     background_scheduler = BackgroundScheduler(
-        db_path='integrated_users.db',
+        db_path=DB_PATH_INTEGRATED,
         budget_manager=ai_budget,
         character_trait_system=character_trait_system
     )
@@ -401,7 +412,7 @@ try:
     from agents.self_improvement import SelfImprovementAgent
     from agents.ab_testing import ABTestingAgent
     
-    sr_db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'smart_response.db')
+    sr_db_path = DB_PATH_SMART_RESPONSE
     quality_scorer = ConversationQualityScorer(db_path=sr_db_path)
     self_improvement_agent = SelfImprovementAgent(db_path=sr_db_path, event_bus=event_bus)
     ab_testing_agent = ABTestingAgent(db_path=sr_db_path, event_bus=event_bus)
@@ -7669,9 +7680,7 @@ def get_user_context():
         
         character = request.args.get('character', 'all')
         
-        conn = sqlite3.connect('integrated_users.db')
-        conn.execute('PRAGMA journal_mode=WAL')
-        conn.execute('PRAGMA busy_timeout=5000')
+        conn = get_db_conn()
         cursor = conn.cursor()
         
         # Build query
@@ -7749,9 +7758,7 @@ def update_user_context(context_id):
         
         data = request.json
         
-        conn = sqlite3.connect('integrated_users.db')
-        conn.execute('PRAGMA journal_mode=WAL')
-        conn.execute('PRAGMA busy_timeout=5000')
+        conn = get_db_conn()
         cursor = conn.cursor()
         
         # Verify context exists
@@ -7818,9 +7825,7 @@ def delete_user_context(context_id):
         if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
-        conn = sqlite3.connect('integrated_users.db')
-        conn.execute('PRAGMA journal_mode=WAL')
-        conn.execute('PRAGMA busy_timeout=5000')
+        conn = get_db_conn()
         cursor = conn.cursor()
         
         # Verify context exists
@@ -8255,9 +8260,7 @@ def get_ai_usage_summary():
         if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
-        conn = sqlite3.connect('integrated_users.db')
-        conn.execute('PRAGMA journal_mode=WAL')
-        conn.execute('PRAGMA busy_timeout=5000')
+        conn = get_db_conn()
         cursor = conn.cursor()
         
         # Today's calls
@@ -8306,9 +8309,7 @@ def get_daily_chart_data():
         if not has_admin_access(user_role):
             return jsonify({'error': 'Admin access required'}), 403
         
-        conn = sqlite3.connect('integrated_users.db')
-        conn.execute('PRAGMA journal_mode=WAL')
-        conn.execute('PRAGMA busy_timeout=5000')
+        conn = get_db_conn()
         cursor = conn.cursor()
         
         # Get daily breakdown for last 7 days
@@ -8389,9 +8390,7 @@ def get_daily_ai_usage():
         
         sort_by = request.args.get('sort', 'calls_desc')
         
-        conn = sqlite3.connect('integrated_users.db')
-        conn.execute('PRAGMA journal_mode=WAL')
-        conn.execute('PRAGMA busy_timeout=5000')
+        conn = get_db_conn()
         cursor = conn.cursor()
         
         # Get today's usage per user
@@ -8453,9 +8452,7 @@ def get_monthly_ai_usage():
         
         sort_by = request.args.get('sort', 'calls_desc')
         
-        conn = sqlite3.connect('integrated_users.db')
-        conn.execute('PRAGMA journal_mode=WAL')
-        conn.execute('PRAGMA busy_timeout=5000')
+        conn = get_db_conn()
         cursor = conn.cursor()
         
         # Get month's usage per user
