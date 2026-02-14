@@ -959,6 +959,12 @@ def process_with_smart_response(message, character_name, ai_chat_function):
                 if isinstance(response, dict) and 'response' in response:
                     response['response'] += clarification_text
                     response['has_clarification'] = True
+                    response['clarification'] = {
+                        'questions': [
+                            {'question': q.question, 'reason': getattr(q, 'reason', ''), 'priority': getattr(q, 'priority', 'medium')}
+                            for q in clarification_questions
+                        ]
+                    }
                 elif isinstance(response, str):
                     response += clarification_text
                 print(f"✅ Added clarification question to response")

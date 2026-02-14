@@ -422,6 +422,11 @@ class IntegratedAIChatbot {
     init() {
         this.setupEventListeners();
         // this.checkAuthStatus();
+        
+        // Initialize Proactive Clarification UI
+        if (window.ProactiveClarificationUI) {
+            ProactiveClarificationUI.init();
+        }
     }
 
     setupEventListeners() {
@@ -2461,24 +2466,43 @@ class IntegratedAIChatbot {
                     feedbackRow.appendChild(thumbsDown);
                     aiMessage.appendChild(feedbackRow);
                     
-                    // Quick-reply buttons for clarification questions
-                    if (result.clarification && result.clarification.perspective_questions && result.clarification.perspective_questions.length > 0) {
-                        const quickReplies = document.createElement('div');
-                        quickReplies.className = 'quick-replies';
-                        result.clarification.perspective_questions.forEach(pq => {
-                            const btn = document.createElement('button');
-                            btn.className = 'quick-reply-btn';
-                            btn.textContent = pq.question;
-                            btn.addEventListener('click', () => {
-                                const chatInput = document.getElementById('chat-input');
-                                chatInput.value = pq.question;
-                                chatInput.focus();
-                                quickReplies.remove();
-                                this.sendChatMessage();
+                    // Quick-reply buttons for clarification questions (standard + perspective)
+                    if (result.clarification) {
+                        const allQuestions = [];
+                        
+                        // Standard clarification questions
+                        if (result.clarification.questions) {
+                            result.clarification.questions.forEach(q => {
+                                allQuestions.push({ question: q.question, reason: q.reason || '' });
                             });
-                            quickReplies.appendChild(btn);
-                        });
-                        aiMessage.appendChild(quickReplies);
+                        }
+                        
+                        // Perspective questions (from domain characters)
+                        if (result.clarification.perspective_questions) {
+                            result.clarification.perspective_questions.forEach(pq => {
+                                allQuestions.push({ question: pq.question, reason: pq.character || '' });
+                            });
+                        }
+                        
+                        if (allQuestions.length > 0) {
+                            const quickReplies = document.createElement('div');
+                            quickReplies.className = 'quick-replies';
+                            allQuestions.slice(0, 3).forEach(q => {
+                                const btn = document.createElement('button');
+                                btn.className = 'quick-reply-btn';
+                                btn.textContent = q.question;
+                                if (q.reason) btn.title = q.reason;
+                                btn.addEventListener('click', () => {
+                                    const chatInput = document.getElementById('chat-input');
+                                    chatInput.value = q.question;
+                                    chatInput.focus();
+                                    quickReplies.remove();
+                                    this.sendChatMessage();
+                                });
+                                quickReplies.appendChild(btn);
+                            });
+                            aiMessage.appendChild(quickReplies);
+                        }
                     }
                     
                     messagesContainer.appendChild(aiMessage);
