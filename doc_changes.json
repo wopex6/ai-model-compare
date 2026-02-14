@@ -20,8 +20,8 @@
     "ai_compare\\knowledge_tracker.py": "f94636b48d6fffff12b9f006abb5efd9",
     "ai_compare\\knowledge_vector_store.py": "86c32ac7bc562af8b68bbc1f579e232f",
     "ai_compare\\models.py": "e6358b1407033021fa791f788ad824ae",
-    "ai_compare\\model_config.py": "a3c4d6c60607f666a17ece6fe196c614",
-    "ai_compare\\model_discovery.py": "840600f41bf2c96bf4f9c7c9e471508d",
+    "ai_compare\\model_config.py": "9bca8ae2ed9abeb45c33f0bfdad9674e",
+    "ai_compare\\model_discovery.py": "22b92bbfe36cf045ab3ec348f9587632",
     "ai_compare\\motivational_chatbot.py": "79398d8ba95d6f7aabbb6e9c0f40b5a3",
     "ai_compare\\motivational_system.py": "4bb6ed5038ffa11462b3464e083544db",
     "ai_compare\\personality_profiler.py": "c7d70386f6782545319c89da05072991",
@@ -41,6 +41,6 @@
     "requirements.txt": "a0c0ba845255584721907b0ff0aabe84",
     ".env": "58519513bede96b32b8ed2989901a0eb"
   },
-  "last_update": "2026-02-14T14:39:02.061176",
-  "update_count": 692
+  "last_update": "2026-02-14T16:52:43.147937",
+  "update_count": 1228
 }

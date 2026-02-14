@@ -199,8 +199,9 @@ def test_production():
             data = r.json()
             assert data.get('success') is True
             assert '🎭' in data.get('response', '')
-            assert len(data.get('characters', [])) >= 2
-            print(f"  ✅ On-demand debate: {len(data['characters'])} characters")
+            contribs = data.get('contributions', data.get('characters', []))
+            assert len(contribs) >= 2
+            print(f"  ✅ On-demand debate: {len(contribs)} characters")
             passed += 1
         else:
             print(f"  ❌ On-demand debate: {r.status_code} {r.text[:200]}")
