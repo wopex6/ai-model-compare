@@ -157,6 +157,7 @@ class BackupManager:
         """Verify SQLite database integrity."""
         try:
             conn = sqlite3.connect(str(db_path))
+            conn.execute('PRAGMA busy_timeout=5000')
             cursor = conn.cursor()
             cursor.execute("PRAGMA integrity_check")
             result = cursor.fetchone()[0]
@@ -221,6 +222,7 @@ class BackupManager:
             
             # Use SQLite backup API for safe hot backup
             source_conn = sqlite3.connect(str(db_path))
+            source_conn.execute('PRAGMA busy_timeout=5000')
             backup_conn = sqlite3.connect(str(backup_path))
             
             with backup_conn:
@@ -414,11 +416,13 @@ class BackupManager:
             
             # Restore using SQLite backup API
             backup_conn = sqlite3.connect(str(backup_path))
+            backup_conn.execute('PRAGMA busy_timeout=5000')
             
             # Ensure target directory exists
             db_path.parent.mkdir(parents=True, exist_ok=True)
             
             target_conn = sqlite3.connect(str(db_path))
+            target_conn.execute('PRAGMA busy_timeout=5000')
             
             with target_conn:
                 backup_conn.backup(target_conn)

@@ -353,6 +353,8 @@ class CharacterManager:
 def create_character_manager(db_path: str = 'integrated_users.db') -> CharacterManager:
     """Create a CharacterManager with database connection"""
     conn = sqlite3.connect(db_path, check_same_thread=False)
+    conn.execute('PRAGMA journal_mode=WAL')
+    conn.execute('PRAGMA busy_timeout=5000')
     return CharacterManager(conn)
 
 

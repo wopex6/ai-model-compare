@@ -61,9 +61,16 @@ class PersonalityAwareContextInterpreter:
             ]
         }
         
+    def _connect(self):
+        """Open a SQLite connection with WAL mode and busy timeout."""
+        conn = sqlite3.connect(self.db_path)
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA busy_timeout=5000')
+        return conn
+    
     def _init_tables(self):
         """Initialize database tables for personality interpretations"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cursor = conn.cursor()
         
         # Create personality interpretations log table
@@ -135,7 +142,7 @@ class PersonalityAwareContextInterpreter:
                 'confidence': 0.0-1.0
             }
         """
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cursor = conn.cursor()
         
         # Level 1: Check for formal personality assessment in psychology_traits table
@@ -632,7 +639,7 @@ Adapt your approach based on the recommended guidance above.
     def _store_interpretation(self, user_id: int, character: str, event_type: str,
                             event_data: Dict, message: str, interpretation: Dict):
         """Store interpretation in database for learning and analysis"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cursor = conn.cursor()
         
         cursor.execute('''
@@ -659,7 +666,7 @@ Adapt your approach based on the recommended guidance above.
     
     def get_interpretation_history(self, user_id: int, limit: int = 10) -> List[Dict]:
         """Get recent interpretation history for user"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cursor = conn.cursor()
         
         cursor.execute('''

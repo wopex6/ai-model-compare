@@ -305,6 +305,28 @@ class DomainCharacterAI:
             character_id=character_id,
             user_id=user_id
         )
+        
+        # Real-time quota alert — print prominent warning and publish to Event Bus
+        if error_type == 'quota_exceeded':
+            print(f"\n{'!'*60}")
+            print(f"🚨 QUOTA EXCEEDED: {provider.upper()}")
+            print(f"   Error: {error_str[:200]}")
+            print(f"   ACTION REQUIRED: Please top up {provider} API credits!")
+            print(f"{'!'*60}\n")
+            
+            # Publish to Event Bus if available
+            try:
+                from agents.event_bus import get_global_bus
+                bus = get_global_bus()
+                if bus:
+                    bus.publish_async('health.critical', {
+                        'alert': f'QUOTA EXCEEDED: {provider.upper()} — top up credits immediately',
+                        'provider': provider,
+                        'error': error_str[:200],
+                        'character_id': character_id,
+                    }, source='ai_integration.quota_alert')
+            except ImportError:
+                pass
     
     def _mark_provider_success(self, provider: str):
         """Mark a provider as successful, resetting failure count"""

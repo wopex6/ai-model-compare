@@ -52,6 +52,29 @@ from automated_greeting_system import AutomatedGreetingSystem
 from database_backup import BackupManager
 from email_service import EmailService
 
+# Import Agent Event Bus (lightweight pub/sub for agent communication)
+try:
+    from agents.event_bus import EventBus, Topics, set_global_bus
+    event_bus = EventBus(persist_events=True)
+    set_global_bus(event_bus)  # Register as global singleton for cross-module access
+    print("✓ Agent Event Bus initialized")
+except ImportError:
+    event_bus = None
+    print("⚠️ Agent Event Bus not available")
+
+# Import Alert Notifier (email/console alerts on critical events)
+alert_notifier = None
+try:
+    from agents.alert_notifier import AlertNotifier
+    alert_notifier = AlertNotifier(
+        event_bus=event_bus,
+        email_service=EmailService(),
+    )
+    alert_notifier.start()
+    print("✓ Alert Notifier initialized")
+except Exception as e:
+    print(f"⚠️ Alert Notifier not available: {e}")
+
 # Import Personality Systems
 from smart_response.trait_inference import TraitInferenceEngine
 
@@ -268,7 +291,10 @@ try:
     from smart_response.developer_analytics import create_developer_analytics
     from smart_response.personality_context_integrator import create_personality_integrator
     from smart_response.explicit_context_handler import ExplicitContextHandler
+    from smart_response.character_effectiveness_learner import create_effectiveness_learner
     smart_response_conn = sqlite3.connect('integrated_users.db', check_same_thread=False)
+    smart_response_conn.execute('PRAGMA journal_mode=WAL')
+    smart_response_conn.execute('PRAGMA busy_timeout=5000')
     smart_handler = SmartResponseHandler(smart_response_conn)
     context_manager = ConversationContextManager(smart_response_conn)
     history_system = DualLayerHistorySystem(smart_response_conn)
@@ -281,6 +307,7 @@ try:
     developer_analytics = create_developer_analytics(smart_response_conn)
     personality_integrator = create_personality_integrator(smart_response_conn, integrated_db)
     explicit_context_handler = ExplicitContextHandler(smart_response_conn)
+    effectiveness_learner = create_effectiveness_learner(smart_response_conn, character_trait_system)
     print("✓ User Context Manager initialized (preferences, goals, language learning)")
     print("✓ Proactive Clarification System initialized")
     print("✓ Character Trait System initialized (12D trait-space matching)")
@@ -288,6 +315,7 @@ try:
     print("✓ Character Collaboration System initialized (Moltbook-style multi-agent)")
     print("✓ Developer Analytics initialized")
     print("✓ Personality Context Integrator initialized (Big5 + profile → conversations)")
+    print("✓ Character Effectiveness Learner initialized (outcome tracking)")
     
     # Clear ALL AI budget notifications on startup (prevents stale notifications)
     try:
@@ -328,6 +356,16 @@ try:
     print("✓ Smart Response System with AI Budget Control initialized")
     print("✓ Frontend error logging initialized")
     
+    # Initialize Background Scheduler with character expansion
+    from smart_response.background_scheduler import BackgroundScheduler
+    background_scheduler = BackgroundScheduler(
+        db_path='integrated_users.db',
+        budget_manager=ai_budget,
+        character_trait_system=character_trait_system
+    )
+    background_scheduler.start()
+    print("✓ Background Scheduler started (character expansion weekly on Wed 3AM)")
+    
     # Initialize Domain Character Manager
     domain_character_manager = CharacterManager(smart_response_conn)
     domain_character_manager.save_domain_characters_to_db()
@@ -336,6 +374,97 @@ try:
     # Initialize Domain Character AI Integration (with db for error logging)
     domain_character_ai = create_ai_integration(ai_budget, smart_response_conn)
     print("✓ Domain Character AI Integration initialized")
+    
+    # Initialize Shared Conversation Enrichment Pipeline
+    from smart_response.conversation_pipeline import create_pipeline
+    conversation_pipeline = create_pipeline(
+        user_context_mgr=user_context_mgr,
+        goal_coaching_system=goal_coaching_system,
+        personality_integrator=personality_integrator,
+        integrated_db=integrated_db,
+        smart_response_conn=smart_response_conn,
+        clarification_system=clarification_system,
+        character_trait_system=character_trait_system,
+        explicit_context_handler=explicit_context_handler,
+        collaboration_system=collaboration_system,
+        effectiveness_learner=effectiveness_learner,
+        event_bus=event_bus,
+        trait_inference=trait_inference,
+        user_personalization=user_personalization,
+        greeting_system=greeting_system,
+        domain_character_manager=domain_character_manager,
+    )
+    print("✓ Shared Conversation Pipeline initialized (all characters get same intelligence)")
+    
+    # Initialize Agent Systems (Quality Scorer, Self-Improvement, A/B Testing)
+    from agents.quality_scorer import ConversationQualityScorer
+    from agents.self_improvement import SelfImprovementAgent
+    from agents.ab_testing import ABTestingAgent
+    
+    sr_db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'smart_response.db')
+    quality_scorer = ConversationQualityScorer(db_path=sr_db_path)
+    self_improvement_agent = SelfImprovementAgent(db_path=sr_db_path, event_bus=event_bus)
+    ab_testing_agent = ABTestingAgent(db_path=sr_db_path, event_bus=event_bus)
+    print("✓ Agent systems initialized (Quality Scorer, Self-Improvement, A/B Testing)")
+    
+    # Add agent tasks to Background Scheduler
+    if background_scheduler:
+        def run_quality_scoring():
+            """Daily: Score recent conversations for quality metrics."""
+            print(f"\n{'='*60}")
+            print(f"SCHEDULED TASK: Quality Scoring")
+            print(f"Time: {datetime.now()}")
+            print(f"{'='*60}")
+            try:
+                report = quality_scorer.score_recent(days=1, limit=50)
+                print(f"✓ Scored {len(report.scores)} conversations")
+                if report.scores:
+                    avg = sum(s.overall for s in report.scores) / len(report.scores)
+                    print(f"  Average quality: {avg:.2f}")
+                return {'scored': len(report.scores)}
+            except Exception as e:
+                print(f"❌ Quality scoring failed: {e}")
+                return None
+        
+        def run_self_improvement():
+            """Weekly: Analyze quality trends and suggest character improvements."""
+            print(f"\n{'='*60}")
+            print(f"SCHEDULED TASK: Self-Improvement Analysis")
+            print(f"Time: {datetime.now()}")
+            print(f"{'='*60}")
+            try:
+                report = self_improvement_agent.analyze(days=14)
+                report = self_improvement_agent.apply_suggestions(report, dry_run=True)
+                print(f"✓ Analyzed {len(report.character_analyses)} characters")
+                print(f"  Suggestions: {len(report.suggestions)}")
+                if event_bus:
+                    event_bus.publish_async('agent.self_improvement.completed', {
+                        'characters_analyzed': len(report.character_analyses),
+                        'suggestions': len(report.suggestions),
+                    }, source='self_improvement_agent')
+                return {'characters': len(report.character_analyses), 'suggestions': len(report.suggestions)}
+            except Exception as e:
+                print(f"❌ Self-improvement analysis failed: {e}")
+                return None
+        
+        import schedule as _schedule
+        _schedule.every().day.at("03:00").do(run_quality_scoring)
+        _schedule.every().monday.at("04:00").do(run_self_improvement)
+        
+        # Register manual triggers
+        _orig_manual = background_scheduler.run_manual_task
+        def _extended_manual(task_name):
+            if task_name == 'quality_scoring':
+                return run_quality_scoring()
+            elif task_name == 'self_improvement':
+                return run_self_improvement()
+            return _orig_manual(task_name)
+        background_scheduler.run_manual_task = _extended_manual
+        
+        print("✓ Agent tasks scheduled:")
+        print("   - Quality Scoring: Daily at 3:00 AM")
+        print("   - Self-Improvement: Weekly on Monday at 4:00 AM")
+
 except Exception as e:
     print(f"✗ Error initializing Smart Response: {e}")
     import traceback
@@ -354,7 +483,12 @@ except Exception as e:
     explicit_context_handler = None
     domain_character_manager = None
     domain_character_ai = None
+    effectiveness_learner = None
     background_scheduler = None
+    conversation_pipeline = None
+    quality_scorer = None
+    self_improvement_agent = None
+    ab_testing_agent = None
     previous_interactions = {}
     message_histories = {}
 
@@ -901,6 +1035,12 @@ def signup():
             'username': username,
             'exp': datetime.utcnow() + timedelta(hours=24)
         }, JWT_SECRET, algorithm='HS256')
+        
+        # Publish user registration event
+        if event_bus:
+            event_bus.publish_async(Topics.USER_REGISTERED, {
+                'user_id': user_id, 'username': username, 'role': user_role
+            }, source='signup_endpoint')
         
         return jsonify({
             'success': True,
@@ -3363,22 +3503,45 @@ def add_conversation_message(session_id):
         
         # If it's a user message, generate AI response
         if sender_type == 'user':
+            # Look up character_id for this session (philosophy chars store it here)
+            char_id = 'chatchat'
+            try:
+                conn = integrated_db.get_connection()
+                cursor = conn.cursor()
+                cursor.execute('SELECT character_id FROM ai_conversations WHERE session_id = ?', (session_id,))
+                row = cursor.fetchone()
+                if row and row[0]:
+                    char_id = row[0]
+                conn.close()
+            except Exception:
+                pass
+            
             # Get user profile for context
             profile = integrated_db.get_user_profile(request.current_user['user_id'])
             traits = integrated_db.get_psychology_traits(request.current_user['user_id'])
             
-            # Create user context
-            user_context = f"User: {request.current_user['username']}"
+            # Create base user context string
+            user_context_str = f"User: {request.current_user['username']}"
             if profile and profile.get('bio'):
-                user_context += f", Bio: {profile['bio']}"
+                user_context_str += f", Bio: {profile['bio']}"
             if traits:
                 trait_summary = ", ".join([f"{t['trait_name']}: {t['trait_value']}" for t in traits[:3]])
-                user_context += f", Traits: {trait_summary}"
+                user_context_str += f", Traits: {trait_summary}"
             
-            # Get AI response using existing chatbot
-            enhanced_message = f"{user_context}\n\nUser message: {content}"
+            # === SHARED PIPELINE: Pre-AI enrichment ===
+            # This gives philosophy chars the same intelligence as domain chars
+            context = {'user_id': user_id, 'is_admin': False, 'timestamp': datetime.now().isoformat()}
+            if conversation_pipeline:
+                context = conversation_pipeline.enrich_context(user_id, content, char_id, context)
             
-            # Create chatbot instance with session
+            # Merge pipeline's user_profile into the enhanced message
+            enriched_profile = context.get('user_profile', '')
+            if enriched_profile:
+                enhanced_message = f"{user_context_str}\n\n{enriched_profile}\n\nUser message: {content}"
+            else:
+                enhanced_message = f"{user_context_str}\n\nUser message: {content}"
+            
+            # Get AI response using existing chatbot (philosophy-specific AI engine)
             chatbot_instance = AIChatbot(session_id=session_id)
             
             loop = asyncio.new_event_loop()
@@ -3387,32 +3550,47 @@ def add_conversation_message(session_id):
             loop.close()
             
             # Save AI response to database
+            model = ai_response.get('model', 'unknown')
             if ai_response.get('response'):
                 integrated_db.add_message(
-                    session_id, 
-                    request.current_user['user_id'], 
-                    'assistant', 
-                    ai_response['response'],
-                    {'model': ai_response.get('model', 'unknown')}
+                    session_id, user_id, 'assistant',
+                    ai_response['response'], {'model': model}
                 )
             
             # Increment message count for the user
-            integrated_db.increment_message_count(request.current_user['user_id'])
+            integrated_db.increment_message_count(user_id)
+            
+            # === SHARED PIPELINE: Post-AI enrichment ===
+            # Clarification, collaboration, event bus, effectiveness, trait inference, summarization
+            collaboration_data = None
+            clarification_data = None
+            if conversation_pipeline and ai_response.get('response'):
+                post_result = conversation_pipeline.post_process(
+                    user_id, content, char_id,
+                    ai_response['response'], context,
+                    session_id=session_id, model=model
+                )
+                ai_response['response'] = post_result['response_text']
+                collaboration_data = post_result.get('collaboration_data')
+                clarification_data = post_result.get('clarification_data')
             
             # Get updated usage info
-            usage = integrated_db.get_message_usage(request.current_user['user_id'])
-            
-            # Get current server timestamp
-            from datetime import datetime
+            usage = integrated_db.get_message_usage(user_id)
             timestamp = datetime.now().isoformat()
             
-            return jsonify({
+            result = {
                 'success': True, 
                 'message': 'Message added successfully',
                 'ai_response': ai_response.get('response', 'Sorry, I could not generate a response.'),
                 'usage': usage,
                 'timestamp': timestamp
-            })
+            }
+            if collaboration_data:
+                result['collaboration'] = collaboration_data
+            if clarification_data:
+                result['clarification'] = clarification_data
+            
+            return jsonify(result)
         
         return jsonify({'success': True, 'message': 'Message added successfully'})
     except Exception as e:
@@ -3609,6 +3787,56 @@ def chat_message():
         response = loop.run_until_complete(chatbot_instance.chat(enhanced_message, include_context))
         loop.close()
         
+        # --- Phase 4: Proactive Clarification (Multi-Perspective) ---
+        if clarification_system and response.get('response'):
+            try:
+                confidence, std_q, persp_q = clarification_system.analyze_with_perspectives(
+                    message, user_context={},
+                    character_trait_system=character_trait_system
+                )
+                if std_q or persp_q:
+                    clar_text = clarification_system.format_perspective_clarification(std_q, persp_q)
+                    if clar_text:
+                        response['response'] += clar_text
+                    response['clarification'] = {
+                        'confidence': round(confidence.overall, 3),
+                        'needs_clarification': True,
+                        'perspective_questions': persp_q
+                    }
+            except Exception as clar_err:
+                print(f"⚠️ Chat clarification error (non-critical): {clar_err}")
+        
+        # --- Moltbook Integration: Enrich response with collaboration if triggered ---
+        if collaboration_system and response.get('response'):
+            try:
+                should_collab, detected_mode, rule_name = collaboration_system.should_collaborate(message, {})
+                if should_collab:
+                    collab_user_id = user_id or 0
+                    collab_result = collaboration_system.orchestrate_collaboration(
+                        message, collab_user_id, {}, detected_mode or 'silent', rule_name
+                    )
+                    if collab_result:
+                        base_resp = response['response']
+                        if collab_result.mode == 'silent':
+                            for c in collab_result.contributions[1:]:
+                                if c.get('action_suggestion'):
+                                    base_resp += "\n\n" + c['action_suggestion'][:200]
+                                    break
+                            response['response'] = base_resp
+                        elif collab_result.mode == 'visible':
+                            response['response'] = base_resp + "\n\n" + collab_result.response
+                        else:
+                            response['response'] = collab_result.response
+                        
+                        response['collaboration'] = {
+                            'collaborated': True,
+                            'mode': collab_result.mode,
+                            'perspectives_count': len(collab_result.participating_characters),
+                            'event_id': collab_result.event_id
+                        }
+            except Exception as collab_err:
+                print(f"⚠️ Chat collaboration error (non-critical): {collab_err}")
+        
         # Record interaction if user_id provided
         if user_id:
             interaction_data = {
@@ -3625,6 +3853,24 @@ def chat_message():
                     print(f"✅ Trait inference updated for user {user_id}: confidence={inference_result['confidence']}")
             except Exception as e:
                 print(f"⚠️ Trait inference error (non-critical): {e}")
+        
+        # --- Phase 7: Effectiveness Learning for /chat/message ---
+        if effectiveness_learner and user_id and response.get('response'):
+            try:
+                # Use simple message-based analysis (we don't have full history here)
+                simple_msgs = [
+                    {'sender_type': 'user', 'content': message},
+                    {'sender_type': 'assistant', 'content': response['response']}
+                ]
+                # Only record periodically (check session message count)
+                outcome = effectiveness_learner.analyze_conversation(
+                    session_id or 'unknown', user_id, simple_msgs, character_id='chatbot'
+                )
+                # Record if engagement is at least moderate
+                if outcome.user_message_count >= 1:
+                    effectiveness_learner.record_conversation_outcome(outcome)
+            except Exception as eff_err:
+                print(f"⚠️ Chat effectiveness error (non-critical): {eff_err}")
         
         # Include session_id in response
         response['session_id'] = chatbot_instance.session_id
@@ -3647,6 +3893,50 @@ def change_personality():
         else:
             return jsonify({'error': 'Invalid personality preset'}), 400
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/chat/perspectives', methods=['POST'])
+def get_more_perspectives():
+    """On-demand: Get Moltbook-style multi-character perspectives on any message"""
+    try:
+        if not collaboration_system:
+            return jsonify({'error': 'Collaboration system not available'}), 500
+        
+        data = request.get_json()
+        message = data.get('message', '')
+        mode = data.get('mode', 'debate')  # Default to debate for on-demand
+        user_id = data.get('user_id', 0)
+        
+        if not message.strip():
+            return jsonify({'error': 'message is required'}), 400
+        
+        # Force collaboration regardless of triggers (user explicitly asked)
+        result = collaboration_system.orchestrate_collaboration(
+            message, user_id, {}, mode, None
+        )
+        
+        if not result:
+            return jsonify({
+                'success': False,
+                'reason': 'Could not generate perspectives'
+            })
+        
+        # Strip character names from contributions before sending to frontend
+        safe_contributions = []
+        for c in result.contributions:
+            safe_c = {k: v for k, v in c.items() if k != 'character_name'}
+            safe_contributions.append(safe_c)
+        
+        return jsonify({
+            'success': True,
+            'response': result.response,
+            'mode': result.mode,
+            'perspectives_count': len(result.participating_characters),
+            'contributions': safe_contributions,
+            'event_id': result.event_id
+        })
+    except Exception as e:
+        print(f"Error in get_more_perspectives: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/chat/summary')
@@ -4269,6 +4559,125 @@ def acknowledge_ai_notifications():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/admin/ai-quota-status', methods=['GET'])
+@require_auth
+def get_ai_quota_status():
+    """Get AI provider quota status — alerts when models are out of credits.
+    
+    Returns health/quota status for all configured AI providers (OpenAI, Anthropic, 
+    Google, Grok) plus budget consumption. Publishes critical alerts to Event Bus.
+    """
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        result = {
+            'checked_at': datetime.now().isoformat(),
+            'providers': {},
+            'budget': {},
+            'alerts': [],
+        }
+        
+        # 1. Check provider health from DomainCharacterAI
+        if domain_character_ai and hasattr(domain_character_ai, 'provider_status'):
+            for provider, status in domain_character_ai.provider_status.items():
+                result['providers'][provider] = {
+                    'healthy': status.get('healthy', False),
+                    'available': status.get('available', False),
+                    'consecutive_failures': status.get('consecutive_failures', 0),
+                    'last_error': str(status.get('last_error', ''))[:200] if status.get('last_error') else None,
+                }
+                
+                # Generate alerts
+                if not status.get('healthy') and status.get('available'):
+                    failures = status.get('consecutive_failures', 0)
+                    last_err = str(status.get('last_error', ''))
+                    
+                    if 'quota' in last_err.lower() or '429' in last_err:
+                        alert = f"QUOTA EXCEEDED: {provider.upper()} — please top up credits"
+                        result['alerts'].append({'level': 'critical', 'message': alert, 'provider': provider})
+                    elif failures >= 3:
+                        alert = f"DOWN: {provider.upper()} — {failures} consecutive failures"
+                        result['alerts'].append({'level': 'critical', 'message': alert, 'provider': provider})
+                    else:
+                        alert = f"WARNING: {provider.upper()} — errors detected"
+                        result['alerts'].append({'level': 'warning', 'message': alert, 'provider': provider})
+        
+        # 2. Check recent provider errors from database
+        try:
+            cursor = smart_response_conn.cursor()
+            cursor.execute("""
+                SELECT provider, error_type, COUNT(*) as cnt,
+                       MAX(timestamp) as last_time
+                FROM ai_provider_errors
+                WHERE timestamp > datetime('now', '-24 hours')
+                GROUP BY provider, error_type
+                ORDER BY cnt DESC
+            """)
+            error_summary = []
+            for row in cursor.fetchall():
+                error_summary.append({
+                    'provider': row[0], 'error_type': row[1],
+                    'count_24h': row[2], 'last_occurrence': row[3]
+                })
+                
+                # Add quota alert if not already present
+                if row[1] == 'quota_exceeded' and not any(
+                    a.get('provider') == row[0] and 'QUOTA' in a.get('message', '')
+                    for a in result['alerts']
+                ):
+                    result['alerts'].append({
+                        'level': 'critical',
+                        'message': f"QUOTA EXCEEDED: {row[0].upper()} — {row[2]} quota errors in 24h. Please top up!",
+                        'provider': row[0]
+                    })
+            
+            result['error_summary'] = error_summary
+        except Exception as db_err:
+            result['error_summary'] = {'error': str(db_err)}
+        
+        # 3. Budget usage
+        if ai_budget:
+            try:
+                usage = ai_budget.get_usage_report()
+                result['budget'] = {
+                    'daily_calls': usage.get('today', {}).get('calls', 0),
+                    'daily_limit': usage.get('today', {}).get('limit', 0),
+                    'daily_percentage': usage.get('today', {}).get('percentage_used', 0),
+                    'monthly_calls': usage.get('month', {}).get('calls', 0),
+                }
+                
+                pct = result['budget']['daily_percentage']
+                if pct > 90:
+                    result['alerts'].append({
+                        'level': 'critical',
+                        'message': f"BUDGET: {pct:.0f}% of daily AI budget consumed"
+                    })
+                elif pct > 70:
+                    result['alerts'].append({
+                        'level': 'warning',
+                        'message': f"BUDGET: {pct:.0f}% of daily AI budget consumed"
+                    })
+            except Exception:
+                pass
+        
+        # 4. Publish critical alerts to Event Bus
+        critical_alerts = [a for a in result['alerts'] if a['level'] == 'critical']
+        if event_bus and critical_alerts:
+            for alert in critical_alerts:
+                event_bus.publish_async('health.critical', {
+                    'alert': alert['message'],
+                    'provider': alert.get('provider'),
+                    'source': 'quota_status_endpoint'
+                }, source='app.ai_quota_status')
+        
+        result['has_critical'] = len(critical_alerts) > 0
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/ai-budget/reset-circuit-breaker', methods=['POST'])
 def reset_ai_circuit_breaker():
     """Reset AI circuit breaker (admin only)"""
@@ -4648,7 +5057,7 @@ def get_trait_space_coverage():
 @app.route('/api/character-context/interpret', methods=['POST'])
 @require_auth
 def get_multi_perspective_interpretation():
-    """Get multiple character perspectives on an event/message"""
+    """Get multiple character perspectives on an event/message (Phase 6 Enhanced)"""
     try:
         if not character_context:
             return jsonify({'error': 'Character context system not initialized'}), 500
@@ -4659,10 +5068,30 @@ def get_multi_perspective_interpretation():
         
         event_text = data['event_text']
         max_perspectives = data.get('max_perspectives', 4)
+        personality = data.get('personality')
         
-        # Get multi-perspective interpretations
+        # Auto-fetch personality if not provided
+        if not personality and personality_integrator:
+            try:
+                user_id = request.current_user['user_id']
+                ctx = personality_integrator.get_personality_context(user_id)
+                personality = {
+                    'openness': ctx.openness, 'conscientiousness': ctx.conscientiousness,
+                    'extraversion': ctx.extraversion, 'agreeableness': ctx.agreeableness,
+                    'neuroticism': ctx.neuroticism
+                }
+            except Exception:
+                personality = None
+        
+        # Situation analysis for contextual interpretations
+        situation = None
+        if character_trait_system:
+            situation = character_trait_system.analyze_situation(event_text)
+        
+        # Get enhanced multi-perspective interpretations
         interpretations = character_context.get_multi_perspective_interpretations(
-            event_text, max_perspectives=max_perspectives
+            event_text, max_perspectives=max_perspectives,
+            situation=situation, personality=personality
         )
         
         # Optionally store them
@@ -4682,11 +5111,16 @@ def get_multi_perspective_interpretation():
                 'action_suggestion': i.action_suggestion,
                 'philosophical_lens': i.philosophical_lens,
                 'dominant_traits': i.dominant_traits,
-                'confidence': round(i.confidence, 3)
-            } for i in interpretations]
+                'confidence': round(i.confidence, 3),
+                'situation_context': i.situation_context,
+                'personality_resonance': i.personality_resonance
+            } for i in interpretations],
+            'situation_analyzed': situation is not None,
+            'personality_used': personality is not None
         })
     except Exception as e:
         print(f"Error in get_multi_perspective_interpretation: {e}")
+        import traceback; traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/character-context/history', methods=['GET'])
@@ -4736,6 +5170,373 @@ def get_event_perspectives(event_id):
             } for i in interpretations]
         })
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Phase 4: Proactive Clarification Endpoints
+
+@app.route('/api/clarification/analyze', methods=['POST'])
+@require_auth
+def analyze_message_clarity():
+    """Analyze a message for clarity and generate multi-perspective clarifying questions"""
+    try:
+        if not clarification_system:
+            return jsonify({'error': 'Clarification system not initialized'}), 500
+        
+        data = request.get_json()
+        if not data or not data.get('message'):
+            return jsonify({'error': 'message is required'}), 400
+        
+        message = data['message']
+        user_context = data.get('context', {})
+        
+        confidence, std_questions, persp_questions = clarification_system.analyze_with_perspectives(
+            message, user_context=user_context,
+            character_trait_system=character_trait_system
+        )
+        
+        return jsonify({
+            'confidence': {
+                'overall': round(confidence.overall, 3),
+                'goal_clarity': round(confidence.goal_clarity, 3),
+                'emotional_clarity': round(confidence.emotional_clarity, 3),
+                'context_sufficiency': round(confidence.context_sufficiency, 3),
+                'action_clarity': round(confidence.action_clarity, 3)
+            },
+            'needs_clarification': confidence.needs_clarification(),
+            'standard_questions': [q.to_dict() for q in std_questions],
+            'perspective_questions': persp_questions,
+            'formatted_text': clarification_system.format_perspective_clarification(
+                std_questions, persp_questions
+            )
+        })
+    except Exception as e:
+        print(f"Error in analyze_message_clarity: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/clarification/pending', methods=['GET'])
+@require_auth
+def get_pending_clarifications():
+    """Get pending clarification questions for the user"""
+    try:
+        if not clarification_system:
+            return jsonify({'error': 'Clarification system not initialized'}), 500
+        
+        user_id = request.current_user['user_id']
+        character_id = request.args.get('character_id', 'chatchat')
+        
+        pending = clarification_system.get_pending_clarifications(user_id, character_id)
+        return jsonify({'pending': pending})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/clarification/stats', methods=['GET'])
+@require_auth
+def get_clarification_stats():
+    """Get clarification system statistics"""
+    try:
+        if not clarification_system:
+            return jsonify({'error': 'Clarification system not initialized'}), 500
+        
+        user_id = request.args.get('user_id', type=int)
+        stats = clarification_system.get_clarification_stats(user_id)
+        return jsonify(stats)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Phase 7: Effectiveness Learning Endpoints
+
+@app.route('/api/effectiveness/character/<character_id>', methods=['GET'])
+@require_auth
+def get_character_effectiveness_data(character_id):
+    """Get effectiveness data for a specific character"""
+    try:
+        if not effectiveness_learner:
+            return jsonify({'error': 'Effectiveness learner not initialized'}), 500
+        
+        data = effectiveness_learner.get_character_effectiveness(character_id)
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/effectiveness/best', methods=['GET'])
+@require_auth
+def get_best_performing_characters():
+    """Get best-performing characters, optionally filtered"""
+    try:
+        if not effectiveness_learner:
+            return jsonify({'error': 'Effectiveness learner not initialized'}), 500
+        
+        situation = request.args.get('situation')
+        user_id = request.args.get('user_id', type=int)
+        limit = request.args.get('limit', 5, type=int)
+        
+        results = effectiveness_learner.get_best_characters(situation, user_id, limit)
+        return jsonify({'characters': results})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/effectiveness/user', methods=['GET'])
+@require_auth
+def get_user_engagement():
+    """Get engagement stats for the current user"""
+    try:
+        if not effectiveness_learner:
+            return jsonify({'error': 'Effectiveness learner not initialized'}), 500
+        
+        user_id = request.current_user['user_id']
+        stats = effectiveness_learner.get_user_engagement_stats(user_id)
+        return jsonify(stats)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/effectiveness/trends/<character_id>', methods=['GET'])
+@require_auth
+def get_effectiveness_trends(character_id):
+    """Get effectiveness trends over time for a character"""
+    try:
+        if not effectiveness_learner:
+            return jsonify({'error': 'Effectiveness learner not initialized'}), 500
+        
+        days = request.args.get('days', 30, type=int)
+        trends = effectiveness_learner.get_effectiveness_trends(character_id, days)
+        return jsonify({'trends': trends, 'character_id': character_id, 'days': days})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/effectiveness/feedback', methods=['POST'])
+@require_auth
+def submit_conversation_feedback():
+    """Submit explicit feedback on a conversation"""
+    try:
+        if not effectiveness_learner:
+            return jsonify({'error': 'Effectiveness learner not initialized'}), 500
+        
+        data = request.get_json()
+        if not data or not data.get('session_id'):
+            return jsonify({'error': 'session_id is required'}), 400
+        
+        feedback_type = data.get('feedback_type', 'rating')
+        feedback_value = data.get('feedback_value')
+        feedback_text = data.get('feedback_text')
+        character_id = data.get('character_id')
+        
+        if feedback_type in ('thumbs_up', 'thumbs_down'):
+            feedback_value = 1.0 if feedback_type == 'thumbs_up' else 0.0
+        
+        effectiveness_learner.record_feedback(
+            session_id=data['session_id'],
+            user_id=request.current_user['user_id'],
+            feedback_type=feedback_type,
+            feedback_value=feedback_value,
+            feedback_text=feedback_text,
+            character_id=character_id
+        )
+        
+        return jsonify({'success': True, 'message': 'Feedback recorded'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/effectiveness/stats', methods=['GET'])
+@require_auth
+def get_effectiveness_system_stats():
+    """Get overall effectiveness learning system stats"""
+    try:
+        if not effectiveness_learner:
+            return jsonify({'error': 'Effectiveness learner not initialized'}), 500
+        
+        stats = effectiveness_learner.get_system_stats()
+        return jsonify(stats)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/effectiveness/analyze/<session_id>', methods=['POST'])
+@require_auth
+def analyze_conversation_effectiveness(session_id):
+    """Manually trigger effectiveness analysis for a conversation"""
+    try:
+        if not effectiveness_learner:
+            return jsonify({'error': 'Effectiveness learner not initialized'}), 500
+        
+        user_id = request.current_user['user_id']
+        msgs = integrated_db.get_conversation_messages(session_id, user_id)
+        
+        if not msgs:
+            return jsonify({'error': 'No messages found for this conversation'}), 404
+        
+        data = request.get_json() or {}
+        character_id = data.get('character_id', 'chatchat')
+        
+        outcome = effectiveness_learner.analyze_and_record(
+            session_id, user_id, msgs, character_id=character_id
+        )
+        
+        return jsonify({
+            'success': True,
+            'outcome': outcome.to_dict()
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Phase 8: Character Expansion Endpoints
+
+@app.route('/api/expansion/gaps', methods=['GET'])
+@require_auth
+def get_trait_space_gaps():
+    """Analyze and return current gaps in trait-space coverage"""
+    try:
+        if not character_trait_system:
+            return jsonify({'error': 'Character trait system not initialized'}), 500
+        
+        from smart_response.character_expansion import create_character_expansion_system
+        expansion = create_character_expansion_system(smart_response_conn, ai_budget)
+        gaps = expansion.analyze_trait_space_coverage(character_trait_system)
+        
+        return jsonify({
+            'gaps_found': len(gaps),
+            'gaps': [{
+                'gap_score': round(g.gap_score, 3),
+                'nearest_character': g.nearest_character,
+                'nearest_distance': round(g.nearest_distance, 3),
+                'situation_types': g.situation_types,
+                'recommended_traits': g.recommended_traits
+            } for g in gaps]
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/expansion/run', methods=['POST'])
+@require_auth
+def trigger_character_expansion():
+    """Manually trigger character expansion (fills top gap with template character)"""
+    try:
+        if not background_scheduler:
+            return jsonify({'error': 'Background scheduler not initialized'}), 500
+        
+        result = background_scheduler.run_character_expansion()
+        return jsonify({
+            'success': True,
+            'result': result or {'gaps_found': 0, 'characters_added': 0}
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/expansion/stats', methods=['GET'])
+@require_auth
+def get_expansion_stats():
+    """Get character expansion statistics"""
+    try:
+        from smart_response.character_expansion import create_character_expansion_system
+        expansion = create_character_expansion_system(smart_response_conn, ai_budget)
+        stats = expansion.get_expansion_stats()
+        
+        # Add current character count
+        if character_trait_system:
+            stats['total_characters'] = len(character_trait_system.characters)
+        
+        return jsonify(stats)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/expansion/characters', methods=['GET'])
+@require_auth
+def get_expanded_characters():
+    """Get list of AI-generated (non-base) characters"""
+    try:
+        if not character_trait_system:
+            return jsonify({'error': 'Character trait system not initialized'}), 500
+        
+        expanded = []
+        for char_id, profile in character_trait_system.characters.items():
+            # Check if it's a non-base character
+            cursor = smart_response_conn.cursor()
+            cursor.execute('SELECT is_base, created_at FROM character_library WHERE character_id = ?', (char_id,))
+            row = cursor.fetchone()
+            if row and not row[0]:  # is_base = 0
+                expanded.append({
+                    'character_id': char_id,
+                    'display_name': profile.display_name,
+                    'domain': profile.domain,
+                    'philosophical_lens': profile.philosophical_lens,
+                    'effectiveness_score': profile.effectiveness_score,
+                    'usage_count': profile.usage_count,
+                    'created_at': row[1]
+                })
+        
+        return jsonify({'characters': expanded, 'count': len(expanded)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Phase 6 Enhancement Endpoints
+
+@app.route('/api/character-context/compare', methods=['POST'])
+@require_auth
+def compare_character_interpretations():
+    """Compare how specific characters interpret the same event"""
+    try:
+        if not character_context:
+            return jsonify({'error': 'Character context system not initialized'}), 500
+        
+        data = request.get_json()
+        if not data or not data.get('event_text'):
+            return jsonify({'error': 'event_text is required'}), 400
+        
+        character_ids = data.get('character_ids', [])
+        if len(character_ids) < 2:
+            return jsonify({'error': 'At least 2 character_ids required'}), 400
+        
+        personality = data.get('personality')
+        
+        # Situation analysis
+        situation = None
+        if character_trait_system:
+            situation = character_trait_system.analyze_situation(data['event_text'])
+        
+        result = character_context.compare_interpretations(
+            data['event_text'], character_ids,
+            situation=situation, personality=personality
+        )
+        
+        return jsonify(result)
+    except Exception as e:
+        print(f"Error in compare_character_interpretations: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/character-context/situation-perspectives', methods=['POST'])
+@require_auth
+def get_situation_aware_perspectives():
+    """All-in-one: analyze situation + get personality-aware diverse perspectives"""
+    try:
+        if not character_context:
+            return jsonify({'error': 'Character context system not initialized'}), 500
+        
+        data = request.get_json()
+        if not data or not data.get('message'):
+            return jsonify({'error': 'message is required'}), 400
+        
+        message = data['message']
+        max_perspectives = data.get('max_perspectives', 4)
+        personality = data.get('personality')
+        
+        # Auto-fetch personality if not provided
+        if not personality and personality_integrator:
+            try:
+                user_id = request.current_user['user_id']
+                ctx = personality_integrator.get_personality_context(user_id)
+                personality = {
+                    'openness': ctx.openness, 'conscientiousness': ctx.conscientiousness,
+                    'extraversion': ctx.extraversion, 'agreeableness': ctx.agreeableness,
+                    'neuroticism': ctx.neuroticism
+                }
+            except Exception:
+                personality = None
+        
+        result = character_context.get_situation_aware_perspectives(
+            message, max_perspectives=max_perspectives, personality=personality
+        )
+        
+        return jsonify(result)
+    except Exception as e:
+        print(f"Error in get_situation_aware_perspectives: {e}")
         return jsonify({'error': str(e)}), 500
 
 # Character Collaboration Endpoints (Phase 6.5)
@@ -4873,6 +5674,101 @@ def get_collaboration_domains():
         
         domains = collaboration_system.get_domains()
         return jsonify({'domains': domains})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Phase 6.5 Enhancement Endpoints
+
+@app.route('/api/collaboration/personality-collaborate', methods=['POST'])
+@require_auth
+def personality_aware_collaboration():
+    """Personality-aware multi-character collaboration"""
+    try:
+        if not collaboration_system:
+            return jsonify({'error': 'Collaboration system not initialized'}), 500
+        
+        data = request.get_json()
+        if not data or not data.get('message'):
+            return jsonify({'error': 'message is required'}), 400
+        
+        message = data['message']
+        personality = data.get('personality')
+        context = data.get('context', {})
+        mode = data.get('mode')
+        
+        # Auto-fetch personality if not provided
+        if not personality and personality_integrator:
+            try:
+                user_id = request.current_user['user_id']
+                ctx = personality_integrator.get_personality_context(user_id)
+                personality = {
+                    'openness': ctx.openness, 'conscientiousness': ctx.conscientiousness,
+                    'extraversion': ctx.extraversion, 'agreeableness': ctx.agreeableness,
+                    'neuroticism': ctx.neuroticism
+                }
+            except Exception:
+                personality = None
+        
+        user_id = request.current_user['user_id']
+        result = collaboration_system.personality_aware_collaborate(
+            message, user_id, personality=personality, context=context, mode=mode
+        )
+        
+        if not result:
+            return jsonify({
+                'collaborated': False,
+                'reason': 'No collaboration trigger matched',
+                'detected_domains': collaboration_system._detect_domains(message)
+            })
+        
+        return jsonify({
+            'collaborated': True,
+            'response': result.response,
+            'mode': result.mode,
+            'contributions': result.contributions,
+            'participating_characters': result.participating_characters,
+            'event_id': result.event_id,
+            'personality_used': personality is not None
+        })
+    except Exception as e:
+        print(f"Error in personality_aware_collaboration: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/collaboration/feedback', methods=['POST'])
+@require_auth
+def record_collaboration_feedback():
+    """Record user satisfaction with a collaboration"""
+    try:
+        if not collaboration_system:
+            return jsonify({'error': 'Collaboration system not initialized'}), 500
+        
+        data = request.get_json()
+        if not data or not data.get('event_id') or not data.get('satisfaction'):
+            return jsonify({'error': 'event_id and satisfaction (1-5) required'}), 400
+        
+        event_id = data['event_id']
+        satisfaction = max(1, min(5, int(data['satisfaction'])))
+        
+        collaboration_system.record_collaboration_feedback(event_id, satisfaction)
+        
+        return jsonify({
+            'status': 'recorded',
+            'event_id': event_id,
+            'satisfaction': satisfaction
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/collaboration/effectiveness', methods=['GET'])
+@require_auth
+def get_collaboration_effectiveness():
+    """Get collaboration effectiveness analysis based on user feedback"""
+    try:
+        if not collaboration_system:
+            return jsonify({'error': 'Collaboration system not initialized'}), 500
+        
+        effectiveness = collaboration_system.get_collaboration_effectiveness()
+        return jsonify(effectiveness)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -5591,266 +6487,20 @@ def route_to_domain_characters():
         except Exception as e:
             print(f"Warning: Could not store user message: {e}")
         
-        # Process message through user context manager (extracts preferences, goals, language patterns)
-        # This runs on EVERY message (cheap, rule-based extraction)
-        if user_context_mgr:
-            try:
-                user_context = user_context_mgr.process_message(
-                    user_id, message, requested_character or 'coordinator',
-                    message_id=context.get('history_id')
-                )
-                # Merge user context into main context
-                context.update(user_context)
-                
-                # Format user context for AI prompt
-                user_context_prompt = user_context_mgr.format_context_for_prompt(user_context)
-                if user_context_prompt:
-                    context['user_profile'] = user_context_prompt
-                    print(f"[USER_CONTEXT] Added user profile for AI")
-                
-                # Check if user references past - may need more history
-                if user_context.get('references_past'):
-                    print(f"[USER_CONTEXT] User references past conversation - expanding context")
-            except Exception as e:
-                print(f"Warning: User context processing failed: {e}")
-        
-        # GOAL COACHING: Add adaptive coaching context (invisible to user)
-        # Detects user's psychological state and adapts guidance approach
-        if goal_coaching_system:
-            try:
-                # Pass message so it can detect user state and adapt
-                coaching_context = goal_coaching_system.get_coaching_context_for_prompt(user_id, message)
-                if coaching_context:
-                    context['coaching_context'] = coaching_context
-                    print(f"[COACHING] Added adaptive coaching context for user {user_id}")
-            except Exception as e:
-                print(f"Warning: Goal coaching context failed: {e}")
-        
-        # PERSONALITY INTEGRATION: Add Big5 traits, goals, profile to AI context
-        # This adapts thresholds dynamically based on conversation state
-        if personality_integrator:
-            try:
-                # Analyze current message for conversation state
-                conversation_state = personality_integrator.get_conversation_state_from_message(message)
-                
-                # Get personality context with adaptive thresholds
-                personality_context = personality_integrator.get_personality_context(
-                    user_id, conversation_state
-                )
-                
-                # Format for AI prompt and add to context
-                personality_prompt = personality_integrator.format_for_prompt(personality_context)
-                if personality_prompt:
-                    # Combine with existing user_profile if present
-                    existing_profile = context.get('user_profile', '')
-                    if existing_profile:
-                        context['user_profile'] = f"{existing_profile}\n\n{personality_prompt}"
-                    else:
-                        context['user_profile'] = personality_prompt
-                    
-                    print(f"[PERSONALITY] Added personality context (source: {personality_context.trait_source}, confidence: {personality_context.trait_confidence:.0%})")
-                    
-                    # Log if significant change detected
-                    if personality_context.change_detected:
-                        print(f"[PERSONALITY] Change detected: {personality_context.change_summary}")
-            except Exception as e:
-                print(f"Warning: Personality integration failed: {e}")
-        
-        # AI FILE ATTACHMENTS: Include user's uploaded files in context
-        # These are files the user uploaded with descriptions of what they contain
-        try:
-            attachments = integrated_db.get_active_attachments(user_id, target_character)
-            if attachments:
-                attachment_context = format_attachments_for_ai(attachments)
-                if attachment_context:
-                    context['file_attachments'] = attachment_context
-                    print(f"[ATTACHMENTS] Added {len(attachments)} file(s) to context")
-        except Exception as e:
-            print(f"Warning: File attachment context failed: {e}")
-        
-        # CHARACTER HISTORY INSIGHTS: Add historical patterns from past interpretations
-        # This helps characters remember and personalize based on user's history
-        if domain_character_manager:
-            try:
-                target_char = requested_character or 'coordinator'
-                character = domain_character_manager.characters.get(target_char) or domain_character_manager.coordinator
-                if character and hasattr(character, 'get_personalization_context'):
-                    personalization = character.get_personalization_context(user_id)
-                    if personalization:
-                        existing_profile = context.get('user_profile', '')
-                        if existing_profile:
-                            context['user_profile'] = f"{existing_profile}\n\n{personalization}"
-                        else:
-                            context['user_profile'] = personalization
-                        print(f"[HISTORY_INSIGHTS] Added personalization from past interpretations")
-            except Exception as e:
-                print(f"Warning: Character history insights failed: {e}")
-        
-        # ADAPTIVE COMPANION: Understand implicit needs, adapt tone, suggest micro-steps
-        # Core philosophy: Truly understand users and inspire them with achievable actions
-        try:
-            from smart_response.adaptive_companion import get_adaptive_companion
-            adaptive = get_adaptive_companion(smart_response_conn)
-            target_char = requested_character or 'coordinator'
-            adaptive_context = adaptive.build_adaptive_context(
-                user_id, message, target_char,
-                user_history=context.get('message_history', [])
+        # === SHARED PIPELINE: Pre-AI enrichment ===
+        # All 13 enrichment steps (User Context, Goal Coaching, Personality, Attachments,
+        # History Insights, Adaptive Companion, Follow-up Suggestions, User Intelligence,
+        # Conversation History, Situation Analysis, Explicit Context) in one call.
+        # Same pipeline used by philosophy characters — zero redundancy.
+        if conversation_pipeline:
+            context = conversation_pipeline.enrich_context(
+                user_id, message, requested_character or 'coordinator', context
             )
-            if adaptive_context:
-                context['adaptive_context'] = adaptive_context
-                implicit_need = adaptive_context.get('implicit_needs', {}).get('primary_need', 'unknown')
-                print(f"[ADAPTIVE] Detected implicit need: {implicit_need}")
-        except Exception as e:
-            print(f"Warning: Adaptive companion failed: {e}")
-        
-        # FOLLOW-UP SUGGESTIONS: Add learned user preferences to AI context
-        # This tracks user's choice paths to understand their implicit needs over time
-        try:
-            from smart_response.follow_up_suggestions import get_suggestion_system
-            suggestion_system = get_suggestion_system(smart_response_conn)
-            # Add db_connection for suggestion storage
-            context['db_connection'] = smart_response_conn
-            # Get learned preferences for AI context
-            pref_summary = suggestion_system.get_preference_summary_for_prompt(user_id)
-            if pref_summary:
-                existing_profile = context.get('user_profile', '')
-                if existing_profile:
-                    context['user_profile'] = f"{existing_profile}\n\n{pref_summary}"
-                else:
-                    context['user_profile'] = pref_summary
-                print(f"[SUGGESTIONS] Added learned preferences to AI context")
-        except Exception as e:
-            print(f"Warning: Suggestion preferences failed: {e}")
-        
-        # USER INTELLIGENCE: Social-media-inspired behavioral understanding
-        # Learns from engagement patterns, temporal habits, topic interests, character chemistry
-        try:
-            from smart_response.user_intelligence import get_intelligence_system
-            intel_system = get_intelligence_system(smart_response_conn)
-            context['intelligence_system'] = intel_system
-            
-            # Record engagement signal for this message
-            topic = requested_character or 'general'
-            is_long_message = len(message) > 100
-            intel_system.record_engagement(
-                user_id, 
-                'long_message' if is_long_message else 'message_sent',
-                context={'message_length': len(message)},
-                character_id=requested_character,
-                topic=topic
-            )
-            
-            # Get intelligence context for AI prompt
-            intel_context = intel_system.get_ai_prompt_context(user_id)
-            if intel_context:
-                existing_profile = context.get('user_profile', '')
-                if existing_profile:
-                    context['user_profile'] = f"{existing_profile}\n\n{intel_context}"
-                else:
-                    context['user_profile'] = intel_context
-                print(f"[INTELLIGENCE] Added behavioral insights to AI context")
-        except Exception as e:
-            print(f"Warning: User intelligence failed: {e}")
-        
-        # Configurable: Number of conversation exchanges to include for AI context
-        # Can be set via environment variable AI_CONTEXT_EXCHANGES (default: 5)
-        # Expand if user references past conversation
-        base_exchanges = int(os.environ.get('AI_CONTEXT_EXCHANGES', 5))
-        context_exchanges = base_exchanges * 2 if context.get('references_past') else base_exchanges
-        
-        target_char = requested_character or 'coordinator'
-        try:
-            cursor = smart_response_conn.cursor()
-            cursor.execute('''
-                SELECT hp.user_message, hp.assistant_response, hp.character
-                FROM history_primary hp
-                LEFT JOIN message_visibility mv ON hp.id = mv.history_id AND mv.character_id = ?
-                WHERE hp.user_id = ? 
-                  AND (mv.character_id = ? OR hp.character = ?)
-                  AND hp.assistant_response IS NOT NULL 
-                  AND hp.assistant_response != ''
-                ORDER BY hp.timestamp DESC
-                LIMIT ?
-            ''', (target_char, user_id, target_char, target_char, context_exchanges))
-            
-            rows = cursor.fetchall()
-            message_history = []
-            history_token_estimate = 0
-            
-            for row in reversed(rows):  # Chronological order
-                user_msg, ai_resp, char = row
-                if user_msg:
-                    message_history.append({'role': 'user', 'content': user_msg})
-                    history_token_estimate += len(user_msg) // 4  # ~4 chars per token
-                if ai_resp:
-                    message_history.append({'role': 'assistant', 'content': ai_resp})
-                    history_token_estimate += len(ai_resp) // 4
-            
-            if message_history:
-                context['message_history'] = message_history
-                context['history_token_estimate'] = history_token_estimate
-                print(f"[CONTEXT] Added {len(message_history)} history messages (~{history_token_estimate} tokens)")
-        except Exception as e:
-            print(f"Warning: Could not fetch conversation history: {e}")
         
         # Route message to characters (get which ones should respond)
         responses = domain_character_manager.route_message(
             message, context, requested_character
         )
-        
-        # PROACTIVE CLARIFICATION: Analyze message for ambiguity (Domain Characters)
-        domain_clarification_questions = []
-        if clarification_system:
-            try:
-                confidence, questions = clarification_system.analyze_message(message, context)
-                if questions:
-                    domain_clarification_questions = questions[:1]
-                    print(f"❓ [DOMAIN] Clarification needed (confidence: {confidence.overall:.0%}): {questions[0].question}")
-            except Exception as e:
-                print(f"⚠️ Domain clarification analysis failed: {e}")
-        
-        # CHARACTER TRAIT ANALYSIS: Understand user's situation (Domain Characters)
-        domain_situation = None
-        if character_trait_system:
-            try:
-                domain_situation = character_trait_system.analyze_situation(message, context)
-                # Always log situation analysis with flags
-                flags = []
-                if domain_situation.needs_validation:
-                    flags.append("needs_validation")
-                if domain_situation.needs_action:
-                    flags.append("needs_action")
-                flag_str = f" [{', '.join(flags)}]" if flags else ""
-                print(f"🎭 [DOMAIN] Situation: {domain_situation.emotional_state} ({domain_situation.goal_type}){flag_str}")
-                if domain_situation.emotional_state != 'neutral':
-                    # Add to context for AI when not neutral
-                    context['situation_analysis'] = {
-                        'emotional_state': domain_situation.emotional_state,
-                        'goal_type': domain_situation.goal_type,
-                        'needs_validation': domain_situation.needs_validation,
-                        'needs_action': domain_situation.needs_action
-                    }
-            except Exception as e:
-                print(f"⚠️ Domain situation analysis failed: {e}")
-        
-        # EXPLICIT CONTEXT EXTRACTION: Capture user's explicit statements (Domain Characters)
-        domain_explicit_context = []
-        if explicit_context_handler:
-            try:
-                # Extract new explicit context from current message
-                domain_explicit_context = explicit_context_handler.extract_explicit_context(
-                    user_id, requested_character, message
-                )
-                if domain_explicit_context:
-                    print(f"📌 [DOMAIN] Extracted {len(domain_explicit_context)} explicit context items")
-                
-                # Retrieve ALL past explicit context for AI prompt (user's stated goals, preferences, etc.)
-                past_context_prompt = explicit_context_handler.format_for_ai_prompt(user_id, requested_character)
-                if past_context_prompt:
-                    context['explicit_user_context'] = past_context_prompt
-                    print(f"📚 [DOMAIN] Retrieved past explicit context for AI")
-            except Exception as e:
-                print(f"⚠️ Domain explicit context extraction failed: {e}")
         
         # If AI integration available and use_ai is True, generate AI responses
         if use_ai and domain_character_ai and responses:
@@ -5950,68 +6600,39 @@ def route_to_domain_characters():
                 except Exception as e:
                     print(f"[VISIBILITY] ✗ Failed: {e}")
         
-        # CONTINUOUS TRAIT REFINEMENT: Analyze conversation to update inferred personality
-        # Runs periodically (not every message) to refine Big5 traits from conversation patterns
-        if trait_inference:
-            try:
-                inference_result = trait_inference.run_inference_if_needed(user_id)
-                if inference_result:
-                    print(f"[TRAIT_INFERENCE] ✓ Updated traits for user {user_id} (confidence: {inference_result['confidence']:.0%})")
-                    # Invalidate personality cache so new inferred traits take effect
-                    if personality_integrator:
-                        personality_integrator.invalidate_cache(user_id)
-            except Exception as e:
-                print(f"[TRAIT_INFERENCE] ⚠️ Failed: {e}")
-        
-        # AI Summarization (throttled - only when needed)
-        # Triggers: every 8 messages, user references past, or summary is stale
-        if user_context_mgr and context.get('needs_summary_refresh'):
-            try:
-                # Fetch recent messages for summary
-                cursor = smart_response_conn.cursor()
-                target_char = requested_character or 'coordinator'
-                cursor.execute('''
-                    SELECT hp.user_message, hp.assistant_response
-                    FROM history_primary hp
-                    LEFT JOIN message_visibility mv ON hp.id = mv.history_id AND mv.character_id = ?
-                    WHERE hp.user_id = ?
-                      AND (mv.character_id = ? OR hp.character = ?)
-                      AND hp.assistant_response IS NOT NULL
-                      AND hp.assistant_response != ''
-                    ORDER BY hp.timestamp DESC
-                    LIMIT 15
-                ''', (target_char, user_id, target_char, target_char))
-                recent_msgs = [{'user_message': r[0], 'assistant_response': r[1]} for r in cursor.fetchall()]
-                
-                if recent_msgs and len(recent_msgs) >= 3:
-                    # Generate summary (uses AI - counts against budget)
-                    summary = user_context_mgr.generate_summary(
-                        user_id, target_char,
-                        list(reversed(recent_msgs)),
-                        context.get('history_id')
+        # === SHARED PIPELINE: Post-AI enrichment ===
+        # Clarification, collaboration, event bus, effectiveness, trait inference, summarization
+        # Now domain chars get the same post-processing as philosophy chars.
+        pipeline_collaboration = None
+        pipeline_clarification = None
+        if conversation_pipeline and formatted_responses:
+            # Get the primary AI response text for post-processing
+            primary_response = next(
+                (r for r in formatted_responses if r.get('should_display')), None
+            )
+            if primary_response:
+                # Get session_id for this character's conversation
+                domain_session_id = None
+                try:
+                    domain_session_id = integrated_db.get_or_create_character_session(
+                        user_id, requested_character or 'coordinator'
                     )
-                    if summary:
-                        print(f"[SUMMARY] ✓ Generated conversation summary")
-            except Exception as e:
-                print(f"[SUMMARY] ✗ Failed: {e}")
-        
-        # PROACTIVE CLARIFICATION: Append clarification to last response (Domain Characters)
-        if domain_clarification_questions and clarification_system and formatted_responses:
-            try:
-                clarification_text = clarification_system.format_clarification_for_response(
-                    domain_clarification_questions, 
-                    context.get('user_language')
+                except Exception:
+                    pass
+                
+                post_result = conversation_pipeline.post_process(
+                    user_id, message, requested_character or 'coordinator',
+                    primary_response['content'], context,
+                    session_id=domain_session_id, model='domain_ai'
                 )
-                if clarification_text:
-                    # Append to last displaying response
-                    for resp in reversed(formatted_responses):
-                        if resp.get('should_display'):
-                            resp['content'] += clarification_text
-                            resp['has_clarification'] = True
-                            print(f"✅ [DOMAIN] Added clarification question to response")
-                            break
-            except Exception as e:
-                print(f"⚠️ Failed to append domain clarification: {e}")
+                
+                # Apply enriched response text back to the primary response
+                primary_response['content'] = post_result['response_text']
+                pipeline_collaboration = post_result.get('collaboration_data')
+                pipeline_clarification = post_result.get('clarification_data')
+                
+                if pipeline_clarification:
+                    primary_response['has_clarification'] = True
         
         response_data = {
             'success': True,
@@ -6021,14 +6642,14 @@ def route_to_domain_characters():
             'ai_generated': use_ai and domain_character_ai is not None
         }
         
-        # Add situation analysis to response metadata
-        if domain_situation:
-            response_data['situation'] = {
-                'emotional_state': domain_situation.emotional_state,
-                'goal_type': domain_situation.goal_type,
-                'needs_validation': domain_situation.needs_validation,
-                'needs_action': domain_situation.needs_action
-            }
+        # Add situation analysis from pipeline context
+        situation = context.get('situation_analysis')
+        if situation:
+            response_data['situation'] = situation
+        
+        # Add collaboration data if multi-perspective enrichment happened
+        if pipeline_collaboration:
+            response_data['collaboration'] = pipeline_collaboration
         
         return jsonify(response_data)
     except Exception as e:
@@ -6654,8 +7275,374 @@ def admin_analytics_page():
     """Admin analytics dashboard - auth handled client-side"""
     return render_template('admin_analytics.html')
 
+@app.route('/admin/agent-dashboard')
+def admin_agent_dashboard_page():
+    """Agent activity dashboard - auth handled client-side"""
+    return render_template('admin_agent_dashboard.html')
+
+@app.route('/api/admin/agent-dashboard', methods=['GET'])
+@require_auth
+def get_agent_dashboard_data():
+    """Aggregated data for the Agent Activity Dashboard."""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        dashboard = {
+            'generated_at': datetime.now().isoformat(),
+            'providers': {},
+            'budget': {},
+            'quality_scores': {},
+            'event_bus': {},
+            'alerts': [],
+            'sim_users': [],
+        }
+        
+        # 1. AI Provider status
+        if domain_character_ai and hasattr(domain_character_ai, 'provider_status'):
+            for prov, st in domain_character_ai.provider_status.items():
+                dashboard['providers'][prov] = {
+                    'healthy': st.get('healthy', False),
+                    'available': st.get('available', False),
+                    'failures': st.get('consecutive_failures', 0),
+                }
+        
+        # 2. Budget
+        if ai_budget:
+            try:
+                rpt = ai_budget.get_usage_report()
+                dashboard['budget'] = {
+                    'daily_calls': rpt.get('today', {}).get('calls', 0),
+                    'daily_limit': rpt.get('today', {}).get('limit', 0),
+                    'daily_pct': rpt.get('today', {}).get('percentage_used', 0),
+                    'monthly_calls': rpt.get('month', {}).get('calls', 0),
+                }
+            except Exception:
+                pass
+        
+        # 3. Quality scores (recent from DB) — covers both domain + philosophy characters
+        try:
+            cursor = smart_response_conn.cursor()
+            # Global averages
+            cursor.execute("""
+                SELECT AVG(overall), AVG(coherence), AVG(helpfulness),
+                       AVG(engagement), AVG(resolution), AVG(consistency),
+                       COUNT(*), MIN(scored_at), MAX(scored_at)
+                FROM conversation_quality_scores
+                WHERE scored_at > datetime('now', '-7 days')
+            """)
+            row = cursor.fetchone()
+            if row and row[6] > 0:
+                dashboard['quality_scores'] = {
+                    'overall': round(row[0] or 0, 2),
+                    'coherence': round(row[1] or 0, 2),
+                    'helpfulness': round(row[2] or 0, 2),
+                    'engagement': round(row[3] or 0, 2),
+                    'resolution': round(row[4] or 0, 2),
+                    'consistency': round(row[5] or 0, 2),
+                    'count': row[6],
+                    'period_start': row[7],
+                    'period_end': row[8],
+                }
+            
+            # Per-character breakdown (both domain + philosophy)
+            cursor.execute("""
+                SELECT character_id, character_type, AVG(overall), COUNT(*)
+                FROM conversation_quality_scores
+                WHERE scored_at > datetime('now', '-7 days')
+                  AND character_id != ''
+                GROUP BY character_id
+                ORDER BY AVG(overall) DESC
+            """)
+            dashboard['quality_by_character'] = [
+                {'character_id': r[0], 'type': r[1] or 'unknown',
+                 'avg_score': round(r[2] or 0, 3), 'count': r[3]}
+                for r in cursor.fetchall()
+            ]
+        except Exception:
+            pass
+        
+        # 4. Event Bus stats + recent events
+        if event_bus:
+            dashboard['event_bus'] = {
+                'stats': event_bus.get_stats(),
+                'recent_events': event_bus.get_history(limit=30),
+            }
+        
+        # 5. Alert history
+        if alert_notifier:
+            dashboard['alerts'] = alert_notifier.get_recent_alerts(limit=50)
+            dashboard['alert_stats'] = alert_notifier.get_stats()
+        
+        # 6. Sim user info
+        try:
+            cursor = integrated_db.conn.cursor()
+            cursor.execute("""
+                SELECT id, username, user_role, last_active, message_count
+                FROM users WHERE username LIKE 'SimUser_%'
+                ORDER BY username
+            """)
+            for row in cursor.fetchall():
+                dashboard['sim_users'].append({
+                    'id': row[0], 'username': row[1], 'role': row[2],
+                    'last_active': row[3], 'messages': row[4],
+                })
+        except Exception:
+            pass
+        
+        # 7. Recent provider errors (24h)
+        try:
+            cursor = smart_response_conn.cursor()
+            cursor.execute("""
+                SELECT provider, error_type, COUNT(*) as cnt, MAX(timestamp) as last_t
+                FROM ai_provider_errors
+                WHERE timestamp > datetime('now', '-24 hours')
+                GROUP BY provider, error_type ORDER BY cnt DESC LIMIT 20
+            """)
+            dashboard['recent_errors'] = [
+                {'provider': r[0], 'type': r[1], 'count': r[2], 'last': r[3]}
+                for r in cursor.fetchall()
+            ]
+        except Exception:
+            dashboard['recent_errors'] = []
+        
+        # 8. Pipeline health
+        dashboard['pipeline'] = {
+            'initialized': conversation_pipeline is not None,
+            'systems': {}
+        }
+        if conversation_pipeline:
+            for attr in ['user_context_mgr', 'goal_coaching_system', 'personality_integrator',
+                         'clarification_system', 'character_trait_system', 'collaboration_system',
+                         'effectiveness_learner', 'event_bus', 'trait_inference']:
+                dashboard['pipeline']['systems'][attr] = getattr(conversation_pipeline, attr, None) is not None
+        
+        # 9. A/B Testing experiments
+        if ab_testing_agent:
+            try:
+                exps = []
+                for eid, exp in ab_testing_agent.experiments.items():
+                    exps.append(exp.to_dict())
+                dashboard['ab_experiments'] = exps
+            except Exception:
+                dashboard['ab_experiments'] = []
+        else:
+            dashboard['ab_experiments'] = []
+        
+        # 10. Scheduled agent tasks
+        dashboard['agent_tasks'] = {
+            'quality_scoring': {'schedule': 'Daily at 3:00 AM', 'active': quality_scorer is not None},
+            'self_improvement': {'schedule': 'Weekly Monday at 4:00 AM', 'active': self_improvement_agent is not None},
+            'ab_testing': {'schedule': 'On-demand', 'active': ab_testing_agent is not None},
+        }
+        
+        # 11. Quality score trends (daily averages for last 30 days)
+        try:
+            cursor = smart_response_conn.cursor()
+            cursor.execute("""
+                SELECT DATE(scored_at) as day,
+                       AVG(overall) as avg_overall,
+                       AVG(coherence) as avg_coherence,
+                       AVG(helpfulness) as avg_helpfulness,
+                       AVG(engagement) as avg_engagement,
+                       COUNT(*) as count
+                FROM conversation_quality_scores
+                WHERE scored_at > datetime('now', '-30 days')
+                GROUP BY DATE(scored_at)
+                ORDER BY day ASC
+            """)
+            dashboard['quality_trends'] = [
+                {
+                    'date': r[0],
+                    'overall': round(r[1] or 0, 3),
+                    'coherence': round(r[2] or 0, 3),
+                    'helpfulness': round(r[3] or 0, 3),
+                    'engagement': round(r[4] or 0, 3),
+                    'count': r[5],
+                }
+                for r in cursor.fetchall()
+            ]
+        except Exception:
+            dashboard['quality_trends'] = []
+        
+        return jsonify(dashboard)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 print("✓ Admin AI Error Log API endpoints registered")
+
+
+# ============================================
+# SELF-IMPROVEMENT & A/B TESTING API
+# ============================================
+
+@app.route('/api/admin/self-improvement/analyze', methods=['POST'])
+@require_auth
+def run_self_improvement_analysis():
+    """Run self-improvement analysis on character performance."""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        data = request.get_json() or {}
+        days = data.get('days', 14)
+        dry_run = data.get('dry_run', True)
+        
+        if not self_improvement_agent:
+            return jsonify({'error': 'Self-improvement agent not initialized'}), 500
+        
+        report = self_improvement_agent.analyze(days=days)
+        report = self_improvement_agent.apply_suggestions(report, dry_run=dry_run)
+        
+        return jsonify({
+            'generated_at': report.generated_at,
+            'dry_run': dry_run,
+            'characters_analyzed': len(report.character_analyses),
+            'suggestions': len(report.suggestions),
+            'applied': len(report.applied),
+            'skipped': len(report.skipped),
+            'details': {
+                char_id: {
+                    'sample_size': a.get('sample_size', 0),
+                    'quality': a.get('quality', {}),
+                    'effectiveness': a.get('effectiveness', {}),
+                    'suggestions': a.get('suggestions', []),
+                    'skip_reason': a.get('skip_reason'),
+                }
+                for char_id, a in report.character_analyses.items()
+            },
+            'suggestion_list': [
+                {
+                    'character': s.character_id,
+                    'parameter': s.parameter,
+                    'field': s.field,
+                    'current': s.current_value,
+                    'suggested': s.suggested_value,
+                    'reason': s.reason,
+                    'confidence': round(s.confidence, 2),
+                }
+                for s in report.suggestions
+            ],
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/ab-testing/experiments', methods=['GET'])
+@require_auth
+def get_ab_experiments():
+    """Get all A/B testing experiments."""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        if not ab_testing_agent:
+            return jsonify({'error': 'A/B testing agent not initialized'}), 500
+        
+        return jsonify(ab_testing_agent.get_results_summary())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/ab-testing/experiments', methods=['POST'])
+@require_auth
+def create_ab_experiment():
+    """Create a new A/B experiment or standard set."""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        data = request.get_json() or {}
+        if not ab_testing_agent:
+            return jsonify({'error': 'A/B testing agent not initialized'}), 500
+        
+        if data.get('create_standard'):
+            experiments = ab_testing_agent.create_standard_experiments()
+            return jsonify({
+                'created': len(experiments),
+                'experiments': [e.to_dict() for e in experiments],
+            })
+        
+        # Custom experiment
+        exp = ab_testing_agent.create_experiment(
+            name=data.get('name', 'Custom Experiment'),
+            description=data.get('description', ''),
+            experiment_type=data.get('type', 'prompt_variation'),
+            character_id=data.get('character_id', 'coordinator'),
+            variants=data.get('variants', []),
+            min_samples=data.get('min_samples', 5),
+        )
+        return jsonify(exp.to_dict())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/ab-testing/experiments/<experiment_id>/start', methods=['POST'])
+@require_auth
+def start_ab_experiment(experiment_id):
+    """Start an A/B experiment."""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        if not ab_testing_agent:
+            return jsonify({'error': 'A/B testing agent not initialized'}), 500
+        
+        success = ab_testing_agent.start_experiment(experiment_id)
+        if success:
+            return jsonify({'status': 'running', 'experiment_id': experiment_id})
+        return jsonify({'error': 'Experiment not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/quality-scoring/run', methods=['POST'])
+@require_auth
+def run_quality_scoring_manual():
+    """Manually trigger quality scoring on recent conversations."""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+        
+        if not quality_scorer:
+            return jsonify({'error': 'Quality scorer not initialized'}), 500
+        
+        data = request.get_json() or {}
+        days = data.get('days', 1)
+        limit = data.get('limit', 50)
+        
+        report = quality_scorer.score_recent(days=days, limit=limit)
+        
+        scores_data = []
+        for s in report.scores:
+            scores_data.append({
+                'session_id': s.session_id,
+                'character_id': s.character_id,
+                'character_type': s.character_type,
+                'overall': round(s.overall, 3),
+                'coherence': round(s.coherence, 3),
+                'helpfulness': round(s.helpfulness, 3),
+                'engagement': round(s.engagement, 3),
+                'flags': s.flags,
+            })
+        
+        return jsonify({
+            'scored': len(report.scores),
+            'average': round(sum(s.overall for s in report.scores) / max(1, len(report.scores)), 3),
+            'scores': scores_data,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+print("✓ Self-Improvement & A/B Testing API endpoints registered")
 
 
 # ============================================
@@ -6683,6 +7670,8 @@ def get_user_context():
         character = request.args.get('character', 'all')
         
         conn = sqlite3.connect('integrated_users.db')
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA busy_timeout=5000')
         cursor = conn.cursor()
         
         # Build query
@@ -6761,6 +7750,8 @@ def update_user_context(context_id):
         data = request.json
         
         conn = sqlite3.connect('integrated_users.db')
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA busy_timeout=5000')
         cursor = conn.cursor()
         
         # Verify context exists
@@ -6828,6 +7819,8 @@ def delete_user_context(context_id):
             return jsonify({'error': 'Admin access required'}), 403
         
         conn = sqlite3.connect('integrated_users.db')
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA busy_timeout=5000')
         cursor = conn.cursor()
         
         # Verify context exists
@@ -7147,6 +8140,87 @@ def download_backup(backup_path):
 
 
 # ============================================
+# ALERT NOTIFIER (ADMIN ONLY)
+# ============================================
+
+@app.route('/api/admin/alerts/stats', methods=['GET'])
+@require_auth
+def get_alert_stats():
+    """Get AlertNotifier stats and configuration."""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+        if not alert_notifier:
+            return jsonify({'error': 'Alert notifier not initialized'}), 500
+        return jsonify(alert_notifier.get_stats())
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/alerts/test', methods=['POST'])
+@require_auth
+def send_test_alert():
+    """Send a test alert email to verify configuration."""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+        if not alert_notifier:
+            return jsonify({'error': 'Alert notifier not initialized'}), 500
+        ok = alert_notifier.send_test_alert()
+        if ok:
+            return jsonify({'success': True, 'message': f'Test alert sent to {alert_notifier.admin_email}'})
+        else:
+            return jsonify({'success': False, 'error': 'Email not configured or send failed'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/alerts/config', methods=['POST'])
+@require_auth
+def update_alert_config():
+    """Update alert notifier configuration (cooldown, email)."""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+        if not alert_notifier:
+            return jsonify({'error': 'Alert notifier not initialized'}), 500
+
+        data = request.get_json() or {}
+        if 'cooldown_minutes' in data:
+            val = int(data['cooldown_minutes'])
+            if 1 <= val <= 1440:
+                alert_notifier.cooldown_minutes = val
+            else:
+                return jsonify({'error': 'cooldown_minutes must be 1-1440'}), 400
+        if 'admin_email' in data and data['admin_email']:
+            alert_notifier.admin_email = data['admin_email']
+
+        return jsonify({'success': True, **alert_notifier.get_stats()})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/alerts/history', methods=['GET'])
+@require_auth
+def get_alert_history():
+    """Get recent alert history."""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+        if not alert_notifier:
+            return jsonify({'error': 'Alert notifier not initialized'}), 500
+        level = request.args.get('level')
+        limit = int(request.args.get('limit', 50))
+        return jsonify({'alerts': alert_notifier.get_recent_alerts(limit=limit, level=level)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# ============================================
 # AI USAGE MONITORING (ADMIN ONLY)
 # ============================================
 
@@ -7182,6 +8256,8 @@ def get_ai_usage_summary():
             return jsonify({'error': 'Admin access required'}), 403
         
         conn = sqlite3.connect('integrated_users.db')
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA busy_timeout=5000')
         cursor = conn.cursor()
         
         # Today's calls
@@ -7231,6 +8307,8 @@ def get_daily_chart_data():
             return jsonify({'error': 'Admin access required'}), 403
         
         conn = sqlite3.connect('integrated_users.db')
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA busy_timeout=5000')
         cursor = conn.cursor()
         
         # Get daily breakdown for last 7 days
@@ -7312,6 +8390,8 @@ def get_daily_ai_usage():
         sort_by = request.args.get('sort', 'calls_desc')
         
         conn = sqlite3.connect('integrated_users.db')
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA busy_timeout=5000')
         cursor = conn.cursor()
         
         # Get today's usage per user
@@ -7374,6 +8454,8 @@ def get_monthly_ai_usage():
         sort_by = request.args.get('sort', 'calls_desc')
         
         conn = sqlite3.connect('integrated_users.db')
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA busy_timeout=5000')
         cursor = conn.cursor()
         
         # Get month's usage per user

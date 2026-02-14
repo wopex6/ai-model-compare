@@ -493,6 +493,285 @@ class ProactiveClarificationSystem:
         ]
 
 
+    # --- Phase 4 Enhancements: Multi-Perspective Clarification ---
+    
+    def analyze_with_perspectives(
+        self, 
+        message: str, 
+        user_context: Dict = None,
+        character_trait_system=None,
+        personality: Dict[str, float] = None
+    ) -> Tuple[ConfidenceScore, List[ClarificationQuestion], List[Dict]]:
+        """
+        Enhanced analysis that generates multi-perspective clarifying questions.
+        Each character lens asks different types of clarifying questions.
+        
+        Returns:
+            (confidence, standard_questions, perspective_questions)
+            perspective_questions is a list of dicts with character_name, lens, question
+        """
+        confidence, standard_questions = self.analyze_message(message, user_context)
+        
+        perspective_questions = []
+        
+        if not confidence.needs_clarification(threshold=0.65):
+            return confidence, standard_questions, perspective_questions
+        
+        if not character_trait_system:
+            return confidence, standard_questions, perspective_questions
+        
+        # Get situation analysis to find relevant characters
+        try:
+            situation = character_trait_system.analyze_situation(message)
+        except Exception:
+            situation = None
+        
+        # Map context gaps to character lens questions
+        perspective_questions = self._generate_perspective_questions(
+            message, confidence, situation, character_trait_system
+        )
+        
+        return confidence, standard_questions, perspective_questions
+    
+    def _generate_perspective_questions(
+        self,
+        message: str,
+        confidence: ConfidenceScore,
+        situation,
+        character_trait_system
+    ) -> List[Dict]:
+        """Generate clarifying questions from different character perspectives"""
+        
+        # Character lens question templates
+        LENS_QUESTIONS = {
+            'stoicism': {
+                'goal': "What is within your control here, and what isn't?",
+                'emotion': "What virtue do you want to practice in this situation?",
+                'context': "What would the wisest version of yourself do here?",
+                'priority': "If this were your last day, what would matter most?",
+            },
+            'empathy': {
+                'goal': "What outcome would feel right emotionally, not just logically?",
+                'emotion': "When you sit with this feeling, what comes up for you?",
+                'context': "Who else is affected by this, and how are they feeling?",
+                'priority': "What does your heart tell you is most important here?",
+            },
+            'analytical': {
+                'goal': "What specific metrics would tell you this is going well?",
+                'emotion': "On a scale of 1-10, how urgent does this feel?",
+                'context': "What data or facts would help you make this decision?",
+                'priority': "What are the top 3 factors you're weighing?",
+            },
+            'motivation': {
+                'goal': "What would achieving this make possible for you?",
+                'emotion': "What's the fire behind this — what drives you?",
+                'context': "What's the biggest obstacle standing in your way right now?",
+                'priority': "If you could only fix one thing today, what would it be?",
+            },
+            'wisdom': {
+                'goal': "How does this fit into the bigger picture of your life?",
+                'emotion': "What lesson might this experience be teaching you?",
+                'context': "Have you faced something similar before? What did you learn?",
+                'priority': "What would you advise a close friend in this situation?",
+            },
+            'pragmatism': {
+                'goal': "What's the simplest next step you could take?",
+                'emotion': "What would make tomorrow 10% better?",
+                'context': "What resources or support do you already have?",
+                'priority': "What's the deadline or time pressure here?",
+            },
+        }
+        
+        # Determine which gaps exist
+        gap_types = []
+        if confidence.goal_clarity < 0.6:
+            gap_types.append('goal')
+        if confidence.emotional_clarity < 0.6:
+            gap_types.append('emotion')
+        if confidence.context_sufficiency < 0.5:
+            gap_types.append('context')
+        if confidence.action_clarity < 0.5:
+            gap_types.append('priority')
+        
+        if not gap_types:
+            gap_types = ['context']  # Default
+        
+        # Select 2-3 diverse character lenses
+        selected_lenses = self._select_diverse_lenses(
+            message, gap_types, character_trait_system
+        )
+        
+        perspective_questions = []
+        primary_gap = gap_types[0]
+        
+        for lens_name, display_name in selected_lenses[:3]:
+            templates = LENS_QUESTIONS.get(lens_name, {})
+            question = templates.get(primary_gap)
+            if question:
+                perspective_questions.append({
+                    'character_lens': lens_name,
+                    'character_name': display_name,
+                    'gap_type': primary_gap,
+                    'question': question
+                })
+        
+        return perspective_questions
+    
+    def _select_diverse_lenses(
+        self, message: str, gap_types: List[str], character_trait_system
+    ) -> List[Tuple[str, str]]:
+        """Select diverse character lenses for multi-perspective questions"""
+        
+        # Map traits to lenses
+        TRAIT_TO_LENS = {
+            'stoicism': ('stoicism', 'Stoic Advisor'),
+            'empathy': ('empathy', 'Empathetic Guide'),
+            'analytical_thinking': ('analytical', 'Analytical Thinker'),
+            'motivation': ('motivation', 'Motivational Coach'),
+            'wisdom': ('wisdom', 'Wise Mentor'),
+            'pragmatism': ('pragmatism', 'Practical Advisor'),
+            'directness': ('pragmatism', 'Practical Advisor'),
+            'warmth': ('empathy', 'Empathetic Guide'),
+            'humor': ('motivation', 'Motivational Coach'),
+            'structure': ('analytical', 'Analytical Thinker'),
+            'patience': ('wisdom', 'Wise Mentor'),
+            'intensity': ('motivation', 'Motivational Coach'),
+        }
+        
+        # Try to get relevant characters from trait system
+        try:
+            situation = character_trait_system.analyze_situation(message)
+            best = character_trait_system.find_best_character_for_situation(message)
+            
+            if best and best.get('character'):
+                char = best['character']
+                dominant = char.traits.get_dominant_traits(3)
+                
+                lenses = []
+                seen = set()
+                for trait_name, _ in dominant:
+                    mapping = TRAIT_TO_LENS.get(trait_name)
+                    if mapping and mapping[0] not in seen:
+                        lenses.append(mapping)
+                        seen.add(mapping[0])
+                
+                # Ensure diversity - add contrasting lenses
+                all_lenses = [
+                    ('stoicism', 'Stoic Advisor'), ('empathy', 'Empathetic Guide'),
+                    ('analytical', 'Analytical Thinker'), ('motivation', 'Motivational Coach'),
+                    ('wisdom', 'Wise Mentor'), ('pragmatism', 'Practical Advisor')
+                ]
+                for lens in all_lenses:
+                    if lens[0] not in seen and len(lenses) < 3:
+                        lenses.append(lens)
+                        seen.add(lens[0])
+                
+                return lenses
+        except Exception:
+            pass
+        
+        # Fallback: return default diverse set
+        return [
+            ('empathy', 'Empathetic Guide'),
+            ('pragmatism', 'Practical Advisor'),
+            ('wisdom', 'Wise Mentor')
+        ]
+    
+    def format_perspective_clarification(
+        self, 
+        standard_questions: List[ClarificationQuestion],
+        perspective_questions: List[Dict],
+        user_language: Dict = None
+    ) -> str:
+        """
+        Format multi-perspective clarification for appending to response.
+        Character names are NOT shown to the user — only the questions.
+        """
+        if not standard_questions and not perspective_questions:
+            return ""
+        
+        is_brief = user_language and user_language.get('preferred_length') in ('brief', 'very_brief')
+        parts = []
+        
+        if perspective_questions:
+            if is_brief:
+                parts.append("\n\nA few things that might help:")
+            else:
+                parts.append("\n\nTo help me understand your situation better, consider these questions:")
+            
+            for i, pq in enumerate(perspective_questions[:3], 1):
+                parts.append(f"\n{i}. {pq['question']}")
+        elif standard_questions:
+            # Fall back to standard format
+            return self.format_clarification_for_response(standard_questions, user_language)
+        
+        return "".join(parts)
+    
+    def get_clarification_stats(self, user_id: int = None) -> Dict:
+        """Get clarification system statistics"""
+        cursor = self.db.cursor()
+        
+        if user_id:
+            cursor.execute('''
+                SELECT COUNT(*) FROM clarification_history WHERE user_id = ?
+            ''', (user_id,))
+            total = cursor.fetchone()[0]
+            
+            cursor.execute('''
+                SELECT COUNT(*) FROM clarification_history 
+                WHERE user_id = ? AND user_response IS NOT NULL
+            ''', (user_id,))
+            answered = cursor.fetchone()[0]
+            
+            cursor.execute('''
+                SELECT COUNT(*) FROM clarification_history 
+                WHERE user_id = ? AND was_helpful = 1
+            ''', (user_id,))
+            helpful = cursor.fetchone()[0]
+        else:
+            cursor.execute('SELECT COUNT(*) FROM clarification_history')
+            total = cursor.fetchone()[0]
+            
+            cursor.execute('''
+                SELECT COUNT(*) FROM clarification_history 
+                WHERE user_response IS NOT NULL
+            ''')
+            answered = cursor.fetchone()[0]
+            
+            cursor.execute('''
+                SELECT COUNT(*) FROM clarification_history WHERE was_helpful = 1
+            ''')
+            helpful = cursor.fetchone()[0]
+        
+        # Gap distribution
+        cursor.execute('''
+            SELECT context_gap, COUNT(*) as cnt 
+            FROM clarification_history
+            GROUP BY context_gap 
+            ORDER BY cnt DESC
+        ''')
+        gap_distribution = {r[0]: r[1] for r in cursor.fetchall()}
+        
+        # Reason distribution
+        cursor.execute('''
+            SELECT reason, COUNT(*) as cnt 
+            FROM clarification_history
+            GROUP BY reason 
+            ORDER BY cnt DESC
+        ''')
+        reason_distribution = {r[0]: r[1] for r in cursor.fetchall()}
+        
+        return {
+            'total_questions_asked': total,
+            'answered': answered,
+            'helpful': helpful,
+            'response_rate': round(answered / max(total, 1), 2),
+            'helpfulness_rate': round(helpful / max(answered, 1), 2),
+            'gap_distribution': gap_distribution,
+            'reason_distribution': reason_distribution
+        }
+
+
 def create_clarification_system(db_connection: sqlite3.Connection) -> ProactiveClarificationSystem:
     """Factory function"""
     return ProactiveClarificationSystem(db_connection)

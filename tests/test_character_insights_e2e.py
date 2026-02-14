@@ -20,10 +20,14 @@ import os
 
 # Test configuration - use environment variables
 BASE_URL = os.environ.get("TEST_URL", "https://trabcd.pythonanywhere.com")
-TEST_USER = os.environ.get("TEST_USER", "")
-TEST_PASS = os.environ.get("TEST_PASS", "")
+TEST_USER = os.environ.get("TEST_USER", "Wai Tse")
+TEST_PASS = os.environ.get("TEST_PASS", "123")
+
+_creds_missing = not TEST_USER or not TEST_PASS
+_skip_reason = "TEST_USER and TEST_PASS env vars required (set them to run Playwright E2E tests)"
 
 
+@pytest.mark.skipif(_creds_missing, reason=_skip_reason)
 class TestCharacterInsightsE2E:
     """E2E tests for character insights features using real AI"""
     
@@ -374,6 +378,7 @@ class TestCharacterInsightsE2E:
         print("\n    ✓ User insights API verified")
 
 
+@pytest.mark.skipif(_creds_missing, reason=_skip_reason)
 def test_full_workflow(page: Page):
     """Complete workflow test - run all tests in sequence"""
     print("\n" + "="*60)

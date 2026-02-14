@@ -166,7 +166,7 @@ def test_local():
     print(f"\n{'='*50}")
     print(f"LOCAL TESTS: {passed}/{passed+failed} passed")
     print(f"{'='*50}")
-    return failed == 0
+    assert failed == 0, f"{failed} test(s) failed"
 
 
 def test_production():
@@ -185,11 +185,11 @@ def test_production():
     r = session.post(f"{BASE_URL}/api/auth/login", json={"username": "Wai Tse", "password": "123"})
     if r.status_code != 200:
         print(f"  ❌ Login failed: {r.status_code}")
-        return False
+        assert False, f"Login failed: {r.status_code}"
     token = r.json().get('token')
     session.headers.update({"Authorization": f"Bearer {token}"})
     print(f"  ✅ Logged in")
-    
+
     # Test 1: Personality match endpoint
     try:
         r = session.post(f"{BASE_URL}/api/character-traits/personality-match", json={
@@ -302,7 +302,7 @@ def test_production():
     print(f"\n{'='*50}")
     print(f"PRODUCTION TESTS: {passed}/{passed+failed} passed")
     print(f"{'='*50}")
-    return failed == 0
+    assert failed == 0, f"{failed} test(s) failed"
 
 
 if __name__ == '__main__':

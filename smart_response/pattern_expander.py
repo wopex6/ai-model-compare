@@ -23,9 +23,16 @@ class PatternExpander:
         self.client = None  # Initialize lazily when needed
         self._init_tables()
     
+    def _connect(self):
+        """Open a SQLite connection with WAL mode and busy timeout."""
+        conn = sqlite3.connect(self.db_path)
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA busy_timeout=5000')
+        return conn
+    
     def _init_tables(self):
         """Create tables for pattern suggestions and usage tracking"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cursor = conn.cursor()
         
         # Pattern suggestions table
@@ -90,7 +97,7 @@ class PatternExpander:
         print(f"📊 Analyzing messages from last {days} days...")
         
         # Create analysis job record
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cursor = conn.cursor()
         cursor.execute('''
             INSERT INTO pattern_analysis_jobs (started_at, status)
@@ -259,7 +266,7 @@ Focus on patterns NOT already covered by:
     
     def get_pending_suggestions(self):
         """Get all patterns awaiting admin review"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cursor = conn.cursor()
         
         cursor.execute('''
@@ -289,7 +296,7 @@ Focus on patterns NOT already covered by:
     
     def approve_pattern(self, pattern_id, admin_user_id, notes=None):
         """Approve a suggested pattern and activate it"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cursor = conn.cursor()
         
         cursor.execute('''
@@ -309,7 +316,7 @@ Focus on patterns NOT already covered by:
     
     def reject_pattern(self, pattern_id, admin_user_id, reason=None):
         """Reject a suggested pattern"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cursor = conn.cursor()
         
         cursor.execute('''
@@ -328,7 +335,7 @@ Focus on patterns NOT already covered by:
     
     def get_approved_patterns(self):
         """Get all approved patterns for use in extraction"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cursor = conn.cursor()
         
         cursor.execute('''
@@ -353,7 +360,7 @@ Focus on patterns NOT already covered by:
     
     def test_pattern_against_messages(self, pattern_regex, limit=100):
         """Test how many recent messages match a given pattern"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cursor = conn.cursor()
         
         cursor.execute('''
@@ -387,7 +394,7 @@ Focus on patterns NOT already covered by:
     
     def get_analysis_history(self, limit=10):
         """Get history of pattern analysis jobs"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cursor = conn.cursor()
         
         cursor.execute('''

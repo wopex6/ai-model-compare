@@ -83,6 +83,8 @@ class BackgroundScheduler:
                 from smart_response.explicit_context_handler import ExplicitContextHandler
                 import sqlite3
                 conn = sqlite3.connect(self.db_path, check_same_thread=False)
+                conn.execute('PRAGMA journal_mode=WAL')
+                conn.execute('PRAGMA busy_timeout=5000')
                 explicit_handler = ExplicitContextHandler(conn)
                 expired = explicit_handler.expire_old_context()
                 results['explicit_context_expired'] = expired
@@ -145,6 +147,8 @@ class BackgroundScheduler:
             if not self.character_expansion:
                 import sqlite3
                 conn = sqlite3.connect(self.db_path, check_same_thread=False)
+                conn.execute('PRAGMA journal_mode=WAL')
+                conn.execute('PRAGMA busy_timeout=5000')
                 self.character_expansion = CharacterExpansionSystem(conn, self.budget_manager)
             
             # Analyze gaps in trait-space

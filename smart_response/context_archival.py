@@ -20,9 +20,16 @@ class ContextArchival:
         self.db_path = db_path
         self._init_tables()
     
+    def _connect(self):
+        """Open a SQLite connection with WAL mode and busy timeout."""
+        conn = sqlite3.connect(self.db_path)
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA busy_timeout=5000')
+        return conn
+    
     def _init_tables(self):
         """Create archive table and add expiration fields to main table"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cursor = conn.cursor()
         
         # Archive table (identical structure to explicit_context)
@@ -85,7 +92,7 @@ class ContextArchival:
         """
         print(f"⏰ Applying confidence decay (decay period: {decay_days} days)...")
         
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cursor = conn.cursor()
         
         # Initialize original_confidence for existing records
@@ -142,7 +149,7 @@ class ContextArchival:
         """
         print(f"📦 Archiving context older than {archive_days} days...")
         
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cursor = conn.cursor()
         
         # Find old context to archive
@@ -231,7 +238,7 @@ class ContextArchival:
         """
         print(f"⏰ Expiring context older than {expiration_days} days...")
         
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cursor = conn.cursor()
         
         # Set expires_at if not already set
@@ -260,7 +267,7 @@ class ContextArchival:
     
     def get_expiring_soon(self, days_threshold=7):
         """Get context that will expire soon (for user notification)"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cursor = conn.cursor()
         
         cursor.execute(f'''
@@ -296,7 +303,7 @@ class ContextArchival:
     
     def extend_context_expiration(self, context_id, additional_days=30):
         """Extend expiration date for important context"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cursor = conn.cursor()
         
         cursor.execute(f'''
@@ -312,7 +319,7 @@ class ContextArchival:
     
     def get_archival_statistics(self):
         """Get statistics about archival operations"""
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
         cursor = conn.cursor()
         
         # Total archived
