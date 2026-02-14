@@ -473,35 +473,35 @@ class CharacterCollaborationSystem:
         return response
     
     def _synthesize_visible(self, contributions: List[Dict], message: str, context: Dict) -> str:
-        """Create response with visible character attributions"""
+        """Create response with visible perspective attributions (no character names shown)"""
         if not contributions:
             return "I'm here to help."
         
         primary = contributions[0]
         
-        # Main response from primary character
-        response = f"**{primary['character_name']}:** {primary['interpretation']}\n\n"
+        # Main response
+        response = f"{primary['interpretation']}\n\n"
         response += f"{primary['action_suggestion']}\n\n"
         
-        # Add other perspectives
+        # Add other perspectives without names
         if len(contributions) > 1:
-            response += "---\n**Other Perspectives:**\n\n"
-            for c in contributions[1:]:
-                response += f"*{c['character_name']}* ({c['philosophical_lens']}): "
-                response += f"{c['interpretation'][:150]}...\n\n"
+            response += "---\n**Other perspectives:**\n\n"
+            for i, c in enumerate(contributions[1:], 1):
+                response += f"{i}. {c['interpretation'][:150]}\n\n"
         
         return response
     
     def _synthesize_debate(self, contributions: List[Dict], message: str, context: Dict) -> str:
-        """Create dialogue-style multi-character response (Moltbook-style)"""
+        """Create dialogue-style multi-perspective response (no character names shown)"""
         if not contributions:
             return "I'm here to help."
         
-        # Character dialogue format
-        response = "🎭 **Character Discussion:**\n\n"
+        # Perspective dialogue format (lens labels only, no character names)
+        response = "🎭 **Multiple Perspectives:**\n\n"
         
         for c in contributions:
-            response += f"**{c['character_name']}:** \"{c['interpretation']}\"\n\n"
+            lens = c.get('philosophical_lens', 'Perspective')
+            response += f"**{lens}:** \"{c['interpretation']}\"\n\n"
         
         # Synthesis
         response += "---\n💡 **Synthesis:** "
@@ -676,6 +676,233 @@ class CharacterCollaborationSystem:
             'emotional_triggers': json.loads(row[3]) if row[3] else [],
             'related_domains': json.loads(row[4]) if row[4] else []
         } for row in cursor.fetchall()]
+
+
+    # --- Phase 6.5 Enhancements ---
+    
+    def personality_aware_collaborate(
+        self,
+        message: str,
+        user_id: int,
+        personality: Dict[str, float] = None,
+        context: Dict = None,
+        mode: str = None
+    ) -> Optional[CollaborationResult]:
+        """
+        Enhanced collaboration that considers user personality when selecting collaborators.
+        Personality influences which characters are chosen and how responses are weighted.
+        """
+        if context is None:
+            context = {}
+        
+        # Check triggers
+        should_collab, detected_mode, rule_name = self.should_collaborate(message, context)
+        if not should_collab:
+            return None
+        
+        final_mode = mode or detected_mode or 'silent'
+        
+        # Find relevant characters with personality weighting
+        relevant = self._find_relevant_characters(message, context)
+        
+        if personality and len(relevant) > 2:
+            relevant = self._rerank_by_personality(relevant, personality)
+        
+        # Get max collaborators from rule
+        max_collabs = 4
+        cursor = self.db.cursor()
+        if rule_name:
+            cursor.execute('SELECT max_collaborators FROM collaboration_rules WHERE rule_name = ?', (rule_name,))
+            row = cursor.fetchone()
+            if row:
+                max_collabs = row[0]
+        
+        selected = relevant[:max_collabs]
+        
+        # Collect weighted contributions
+        contributions = []
+        for char in selected:
+            interpretation = self.context_system.interpret_event_as_character(
+                message, char['profile'], context,
+                personality=personality
+            )
+            contributions.append({
+                'character_id': char['character_id'],
+                'character_name': char['display_name'],
+                'interpretation': interpretation.interpretation,
+                'emotional_framing': interpretation.emotional_framing,
+                'action_suggestion': interpretation.action_suggestion,
+                'philosophical_lens': interpretation.philosophical_lens,
+                'relevance_score': char['relevance_score'],
+                'dominant_traits': interpretation.dominant_traits,
+                'personality_resonance': interpretation.personality_resonance
+            })
+        
+        # Weighted synthesis based on relevance + personality resonance
+        if final_mode == 'silent':
+            response = self._synthesize_weighted(contributions, message, context)
+        elif final_mode == 'visible':
+            response = self._synthesize_visible(contributions, message, context)
+        else:
+            response = self._synthesize_debate(contributions, message, context)
+        
+        # Log
+        detected_domains = self._detect_domains(message)
+        event_id = self._log_collaboration(
+            user_id, message, final_mode, rule_name,
+            detected_domains, contributions, response
+        )
+        
+        return CollaborationResult(
+            response=response,
+            mode=final_mode,
+            contributions=contributions,
+            participating_characters=[c['character_name'] for c in contributions],
+            event_id=event_id
+        )
+    
+    def _rerank_by_personality(
+        self, candidates: List[Dict], personality: Dict[str, float]
+    ) -> List[Dict]:
+        """
+        Re-rank candidates by blending relevance score with personality resonance.
+        Keeps top-relevant characters but boosts those matching personality.
+        """
+        from .character_specific_context import CharacterSpecificContext
+        
+        for c in candidates:
+            # Compute personality resonance for each candidate
+            dominant = c['profile'].traits.get_dominant_traits(3)
+            resonance = 0.5  # default
+            
+            resonance_score = 0.0
+            total = 0.0
+            for big5, score in personality.items():
+                if big5 in CharacterSpecificContext.PERSONALITY_TRAIT_RESONANCE:
+                    trait_map = CharacterSpecificContext.PERSONALITY_TRAIT_RESONANCE[big5]
+                    for dom_trait, dom_val in dominant:
+                        if dom_trait in trait_map:
+                            mult = trait_map[dom_trait]
+                            if score > 0.6 and mult > 1.0:
+                                resonance_score += score * (mult - 1.0) * dom_val
+                            elif score < 0.4 and mult < 1.0:
+                                resonance_score += (1 - score) * (1.0 - mult) * dom_val
+                            total += 1.0
+            
+            if total > 0:
+                resonance = min(0.5 + resonance_score / total, 1.0)
+            
+            c['personality_resonance'] = resonance
+            # Blended score: 60% relevance + 40% personality
+            c['blended_score'] = c['relevance_score'] * 0.6 + resonance * 0.4
+        
+        candidates.sort(key=lambda x: x.get('blended_score', 0), reverse=True)
+        return candidates
+    
+    def _synthesize_weighted(
+        self, contributions: List[Dict], message: str, context: Dict
+    ) -> str:
+        """
+        Weighted synthesis: contributions weighted by relevance + personality resonance.
+        Primary contributor gets the most space; secondary adds key insights.
+        """
+        if not contributions:
+            return "I'm here to help."
+        
+        # Sort by relevance (personality resonance already factored into selection)
+        sorted_contribs = sorted(
+            contributions, 
+            key=lambda c: c.get('relevance_score', 0), 
+            reverse=True
+        )
+        
+        primary = sorted_contribs[0]
+        response = primary['interpretation']
+        response += "\n\n" + primary['emotional_framing']
+        response += "\n\n" + primary['action_suggestion']
+        
+        # Add unique insights from secondary contributors
+        for c in sorted_contribs[1:]:
+            if c['action_suggestion'] != primary['action_suggestion']:
+                # Only include substantively different suggestions
+                response += f"\n\nAdditionally: {c['action_suggestion'][:120]}"
+                break  # One additional insight is enough for silent mode
+        
+        return response
+    
+    def record_collaboration_feedback(
+        self, event_id: int, user_satisfaction: int
+    ):
+        """Record user satisfaction with a collaboration (1-5 scale)"""
+        cursor = self.db.cursor()
+        cursor.execute('''
+            UPDATE collaboration_events 
+            SET user_satisfaction = ? 
+            WHERE id = ?
+        ''', (user_satisfaction, event_id))
+        self.db.commit()
+    
+    def get_collaboration_effectiveness(self) -> Dict:
+        """Analyze effectiveness of collaborations based on user feedback"""
+        cursor = self.db.cursor()
+        
+        # Overall satisfaction
+        cursor.execute('''
+            SELECT AVG(user_satisfaction), COUNT(*) 
+            FROM collaboration_events 
+            WHERE user_satisfaction IS NOT NULL
+        ''')
+        row = cursor.fetchone()
+        avg_satisfaction = round(row[0], 2) if row[0] else None
+        rated_count = row[1]
+        
+        # By mode
+        cursor.execute('''
+            SELECT collaboration_mode, AVG(user_satisfaction), COUNT(*)
+            FROM collaboration_events
+            WHERE user_satisfaction IS NOT NULL
+            GROUP BY collaboration_mode
+        ''')
+        by_mode = {r[0]: {'avg_satisfaction': round(r[1], 2), 'count': r[2]} for r in cursor.fetchall()}
+        
+        # By rule
+        cursor.execute('''
+            SELECT triggered_rule, AVG(user_satisfaction), COUNT(*)
+            FROM collaboration_events
+            WHERE user_satisfaction IS NOT NULL AND triggered_rule IS NOT NULL
+            GROUP BY triggered_rule
+        ''')
+        by_rule = {r[0]: {'avg_satisfaction': round(r[1], 2), 'count': r[2]} for r in cursor.fetchall()}
+        
+        # Most effective characters
+        cursor.execute('''
+            SELECT cc.character_name, AVG(ce.user_satisfaction) as avg_sat, COUNT(*) as uses
+            FROM character_contributions cc
+            JOIN collaboration_events ce ON cc.collaboration_event_id = ce.id
+            WHERE ce.user_satisfaction IS NOT NULL
+            GROUP BY cc.character_id
+            HAVING COUNT(*) >= 1
+            ORDER BY avg_sat DESC
+            LIMIT 10
+        ''')
+        top_chars = [{
+            'character': r[0], 
+            'avg_satisfaction': round(r[1], 2), 
+            'uses': r[2]
+        } for r in cursor.fetchall()]
+        
+        # Total collaborations
+        cursor.execute('SELECT COUNT(*) FROM collaboration_events')
+        total = cursor.fetchone()[0]
+        
+        return {
+            'total_collaborations': total,
+            'rated_collaborations': rated_count,
+            'avg_satisfaction': avg_satisfaction,
+            'by_mode': by_mode,
+            'by_rule': by_rule,
+            'top_effective_characters': top_chars
+        }
 
 
 def create_collaboration_system(

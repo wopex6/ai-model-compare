@@ -14,10 +14,11 @@ Key Features:
 import sqlite3
 import json
 import math
+import re
 import random
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple, Any
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 # Import from character_traits module
 try:
@@ -39,6 +40,8 @@ class TraitSpaceGap:
     nearest_distance: float
     recommended_traits: Dict[str, str]  # Human-readable trait recommendations
     situation_types: List[str]  # What situations this gap affects
+    effectiveness_score: float = 0.0  # How poorly current coverage performs (0=fine, 1=terrible)
+    demand_score: float = 0.0  # How frequently users encounter this situation
 
 
 @dataclass 
@@ -129,12 +132,30 @@ class CharacterExpansionSystem:
         
         self.db.commit()
     
+    def _get_adaptive_threshold(self, num_characters: int) -> float:
+        """
+        Adaptive gap threshold: lower as library grows.
+        - 8 characters (base): 1.5 (original)
+        - 12 characters: 1.2
+        - 16+ characters: 1.0
+        Ensures the system keeps finding refinement opportunities.
+        """
+        base_threshold = 1.5
+        reduction = max(0, (num_characters - 8)) * 0.075
+        return max(0.8, base_threshold - reduction)
+    
     def analyze_trait_space_coverage(self, character_system: CharacterTraitSystem) -> List[TraitSpaceGap]:
         """
         Analyze current trait-space coverage and identify gaps.
         
-        Uses a grid-based approach to sample the 12D space and find areas
-        where no existing character provides good coverage.
+        Two complementary detection strategies:
+        1. COVERAGE GAPS: Trait-space distance (no nearby character for a situation)
+        2. PERFORMANCE GAPS: Existing character is nearby but performing poorly
+        
+        Enhanced with:
+        - Adaptive threshold (lowers as library grows)
+        - Effectiveness-driven scoring (boost gaps where characters perform poorly)
+        - Usage-demand weighting (prioritize high-demand situations)
         """
         gaps = []
         characters = character_system.get_all_characters()
@@ -142,6 +163,13 @@ class CharacterExpansionSystem:
         if len(characters) < 3:
             print("⚠️ Not enough characters for gap analysis")
             return gaps
+        
+        # Get adaptive threshold
+        threshold = self._get_adaptive_threshold(len(characters))
+        
+        # Get effectiveness and demand data from Phase 7
+        effectiveness_gaps = self._get_effectiveness_gaps()
+        demand_scores = self._get_demand_scores()
         
         # Sample key points in trait-space that represent common user needs
         sample_situations = self._get_sample_situations()
@@ -157,22 +185,51 @@ class CharacterExpansionSystem:
                     min_distance = dist
                     nearest_char = char
             
-            # If nearest character is too far, we have a gap
-            # Threshold: distance > 1.5 in 12D space indicates significant gap
-            if min_distance > 1.5:
-                gap_score = min(1.0, (min_distance - 1.5) / 2.0)  # Normalize to 0-1
+            eff_weakness = effectiveness_gaps.get(situation_name, 0.0)
+            demand = demand_scores.get(situation_name, 0.0)
+            
+            # === Strategy 1: COVERAGE GAP (trait-space distance) ===
+            adjusted_threshold = threshold - (eff_weakness * 0.4) - (demand * 0.2)
+            adjusted_threshold = max(0.5, adjusted_threshold)
+            
+            if min_distance > adjusted_threshold:
+                distance_score = min(1.0, (min_distance - adjusted_threshold) / 2.0)
+                gap_score = (distance_score * 0.5) + (eff_weakness * 0.3) + (demand * 0.2)
+                gap_score = min(1.0, gap_score)
                 
                 gap = TraitSpaceGap(
                     centroid=ideal_traits,
-                    gap_score=gap_score,
+                    gap_score=round(gap_score, 3),
                     nearest_character=nearest_char.character_id if nearest_char else "none",
-                    nearest_distance=min_distance,
+                    nearest_distance=round(min_distance, 3),
                     recommended_traits=self._describe_traits(ideal_traits),
-                    situation_types=[situation_name]
+                    situation_types=[situation_name],
+                    effectiveness_score=eff_weakness,
+                    demand_score=demand
+                )
+                gaps.append(gap)
+                continue  # Don't double-count
+            
+            # === Strategy 2: PERFORMANCE GAP (nearby character but poor results) ===
+            # Triggers when: weakness > 0.5 (avg satisfaction < 50%) regardless of distance
+            if eff_weakness > 0.5:
+                # Performance gap: character exists but doesn't serve users well
+                gap_score = (eff_weakness * 0.6) + (demand * 0.3) + (min_distance / 5.0 * 0.1)
+                gap_score = min(1.0, gap_score)
+                
+                gap = TraitSpaceGap(
+                    centroid=ideal_traits,
+                    gap_score=round(gap_score, 3),
+                    nearest_character=nearest_char.character_id if nearest_char else "none",
+                    nearest_distance=round(min_distance, 3),
+                    recommended_traits=self._describe_traits(ideal_traits),
+                    situation_types=[situation_name],
+                    effectiveness_score=eff_weakness,
+                    demand_score=demand
                 )
                 gaps.append(gap)
         
-        # Sort by gap severity
+        # Sort by composite gap score (most impactful first)
         gaps.sort(key=lambda g: g.gap_score, reverse=True)
         
         # Store gaps in database
@@ -184,35 +241,123 @@ class CharacterExpansionSystem:
             ''', (json.dumps({
                 'centroid': gap.centroid.to_dict(),
                 'situation_types': gap.situation_types,
-                'recommended_traits': gap.recommended_traits
+                'recommended_traits': gap.recommended_traits,
+                'effectiveness_score': gap.effectiveness_score,
+                'demand_score': gap.demand_score
             }), gap.gap_score))
         self.db.commit()
         
         return gaps
     
+    # Map Phase 7 auto-detected situation types to sample situation names
+    # Allows effectiveness data to flow into gap detection correctly
+    SITUATION_TYPE_MAP = {
+        'emotional': 'emotional',
+        'emotional_crisis': 'emotional',
+        'relationship': 'relationship',
+        'relationship_conflict': 'relationship',
+        'career': 'career_guidance',
+        'career_guidance': 'career_guidance',
+        'existential': 'existential',
+        'existential_question': 'existential',
+        'skill_development': 'skill_development',
+        'quick_decision': 'quick_decision',
+        'urgent_problem': 'quick_decision',
+        'celebration': 'celebration',
+        'celebration_moment': 'celebration',
+        'financial': 'financial',
+        'health': 'health',
+        'grief': 'grief',
+        'creative': 'creative',
+        'general': 'general',
+    }
+    
+    def _normalize_situation(self, situation_type: str) -> str:
+        """Normalize situation type to canonical name"""
+        return self.SITUATION_TYPE_MAP.get(situation_type, situation_type)
+    
+    def _get_effectiveness_gaps(self) -> Dict[str, float]:
+        """
+        Query Phase 7 outcome data to find situations where characters perform poorly.
+        Returns {situation_type: weakness_score} where higher = worse performance.
+        Normalizes situation type names to match sample situations.
+        """
+        weakness = {}
+        try:
+            cursor = self.db.cursor()
+            cursor.execute('''
+                SELECT situation_type, AVG(satisfaction_estimate), COUNT(*)
+                FROM conversation_outcomes
+                WHERE situation_type IS NOT NULL AND situation_type != 'general'
+                GROUP BY situation_type
+                HAVING COUNT(*) >= 3
+            ''')
+            for row in cursor.fetchall():
+                situation, avg_sat, count = row
+                normalized = self._normalize_situation(situation)
+                score = round(1.0 - (avg_sat or 0.5), 3)
+                # Keep worst weakness if multiple types map to same canonical name
+                if normalized not in weakness or score > weakness[normalized]:
+                    weakness[normalized] = score
+        except Exception:
+            pass  # Table may not exist yet
+        return weakness
+    
+    def _get_demand_scores(self) -> Dict[str, float]:
+        """
+        Track which situation types users encounter most frequently.
+        Returns {situation_type: demand_score} normalized 0-1.
+        Normalizes situation type names to match sample situations.
+        """
+        raw_demand = {}
+        try:
+            cursor = self.db.cursor()
+            cursor.execute('''
+                SELECT situation_type, COUNT(*) as freq
+                FROM conversation_outcomes
+                WHERE situation_type IS NOT NULL AND situation_type != 'general'
+                GROUP BY situation_type
+            ''')
+            rows = cursor.fetchall()
+            if rows:
+                # Aggregate under normalized names
+                for situation, freq in rows:
+                    normalized = self._normalize_situation(situation)
+                    raw_demand[normalized] = raw_demand.get(normalized, 0) + freq
+                
+                max_freq = max(raw_demand.values()) if raw_demand else 1
+                for k in raw_demand:
+                    raw_demand[k] = round(raw_demand[k] / max(1, max_freq), 3)
+        except Exception:
+            pass  # Table may not exist yet
+        return raw_demand
+    
     def _get_sample_situations(self) -> Dict[str, TraitVector]:
-        """Generate sample situations that represent common user needs"""
+        """
+        Generate sample situations that represent common user needs.
+        Names are canonical and match the normalized Phase 7 situation types.
+        """
         return {
             # High empathy, low action (pure emotional support)
-            'emotional_crisis': TraitVector(
+            'emotional': TraitVector(
                 stoicism=0.1, optimism=0.4, directness=0.2, supportiveness=0.95,
                 structure=0.2, depth=0.6, formality=0.3, verbosity=0.5,
                 action_oriented=0.1, present_focus=0.9, empathy=0.95, intensity=0.3
             ),
             # High structure, high action (crisis management)
-            'urgent_problem': TraitVector(
+            'quick_decision': TraitVector(
                 stoicism=0.7, optimism=0.5, directness=0.9, supportiveness=0.4,
                 structure=0.9, depth=0.4, formality=0.6, verbosity=0.3,
                 action_oriented=0.95, present_focus=0.9, empathy=0.3, intensity=0.7
             ),
             # High depth, low action (philosophical exploration)
-            'existential_question': TraitVector(
+            'existential': TraitVector(
                 stoicism=0.5, optimism=0.5, directness=0.4, supportiveness=0.5,
                 structure=0.3, depth=0.95, formality=0.5, verbosity=0.8,
                 action_oriented=0.2, present_focus=0.3, empathy=0.6, intensity=0.4
             ),
             # High optimism, high intensity (celebration/motivation)
-            'celebration_moment': TraitVector(
+            'celebration': TraitVector(
                 stoicism=0.1, optimism=0.95, directness=0.6, supportiveness=0.8,
                 structure=0.3, depth=0.3, formality=0.2, verbosity=0.6,
                 action_oriented=0.7, present_focus=0.8, empathy=0.7, intensity=0.9
@@ -224,22 +369,40 @@ class CharacterExpansionSystem:
                 action_oriented=0.7, present_focus=0.5, empathy=0.4, intensity=0.5
             ),
             # High empathy, moderate action (relationship guidance)
-            'relationship_conflict': TraitVector(
+            'relationship': TraitVector(
                 stoicism=0.3, optimism=0.5, directness=0.5, supportiveness=0.8,
                 structure=0.5, depth=0.7, formality=0.4, verbosity=0.6,
                 action_oriented=0.5, present_focus=0.6, empathy=0.85, intensity=0.4
-            ),
-            # Low verbosity, high directness (quick decisions)
-            'quick_decision': TraitVector(
-                stoicism=0.6, optimism=0.5, directness=0.9, supportiveness=0.4,
-                structure=0.7, depth=0.3, formality=0.5, verbosity=0.2,
-                action_oriented=0.9, present_focus=0.8, empathy=0.3, intensity=0.6
             ),
             # High formality, high depth (professional mentoring)
             'career_guidance': TraitVector(
                 stoicism=0.5, optimism=0.6, directness=0.7, supportiveness=0.6,
                 structure=0.7, depth=0.7, formality=0.8, verbosity=0.5,
                 action_oriented=0.7, present_focus=0.4, empathy=0.5, intensity=0.5
+            ),
+            # High structure, moderate empathy (money/planning)
+            'financial': TraitVector(
+                stoicism=0.6, optimism=0.5, directness=0.7, supportiveness=0.5,
+                structure=0.9, depth=0.5, formality=0.7, verbosity=0.4,
+                action_oriented=0.8, present_focus=0.5, empathy=0.3, intensity=0.4
+            ),
+            # High empathy, high supportiveness (body/wellness)
+            'health': TraitVector(
+                stoicism=0.3, optimism=0.6, directness=0.5, supportiveness=0.8,
+                structure=0.6, depth=0.5, formality=0.4, verbosity=0.5,
+                action_oriented=0.6, present_focus=0.7, empathy=0.8, intensity=0.4
+            ),
+            # Very high empathy, high depth, gentle (loss/mourning)
+            'grief': TraitVector(
+                stoicism=0.15, optimism=0.3, directness=0.2, supportiveness=0.95,
+                structure=0.2, depth=0.8, formality=0.3, verbosity=0.5,
+                action_oriented=0.1, present_focus=0.9, empathy=0.95, intensity=0.2
+            ),
+            # High depth, low structure, moderate empathy (artistic/innovation)
+            'creative': TraitVector(
+                stoicism=0.2, optimism=0.7, directness=0.4, supportiveness=0.6,
+                structure=0.2, depth=0.8, formality=0.2, verbosity=0.7,
+                action_oriented=0.5, present_focus=0.5, empathy=0.6, intensity=0.6
             ),
         }
     
@@ -397,7 +560,6 @@ class CharacterExpansionSystem:
     def _generate_with_ai(self, gap: TraitSpaceGap, inspiration: Dict, 
                           ai_func) -> Optional[CharacterCandidate]:
         """Generate character using AI (costs API tokens)"""
-        # Build prompt for AI
         prompt = f"""Create a therapeutic AI character inspired by {inspiration['name']}.
 
 Target traits (0-1 scale):
@@ -405,20 +567,45 @@ Target traits (0-1 scale):
 
 This character should help users in situations like: {', '.join(gap.situation_types)}
 
-Respond with JSON containing:
-- display_name: A title like "The [Role]"
-- description: 2 sentences describing their approach
-- philosophical_lens: Their core belief/approach in one sentence
-
-Keep responses focused and practical."""
+Respond ONLY with a JSON object (no markdown, no extra text):
+{{
+  "display_name": "The [Role]",
+  "description": "2 sentences describing their approach.",
+  "philosophical_lens": "Their core belief in one sentence."
+}}"""
 
         try:
-            # Call AI (this is tracked by budget manager)
             response = ai_func(prompt)
             
-            # Parse response
-            # (In real implementation, parse the AI JSON response)
-            # For now, fall back to template
+            # Extract the AI response text
+            ai_text = response
+            if isinstance(response, dict):
+                ai_text = response.get('response', response.get('text', str(response)))
+            
+            # Parse JSON from response (handle markdown code blocks)
+            ai_text = str(ai_text).strip()
+            json_match = re.search(r'\{[^{}]*"display_name"[^{}]*\}', ai_text, re.DOTALL)
+            if json_match:
+                parsed = json.loads(json_match.group())
+                
+                display_name = parsed.get('display_name', '').strip()
+                description = parsed.get('description', '').strip()
+                philosophical_lens = parsed.get('philosophical_lens', '').strip()
+                
+                if display_name and description and philosophical_lens:
+                    print(f"🤖 AI generated character: {display_name}")
+                    return CharacterCandidate(
+                        name=display_name,
+                        inspiration=inspiration['name'],
+                        traits=gap.centroid,
+                        domain=inspiration['domain'],
+                        description=description,
+                        philosophical_lens=philosophical_lens,
+                        gap_filled=gap
+                    )
+            
+            # Fallback to template if parsing fails
+            print(f"⚠️ Could not parse AI response, using template")
             return self._generate_from_template(gap, inspiration)
             
         except Exception as e:
@@ -511,12 +698,21 @@ Keep responses focused and practical."""
         ''')
         custom_characters = cursor.fetchone()[0]
         
+        # Get effectiveness and demand data
+        effectiveness_gaps = self._get_effectiveness_gaps()
+        demand_scores = self._get_demand_scores()
+        
         return {
             'unfilled_gaps': unfilled_gaps,
             'filled_gaps': filled_gaps,
             'successful_generations': successful_generations,
             'custom_characters': custom_characters,
-            'base_characters': len(BASE_CHARACTERS)
+            'base_characters': len(BASE_CHARACTERS),
+            'effectiveness_weaknesses': effectiveness_gaps,
+            'demand_scores': demand_scores,
+            'adaptive_threshold': self._get_adaptive_threshold(
+                len(BASE_CHARACTERS) + custom_characters
+            )
         }
 
 

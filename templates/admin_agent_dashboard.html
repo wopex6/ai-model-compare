@@ -1,0 +1,1072 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agent Activity Dashboard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #667eea;
+            --secondary: #764ba2;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --bg: #0f172a;
+            --card: #1e293b;
+            --card-hover: #334155;
+            --text: #e2e8f0;
+            --text-muted: #94a3b8;
+            --border: #334155;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+        .header {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            padding: 24px 30px;
+            border-radius: 16px;
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 1.6rem;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: white;
+        }
+
+        .header-actions { display: flex; gap: 12px; align-items: center; }
+
+        .header-actions button, .header-actions a {
+            background: rgba(255,255,255,0.15);
+            color: white;
+            border: 1px solid rgba(255,255,255,0.25);
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+
+        .header-actions button:hover, .header-actions a:hover {
+            background: rgba(255,255,255,0.25);
+        }
+
+        .status-dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            display: inline-block; margin-right: 6px;
+        }
+        .status-dot.green { background: var(--success); box-shadow: 0 0 6px var(--success); }
+        .status-dot.yellow { background: var(--warning); box-shadow: 0 0 6px var(--warning); }
+        .status-dot.red { background: var(--danger); box-shadow: 0 0 6px var(--danger); }
+
+        .grid { display: grid; gap: 20px; }
+        .grid-2 { grid-template-columns: 1fr 1fr; }
+        .grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+        .grid-4 { grid-template-columns: repeat(4, 1fr); }
+
+        @media (max-width: 900px) {
+            .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            transition: border-color 0.2s;
+        }
+
+        .card:hover { border-color: var(--primary); }
+
+        .card-title {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .card-value {
+            font-size: 2rem;
+            font-weight: 700;
+            line-height: 1.1;
+        }
+
+        .card-sub {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        .provider-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+
+        .provider-card {
+            background: var(--bg);
+            border-radius: 10px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .provider-card .name {
+            font-size: 0.85rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .provider-card .status-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-ok { background: rgba(16,185,129,0.15); color: var(--success); }
+        .badge-warn { background: rgba(245,158,11,0.15); color: var(--warning); }
+        .badge-error { background: rgba(239,68,68,0.15); color: var(--danger); }
+
+        .quality-bars { display: flex; flex-direction: column; gap: 10px; }
+
+        .quality-bar-row {
+            display: flex; align-items: center; gap: 12px;
+        }
+
+        .quality-bar-label {
+            font-size: 0.8rem; width: 90px; color: var(--text-muted);
+        }
+
+        .quality-bar-track {
+            flex: 1; height: 8px; background: var(--bg);
+            border-radius: 4px; overflow: hidden;
+        }
+
+        .quality-bar-fill {
+            height: 100%; border-radius: 4px;
+            transition: width 0.6s ease;
+        }
+
+        .quality-bar-value {
+            font-size: 0.85rem; font-weight: 600; width: 45px; text-align: right;
+        }
+
+        .progress-ring {
+            width: 120px; height: 120px; margin: 0 auto 12px;
+            position: relative;
+        }
+
+        .progress-ring svg { transform: rotate(-90deg); }
+
+        .progress-ring .value {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.4rem; font-weight: 700;
+        }
+
+        .event-stream {
+            max-height: 320px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border) transparent;
+        }
+
+        .event-item {
+            display: flex;
+            gap: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.82rem;
+        }
+
+        .event-item:last-child { border-bottom: none; }
+
+        .event-time {
+            color: var(--text-muted);
+            white-space: nowrap;
+            width: 65px;
+            flex-shrink: 0;
+        }
+
+        .event-topic {
+            font-weight: 600;
+            color: var(--primary);
+            width: 160px;
+            flex-shrink: 0;
+        }
+
+        .event-data { color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; }
+
+        .alert-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            font-size: 0.85rem;
+        }
+
+        .alert-critical {
+            background: rgba(239,68,68,0.1);
+            border-left: 3px solid var(--danger);
+        }
+
+        .alert-warning {
+            background: rgba(245,158,11,0.1);
+            border-left: 3px solid var(--warning);
+        }
+
+        .alert-icon { font-size: 1rem; flex-shrink: 0; margin-top: 2px; }
+        .alert-time { font-size: 0.75rem; color: var(--text-muted); }
+
+        .sim-user-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .sim-user-table th {
+            text-align: left; padding: 8px; color: var(--text-muted);
+            font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border);
+        }
+        .sim-user-table td { padding: 8px; border-bottom: 1px solid var(--border); }
+
+        .action-btn {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            border: none;
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.78rem;
+            font-weight: 600;
+            transition: opacity 0.2s, transform 0.1s;
+        }
+        .action-btn:hover { opacity: 0.85; transform: translateY(-1px); }
+        .action-btn:active { transform: translateY(0); }
+        .action-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .action-btn.success { background: var(--success); }
+        .action-btn.outline {
+            background: transparent;
+            border: 1px solid var(--primary);
+            color: var(--primary);
+        }
+        .action-btn.outline:hover { background: rgba(102,126,234,0.1); }
+
+        .toast {
+            position: fixed; bottom: 24px; right: 24px;
+            background: var(--card); border: 1px solid var(--border);
+            border-radius: 10px; padding: 14px 20px;
+            font-size: 0.85rem; max-width: 420px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            z-index: 1000; transform: translateY(100px); opacity: 0;
+            transition: transform 0.3s ease, opacity 0.3s ease;
+        }
+        .toast.show { transform: translateY(0); opacity: 1; }
+        .toast-title { font-weight: 700; margin-bottom: 4px; }
+        .toast-body { color: var(--text-muted); font-size: 0.8rem; }
+
+        .loading { text-align: center; padding: 40px; color: var(--text-muted); }
+        .loading i { animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .refresh-timer { font-size: 0.8rem; color: rgba(255,255,255,0.6); }
+
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 30px;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><i class="fas fa-robot"></i> Agent Activity Dashboard</h1>
+            <div class="header-actions">
+                <span class="refresh-timer" id="refreshTimer">Auto-refresh: 30s</span>
+                <button onclick="loadDashboard()"><i class="fas fa-sync-alt"></i> Refresh</button>
+                <a href="/admin/settings"><i class="fas fa-cog"></i> Settings</a>
+                <a href="/admin/ai-errors"><i class="fas fa-exclamation-triangle"></i> Errors</a>
+            </div>
+        </div>
+
+        <div id="dashboardContent">
+            <div class="loading">
+                <i class="fas fa-spinner fa-2x"></i>
+                <p style="margin-top:12px">Loading dashboard...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '';
+        let refreshInterval = null;
+        let countdown = 30;
+
+        function getToken() {
+            return localStorage.getItem('token') || sessionStorage.getItem('token');
+        }
+
+        async function fetchAPI(path) {
+            const token = getToken();
+            if (!token) {
+                document.getElementById('dashboardContent').innerHTML =
+                    '<div class="card"><p>Please <a href="/" style="color:var(--primary)">log in</a> with an admin account.</p></div>';
+                return null;
+            }
+            const r = await fetch(API_BASE + path, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (r.status === 401 || r.status === 403) {
+                document.getElementById('dashboardContent').innerHTML =
+                    '<div class="card"><p>Admin access required. Please log in as admin.</p></div>';
+                return null;
+            }
+            return await r.json();
+        }
+
+        async function postAPI(path, body = {}) {
+            const token = getToken();
+            if (!token) return null;
+            const r = await fetch(API_BASE + path, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            return await r.json();
+        }
+
+        function showToast(title, body, duration = 5000) {
+            let container = document.getElementById('toastContainer');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'toastContainer';
+                document.body.appendChild(container);
+            }
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.innerHTML = `<div class="toast-title">${title}</div><div class="toast-body">${body}</div>`;
+            container.appendChild(toast);
+            requestAnimationFrame(() => toast.classList.add('show'));
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, duration);
+        }
+
+        async function triggerQualityScoring(btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running...';
+            try {
+                const res = await postAPI('/api/admin/quality-scoring/run', { days: 1, limit: 50 });
+                if (res.error) {
+                    showToast('⚠️ Quality Scoring', res.error);
+                } else {
+                    showToast('✅ Quality Scoring Complete', `Scored ${res.scored} conversations. Average: ${res.average}`);
+                    loadDashboard();
+                }
+            } catch (e) {
+                showToast('❌ Error', e.message);
+            }
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-play"></i> Run Now';
+        }
+
+        async function triggerSelfImprovement(btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
+            try {
+                const res = await postAPI('/api/admin/self-improvement/analyze', { days: 14, dry_run: true });
+                if (res.error) {
+                    showToast('⚠️ Self-Improvement', res.error);
+                } else {
+                    showToast('✅ Self-Improvement Analysis', `${res.characters_analyzed} characters analyzed, ${res.suggestions} suggestions (dry run)`);
+                    loadDashboard();
+                }
+            } catch (e) {
+                showToast('❌ Error', e.message);
+            }
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-play"></i> Analyze';
+        }
+
+        async function triggerCreateExperiments(btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Creating...';
+            try {
+                const res = await postAPI('/api/admin/ab-testing/experiments', { create_standard: true });
+                if (res.error) {
+                    showToast('⚠️ A/B Experiments', res.error);
+                } else {
+                    showToast('✅ Experiments Created', `${res.created} standard experiments created`);
+                    loadDashboard();
+                }
+            } catch (e) {
+                showToast('❌ Error', e.message);
+            }
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-plus"></i> Create Standard Set';
+        }
+
+        async function triggerStartExperiment(experimentId, btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            try {
+                const res = await postAPI(`/api/admin/ab-testing/experiments/${experimentId}/start`);
+                if (res.error) {
+                    showToast('⚠️ Experiment', res.error);
+                } else {
+                    showToast('✅ Experiment Started', `Experiment ${experimentId} is now running`);
+                    loadDashboard();
+                }
+            } catch (e) {
+                showToast('❌ Error', e.message);
+            }
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-play"></i>';
+        }
+
+        async function saveAlertConfig(btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+            try {
+                const email = document.getElementById('alertEmail').value.trim();
+                const cooldown = parseInt(document.getElementById('alertCooldown').value, 10);
+                const body = {};
+                if (email) body.admin_email = email;
+                if (cooldown >= 1 && cooldown <= 1440) body.cooldown_minutes = cooldown;
+                const res = await postAPI('/api/admin/alerts/config', body);
+                if (res.error) {
+                    showToast('⚠️ Alert Config', res.error);
+                } else {
+                    showToast('✅ Alert Config Saved', `Email: ${res.admin_email}, Cooldown: ${res.cooldown_minutes}min`);
+                }
+            } catch (e) {
+                showToast('❌ Error', e.message);
+            }
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-save"></i> Save';
+        }
+
+        async function sendTestAlert(btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending...';
+            try {
+                const res = await postAPI('/api/admin/alerts/test', {});
+                if (res.error) {
+                    showToast('⚠️ Test Alert', res.error);
+                } else {
+                    showToast('✅ Test Alert Sent', res.message);
+                }
+            } catch (e) {
+                showToast('❌ Error', e.message);
+            }
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-paper-plane"></i> Send Test Alert';
+        }
+
+        function statusBadge(healthy, available) {
+            if (healthy && available) return '<span class="status-badge badge-ok">Healthy</span>';
+            if (!healthy && available) return '<span class="status-badge badge-warn">Degraded</span>';
+            if (!available) return '<span class="status-badge badge-error">Unavailable</span>';
+            return '<span class="status-badge badge-warn">Unknown</span>';
+        }
+
+        function statusDot(healthy) {
+            return `<span class="status-dot ${healthy ? 'green' : 'red'}"></span>`;
+        }
+
+        function qualityColor(score) {
+            if (score >= 0.7) return 'var(--success)';
+            if (score >= 0.4) return 'var(--warning)';
+            return 'var(--danger)';
+        }
+
+        function formatTime(iso) {
+            if (!iso) return '';
+            const d = new Date(iso);
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function progressRing(pct, label) {
+            const r = 52, c = 2 * Math.PI * r;
+            const offset = c - (pct / 100) * c;
+            const color = pct > 90 ? 'var(--danger)' : pct > 70 ? 'var(--warning)' : 'var(--success)';
+            return `
+                <div class="progress-ring">
+                    <svg width="120" height="120" viewBox="0 0 120 120">
+                        <circle cx="60" cy="60" r="${r}" fill="none" stroke="var(--bg)" stroke-width="8"/>
+                        <circle cx="60" cy="60" r="${r}" fill="none" stroke="${color}" stroke-width="8"
+                                stroke-dasharray="${c}" stroke-dashoffset="${offset}" stroke-linecap="round"/>
+                    </svg>
+                    <div class="value">${Math.round(pct)}%</div>
+                </div>
+                <div style="text-align:center;color:var(--text-muted);font-size:0.8rem">${label}</div>`;
+        }
+
+        function renderDashboard(data) {
+            const el = document.getElementById('dashboardContent');
+
+            // Count healthy providers
+            const provEntries = Object.entries(data.providers || {});
+            const healthyCount = provEntries.filter(([,v]) => v.healthy).length;
+            const totalProviders = provEntries.length || 4;
+
+            // Budget
+            const bPct = data.budget?.daily_pct || 0;
+            const bCalls = data.budget?.daily_calls || 0;
+            const bLimit = data.budget?.daily_limit || 0;
+
+            // Quality
+            const qs = data.quality_scores || {};
+            const qCount = qs.count || 0;
+
+            // Events
+            const ebStats = data.event_bus?.stats || {};
+            const recentEvents = (data.event_bus?.recent_events || []).reverse();
+
+            // Alerts
+            const alerts = data.alerts || [];
+            const critAlerts = alerts.filter(a => a.level === 'critical');
+
+            // Sim users
+            const simUsers = data.sim_users || [];
+
+            // Errors
+            const recentErrors = data.recent_errors || [];
+
+            let html = '';
+
+            // ========== Top stat cards ==========
+            html += '<div class="grid grid-4" style="margin-bottom:20px">';
+
+            html += `<div class="card">
+                <div class="card-title"><i class="fas fa-server"></i> Providers</div>
+                <div class="card-value" style="color:${healthyCount === totalProviders ? 'var(--success)' : 'var(--warning)'}">
+                    ${healthyCount}/${totalProviders}
+                </div>
+                <div class="card-sub">healthy providers</div>
+            </div>`;
+
+            html += `<div class="card">
+                <div class="card-title"><i class="fas fa-coins"></i> Budget Used</div>
+                <div class="card-value" style="color:${bPct > 90 ? 'var(--danger)' : bPct > 70 ? 'var(--warning)' : 'var(--success)'}">
+                    ${Math.round(bPct)}%
+                </div>
+                <div class="card-sub">${bCalls} / ${bLimit} calls today</div>
+            </div>`;
+
+            html += `<div class="card">
+                <div class="card-title"><i class="fas fa-star"></i> Quality Score</div>
+                <div class="card-value" style="color:${qualityColor(qs.overall || 0)}">
+                    ${(qs.overall || 0).toFixed(2)}
+                </div>
+                <div class="card-sub">${qCount} conversations scored (7d)</div>
+            </div>`;
+
+            html += `<div class="card">
+                <div class="card-title"><i class="fas fa-bell"></i> Alerts</div>
+                <div class="card-value" style="color:${critAlerts.length > 0 ? 'var(--danger)' : 'var(--success)'}">
+                    ${critAlerts.length}
+                </div>
+                <div class="card-sub">${alerts.length} total alerts</div>
+            </div>`;
+
+            html += '</div>';
+
+            // ========== Provider cards ==========
+            html += '<div class="section-title"><i class="fas fa-cloud"></i> AI Provider Status</div>';
+            html += '<div class="provider-grid" style="margin-bottom:20px">';
+            for (const [name, info] of provEntries) {
+                html += `<div class="provider-card">
+                    <div class="name">${statusDot(info.healthy)} ${name}</div>
+                    ${statusBadge(info.healthy, info.available)}
+                    ${info.failures > 0 ? `<div style="font-size:0.75rem;color:var(--danger);margin-top:6px">${info.failures} failures</div>` : ''}
+                </div>`;
+            }
+            if (provEntries.length === 0) {
+                html += '<div class="provider-card"><div class="name">No provider data</div></div>';
+            }
+            html += '</div>';
+
+            // ========== Two columns: Budget + Quality ==========
+            html += '<div class="grid grid-2" style="margin-bottom:20px">';
+
+            // Budget ring
+            html += `<div class="card" style="text-align:center">
+                <div class="card-title"><i class="fas fa-chart-pie"></i> Daily Budget</div>
+                ${progressRing(bPct, `${bCalls} / ${bLimit} API calls`)}
+                ${data.budget?.monthly_calls ? `<div class="card-sub" style="margin-top:8px">Monthly: ${data.budget.monthly_calls} calls</div>` : ''}
+            </div>`;
+
+            // Quality bars
+            html += '<div class="card">';
+            html += '<div class="card-title"><i class="fas fa-chart-bar"></i> Conversation Quality (7d avg)</div>';
+            if (qCount > 0) {
+                html += '<div class="quality-bars">';
+                for (const dim of ['overall', 'coherence', 'helpfulness', 'engagement', 'resolution', 'consistency']) {
+                    const val = qs[dim] || 0;
+                    const pct = (val * 100).toFixed(0);
+                    html += `<div class="quality-bar-row">
+                        <div class="quality-bar-label">${dim.charAt(0).toUpperCase() + dim.slice(1)}</div>
+                        <div class="quality-bar-track">
+                            <div class="quality-bar-fill" style="width:${pct}%;background:${qualityColor(val)}"></div>
+                        </div>
+                        <div class="quality-bar-value" style="color:${qualityColor(val)}">${val.toFixed(2)}</div>
+                    </div>`;
+                }
+                html += '</div>';
+            } else {
+                html += '<div class="empty-state"><i class="fas fa-chart-line" style="font-size:2rem;margin-bottom:8px"></i><p>No quality scores yet</p></div>';
+            }
+            html += '</div>';
+
+            html += '</div>';
+
+            // ========== Quality Score Trend Chart (full width) ==========
+            const trends = data.quality_trends || [];
+            html += '<div class="card" style="margin-bottom:20px">';
+            html += '<div class="card-title"><i class="fas fa-chart-area"></i> Quality Score Trends (30 days)</div>';
+            if (trends.length >= 2) {
+                html += '<div style="position:relative"><canvas id="qualityTrendChart" height="220" style="width:100%"></canvas><div id="chartTooltip" style="display:none;position:absolute;pointer-events:none;background:rgba(15,23,42,0.95);border:1px solid rgba(102,126,234,0.4);border-radius:6px;padding:8px 12px;font-size:0.78rem;color:#e2e8f0;z-index:10;white-space:nowrap;box-shadow:0 4px 12px rgba(0,0,0,0.3)"></div></div>';
+            } else {
+                html += '<div class="empty-state"><i class="fas fa-chart-area" style="font-size:2rem;margin-bottom:8px"></i><p>Need at least 2 days of data for trend chart</p><p style="font-size:0.8rem;margin-top:4px;color:var(--text-muted)">Run quality scoring to start building trend data</p></div>';
+            }
+            html += '</div>';
+
+            // ========== Two columns: Event Stream + Alerts ==========
+            html += '<div class="grid grid-2" style="margin-bottom:20px">';
+
+            // Event stream
+            html += '<div class="card">';
+            html += `<div class="card-title"><i class="fas fa-stream"></i> Event Bus Stream <span style="margin-left:auto;font-size:0.75rem;color:var(--text-muted)">${ebStats.events_published || 0} published, ${ebStats.events_delivered || 0} delivered</span></div>`;
+            html += '<div class="event-stream">';
+            if (recentEvents.length > 0) {
+                for (const evt of recentEvents.slice(0, 30)) {
+                    html += `<div class="event-item">
+                        <div class="event-time">${formatTime(evt.timestamp)}</div>
+                        <div class="event-topic">${evt.topic}</div>
+                        <div class="event-data">${evt.source}: ${JSON.stringify(evt.data || {}).substring(0, 80)}</div>
+                    </div>`;
+                }
+            } else {
+                html += '<div class="empty-state"><p>No events recorded yet</p></div>';
+            }
+            html += '</div></div>';
+
+            // Alerts
+            html += '<div class="card">';
+            html += `<div class="card-title"><i class="fas fa-exclamation-circle"></i> Recent Alerts</div>`;
+            html += '<div class="event-stream">';
+            if (alerts.length > 0) {
+                for (const a of alerts.slice(-20).reverse()) {
+                    const cls = a.level === 'critical' ? 'alert-critical' : 'alert-warning';
+                    const icon = a.level === 'critical' ? '🚨' : '⚠️';
+                    html += `<div class="alert-item ${cls}">
+                        <span class="alert-icon">${icon}</span>
+                        <div>
+                            <div>${a.message}</div>
+                            <div class="alert-time">${formatTime(a.timestamp)} · ${a.source || ''}</div>
+                        </div>
+                    </div>`;
+                }
+            } else {
+                html += '<div class="empty-state"><i class="fas fa-check-circle" style="font-size:2rem;color:var(--success);margin-bottom:8px"></i><p>No alerts — all clear</p></div>';
+            }
+            html += '</div></div>';
+
+            html += '</div>';
+
+            // ========== Pipeline Health + Agent Tasks ==========
+            html += '<div class="grid grid-2" style="margin-bottom:20px">';
+
+            // Pipeline health
+            const pipeline = data.pipeline || {};
+            const pSystems = pipeline.systems || {};
+            const pActiveCount = Object.values(pSystems).filter(v => v).length;
+            const pTotalCount = Object.keys(pSystems).length || 1;
+            html += '<div class="card">';
+            html += `<div class="card-title"><i class="fas fa-project-diagram"></i> Conversation Pipeline</div>`;
+            html += `<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">`;
+            html += `<span class="status-dot ${pipeline.initialized ? 'green' : 'red'}"></span>`;
+            html += `<span style="font-weight:600">${pipeline.initialized ? 'Active' : 'Not Initialized'}</span>`;
+            html += `<span style="color:var(--text-muted);font-size:0.85rem;margin-left:auto">${pActiveCount}/${pTotalCount} systems</span>`;
+            html += `</div>`;
+            if (pTotalCount > 0) {
+                html += '<div style="display:flex;flex-wrap:wrap;gap:6px">';
+                for (const [sys, active] of Object.entries(pSystems)) {
+                    const label = sys.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                    const bg = active ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)';
+                    const fg = active ? 'var(--success)' : 'var(--danger)';
+                    html += `<span style="background:${bg};color:${fg};padding:3px 10px;border-radius:12px;font-size:0.75rem;font-weight:600">${active ? '✓' : '✗'} ${label}</span>`;
+                }
+                html += '</div>';
+            }
+            html += '</div>';
+
+            // Agent tasks
+            const tasks = data.agent_tasks || {};
+            html += '<div class="card">';
+            html += '<div class="card-title"><i class="fas fa-clock"></i> Scheduled Agent Tasks</div>';
+            html += '<table class="sim-user-table"><thead><tr><th>Task</th><th>Schedule</th><th>Status</th><th style="width:100px">Action</th></tr></thead><tbody>';
+            for (const [name, info] of Object.entries(tasks)) {
+                const label = name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                const statusHtml = info.active
+                    ? '<span style="color:var(--success)"><i class="fas fa-check-circle"></i> Active</span>'
+                    : '<span style="color:var(--danger)"><i class="fas fa-times-circle"></i> Inactive</span>';
+                let actionBtn = '';
+                if (name === 'quality_scoring' && info.active) {
+                    actionBtn = `<button class="action-btn" onclick="triggerQualityScoring(this)"><i class="fas fa-play"></i> Run Now</button>`;
+                } else if (name === 'self_improvement' && info.active) {
+                    actionBtn = `<button class="action-btn" onclick="triggerSelfImprovement(this)"><i class="fas fa-play"></i> Analyze</button>`;
+                }
+                html += `<tr><td><strong>${label}</strong></td><td style="color:var(--text-muted)">${info.schedule}</td><td>${statusHtml}</td><td>${actionBtn}</td></tr>`;
+            }
+            html += '</tbody></table>';
+            html += '</div>';
+            html += '</div>';
+
+            // ========== Per-Character Quality + A/B Experiments ==========
+            html += '<div class="grid grid-2" style="margin-bottom:20px">';
+
+            // Per-character quality
+            const charQuality = data.quality_by_character || [];
+            html += '<div class="card">';
+            html += '<div class="card-title"><i class="fas fa-users-cog"></i> Quality by Character (7d)</div>';
+            if (charQuality.length > 0) {
+                html += '<table class="sim-user-table"><thead><tr><th>Character</th><th>Type</th><th>Avg Score</th><th>Convos</th></tr></thead><tbody>';
+                for (const c of charQuality) {
+                    const typeColor = c.type === 'philosophy' ? '#a78bfa' : c.type === 'domain' ? '#60a5fa' : 'var(--text-muted)';
+                    const scoreColor = qualityColor(c.avg_score);
+                    const charLabel = c.character_id.replace(/_/g, ' ').replace(/\b\w/g, ch => ch.toUpperCase());
+                    html += `<tr>
+                        <td><strong>${charLabel}</strong></td>
+                        <td><span style="color:${typeColor};font-size:0.8rem;font-weight:600">${c.type}</span></td>
+                        <td style="color:${scoreColor};font-weight:700">${c.avg_score.toFixed(3)}</td>
+                        <td>${c.count}</td>
+                    </tr>`;
+                }
+                html += '</tbody></table>';
+            } else {
+                html += '<div class="empty-state"><i class="fas fa-chart-line" style="font-size:2rem;margin-bottom:8px"></i><p>No per-character data yet</p></div>';
+            }
+            html += '</div>';
+
+            // A/B Experiments
+            const abExps = data.ab_experiments || [];
+            html += '<div class="card">';
+            html += `<div class="card-title"><i class="fas fa-flask"></i> A/B Experiments <span style="margin-left:auto;display:flex;gap:8px;align-items:center"><span style="font-size:0.75rem;color:var(--text-muted)">${abExps.length} total</span><button class="action-btn outline" onclick="triggerCreateExperiments(this)"><i class="fas fa-plus"></i> Create Standard Set</button></span></div>`;
+            if (abExps.length > 0) {
+                html += '<div class="event-stream">';
+                for (const exp of abExps) {
+                    const statusColors = { draft: 'var(--text-muted)', running: 'var(--warning)', completed: 'var(--success)', cancelled: 'var(--danger)' };
+                    const sColor = statusColors[exp.status] || 'var(--text-muted)';
+                    html += `<div style="padding:10px;margin-bottom:8px;background:var(--bg);border-radius:8px">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                            <strong style="font-size:0.85rem">${exp.name}</strong>
+                            <span style="color:${sColor};font-size:0.75rem;font-weight:600;text-transform:uppercase">${exp.status}</span>
+                        </div>
+                        <div style="display:flex;justify-content:space-between;align-items:center">
+                            <span style="font-size:0.78rem;color:var(--text-muted)">
+                                Character: ${exp.character_id} · ${exp.variants.length} variants ·
+                                ${exp.winner ? `<span style="color:var(--success)">Winner: ${exp.winner}</span>` : 'No winner yet'}
+                            </span>
+                            ${exp.status === 'draft' ? `<button class="action-btn" style="font-size:0.72rem;padding:3px 10px" onclick="triggerStartExperiment('${exp.experiment_id}', this)"><i class="fas fa-play"></i></button>` : ''}
+                        </div>
+                    </div>`;
+                }
+                html += '</div>';
+            } else {
+                html += `<div class="empty-state"><i class="fas fa-flask" style="font-size:2rem;margin-bottom:8px"></i><p>No experiments created yet</p><button class="action-btn" style="margin-top:10px" onclick="triggerCreateExperiments(this)"><i class="fas fa-plus"></i> Create Standard Set</button></div>`;
+            }
+            html += '</div>';
+            html += '</div>';
+
+            // ========== Sim Users + Errors ==========
+            html += '<div class="grid grid-2">';
+
+            // Sim users
+            html += '<div class="card">';
+            html += '<div class="card-title"><i class="fas fa-users"></i> Simulated Users</div>';
+            if (simUsers.length > 0) {
+                html += '<table class="sim-user-table"><thead><tr><th>Agent</th><th>Role</th><th>Messages</th><th>Last Active</th></tr></thead><tbody>';
+                for (const u of simUsers) {
+                    const roleColor = u.role === 'paid' ? 'var(--success)' : 'var(--warning)';
+                    html += `<tr>
+                        <td><strong>${u.username}</strong></td>
+                        <td><span style="color:${roleColor}">${u.role}</span></td>
+                        <td>${u.messages || 0}</td>
+                        <td style="color:var(--text-muted)">${u.last_active ? new Date(u.last_active).toLocaleString() : 'never'}</td>
+                    </tr>`;
+                }
+                html += '</tbody></table>';
+            } else {
+                html += '<div class="empty-state"><p>No sim users found</p></div>';
+            }
+            html += '</div>';
+
+            // Recent errors
+            html += '<div class="card">';
+            html += '<div class="card-title"><i class="fas fa-bug"></i> Provider Errors (24h)</div>';
+            if (recentErrors.length > 0) {
+                html += '<table class="sim-user-table"><thead><tr><th>Provider</th><th>Type</th><th>Count</th><th>Last</th></tr></thead><tbody>';
+                for (const e of recentErrors) {
+                    const typeColor = e.type === 'quota_exceeded' ? 'var(--danger)' : 'var(--warning)';
+                    html += `<tr>
+                        <td><strong>${e.provider}</strong></td>
+                        <td><span style="color:${typeColor}">${e.type}</span></td>
+                        <td>${e.count}</td>
+                        <td style="color:var(--text-muted)">${formatTime(e.last)}</td>
+                    </tr>`;
+                }
+                html += '</tbody></table>';
+            } else {
+                html += '<div class="empty-state"><i class="fas fa-check-circle" style="font-size:2rem;color:var(--success);margin-bottom:8px"></i><p>No errors in 24h</p></div>';
+            }
+            html += '</div>';
+
+            html += '</div>';
+
+            // ========== Alert Notifier Configuration ==========
+            const alertStats = data.alert_stats || {};
+            html += '<div class="card" style="margin-top:20px">';
+            html += '<div class="card-title"><i class="fas fa-bell"></i> Alert Notifier Configuration</div>';
+            html += '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px">';
+            html += `<div style="background:var(--bg);padding:12px;border-radius:8px;text-align:center">
+                <div style="font-size:1.4rem;font-weight:700;color:var(--primary)">${alertStats.alerts_received || 0}</div>
+                <div style="font-size:0.75rem;color:var(--text-muted)">Alerts Received</div></div>`;
+            html += `<div style="background:var(--bg);padding:12px;border-radius:8px;text-align:center">
+                <div style="font-size:1.4rem;font-weight:700;color:var(--success)">${alertStats.emails_sent || 0}</div>
+                <div style="font-size:0.75rem;color:var(--text-muted)">Emails Sent</div></div>`;
+            html += `<div style="background:var(--bg);padding:12px;border-radius:8px;text-align:center">
+                <div style="font-size:1.4rem;font-weight:700;color:var(--warning)">${alertStats.emails_suppressed || 0}</div>
+                <div style="font-size:0.75rem;color:var(--text-muted)">Suppressed (cooldown)</div></div>`;
+            html += '</div>';
+
+            html += '<div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">';
+            html += `<div style="flex:1;min-width:180px"><label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:4px">Admin Email</label>
+                <input id="alertEmail" type="email" value="${alertStats.admin_email || ''}" placeholder="admin@example.com"
+                    style="width:100%;padding:6px 10px;border-radius:6px;border:1px solid rgba(148,163,184,0.2);background:var(--bg);color:var(--text);font-size:0.85rem"></div>`;
+            html += `<div style="min-width:120px"><label style="font-size:0.75rem;color:var(--text-muted);display:block;margin-bottom:4px">Cooldown (min)</label>
+                <input id="alertCooldown" type="number" min="1" max="1440" value="${alertStats.cooldown_minutes || 30}"
+                    style="width:100%;padding:6px 10px;border-radius:6px;border:1px solid rgba(148,163,184,0.2);background:var(--bg);color:var(--text);font-size:0.85rem"></div>`;
+            html += `<button class="action-btn" onclick="saveAlertConfig(this)" style="height:34px"><i class="fas fa-save"></i> Save</button>`;
+            html += `<button class="action-btn outline" onclick="sendTestAlert(this)" style="height:34px"><i class="fas fa-paper-plane"></i> Send Test Alert</button>`;
+            html += '</div>';
+
+            html += `<div style="font-size:0.75rem;color:var(--text-muted)">Active cooldowns: ${alertStats.active_cooldowns || 0} · History: ${alertStats.alert_history_size || 0} entries · Failures: ${alertStats.email_failures || 0}</div>`;
+            html += '</div>';
+
+            el.innerHTML = html;
+
+            // Draw trend chart if data available
+            if (trends.length >= 2) {
+                requestAnimationFrame(() => drawTrendChart(trends));
+            }
+        }
+
+        function _paintTrendLines(canvas, ctx, trends, dpr, W, H, pad, cW, cH, minV, maxV, xPos, yPos, highlightIdx) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.save();
+            ctx.scale(dpr, dpr);
+
+            // Grid lines
+            ctx.strokeStyle = 'rgba(51,65,85,0.5)';
+            ctx.lineWidth = 0.5;
+            for (let i = 0; i <= 4; i++) {
+                const v = minV + (maxV - minV) * (i / 4);
+                const y = yPos(v);
+                ctx.beginPath(); ctx.moveTo(pad.left, y); ctx.lineTo(W - pad.right, y); ctx.stroke();
+                ctx.fillStyle = '#94a3b8'; ctx.font = '11px sans-serif'; ctx.textAlign = 'right';
+                ctx.fillText(v.toFixed(2), pad.left - 8, y + 4);
+            }
+
+            // X-axis labels
+            ctx.fillStyle = '#94a3b8'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+            const labelEvery = Math.max(1, Math.floor(trends.length / 8));
+            for (let i = 0; i < trends.length; i += labelEvery) {
+                ctx.fillText(trends[i].date.substring(5), xPos(i), H - pad.bottom + 18);
+            }
+
+            // Draw lines
+            const series = [
+                { key: 'overall', color: '#667eea', width: 2.5 },
+                { key: 'coherence', color: '#10b981', width: 1.5 },
+                { key: 'helpfulness', color: '#f59e0b', width: 1.5 },
+                { key: 'engagement', color: '#ef4444', width: 1.5 },
+            ];
+            for (const s of series) {
+                ctx.strokeStyle = s.color; ctx.lineWidth = s.width; ctx.lineJoin = 'round';
+                ctx.beginPath();
+                for (let i = 0; i < trends.length; i++) {
+                    const x = xPos(i), y = yPos(trends[i][s.key]);
+                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            }
+
+            // Area fill for overall
+            ctx.beginPath();
+            for (let i = 0; i < trends.length; i++) {
+                const x = xPos(i), y = yPos(trends[i].overall);
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.lineTo(xPos(trends.length - 1), pad.top + cH);
+            ctx.lineTo(xPos(0), pad.top + cH);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(102,126,234,0.08)';
+            ctx.fill();
+
+            // Dots on overall line
+            for (let i = 0; i < trends.length; i++) {
+                ctx.fillStyle = '#667eea';
+                ctx.beginPath();
+                ctx.arc(xPos(i), yPos(trends[i].overall), (highlightIdx === i ? 5 : 3), 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Highlight vertical line on hover
+            if (highlightIdx >= 0 && highlightIdx < trends.length) {
+                ctx.strokeStyle = 'rgba(102,126,234,0.4)';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath();
+                ctx.moveTo(xPos(highlightIdx), pad.top);
+                ctx.lineTo(xPos(highlightIdx), pad.top + cH);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+
+            // Legend
+            const legendY = 10;
+            let legendX = pad.left;
+            for (const s of series) {
+                ctx.fillStyle = s.color;
+                ctx.fillRect(legendX, legendY, 14, 3);
+                ctx.fillStyle = '#e2e8f0'; ctx.font = '11px sans-serif'; ctx.textAlign = 'left';
+                ctx.fillText(s.key.charAt(0).toUpperCase() + s.key.slice(1), legendX + 18, legendY + 5);
+                legendX += ctx.measureText(s.key.charAt(0).toUpperCase() + s.key.slice(1)).width + 32;
+            }
+            ctx.restore();
+        }
+
+        function drawTrendChart(trends) {
+            const canvas = document.getElementById('qualityTrendChart');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const dpr = window.devicePixelRatio || 1;
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            const W = rect.width, H = rect.height;
+            const pad = { top: 20, right: 20, bottom: 40, left: 50 };
+            const cW = W - pad.left - pad.right;
+            const cH = H - pad.top - pad.bottom;
+
+            let allVals = trends.flatMap(t => [t.overall, t.coherence, t.helpfulness, t.engagement]);
+            let minV = Math.max(0, Math.min(...allVals) - 0.05);
+            let maxV = Math.min(1, Math.max(...allVals) + 0.05);
+            if (maxV - minV < 0.1) { minV = Math.max(0, maxV - 0.15); maxV = Math.min(1, minV + 0.15); }
+
+            function xPos(i) { return pad.left + (i / (trends.length - 1)) * cW; }
+            function yPos(v) { return pad.top + cH - ((v - minV) / (maxV - minV)) * cH; }
+
+            // Initial draw
+            _paintTrendLines(canvas, ctx, trends, dpr, W, H, pad, cW, cH, minV, maxV, xPos, yPos, -1);
+
+            // Tooltip interactivity
+            const tooltip = document.getElementById('chartTooltip');
+            if (!tooltip) return;
+            let lastNearest = -1;
+
+            canvas.onmousemove = (e) => {
+                const cr = canvas.getBoundingClientRect();
+                const mx = e.clientX - cr.left;
+                const my = e.clientY - cr.top;
+                let nearest = -1, minDist = Infinity;
+                for (let i = 0; i < trends.length; i++) {
+                    const d = Math.abs(xPos(i) - mx);
+                    if (d < minDist) { minDist = d; nearest = i; }
+                }
+                if (nearest >= 0 && minDist < cW / trends.length + 10 && my > pad.top && my < pad.top + cH) {
+                    if (nearest !== lastNearest) {
+                        lastNearest = nearest;
+                        _paintTrendLines(canvas, ctx, trends, dpr, W, H, pad, cW, cH, minV, maxV, xPos, yPos, nearest);
+                    }
+                    const t = trends[nearest];
+                    tooltip.innerHTML = `<div style="font-weight:600;margin-bottom:4px;color:#667eea">${t.date}</div>`
+                        + `<div><span style="color:#667eea">●</span> Overall: <b>${t.overall.toFixed(3)}</b></div>`
+                        + `<div><span style="color:#10b981">●</span> Coherence: ${t.coherence.toFixed(3)}</div>`
+                        + `<div><span style="color:#f59e0b">●</span> Helpfulness: ${t.helpfulness.toFixed(3)}</div>`
+                        + `<div><span style="color:#ef4444">●</span> Engagement: ${t.engagement.toFixed(3)}</div>`
+                        + `<div style="margin-top:4px;color:#94a3b8;font-size:0.72rem">${t.count} conversation${t.count !== 1 ? 's' : ''} scored</div>`;
+                    tooltip.style.display = 'block';
+                    let tx = xPos(nearest) + 12;
+                    if (tx + 180 > W) tx = xPos(nearest) - 190;
+                    tooltip.style.left = tx + 'px';
+                    tooltip.style.top = (yPos(t.overall) - 20) + 'px';
+                } else {
+                    if (lastNearest !== -1) {
+                        lastNearest = -1;
+                        _paintTrendLines(canvas, ctx, trends, dpr, W, H, pad, cW, cH, minV, maxV, xPos, yPos, -1);
+                    }
+                    tooltip.style.display = 'none';
+                }
+            };
+            canvas.onmouseleave = () => {
+                tooltip.style.display = 'none';
+                if (lastNearest !== -1) {
+                    lastNearest = -1;
+                    _paintTrendLines(canvas, ctx, trends, dpr, W, H, pad, cW, cH, minV, maxV, xPos, yPos, -1);
+                }
+            };
+        }
+
+        async function loadDashboard() {
+            const data = await fetchAPI('/api/admin/agent-dashboard');
+            if (data && !data.error) {
+                renderDashboard(data);
+            }
+            countdown = 30;
+        }
+
+        function startAutoRefresh() {
+            loadDashboard();
+            refreshInterval = setInterval(() => {
+                countdown--;
+                document.getElementById('refreshTimer').textContent = `Auto-refresh: ${countdown}s`;
+                if (countdown <= 0) {
+                    loadDashboard();
+                }
+            }, 1000);
+        }
+
+        startAutoRefresh();
+    </script>
+</body>
+</html>

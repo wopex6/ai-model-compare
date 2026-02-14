@@ -21,6 +21,8 @@ class DataCleanupManager:
         """Get a setting from admin_settings table"""
         try:
             conn = sqlite3.connect(self.smart_response_db_path)
+            conn.execute('PRAGMA journal_mode=WAL')
+            conn.execute('PRAGMA busy_timeout=5000')
             cursor = conn.cursor()
             cursor.execute('SELECT value, setting_type FROM admin_settings WHERE key = ?', (key,))
             row = cursor.fetchone()
@@ -62,6 +64,8 @@ class DataCleanupManager:
         counts = {}
         
         conn = sqlite3.connect(self.users_db_path)
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA busy_timeout=5000')
         cursor = conn.cursor()
         
         # Character interpretations
@@ -99,6 +103,8 @@ class DataCleanupManager:
         batch_size = self.get_batch_size()
         
         conn = sqlite3.connect(self.users_db_path)
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA busy_timeout=5000')
         cursor = conn.cursor()
         
         results = {
@@ -172,6 +178,8 @@ class DataCleanupManager:
         Called when user requests data deletion (GDPR compliance).
         """
         conn = sqlite3.connect(self.users_db_path)
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA busy_timeout=5000')
         cursor = conn.cursor()
         
         results = {'user_id': user_id, 'deleted': {}}
@@ -215,6 +223,8 @@ class DataCleanupManager:
         Returns data in a structured format for GDPR data portability.
         """
         conn = sqlite3.connect(self.users_db_path)
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA busy_timeout=5000')
         cursor = conn.cursor()
         
         export_data = {
@@ -292,6 +302,8 @@ class DataCleanupManager:
     def get_cleanup_stats(self) -> Dict:
         """Get statistics about data and cleanup status"""
         conn = sqlite3.connect(self.users_db_path)
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA busy_timeout=5000')
         cursor = conn.cursor()
         
         stats = {

@@ -2165,6 +2165,11 @@ class IntegratedAIChatbot {
     }
 
     async selectChatSession(sessionId) {
+        // Phase 7: Trigger end-of-conversation analysis when switching away
+        if (this.currentChatSession && this.currentChatSession !== sessionId) {
+            this._triggerEndOfConversationAnalysis(this.currentChatSession);
+        }
+        
         // Update UI
         document.querySelectorAll('.chat-session-item').forEach(item => {
             item.classList.remove('active');
@@ -2189,6 +2194,17 @@ class IntegratedAIChatbot {
         } catch (error) {
             console.error('Failed to load chat messages:', error);
         }
+    }
+
+    _triggerEndOfConversationAnalysis(sessionId) {
+        // Fire-and-forget: ask backend to analyze the conversation we're leaving
+        try {
+            fetch(`/api/effectiveness/analyze/${sessionId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.authToken}` },
+                body: JSON.stringify({})
+            }).catch(e => console.log('End-of-conversation analysis error:', e));
+        } catch(e) { /* non-critical */ }
     }
 
     renderChatMessages(messages) {
@@ -2403,6 +2419,68 @@ class IntegratedAIChatbot {
                     
                     aiMessage.appendChild(aiContent);
                     aiMessage.appendChild(aiTimestamp);
+                    
+                    // Feedback buttons (Phase 7: Effectiveness Learning)
+                    const feedbackRow = document.createElement('div');
+                    feedbackRow.className = 'feedback-row';
+                    const sessionId = this.currentSessionId;
+                    
+                    const thumbsUp = document.createElement('button');
+                    thumbsUp.className = 'feedback-btn';
+                    thumbsUp.innerHTML = '👍';
+                    thumbsUp.title = 'Helpful';
+                    thumbsUp.addEventListener('click', async () => {
+                        thumbsUp.classList.add('feedback-selected');
+                        thumbsDown.classList.remove('feedback-selected');
+                        try {
+                            await fetch(`/api/effectiveness/feedback`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.authToken}` },
+                                body: JSON.stringify({ session_id: sessionId, feedback_type: 'thumbs_up' })
+                            });
+                        } catch(e) { console.log('Feedback error:', e); }
+                    });
+                    
+                    const thumbsDown = document.createElement('button');
+                    thumbsDown.className = 'feedback-btn';
+                    thumbsDown.innerHTML = '👎';
+                    thumbsDown.title = 'Not helpful';
+                    thumbsDown.addEventListener('click', async () => {
+                        thumbsDown.classList.add('feedback-selected');
+                        thumbsUp.classList.remove('feedback-selected');
+                        try {
+                            await fetch(`/api/effectiveness/feedback`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.authToken}` },
+                                body: JSON.stringify({ session_id: sessionId, feedback_type: 'thumbs_down' })
+                            });
+                        } catch(e) { console.log('Feedback error:', e); }
+                    });
+                    
+                    feedbackRow.appendChild(thumbsUp);
+                    feedbackRow.appendChild(thumbsDown);
+                    aiMessage.appendChild(feedbackRow);
+                    
+                    // Quick-reply buttons for clarification questions
+                    if (result.clarification && result.clarification.perspective_questions && result.clarification.perspective_questions.length > 0) {
+                        const quickReplies = document.createElement('div');
+                        quickReplies.className = 'quick-replies';
+                        result.clarification.perspective_questions.forEach(pq => {
+                            const btn = document.createElement('button');
+                            btn.className = 'quick-reply-btn';
+                            btn.textContent = pq.question;
+                            btn.addEventListener('click', () => {
+                                const chatInput = document.getElementById('chat-input');
+                                chatInput.value = pq.question;
+                                chatInput.focus();
+                                quickReplies.remove();
+                                this.sendChatMessage();
+                            });
+                            quickReplies.appendChild(btn);
+                        });
+                        aiMessage.appendChild(quickReplies);
+                    }
+                    
                     messagesContainer.appendChild(aiMessage);
                     messagesContainer.scrollTop = messagesContainer.scrollHeight;
                     

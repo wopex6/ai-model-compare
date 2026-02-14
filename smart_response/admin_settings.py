@@ -239,7 +239,10 @@ class AdminSettings:
         self._initialize_defaults()
     
     def _get_connection(self):
-        return sqlite3.connect(self.db_path)
+        conn = sqlite3.connect(self.db_path)
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA busy_timeout=5000')
+        return conn
     
     def _ensure_table(self):
         """Create settings table if it doesn't exist"""
