@@ -1,5 +1,10 @@
 # CRITICAL: Load .env FIRST before any other imports!
 # This must be at the top because ai_compare modules also call load_dotenv()
+import time as _startup_time_mod
+_startup_t0 = _startup_time_mod.perf_counter()
+def _startup_elapsed():
+    return f"[{_startup_time_mod.perf_counter() - _startup_t0:.1f}s]"
+
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -19,13 +24,20 @@ if sys.platform == 'win32':
         sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
         sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
 
-# Suppress noisy HTTP request logging from AI SDKs (httpx, openai, anthropic)
+# Suppress noisy HTTP request logging from AI SDKs (httpx, openai, anthropic, google/grpc)
 import logging
 logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.getLogger('openai').setLevel(logging.WARNING)
 logging.getLogger('anthropic').setLevel(logging.WARNING)
+logging.getLogger('grpc').setLevel(logging.WARNING)
+logging.getLogger('absl').setLevel(logging.WARNING)
+logging.getLogger('google').setLevel(logging.WARNING)
+import os
+os.environ.setdefault('GRPC_VERBOSITY', 'ERROR')
+os.environ.setdefault('GLOG_minloglevel', '2')
 
 # Now import everything else
+print(f"{_startup_elapsed()} Starting imports...")
 from flask import Flask, render_template, request, jsonify, session, redirect, send_from_directory
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
@@ -35,6 +47,7 @@ import bcrypt
 import jwt
 import uuid
 from datetime import datetime, timedelta
+print(f"{_startup_elapsed()} Flask + stdlib loaded")
 from ai_compare.compare import AICompare
 from ai_compare.chatbot import AIChatbot
 from ai_compare.motivational_chatbot import MotivationalChatbot
@@ -46,6 +59,7 @@ from ai_compare.personality_profiler import PersonalityProfiler
 from ai_compare.personality_ui import PersonalityFeedbackWindow, PersonalityAssessmentUI
 from ai_compare.user_profile_manager import UserProfileManager
 from auto_doc_hook import enable_auto_docs, update_docs_now
+print(f"{_startup_elapsed()} ai_compare + chatbots loaded")
 
 # New character system
 from ai_compare.character_factory import CharacterFactory
@@ -53,6 +67,7 @@ from ai_compare.character_routes import register_character_routes
 from ai_compare.character_configs import CHARACTER_CONFIGS
 
 # Import the integrated database system
+print(f"{_startup_elapsed()} Character system loaded")
 from integrated_database import IntegratedDatabase
 from automated_greeting_system import AutomatedGreetingSystem
 from database_backup import BackupManager
@@ -81,6 +96,7 @@ try:
 except Exception as e:
     print(f"⚠️ Alert Notifier not available: {e}")
 
+print(f"{_startup_elapsed()} DB + agents loaded")
 # Import Personality Systems
 from smart_response.trait_inference import TraitInferenceEngine
 
@@ -97,6 +113,7 @@ try:
     from smart_response.monitoring import get_error_tracker, get_uptime_monitor, get_alert_manager, track_error
     from smart_response.context_window import create_context_window, create_multi_turn_memory, create_character_switcher
     NEW_MODULES_AVAILABLE = True
+    print(f"{_startup_elapsed()} All imports complete")
 except ImportError as e:
     print(f"Warning: New modules not available: {e}")
     NEW_MODULES_AVAILABLE = False
