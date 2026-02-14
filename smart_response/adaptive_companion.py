@@ -397,6 +397,17 @@ class AdaptiveCompanion:
             cursor = self.db.cursor()
             
             cursor.execute('''
+                CREATE TABLE IF NOT EXISTS response_feedback (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    message_id INTEGER,
+                    feedback_type TEXT NOT NULL,
+                    feedback_data TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ''')
+            
+            cursor.execute('''
                 SELECT feedback_type, COUNT(*) 
                 FROM response_feedback 
                 WHERE user_id = ?
