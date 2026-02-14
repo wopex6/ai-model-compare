@@ -211,7 +211,7 @@ class ModelDiscovery:
                 self._set_cache_data('google', available[:10])  # Top 10
                 return available[:10]
         except Exception as e:
-            logger.warning(f"Failed to discover Google models: {e}")
+            logger.info(f"Google model discovery unavailable (using fallback): {e}")
         
         # Fallback to known working models
         known_models = [
