@@ -11,9 +11,14 @@ project = f'/home/{username}/ai-model-compare'
 
 # Files that changed since last successful deploy
 files_to_upload = [
+    ('.env', '.env'),
+    ('app.py', 'app.py'),
     ('smart_response/characters/base.py', 'smart_response/characters/base.py'),
     ('ai_compare/model_config.py', 'ai_compare/model_config.py'),
     ('ai_compare/model_discovery.py', 'ai_compare/model_discovery.py'),
+    ('templates/chatchat.html', 'templates/chatchat.html'),
+    ('static/multi_user_app.js', 'static/multi_user_app.js'),
+    ('static/proactive_clarification_ui.js', 'static/proactive_clarification_ui.js'),
 ]
 
 print("Uploading changed files to PythonAnywhere...")
