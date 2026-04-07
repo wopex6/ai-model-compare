@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<model type="com.apple.IDECoreDataModeler.DataModel" documentVersion="1.0" lastSavedToolsVersion="21754" systemVersion="22G74" minimumToolsVersion="Automatic" sourceLanguage="Swift" userDefinedModelVersionIdentifier="">
+    <entity name="ChatSessionEntity" representedClassName="ChatSessionEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="createdAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="selectedModels" optional="YES" attributeType="String"/>
+        <attribute name="title" optional="YES" attributeType="String"/>
+        <attribute name="updatedAt" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="messages" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="MessageEntity" inverseName="session" inverseEntity="MessageEntity"/>
+    </entity>
+    <entity name="ComparisonResultEntity" representedClassName="ComparisonResultEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="prompt" optional="YES" attributeType="String"/>
+        <attribute name="timestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <attribute name="winner" optional="YES" attributeType="String"/>
+        <relationship name="responses" optional="YES" toMany="YES" deletionRule="Cascade" destinationEntity="ModelResponseEntity" inverseName="comparisonResult" inverseEntity="ModelResponseEntity"/>
+    </entity>
+    <entity name="MessageEntity" representedClassName="MessageEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="content" optional="YES" attributeType="String"/>
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="isUser" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+        <attribute name="modelId" optional="YES" attributeType="String"/>
+        <attribute name="timestamp" optional="YES" attributeType="Date" usesScalarValueType="NO"/>
+        <relationship name="session" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="ChatSessionEntity" inverseName="messages" inverseEntity="ChatSessionEntity"/>
+    </entity>
+    <entity name="ModelResponseEntity" representedClassName="ModelResponseEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="id" optional="YES" attributeType="UUID" usesScalarValueType="NO"/>
+        <attribute name="modelId" optional="YES" attributeType="String"/>
+        <attribute name="rating" optional="YES" attributeType="Integer 16" defaultValueString="0" usesScalarValueType="YES"/>
+        <attribute name="response" optional="YES" attributeType="String"/>
+        <attribute name="responseTime" optional="YES" attributeType="Double" defaultValueString="0.0" usesScalarValueType="YES"/>
+        <attribute name="tokenCount" optional="YES" attributeType="Integer 32" defaultValueString="0" usesScalarValueType="YES"/>
+        <relationship name="comparisonResult" optional="YES" maxCount="1" deletionRule="Nullify" destinationEntity="ComparisonResultEntity" inverseName="responses" inverseEntity="ComparisonResultEntity"/>
+    </entity>
+    <entity name="SettingsEntity" representedClassName="SettingsEntity" syncable="YES" codeGenerationType="class">
+        <attribute name="autoSaveChats" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+        <attribute name="maxTokenUsage" optional="YES" attributeType="Integer 32" defaultValueString="100000" usesScalarValueType="YES"/>
+        <attribute name="preferredModel" optional="YES" attributeType="String"/>
+        <attribute name="theme" optional="YES" attributeType="String"/>
+        <attribute name="voiceInputEnabled" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+        <attribute name="voiceOutputEnabled" optional="YES" attributeType="Boolean" usesScalarValueType="YES"/>
+    </entity>
+</model>

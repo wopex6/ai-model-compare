@@ -131,6 +131,9 @@ DB_PATH_INTEGRATED = os.environ.get('DB_PATH_INTEGRATED', 'integrated_users.db')
 DB_PATH_SMART_RESPONSE = os.environ.get('DB_PATH_SMART_RESPONSE',
     os.path.join(os.path.dirname(os.path.abspath(__file__)), 'smart_response.db'))
 
+import threading as _threading
+_db_lock = _threading.Lock()
+
 def get_db_conn(db_path=None, check_same_thread=True):
     """Create a SQLite connection with WAL mode and busy timeout."""
     path = db_path or DB_PATH_INTEGRATED
@@ -139,14 +142,109 @@ def get_db_conn(db_path=None, check_same_thread=True):
     conn.execute('PRAGMA busy_timeout=5000')
     return conn
 
+
+class ThreadSafeConnection:
+    """Wrap a sqlite3.Connection so every execute/commit acquires a lock.
+    Drop-in replacement for the shared smart_response_conn."""
+
+    def __init__(self, conn):
+        self._conn = conn
+        self._lock = _threading.Lock()
+
+    def cursor(self):
+        return _ThreadSafeCursor(self._conn, self._lock)
+
+    def commit(self):
+        with self._lock:
+            self._conn.commit()
+
+    def close(self):
+        self._conn.close()
+
+    def execute(self, *a, **kw):
+        with self._lock:
+            return self._conn.execute(*a, **kw)
+
+    def executemany(self, *a, **kw):
+        with self._lock:
+            return self._conn.executemany(*a, **kw)
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+
+class _ThreadSafeCursor:
+    def __init__(self, conn, lock):
+        self._lock = lock
+        with lock:
+            self._cursor = conn.cursor()
+
+    def execute(self, *a, **kw):
+        with self._lock:
+            return self._cursor.execute(*a, **kw)
+
+    def executemany(self, *a, **kw):
+        with self._lock:
+            return self._cursor.executemany(*a, **kw)
+
+    def fetchone(self):
+        with self._lock:
+            return self._cursor.fetchone()
+
+    def fetchall(self):
+        with self._lock:
+            return self._cursor.fetchall()
+
+    def fetchmany(self, size=None):
+        with self._lock:
+            return self._cursor.fetchmany(size) if size else self._cursor.fetchmany()
+
+    @property
+    def lastrowid(self):
+        return self._cursor.lastrowid
+
+    @property
+    def rowcount(self):
+        return self._cursor.rowcount
+
+    @property
+    def description(self):
+        return self._cursor.description
+
+    def __getattr__(self, name):
+        return getattr(self._cursor, name)
+
 # Disable auto-docs in production
 os.environ['DISABLE_AUTO_DOCS'] = 'true'
 
 app = Flask(__name__)
 
-# Configure Flask for better incognito browser support
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
-app.config['SESSION_COOKIE_SECURE'] = False  # Set to True in production with HTTPS
+# ---------- Environment detection ----------
+_FLASK_ENV = os.environ.get('FLASK_ENV', 'development')
+_IS_PRODUCTION = _FLASK_ENV == 'production'
+
+# ---------- Structured logging ----------
+import logging as _logging
+_log = _logging.getLogger('app')
+_log.setLevel(_logging.DEBUG if not _IS_PRODUCTION else _logging.INFO)
+if not _log.handlers:
+    _handler = _logging.StreamHandler()
+    _handler.setFormatter(_logging.Formatter(
+        '%(asctime)s %(levelname)s [%(name)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S'))
+    _log.addHandler(_handler)
+
+# ---------- Secrets – MUST be set via env vars in production ----------
+def _require_secret(name: str, fallback: str) -> str:
+    val = os.environ.get(name)
+    if val:
+        return val
+    if _IS_PRODUCTION:
+        raise RuntimeError(f"FATAL: {name} env-var is required in production. Set it and restart.")
+    _log.warning("Using insecure default for %s — set via env var before deploying!", name)
+    return fallback
+
+app.config['SECRET_KEY'] = _require_secret('SECRET_KEY', 'dev-secret-key-change-in-production')
+app.config['SESSION_COOKIE_SECURE'] = _IS_PRODUCTION  # True in production (requires HTTPS)
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['PERMANENT_SESSION_LIFETIME'] = 3600  # 1 hour
@@ -178,10 +276,29 @@ app.config['MAX_CONTENT_LENGTH'] = MAX_FILE_SIZE
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # JWT Configuration
-JWT_SECRET = os.environ.get('JWT_SECRET', 'your-jwt-secret-change-in-production')
+JWT_SECRET = _require_secret('JWT_SECRET', 'your-jwt-secret-change-in-production')
 
-# Enable CORS for better browser compatibility
-CORS(app, supports_credentials=True)
+# Enable CORS — restrict origins in production
+_ALLOWED_ORIGINS = os.environ.get('CORS_ORIGINS', '*').split(',')
+CORS(app,
+     supports_credentials=True,
+     origins=_ALLOWED_ORIGINS if _IS_PRODUCTION else ['*'],
+     expose_headers=['X-RateLimit-Remaining', 'X-RateLimit-Reset'])
+
+# ---------- Security headers (after_request) ----------
+@app.after_request
+def _apply_security_headers(response):
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    if _IS_PRODUCTION:
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+        csp = ("default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+               "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; "
+               "font-src 'self' https://cdnjs.cloudflare.com; img-src 'self' data:;")
+        response.headers['Content-Security-Policy'] = csp
+    return response
 
 # Initialize integrated database
 integrated_db = IntegratedDatabase()
@@ -328,11 +445,30 @@ try:
     from smart_response.personality_context_integrator import create_personality_integrator
     from smart_response.explicit_context_handler import ExplicitContextHandler
     from smart_response.character_effectiveness_learner import create_effectiveness_learner
-    smart_response_conn = get_db_conn(DB_PATH_INTEGRATED, check_same_thread=False)
+    from smart_response.life_stage_adapter import get_life_stage_adapter
+    from smart_response.life_companion_profile import get_life_companion_profiler
+    from smart_response.crisis_detector import get_crisis_detector
+    from smart_response.emotional_intelligence import get_emotional_intelligence
+    from smart_response.life_pattern_detector import get_life_pattern_detector
+    from smart_response.habit_tracker import get_habit_tracker
+    from smart_response.decision_support import get_decision_support
+    from smart_response.life_transition_guide import get_life_transition_guide
+    from smart_response.companion_cache import get_companion_cache
+    _raw_sr_conn = get_db_conn(DB_PATH_INTEGRATED, check_same_thread=False)
+    smart_response_conn = ThreadSafeConnection(_raw_sr_conn)
     smart_handler = SmartResponseHandler(smart_response_conn)
     context_manager = ConversationContextManager(smart_response_conn)
     history_system = DualLayerHistorySystem(smart_response_conn)
     ai_budget = AIBudgetManager(smart_response_conn)
+    # Apply env-var overrides so limits can be raised without code changes.
+    # Defaults are intentionally generous; set lower in production via env vars.
+    _user_limit  = int(os.environ.get('AI_DAILY_LIMIT_USER',  1000))
+    _admin_limit = int(os.environ.get('AI_DAILY_LIMIT_ADMIN', 5000))
+    _system_cap  = int(os.environ.get('AI_SYSTEM_DAILY_CAP',  10000))
+    ai_budget.update_limit('daily_limit_user',  _user_limit)
+    ai_budget.update_limit('daily_limit_admin', _admin_limit)
+    ai_budget.update_limit('system_daily_cap',  _system_cap)
+    print(f"✓ AI Budget limits set — user: {_user_limit}/day, admin: {_admin_limit}/day, system cap: {_system_cap}/day")
     user_context_mgr = create_user_context_manager(smart_response_conn, ai_budget)
     clarification_system = create_clarification_system(smart_response_conn)
     character_trait_system = create_character_trait_system(smart_response_conn)
@@ -342,7 +478,17 @@ try:
     personality_integrator = create_personality_integrator(smart_response_conn, integrated_db)
     explicit_context_handler = ExplicitContextHandler(smart_response_conn)
     effectiveness_learner = create_effectiveness_learner(smart_response_conn, character_trait_system)
+    life_stage_adapter = get_life_stage_adapter(smart_response_conn)
+    life_companion_profiler = get_life_companion_profiler(smart_response_conn)
+    crisis_detector = get_crisis_detector(smart_response_conn, locale=os.environ.get('CRISIS_LOCALE', 'AU'))
+    emotional_intelligence = get_emotional_intelligence(smart_response_conn)
+    life_pattern_detector = get_life_pattern_detector(smart_response_conn)
+    habit_tracker = get_habit_tracker(smart_response_conn)
+    decision_support = get_decision_support(smart_response_conn)
+    life_transition_guide = get_life_transition_guide(smart_response_conn)
+    companion_cache = get_companion_cache()
     print("✓ User Context Manager initialized (preferences, goals, language learning)")
+    print("✓ Life Companion modules initialized (8 modules + cache)")
     print("✓ Proactive Clarification System initialized")
     print("✓ Character Trait System initialized (12D trait-space matching)")
     print("✓ Character-Specific Context initialized (multi-perspective interpretations)")
@@ -518,6 +664,15 @@ except Exception as e:
     domain_character_manager = None
     domain_character_ai = None
     effectiveness_learner = None
+    life_stage_adapter = None
+    life_companion_profiler = None
+    crisis_detector = None
+    emotional_intelligence = None
+    life_pattern_detector = None
+    habit_tracker = None
+    decision_support = None
+    life_transition_guide = None
+    companion_cache = None
     background_scheduler = None
     conversation_pipeline = None
     quality_scorer = None
@@ -525,6 +680,18 @@ except Exception as e:
     ab_testing_agent = None
     previous_interactions = {}
     message_histories = {}
+
+# ---------- Memory growth caps (W11) ----------
+_MAX_PREVIOUS_INTERACTIONS = 500
+_MAX_MESSAGE_HISTORIES = 200
+
+def _cap_dict(d, max_size):
+    """Evict oldest entries when dict exceeds max_size."""
+    if len(d) > max_size:
+        excess = len(d) - max_size
+        keys_to_remove = list(d.keys())[:excess]
+        for k in keys_to_remove:
+            del d[k]
 
 # Helper function for Smart Response integration with Context
 def process_with_smart_response(message, character_name, ai_chat_function):
@@ -585,6 +752,7 @@ def process_with_smart_response(message, character_name, ai_chat_function):
             
             # Cache in memory for this session
             message_histories[history_key] = message_history
+            _cap_dict(message_histories, _MAX_MESSAGE_HISTORIES)
             
             if message_history:
                 print(f"📚 Loaded {len(message_history)//2} conversation turns from database for {character_name}")
@@ -722,6 +890,7 @@ def process_with_smart_response(message, character_name, ai_chat_function):
             # Keep only last 20 messages
             message_history = message_history[-20:]
             message_histories[history_key] = message_history
+            _cap_dict(message_histories, _MAX_MESSAGE_HISTORIES)
             
             result = {
                 'response': response_data['text'],
@@ -763,6 +932,7 @@ def process_with_smart_response(message, character_name, ai_chat_function):
                 'situation': situation_analysis,
                 'conv_length': len(message_history)
             }
+            _cap_dict(previous_interactions, _MAX_PREVIOUS_INTERACTIONS)
             
             return result
         
@@ -821,10 +991,127 @@ def process_with_smart_response(message, character_name, ai_chat_function):
             if explicit_parts:
                 explicit_context += "\n[From This Message]\n" + "\n".join(f"- {p}" for p in explicit_parts)
         
-        if context_prompt or situation_context or explicit_context or response_style_hint:
+        # LIFE COMPANION CONTEXT: Build context blocks from all companion modules
+        life_companion_context = ""
+        if user_id:
+            lc_blocks = []
+            emo_state = None
+            lc_profile = None
+            try:
+                # 1. Crisis detection (ALWAYS first — safety priority)
+                if crisis_detector:
+                    crisis = crisis_detector.assess(user_id, message)
+                    crisis_block = crisis_detector.build_prompt_block(crisis)
+                    if crisis_block:
+                        lc_blocks.append(crisis_block)
+                        print(f"🚨 Crisis: {crisis.severity} (conf {crisis.confidence:.0%})")
+
+                # 2. Emotional intelligence
+                if emotional_intelligence:
+                    emo_state = emotional_intelligence.analyse_emotion(user_id, message)
+                    trajectory = emotional_intelligence.get_trajectory(user_id, emo_state)
+                    empathy = emotional_intelligence.get_empathy_guidance(emo_state)
+                    emo_block = emotional_intelligence.build_prompt_block(trajectory, empathy)
+                    if emo_block:
+                        lc_blocks.append(emo_block)
+
+                # 3. Life stage awareness (cached — changes very rarely)
+                _detected_stage = None
+                if life_stage_adapter:
+                    stage_block = companion_cache.get(user_id, 'life_stage') if companion_cache else None
+                    if stage_block is None:
+                        _stage_profile = life_stage_adapter.detect_life_stage(user_id, message)
+                        _detected_stage = _stage_profile.stage if _stage_profile else None
+                        stage_block = life_stage_adapter.build_prompt_block(_stage_profile)
+                        if companion_cache:
+                            companion_cache.set(user_id, 'life_stage', stage_block)
+                            companion_cache.set(user_id, 'life_stage_name', _detected_stage)
+                    else:
+                        _detected_stage = companion_cache.get(user_id, 'life_stage_name') if companion_cache else None
+                    if stage_block:
+                        char_tone = life_stage_adapter.get_character_stage_guidance(
+                            character_name, _detected_stage or '')
+                        if char_tone:
+                            stage_block += f"\n[Character tone for this stage]: {char_tone}"
+                        lc_blocks.append(stage_block)
+
+                # 4. Life companion profile (write every msg, read cached)
+                if life_companion_profiler:
+                    life_companion_profiler.process_message(user_id, message, character_name)
+                    lc_profile = companion_cache.get(user_id, 'companion_profile') if companion_cache else None
+                    if lc_profile is None:
+                        lc_profile = life_companion_profiler.get_profile(user_id)
+                        if companion_cache:
+                            companion_cache.set(user_id, 'companion_profile', lc_profile)
+                    profile_block = life_companion_profiler.build_prompt_block(lc_profile)
+                    if profile_block:
+                        lc_blocks.append(profile_block)
+
+                # 5. Life pattern detection (lightweight tag every msg; report cached)
+                if life_pattern_detector:
+                    emo_label = emo_state.primary_emotion if emo_state else 'neutral'
+                    life_pattern_detector.process_message(user_id, message, emotion=emo_label)
+                    pattern_block = companion_cache.get(user_id, 'pattern_report') if companion_cache else None
+                    if pattern_block is None:
+                        interaction_count = lc_profile.total_interactions if lc_profile else 0
+                        if interaction_count >= 10:
+                            pattern_report = life_pattern_detector.generate_report(user_id)
+                            pattern_block = life_pattern_detector.build_prompt_block(pattern_report)
+                            if companion_cache:
+                                companion_cache.set(user_id, 'pattern_report', pattern_block)
+                    if pattern_block:
+                        lc_blocks.append(pattern_block)
+
+                # 6. Habit tracker nudges (cached, only if user has habits)
+                if habit_tracker:
+                    habit_block = companion_cache.get(user_id, 'habit_summary') if companion_cache else None
+                    if habit_block is None:
+                        habits = habit_tracker.get_habits(user_id)
+                        if habits:
+                            habit_summary = habit_tracker.get_summary(user_id)
+                            habit_block = habit_tracker.build_prompt_block(habit_summary)
+                            if companion_cache:
+                                companion_cache.set(user_id, 'habit_summary', habit_block or '')
+                    if habit_block:
+                        lc_blocks.append(habit_block)
+
+                # 7. Decision support (only for substantial messages to reduce false positives)
+                if decision_support and len(message) > 20:
+                    user_vals = list((lc_profile.detected_values or {}).keys())[:5] if lc_profile else []
+                    guidance = decision_support.analyse_message(user_id, message, user_values=user_vals, character_id=character_name)
+                    decision_block = decision_support.build_prompt_block(guidance)
+                    if decision_block:
+                        lc_blocks.append(decision_block)
+
+                # 8. Life transition detection
+                if life_transition_guide:
+                    transition = life_transition_guide.detect_transition(user_id, message)
+                    if transition:
+                        transition_block = life_transition_guide.build_prompt_block(transition)
+                        if transition_block:
+                            lc_blocks.append(transition_block)
+
+            except Exception as e:
+                print(f"⚠️ Life companion context error: {e}")
+
+            if lc_blocks:
+                # Prioritize: crisis always first, then limit to top 4 by length (proxy for relevance)
+                MAX_LC_BLOCKS = 4
+                if len(lc_blocks) > MAX_LC_BLOCKS:
+                    crisis_blocks = [b for b in lc_blocks if 'CRISIS' in b or 'SAFETY' in b]
+                    other_blocks = [b for b in lc_blocks if b not in crisis_blocks]
+                    # Sort non-crisis by length descending (longer = more specific = more relevant)
+                    other_blocks.sort(key=len, reverse=True)
+                    lc_blocks = crisis_blocks + other_blocks[:MAX_LC_BLOCKS - len(crisis_blocks)]
+                    print(f"🧠 Life Companion: {len(lc_blocks)} of {len(crisis_blocks) + len(other_blocks)} blocks selected")
+                else:
+                    print(f"🧠 Life Companion: {len(lc_blocks)} context blocks injected")
+                life_companion_context = "\n\n" + "\n\n".join(lc_blocks)
+
+        if context_prompt or situation_context or explicit_context or response_style_hint or life_companion_context:
             # Prepend context to message so AI receives it
             # This makes AI aware of user's emotional state, goals, and preferences
-            full_context = (context_prompt + situation_context + explicit_context + response_style_hint).strip()
+            full_context = (context_prompt + situation_context + explicit_context + response_style_hint + life_companion_context).strip()
             enhanced_message = f"{full_context}\n\nUser's current message: {message}"
         else:
             enhanced_message = message
@@ -929,6 +1216,7 @@ def process_with_smart_response(message, character_name, ai_chat_function):
             })
             message_history = message_history[-20:]
             message_histories[history_key] = message_history
+            _cap_dict(message_histories, _MAX_MESSAGE_HISTORIES)
         
         # Update context
         response_text = response if isinstance(response, str) else response.get('response', '')
@@ -959,6 +1247,7 @@ def process_with_smart_response(message, character_name, ai_chat_function):
             'situation': situation_analysis,
             'conv_length': len(message_history)
         }
+        _cap_dict(previous_interactions, _MAX_PREVIOUS_INTERACTIONS)
     
     # Add metadata
     if isinstance(response, dict):
@@ -997,9 +1286,55 @@ def process_with_smart_response(message, character_name, ai_chat_function):
             'needs_action': situation_analysis.needs_action
         }
     
+    # PROACTIVE NUDGES: Attach habit/checkin nudges to response metadata
+    if user_id and isinstance(response, dict):
+        try:
+            nudges = []
+            if habit_tracker:
+                nudges.extend(habit_tracker.get_nudges(user_id)[:2])
+            if decision_support:
+                open_decisions = decision_support.get_open_decisions(user_id)
+                old_decisions = [d for d in open_decisions
+                                 if d.get('created_at') and
+                                 (datetime.now() - datetime.fromisoformat(d['created_at'])).days >= 14]
+                for d in old_decisions[:1]:
+                    nudges.append(f"You were thinking about: \"{d['title'][:60]}\" — how did that turn out?")
+            if nudges:
+                response['nudges'] = nudges
+        except Exception as e:
+            print(f"⚠️ Nudge generation error: {e}")
+
     return response
 
 # Authentication middleware
+_token_blacklist = {}  # token_hash -> expiry_timestamp
+_token_bl_lock = _threading.Lock()
+
+def _blacklist_token(token: str, exp_timestamp: float):
+    """Add a token to the blacklist until its natural expiry."""
+    import hashlib
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    with _token_bl_lock:
+        _token_blacklist[token_hash] = exp_timestamp
+        # Lazy cleanup: remove expired entries when list grows
+        if len(_token_blacklist) > 500:
+            now = datetime.utcnow().timestamp()
+            expired = [k for k, v in _token_blacklist.items() if v < now]
+            for k in expired:
+                del _token_blacklist[k]
+
+def _is_token_blacklisted(token: str) -> bool:
+    import hashlib
+    token_hash = hashlib.sha256(token.encode()).hexdigest()
+    with _token_bl_lock:
+        exp = _token_blacklist.get(token_hash)
+        if exp is None:
+            return False
+        if datetime.utcnow().timestamp() > exp:
+            del _token_blacklist[token_hash]
+            return False
+        return True
+
 def authenticate_token():
     """Middleware to authenticate JWT tokens"""
     auth_header = request.headers.get('Authorization')
@@ -1008,6 +1343,8 @@ def authenticate_token():
     
     try:
         token = auth_header.split(' ')[1]
+        if _is_token_blacklisted(token):
+            return None
         payload = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
         return payload
     except (jwt.ExpiredSignatureError, jwt.InvalidTokenError, IndexError):
@@ -1034,11 +1371,25 @@ def favicon():
     """Serve favicon or return 204 No Content"""
     return '', 204
 
+# ---------- Safe error helper (W6: never leak internals) ----------
+def _safe_error(e, context='request'):
+    """Log the real error server-side and return a generic message to the client."""
+    _log.error("Internal error in %s: %s", context, e, exc_info=True)
+    return jsonify({'error': 'An internal error occurred. Please try again later.'}), 500
+
 # Authentication routes
 @app.route('/api/auth/signup', methods=['POST'])
 def signup():
     """User registration"""
     try:
+        # Rate limit signups by IP
+        rl = get_rate_limiter()
+        if rl:
+            allowed, info = rl.check_limit(request.remote_addr, 'auth')
+            if not allowed:
+                return jsonify({'error': 'Too many attempts. Please try again later.',
+                                'retry_after': info.get('reset_in', 60)}), 429
+
         data = request.get_json()
         username = data.get('username')
         email = data.get('email')
@@ -1047,6 +1398,16 @@ def signup():
         if not all([username, email, password]):
             return jsonify({'error': 'Username, email, and password are required'}), 400
         
+        # Input validation
+        valid, err = InputValidator.validate_username(username)
+        if not valid:
+            return jsonify({'error': err}), 400
+        valid, err = InputValidator.validate_email(email)
+        if not valid:
+            return jsonify({'error': err}), 400
+        if len(password) < 8:
+            return jsonify({'error': 'Password must be at least 8 characters'}), 400
+
         user_id = integrated_db.create_user(username, email, password)
         if not user_id:
             return jsonify({'error': 'Username or email already exists'}), 400
@@ -1092,12 +1453,20 @@ def signup():
             'verification_sent': email_sent
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'signup')
 
 @app.route('/api/auth/login', methods=['POST'])
 def login():
     """User login"""
     try:
+        # Rate limit logins by IP (brute-force protection)
+        rl = get_rate_limiter()
+        if rl:
+            allowed, info = rl.check_limit(request.remote_addr, 'auth')
+            if not allowed:
+                return jsonify({'error': 'Too many login attempts. Please try again later.',
+                                'retry_after': info.get('reset_in', 60)}), 429
+
         data = request.get_json()
         username = data.get('username')
         password = data.get('password')
@@ -1107,6 +1476,7 @@ def login():
         
         user = integrated_db.authenticate_user(username, password)
         if not user:
+            _log.warning("Failed login attempt for user '%s' from %s", username, request.remote_addr)
             return jsonify({'error': 'Invalid credentials'}), 401
         
         # Get user role
@@ -1124,19 +1494,32 @@ def login():
         session['username'] = user['username']
         session['role'] = user_role
         
-        print(f"🔐 Login successful for user {user['id']} ({user['username']})")
-        print(f"   Session set: {dict(session)}")
-        print(f"   Token generated: {token[:20]}...")
+        _log.info("Login successful for user %s (%s)", user['id'], user['username'])
         
         return jsonify({
             'success': True,
             'token': token,
             'user_id': user['id'],
             'username': user['username'],
-            'role': user_role  # Include role in login response
+            'role': user_role
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'login')
+
+@app.route('/api/auth/logout', methods=['POST'])
+@require_auth
+def logout():
+    """Logout — blacklist the current JWT until it naturally expires."""
+    try:
+        auth_header = request.headers.get('Authorization', '')
+        token = auth_header.split(' ')[1] if ' ' in auth_header else ''
+        if token:
+            exp = request.current_user.get('exp', 0)
+            _blacklist_token(token, exp)
+        session.clear()
+        return jsonify({'success': True, 'message': 'Logged out'})
+    except Exception as e:
+        return _safe_error(e, 'logout')
 
 @app.route('/api/auth/change-password', methods=['POST'])
 @require_auth
@@ -1162,7 +1545,7 @@ def change_password():
         else:
             return jsonify({'error': 'Failed to update password'}), 500
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'change_password')
 
 @app.route('/api/auth/change-email', methods=['POST'])
 @require_auth
@@ -1201,7 +1584,7 @@ def change_email():
         else:
             return jsonify({'error': 'Failed to update email'}), 500
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'change_email')
 
 @app.route('/api/admin/users')
 @require_auth
@@ -1216,7 +1599,7 @@ def get_all_users():
         users = integrated_db.get_all_users_stats()
         return jsonify(users)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'get_all_users')
 
 @app.route('/api/admin/users/<int:user_id>/delete', methods=['POST'])
 @require_auth
@@ -1238,7 +1621,7 @@ def delete_user(user_id):
         else:
             return jsonify({'error': 'Failed to delete user'}), 500
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/admin/users/<int:user_id>/restore', methods=['POST'])
 @require_auth
@@ -1256,7 +1639,7 @@ def restore_user(user_id):
         else:
             return jsonify({'error': 'Failed to restore user'}), 500
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/admin/users/<int:user_id>/role', methods=['POST'])
 @require_auth
@@ -1286,7 +1669,7 @@ def change_user_role(user_id):
         else:
             return jsonify({'error': 'Failed to change user role'}), 500
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/admin/users/<int:user_id>/permanent-delete', methods=['POST'])
 @require_auth
@@ -1308,7 +1691,7 @@ def permanent_delete_user(user_id):
         else:
             return jsonify({'error': 'Failed to permanently delete user'}), 500
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/admin/users/bulk-delete-deleted', methods=['POST'])
 @require_auth
@@ -1327,7 +1710,7 @@ def bulk_delete_deleted_users():
             'deleted_count': deleted_count
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/admin/statistics')
 @require_auth
@@ -1342,7 +1725,7 @@ def get_statistics():
         stats = integrated_db.get_usage_statistics()
         return jsonify(stats)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/admin/smart-response-analytics')
 @require_auth
@@ -1530,7 +1913,7 @@ def get_smart_response_analytics():
             'domain_character_stats': domain_char_stats
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/admin/populate-test-data', methods=['POST'])
 @require_auth
@@ -1628,7 +2011,7 @@ def populate_test_data():
         
         return jsonify({'success': True, 'results': results})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/admin/background-tasks/run', methods=['POST'])
 @require_auth
@@ -1669,7 +2052,405 @@ def run_background_task():
             return jsonify({'error': 'Background scheduler not available'}), 500
             
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
+
+@app.route('/api/admin/ai-budget/set-limit', methods=['POST'])
+@require_auth
+def set_ai_budget_limit():
+    """Update an AI budget limit (admin only).
+    Body: { "key": "daily_limit_user", "value": 500 }
+    Valid keys: daily_limit_user, daily_limit_admin, system_daily_cap,
+                hourly_limit, background_limit
+    """
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+        if not ai_budget:
+            return jsonify({'error': 'Budget manager not initialised'}), 503
+
+        data = request.get_json() or {}
+        key   = data.get('key', '').strip()
+        value = data.get('value')
+
+        valid_keys = [
+            'daily_limit_user', 'daily_limit_admin', 'system_daily_cap',
+            'hourly_limit', 'background_limit'
+        ]
+        if key not in valid_keys:
+            return jsonify({
+                'error': f'Invalid key "{key}". Valid keys: {valid_keys}'
+            }), 400
+
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'value must be an integer'}), 400
+
+        if value < 1:
+            return jsonify({'error': 'value must be >= 1'}), 400
+
+        ok = ai_budget.update_limit(key, value)
+        if not ok:
+            return jsonify({'error': 'update_limit returned False'}), 500
+
+        print(f"[AI-BUDGET] Admin {request.current_user['user_id']} set {key} = {value}")
+        return jsonify({
+            'success': True,
+            'key': key,
+            'new_value': value,
+            'limits': ai_budget.get_limits()
+        })
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+# ============================================
+# LIFE COMPANION API ENDPOINTS
+# ============================================
+
+@app.route('/api/user/companion-profile', methods=['GET'])
+@require_auth
+def get_companion_profile():
+    """Get the user's life companion profile"""
+    try:
+        uid = request.current_user['user_id']
+        if not life_companion_profiler:
+            return jsonify({'error': 'Life companion not initialised'}), 503
+        profile = life_companion_profiler.get_profile(uid)
+        block = life_companion_profiler.build_prompt_block(profile)
+        return jsonify({
+            'success': True,
+            'profile': {
+                'values': profile.detected_values,
+                'domains': {k: {'sentiment': v.sentiment, 'trajectory': v.trajectory,
+                                'mentions': v.mention_count}
+                            for k, v in profile.life_domains.items() if v.confidence > 0.2},
+                'people': {k: {'relationship': v.relationship, 'mentions': v.mention_count}
+                           for k, v in profile.people.items()},
+                'trust_level': round(profile.trust_level, 2),
+                'message_depth': profile.avg_message_depth,
+                'total_interactions': profile.total_interactions,
+                'first_interaction': profile.first_interaction,
+                'last_interaction': profile.last_interaction,
+            },
+            'summary_text': block,
+        })
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/user/habits', methods=['GET'])
+@require_auth
+def get_user_habits():
+    """Get user's habits and today's summary"""
+    try:
+        uid = request.current_user['user_id']
+        if not habit_tracker:
+            return jsonify({'error': 'Habit tracker not initialised'}), 503
+        summary = habit_tracker.get_summary(uid)
+        nudges = habit_tracker.get_nudges(uid)
+        return jsonify({
+            'success': True,
+            'habits': [{'id': h.id, 'name': h.name, 'category': h.category,
+                        'frequency': h.frequency, 'streak': h.current_streak,
+                        'best_streak': h.best_streak, 'total': h.total_completions}
+                       for h in summary.active_habits],
+            'due_today': [h.id for h in summary.due_today],
+            'completed_today': summary.completed_today,
+            'weekly_rate': summary.weekly_completion_rate,
+            'mood_trend': summary.mood_trend,
+            'nudges': nudges,
+        })
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/user/habits', methods=['POST'])
+@require_auth
+def create_user_habit():
+    """Create a new habit"""
+    try:
+        uid = request.current_user['user_id']
+        if not habit_tracker:
+            return jsonify({'error': 'Habit tracker not initialised'}), 503
+        data = request.get_json() or {}
+        name = data.get('name', '').strip()
+        if not name:
+            return jsonify({'error': 'name is required'}), 400
+        habit = habit_tracker.create_habit(
+            uid, name=name,
+            description=data.get('description', ''),
+            frequency=data.get('frequency', 'daily'),
+            category=data.get('category', 'general'),
+        )
+        if not habit:
+            return jsonify({'error': 'Habit already exists or creation failed'}), 409
+        return jsonify({'success': True, 'habit_id': habit.id, 'name': habit.name})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/user/habits/<int:habit_id>/complete', methods=['POST'])
+@require_auth
+def complete_user_habit(habit_id):
+    """Mark a habit as completed for today"""
+    try:
+        uid = request.current_user['user_id']
+        if not habit_tracker:
+            return jsonify({'error': 'Habit tracker not initialised'}), 503
+        data = request.get_json() or {}
+        ok = habit_tracker.complete_habit(uid, habit_id, notes=data.get('notes', ''))
+        return jsonify({'success': ok})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/user/checkin', methods=['GET'])
+@require_auth
+def get_user_checkin():
+    """Get today's check-in and recent history"""
+    try:
+        uid = request.current_user['user_id']
+        if not habit_tracker:
+            return jsonify({'error': 'Habit tracker not initialised'}), 503
+        today = habit_tracker.get_today_checkin(uid)
+        recent = habit_tracker.get_recent_checkins(uid, days=7)
+        return jsonify({
+            'success': True,
+            'today': {'mood': today.mood, 'energy': today.energy,
+                      'priority': today.top_priority, 'gratitude': today.gratitude} if today else None,
+            'recent': [{'date': c.date, 'mood': c.mood, 'energy': c.energy,
+                        'mood_score': c.mood_score} for c in recent],
+        })
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/user/checkin', methods=['POST'])
+@require_auth
+def submit_user_checkin():
+    """Submit a daily check-in"""
+    try:
+        uid = request.current_user['user_id']
+        if not habit_tracker:
+            return jsonify({'error': 'Habit tracker not initialised'}), 503
+        data = request.get_json() or {}
+        checkin = habit_tracker.daily_checkin(
+            uid,
+            mood=data.get('mood', 'okay'),
+            energy=data.get('energy', 'medium'),
+            top_priority=data.get('top_priority', ''),
+            gratitude=data.get('gratitude', ''),
+            reflection=data.get('reflection', ''),
+        )
+        return jsonify({'success': True, 'date': checkin.date if checkin else None})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/user/decisions', methods=['GET'])
+@require_auth
+def get_user_decisions():
+    """Get user's open decisions"""
+    try:
+        uid = request.current_user['user_id']
+        if not decision_support:
+            return jsonify({'error': 'Decision support not initialised'}), 503
+        return jsonify({
+            'success': True,
+            'open': decision_support.get_open_decisions(uid),
+            'recent_decided': decision_support.get_decision_history(uid, days=90),
+        })
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/user/emotional-summary', methods=['GET'])
+@require_auth
+def get_emotional_summary():
+    """Get user's emotional summary over time"""
+    try:
+        uid = request.current_user['user_id']
+        if not emotional_intelligence:
+            return jsonify({'error': 'Emotional intelligence not initialised'}), 503
+        days = request.args.get('days', 30, type=int)
+        summary = emotional_intelligence.get_emotional_summary(uid, days=days)
+        triggers = emotional_intelligence.get_known_triggers(uid)
+        return jsonify({'success': True, 'summary': summary, 'triggers': triggers})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/user/life-transitions', methods=['GET'])
+@require_auth
+def get_user_transitions():
+    """Get user's active life transitions"""
+    try:
+        uid = request.current_user['user_id']
+        if not life_transition_guide:
+            return jsonify({'error': 'Transition guide not initialised'}), 503
+        transitions = life_transition_guide.get_active_transitions(uid)
+        return jsonify({
+            'success': True,
+            'transitions': [{
+                'type': t.transition_type, 'stage': t.current_stage,
+                'progress': f"{t.stage_index + 1}/{t.total_stages}",
+                'weeks': t.weeks_in_transition, 'confidence': t.confidence,
+                'guidance': t.guidance, 'resources': t.resources,
+            } for t in transitions],
+        })
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/user/weekly-summary', methods=['GET'])
+@require_auth
+def get_weekly_summary():
+    """Get a comprehensive weekly summary (habits, mood, goals)"""
+    try:
+        uid = request.current_user['user_id']
+        if not habit_tracker:
+            return jsonify({'error': 'Habit tracker not initialised'}), 503
+        summary = habit_tracker.generate_weekly_summary(uid)
+        # Add emotional data if available
+        if emotional_intelligence:
+            emo_summary = emotional_intelligence.get_emotional_summary(uid, days=7)
+            summary['emotional'] = emo_summary
+        return jsonify({'success': True, 'summary': summary})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/user/habits/<int:habit_id>/link-goal', methods=['POST'])
+@require_auth
+def link_habit_to_goal(habit_id):
+    """Link a habit to a goal"""
+    try:
+        uid = request.current_user['user_id']
+        if not habit_tracker:
+            return jsonify({'error': 'Habit tracker not initialised'}), 503
+        data = request.get_json() or {}
+        goal = data.get('goal', '').strip()
+        if not goal:
+            return jsonify({'error': 'goal is required'}), 400
+        ok = habit_tracker.link_habit_to_goal(uid, habit_id, goal)
+        return jsonify({'success': ok})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/user/goal-progress', methods=['GET'])
+@require_auth
+def get_goal_progress():
+    """Get habit progress grouped by linked goal"""
+    try:
+        uid = request.current_user['user_id']
+        if not habit_tracker:
+            return jsonify({'error': 'Habit tracker not initialised'}), 503
+        progress = habit_tracker.get_goal_progress(uid)
+        return jsonify({'success': True, 'goals': progress})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/user/persona', methods=['GET'])
+@require_auth
+def get_persona():
+    """Return the user's UI persona preference."""
+    try:
+        user_id = request.current_user.get('user_id')
+        persona = integrated_db.get_user_persona(user_id)
+        return jsonify({'persona': persona})
+    except Exception as e:
+        return _safe_error(e, 'get_persona')
+
+@app.route('/api/user/persona', methods=['POST'])
+@require_auth
+def set_persona():
+    """Save the user's UI persona preference."""
+    try:
+        user_id = request.current_user.get('user_id')
+        data = request.get_json()
+        persona = data.get('persona', '')
+        if persona not in ('serenity', 'momentum', 'odyssey', 'spark'):
+            return jsonify({'error': 'Invalid persona. Must be one of: serenity, momentum, odyssey, spark'}), 400
+        ok = integrated_db.set_user_persona(user_id, persona)
+        if ok:
+            return jsonify({'success': True, 'persona': persona})
+        return jsonify({'error': 'Could not save persona'}), 500
+    except Exception as e:
+        return _safe_error(e, 'set_persona')
+
+@app.route('/api/user/companion-data', methods=['GET'])
+@require_auth
+def export_companion_data():
+    """Export ALL companion data for the user (GDPR-style)"""
+    try:
+        uid = request.current_user['user_id']
+        data = {}
+        if life_companion_profiler:
+            profile = life_companion_profiler.get_profile(uid)
+            data['profile'] = life_companion_profiler.build_prompt_block(profile)
+        if emotional_intelligence:
+            data['emotional_summary'] = emotional_intelligence.get_emotional_summary(uid, days=365)
+            data['emotional_triggers'] = emotional_intelligence.get_known_triggers(uid)
+        if habit_tracker:
+            summary = habit_tracker.get_summary(uid)
+            data['habits'] = [{'name': h.name, 'category': h.category, 'streak': h.current_streak,
+                               'total': h.total_completions} for h in summary.active_habits]
+            data['recent_checkins'] = [{'date': c.date, 'mood': c.mood, 'energy': c.energy}
+                                       for c in summary.recent_checkins]
+        if decision_support:
+            data['open_decisions'] = decision_support.get_open_decisions(uid)
+            data['decision_history'] = decision_support.get_decision_history(uid, days=365)
+        if life_transition_guide:
+            transitions = life_transition_guide.get_active_transitions(uid)
+            data['transitions'] = [{'type': t.transition_type, 'stage': t.current_stage,
+                                    'weeks': t.weeks_in_transition} for t in transitions]
+        return jsonify({'success': True, 'data': data})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/user/companion-data', methods=['DELETE'])
+@require_auth
+def clear_companion_data():
+    """Clear ALL companion data for the user"""
+    try:
+        uid = request.current_user['user_id']
+        conn = get_db_conn(DB_PATH_INTEGRATED, check_same_thread=False)
+        cur = conn.cursor()
+        tables_to_clear = [
+            ('emotional_history', 'user_id'),
+            ('emotional_triggers', 'user_id'),
+            ('life_patterns', 'user_id'),
+            ('pattern_summaries', 'user_id'),
+            ('habits', 'user_id'),
+            ('habit_completions', 'user_id'),
+            ('daily_checkins', 'user_id'),
+            ('decisions', 'user_id'),
+            ('life_transitions', 'user_id'),
+            ('companion_profiles', 'user_id'),
+            ('companion_people', 'user_id'),
+            ('crisis_log', 'user_id'),
+            ('life_stage_history', 'user_id'),
+        ]
+        cleared = []
+        for table, col in tables_to_clear:
+            try:
+                cur.execute(f'DELETE FROM {table} WHERE {col} = ?', (uid,))
+                if cur.rowcount > 0:
+                    cleared.append(f'{table}: {cur.rowcount} rows')
+            except Exception:
+                pass  # table may not exist yet
+        conn.commit()
+        conn.close()
+        print(f"[PRIVACY] User {uid} cleared companion data: {cleared}")
+        return jsonify({'success': True, 'cleared': cleared})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
 
 @app.route('/api/admin/cost-alert', methods=['POST'])
 @require_auth
@@ -1701,7 +2482,7 @@ def set_cost_alert():
         
         return jsonify({'success': True, 'threshold': threshold})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/admin/background-tasks/status', methods=['GET'])
 @require_auth
@@ -1761,7 +2542,7 @@ def get_background_task_status():
             })
     except Exception as e:
         print(f"Error in get_background_task_status: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/auth/verify-email', methods=['POST'])
 @require_auth
@@ -1781,7 +2562,7 @@ def verify_email():
         else:
             return jsonify({'error': message}), 400
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/auth/resend-verification', methods=['POST'])
 @require_auth
@@ -1805,7 +2586,7 @@ def resend_verification():
         else:
             return jsonify({'error': 'Failed to send verification email'}), 500
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/auth/check-verification')
 @require_auth
@@ -1815,7 +2596,7 @@ def check_verification():
         is_verified = integrated_db.is_email_verified(request.current_user['user_id'])
         return jsonify({'verified': is_verified})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # File Upload/Download Endpoints
 def allowed_file(filename):
@@ -1857,7 +2638,7 @@ def upload_file():
         else:
             return jsonify({'error': 'File type not allowed'}), 400
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/files/<filename>', methods=['GET'])
 def download_file(filename):
@@ -1962,7 +2743,7 @@ def upload_ai_attachment():
             return jsonify({'error': 'File type not allowed'}), 400
     except Exception as e:
         print(f"Error uploading AI attachment: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/ai-attachments', methods=['GET'])
 @require_auth
@@ -1979,7 +2760,7 @@ def get_ai_attachments():
             'attachments': attachments
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/ai-attachments/<int:attachment_id>', methods=['DELETE'])
 @require_auth
@@ -1995,7 +2776,7 @@ def delete_ai_attachment(attachment_id):
         else:
             return jsonify({'error': 'Attachment not found'}), 404
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 def format_attachments_for_ai(attachments):
     """Format active attachments into context for AI prompt"""
@@ -2034,7 +2815,7 @@ def get_admin_chat_messages():
         integrated_db.mark_admin_messages_read(request.current_user['user_id'], 'admin')
         return jsonify(messages)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/admin-chat/send', methods=['POST'])
 @require_auth
@@ -2067,7 +2848,7 @@ def send_admin_chat_message():
         else:
             return jsonify({'error': 'Failed to send message'}), 500
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/admin-chat/unread-count', methods=['GET'])
 @require_auth
@@ -2077,7 +2858,7 @@ def get_unread_admin_messages():
         count = integrated_db.get_unread_admin_message_count(request.current_user['user_id'], 'admin')
         return jsonify({'count': count})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # Admin-only endpoints
 @app.route('/api/admin/chats', methods=['GET'])
@@ -2092,7 +2873,7 @@ def get_all_admin_chats():
         chats = integrated_db.get_all_user_admin_chats()
         return jsonify(chats)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/admin/chats/<int:user_id>/messages', methods=['GET'])
 @require_auth
@@ -2108,7 +2889,7 @@ def get_user_admin_messages(user_id):
         integrated_db.mark_admin_messages_read(user_id, 'user')
         return jsonify(messages)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/admin/chats/<int:user_id>/send', methods=['POST'])
 @require_auth
@@ -2137,7 +2918,7 @@ def send_admin_reply(user_id):
         else:
             return jsonify({'error': 'Failed to send message'}), 500
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/admin-chat/message/<int:message_id>', methods=['DELETE'])
 @require_auth
@@ -2152,7 +2933,7 @@ def delete_admin_message(message_id):
         else:
             return jsonify({'error': 'Message not found or already deleted'}), 404
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/auth/user')
 @require_auth
@@ -2165,7 +2946,7 @@ def get_current_user():
         else:
             return jsonify({'error': 'User not found'}), 404
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # Multi-user profile routes
 @app.route('/api/user/profile')
@@ -2176,7 +2957,7 @@ def get_profile():
         profile = integrated_db.get_user_profile(request.current_user['user_id'])
         return jsonify(profile)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/profile', methods=['PUT'])
 @require_auth
@@ -2194,7 +2975,7 @@ def update_profile():
         else:
             return jsonify({'error': 'Failed to update profile'}), 500
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # Comprehensive profile routes (integrating original 3-page system)
 @app.route('/api/user/comprehensive-profile')
@@ -2222,7 +3003,7 @@ def get_comprehensive_profile():
             'metadata': {'profile_completion': 0}
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/comprehensive-profile/personal', methods=['PUT'])
 @require_auth
@@ -2236,7 +3017,7 @@ def update_comprehensive_personal():
         success = integrated_db.update_user_profile(user_id, {'personal_info': data})
         return jsonify({'success': success})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/comprehensive-profile/preferences', methods=['PUT'])
 @require_auth
@@ -2255,7 +3036,7 @@ def update_comprehensive_preferences():
         
         return jsonify({'success': success})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/comprehensive-profile/privacy', methods=['PUT'])
 @require_auth
@@ -2269,7 +3050,7 @@ def update_comprehensive_privacy():
         success = integrated_db.update_user_profile(user_id, {'privacy_settings': data})
         return jsonify({'success': success})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # Psychology traits routes
 @app.route('/api/user/psychology-traits')
@@ -2312,7 +3093,7 @@ def get_psychology_traits():
         
         return jsonify(traits)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/psychology-traits', methods=['POST'])
 @require_auth
@@ -2335,7 +3116,7 @@ def create_psychology_trait():
         else:
             return jsonify({'error': 'Failed to save psychology trait'}), 500
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/psychology-traits/<trait_name>', methods=['PUT'])
 @require_auth
@@ -2357,7 +3138,7 @@ def update_psychology_trait(trait_name):
         else:
             return jsonify({'error': 'Failed to update psychology trait'}), 500
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # Multi-user conversation routes
 @app.route('/api/user/conversations')
@@ -2368,7 +3149,7 @@ def get_user_conversations():
         conversations = integrated_db.get_user_conversations(request.current_user['user_id'])
         return jsonify(conversations)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/conversations', methods=['POST'])
 @require_auth
@@ -2381,7 +3162,7 @@ def create_user_conversation():
         session_id = integrated_db.create_conversation(request.current_user['user_id'], title)
         return jsonify({'success': True, 'session_id': session_id, 'message': 'Conversation created successfully'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/conversations/<session_id>', methods=['DELETE'])
 @require_auth
@@ -2394,7 +3175,7 @@ def delete_user_conversation(session_id):
         else:
             return jsonify({'error': 'Conversation not found or unauthorized'}), 404
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/message-usage')
 @require_auth
@@ -2404,7 +3185,7 @@ def get_message_usage():
         usage = integrated_db.get_message_usage(request.current_user['user_id'])
         return jsonify(usage)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # ==================== USER EXPLICIT CONTEXT ====================
 
@@ -2430,7 +3211,7 @@ def get_user_explicit_context():
             'count': len(context_items)
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/explicit-context/summary', methods=['GET'])
 @require_auth
@@ -2452,7 +3233,7 @@ def get_explicit_context_summary():
             'has_context': bool(summary)
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/explicit-context/<int:context_id>', methods=['DELETE'])
 @require_auth
@@ -2484,7 +3265,7 @@ def delete_explicit_context(context_id):
             'message': 'Context item removed'
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/explicit-context/stats', methods=['GET'])
 @require_auth
@@ -2504,7 +3285,7 @@ def get_explicit_context_stats():
             'stats': stats
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/explicit-context/ui-data', methods=['GET'])
 @require_auth
@@ -2572,7 +3353,7 @@ def get_explicit_context_ui_data():
             'help_text': "These are things you've told me about yourself. I use this to give you better responses. You can remove anything that's no longer accurate."
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # ==================== CONVERSATION HIGHLIGHTS ====================
 
@@ -2588,7 +3369,7 @@ def get_highlights():
         highlights = integrated_db.get_highlights(user_id, character_id, limit)
         return jsonify({'highlights': highlights})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/highlights', methods=['POST'])
 @require_auth
@@ -2618,7 +3399,7 @@ def save_highlight():
         else:
             return jsonify({'error': 'Failed to save highlight'}), 500
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/highlights/<int:highlight_id>', methods=['PUT'])
 @require_auth
@@ -2635,7 +3416,7 @@ def update_highlight(highlight_id):
         else:
             return jsonify({'error': 'Highlight not found or unauthorized'}), 404
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/highlights/<int:highlight_id>', methods=['DELETE'])
 @require_auth
@@ -2650,7 +3431,7 @@ def delete_highlight(highlight_id):
         else:
             return jsonify({'error': 'Highlight not found or unauthorized'}), 404
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # ==================== FOLLOW-UP SUGGESTIONS ====================
 
@@ -2687,7 +3468,7 @@ def record_suggestion_selection():
         return jsonify({'success': True, 'message': 'Selection recorded'})
     except Exception as e:
         print(f"Error recording suggestion selection: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/preferences', methods=['GET'])
 @require_auth
@@ -2710,7 +3491,7 @@ def get_learned_preferences():
             'journey_insights': journey
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/conversations/<session_id>/messages')
 @require_auth
@@ -2720,7 +3501,7 @@ def get_conversation_messages(session_id):
         messages = integrated_db.get_conversation_messages(session_id, request.current_user['user_id'])
         return jsonify(messages)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # ==================== USER INTELLIGENCE (Social Media-inspired) ====================
 
@@ -2743,7 +3524,7 @@ def get_intelligence_profile():
         
         return jsonify({'success': True, 'profile': profile})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/intelligence/engagement', methods=['GET'])
 @require_auth
@@ -2762,7 +3543,7 @@ def get_engagement_metrics():
         
         return jsonify({'success': True, 'engagement': summary})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/intelligence/patterns', methods=['GET'])
 @require_auth
@@ -2784,7 +3565,7 @@ def get_behavioral_patterns():
         
         return jsonify({'success': True, 'patterns': patterns})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/intelligence/recommendations', methods=['GET'])
 @require_auth
@@ -2802,7 +3583,7 @@ def get_character_recommendations():
         
         return jsonify({'success': True, 'recommendations': recommendations})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/intelligence/predictions', methods=['GET'])
 @require_auth
@@ -2825,7 +3606,7 @@ def get_need_predictions():
             'proactive_suggestions': proactive
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/intelligence/record', methods=['POST'])
 @require_auth
@@ -2858,7 +3639,273 @@ def record_engagement_signal():
         
         return jsonify({'success': True, 'message': f'Recorded {signal_type}'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
+
+@app.route('/api/user/character-switch', methods=['POST'])
+@require_auth
+def record_character_switch():
+    """
+    Record that a user followed a character suggestion.
+    Called by the frontend when the user clicks a character suggestion link.
+    Used to improve CharacterSuggester recommendations over time.
+    """
+    try:
+        user_id = request.current_user['user_id']
+        data = request.get_json() or {}
+        from_character  = data.get('from_character', '')
+        to_character    = data.get('to_character', '')
+        detected_need   = data.get('detected_need', '')
+        suggestion_used = data.get('suggestion_used', True)   # True = followed, False = dismissed
+
+        try:
+            from smart_response.user_intelligence import get_intelligence_system
+            conn = integrated_db.get_connection() if integrated_db else None
+            if conn:
+                intel = get_intelligence_system(conn)
+                intel.record_engagement(
+                    user_id=user_id,
+                    signal_type='character_switch',
+                    context={
+                        'from_character': from_character,
+                        'to_character': to_character,
+                        'detected_need': detected_need,
+                        'suggestion_used': suggestion_used,
+                    },
+                    character_id=to_character,
+                    topic=detected_need,
+                )
+                conn.close()
+        except Exception:
+            pass
+
+        return jsonify({'success': True, 'recorded': suggestion_used})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/user/progress-summary', methods=['GET'])
+@require_auth
+def get_progress_summary():
+    """
+    Long-term progress summary — what topics, concerns, and progress
+    indicators the AI has detected across the user's conversation history.
+    """
+    try:
+        user_id = request.current_user['user_id']
+        character_id = request.args.get('character_id', 'general')
+
+        try:
+            from smart_response.progress_context_builder import build_progress_context
+            from smart_response.dual_layer_history import DualLayerHistorySystem
+            conn = integrated_db.get_connection() if integrated_db else None
+            history_data = {}
+            progress_block = ""
+            if conn:
+                dlh = DualLayerHistorySystem(conn)
+                stats = dlh.get_stats(user_id, character_id)
+                recent = dlh.get_conversation_history(user_id, character_id, layer='secondary', limit=20)
+                history_data = {'stats': stats, 'recent_secondary': recent[:5]}
+                conn.close()
+            progress_block = build_progress_context(user_id, character_id)
+        except Exception:
+            history_data = {}
+            progress_block = ""
+
+        return jsonify({
+            'success': True,
+            'progress_context': progress_block,
+            'history_data': history_data,
+        })
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/user/personalization-profile', methods=['GET'])
+@require_auth
+def get_personalization_profile():
+    """
+    Unified personalization profile — shows how the AI currently understands
+    this user: verbosity preference, emotional trajectory, recent need types,
+    and communication style.
+    """
+    try:
+        user_id = request.current_user['user_id']
+
+        profile = {}
+
+        # --- Verbosity / response length preference ---
+        try:
+            from smart_response.user_personalization import UserPersonalization
+            up = UserPersonalization()
+            rl = up.get_parameter(user_id, 'communication.response_length', 'balanced')
+            profile['verbosity'] = {'response_length': rl}
+            profile['response_length'] = rl  # keep backward compat
+            profile['parameters'] = up.get_user_parameters(user_id)
+        except Exception:
+            profile['verbosity'] = {'response_length': 'balanced'}
+            profile['response_length'] = 'balanced'
+
+        # --- Explicit context: emotional state, active goal ---
+        try:
+            from smart_response.explicit_context_handler import ExplicitContextHandler
+            if integrated_db:
+                _ec_conn = integrated_db.get_connection()
+                ech = ExplicitContextHandler(_ec_conn)
+                _char = request.args.get('character_id', '')
+                _fmt = ech.format_for_ai_prompt(user_id, character_id=_char)
+                # Extract top emotional_state and goal from stored context
+                ctx_rows = ech.get_explicit_context(user_id, _char)
+                for row in ctx_rows:
+                    ctx_type = row.get('context_type', '')
+                    if ctx_type == 'emotional_state' and 'emotional_state' not in profile:
+                        profile['emotional_state'] = row.get('context_value', '')
+                    elif ctx_type == 'goal' and 'active_goal' not in profile:
+                        profile['active_goal'] = row.get('context_value', '')
+                _ec_conn.close()
+        except Exception:
+            pass
+
+        # --- Current need type (most recent engagement signal) ---
+        try:
+            if integrated_db:
+                _ni_conn = integrated_db.get_connection()
+                cursor = _ni_conn.cursor()
+                cursor.execute('''
+                    SELECT topic FROM user_engagement_signals
+                    WHERE user_id = ? AND topic IS NOT NULL
+                    ORDER BY timestamp DESC LIMIT 1
+                ''', (user_id,))
+                row = cursor.fetchone()
+                if row and row[0]:
+                    profile['current_need'] = row[0]
+                _ni_conn.close()
+        except Exception:
+            pass
+
+        # --- Emotional trajectory ---
+        try:
+            from smart_response.user_intelligence import get_intelligence_system
+            conn = integrated_db.get_connection() if integrated_db else None
+            intel = get_intelligence_system(conn)
+            if intel:
+                profile['emotional_journey'] = intel.analyze_emotional_journey(user_id, recent_messages=20)
+                profile['communication_style'] = intel.analyze_communication_style(user_id)
+            if conn:
+                conn.close()
+        except Exception:
+            profile['emotional_journey'] = {}
+            profile['communication_style'] = {}
+
+        return jsonify({'success': True, 'profile': profile})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/user/conversation-summary', methods=['GET'])
+@require_auth
+def get_conversation_summary():
+    """
+    High-level summary of a user's conversation activity across all characters.
+
+    Returns:
+      - total_messages: int — total user messages across all characters
+      - characters_used: {character_id: message_count}
+      - most_active_character: str
+      - first_interaction: ISO datetime str or null
+      - last_interaction: ISO datetime str or null
+      - active_goals: list of goal strings (CRITICAL/HIGH, active)
+      - recent_topics: list of up to 5 topic strings from secondary history
+      - emotional_state: str or null (most recent stored emotional state)
+    """
+    try:
+        user_id = request.current_user['user_id']
+        conn = get_db_conn()
+        summary = {}
+
+        # ---- Message counts per character ----
+        try:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT character_id, COUNT(*) as cnt
+                FROM character_messages
+                WHERE user_id = ? AND role = 'user'
+                GROUP BY character_id
+                ORDER BY cnt DESC
+            ''', (user_id,))
+            rows = cursor.fetchall()
+            characters_used = {r[0]: r[1] for r in rows}
+            summary['characters_used']      = characters_used
+            summary['total_messages']        = sum(characters_used.values())
+            summary['most_active_character'] = rows[0][0] if rows else None
+        except Exception:
+            summary['characters_used']      = {}
+            summary['total_messages']        = 0
+            summary['most_active_character'] = None
+
+        # ---- First / last interaction ----
+        try:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT MIN(timestamp), MAX(timestamp)
+                FROM character_messages
+                WHERE user_id = ? AND role = 'user'
+            ''', (user_id,))
+            row = cursor.fetchone()
+            summary['first_interaction'] = row[0] if row else None
+            summary['last_interaction']  = row[1] if row else None
+        except Exception:
+            summary['first_interaction'] = None
+            summary['last_interaction']  = None
+
+        # ---- Active goals (CRITICAL / HIGH explicit context) ----
+        try:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT DISTINCT context_value
+                FROM explicit_context
+                WHERE user_id = ? AND context_type = 'goal'
+                  AND active = 1
+                  AND priority IN ('CRITICAL', 'HIGH')
+                ORDER BY timestamp DESC
+                LIMIT 5
+            ''', (user_id,))
+            summary['active_goals'] = [r[0] for r in cursor.fetchall()]
+        except Exception:
+            summary['active_goals'] = []
+
+        # ---- Recent topics from secondary history ----
+        try:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT DISTINCT json_extract(analysis_data, '$.topics[0]')
+                FROM history_secondary
+                WHERE user_id = ?
+                  AND json_extract(analysis_data, '$.topics[0]') IS NOT NULL
+                ORDER BY created_at DESC
+                LIMIT 5
+            ''', (user_id,))
+            summary['recent_topics'] = [r[0] for r in cursor.fetchall() if r[0]]
+        except Exception:
+            summary['recent_topics'] = []
+
+        # ---- Most recent emotional state ----
+        try:
+            cursor = conn.cursor()
+            cursor.execute('''
+                SELECT context_value FROM explicit_context
+                WHERE user_id = ? AND context_type = 'emotional_state' AND active = 1
+                ORDER BY timestamp DESC LIMIT 1
+            ''', (user_id,))
+            row = cursor.fetchone()
+            summary['emotional_state'] = row[0] if row else None
+        except Exception:
+            summary['emotional_state'] = None
+
+        conn.close()
+        return jsonify({'success': True, 'summary': summary})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
 
 # ==================== PINNED MESSAGES (WhatsApp-style) ====================
 
@@ -2909,7 +3956,7 @@ def get_pinned_messages():
         
         return jsonify({'success': True, 'pinned_messages': pinned, 'count': len(pinned)})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/pinned-messages', methods=['POST'])
 @require_auth
@@ -2962,7 +4009,7 @@ def pin_message():
     except Exception as e:
         if 'UNIQUE constraint failed' in str(e):
             return jsonify({'error': 'Message already pinned'}), 409
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
     finally:
         if conn:
             conn.close()
@@ -2999,7 +4046,7 @@ def update_pinned_message(pin_id):
         
         return jsonify({'success': True})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
     finally:
         if conn:
             conn.close()
@@ -3027,7 +4074,7 @@ def check_if_pinned():
         
         return jsonify({'is_pinned': existing is not None, 'pin_id': existing[0] if existing else None})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
     finally:
         if conn:
             conn.close()
@@ -3058,7 +4105,7 @@ def cleanup_duplicate_pins():
         
         return jsonify({'success': True, 'deleted_count': deleted_count})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
     finally:
         if conn:
             conn.close()
@@ -3086,7 +4133,7 @@ def unpin_message(pin_id):
         else:
             return jsonify({'error': 'Pin not found or unauthorized'}), 404
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
     finally:
         if conn:
             conn.close()
@@ -3100,7 +4147,7 @@ def check_greetings():
         sent_greetings = greeting_system.check_and_send_greetings(user_id)
         return jsonify({'success': True, 'greetings': sent_greetings})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/greetings/pending')
 @require_auth
@@ -3123,7 +4170,7 @@ def get_pending_greetings():
         return jsonify({'success': True, 'greetings': greetings})
     except Exception as e:
         print(f"Error in get_pending_greetings: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/greetings/activity', methods=['POST'])
 @require_auth
@@ -3138,7 +4185,7 @@ def update_user_activity():
         greeting_system.update_user_activity(user_id, activity_type, metadata)
         return jsonify({'success': True})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/greetings/ai-prompt', methods=['POST'])
 @require_auth
@@ -3179,7 +4226,7 @@ def generate_ai_context_prompt():
                 'type': 'template'
             })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/greetings/feedback', methods=['POST'])
 @require_auth
@@ -3205,7 +4252,7 @@ def track_greeting_feedback():
         
         return jsonify({'success': True})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/greetings/cleanup', methods=['POST'])
 @require_auth
@@ -3230,7 +4277,7 @@ def cleanup_old_greetings():
             'days_kept': days_to_keep
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/greetings/extract-themes', methods=['POST'])
 @require_auth
@@ -3262,7 +4309,7 @@ def extract_themes_from_history():
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # ============================================
 # USER PERSONALIZATION API
@@ -3281,7 +4328,7 @@ def get_user_personalization():
             'parameters': params
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/personalization', methods=['PUT'])
 @require_auth
@@ -3304,7 +4351,7 @@ def update_user_personalization():
             'updated': True
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/personalization/parameter', methods=['PUT'])
 @require_auth
@@ -3328,7 +4375,7 @@ def set_user_parameter():
             'value': value
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/personalization/history', methods=['GET'])
 @require_auth
@@ -3346,7 +4393,7 @@ def get_personalization_history():
             'history': history
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/personalization/signal', methods=['POST'])
 @require_auth
@@ -3366,7 +4413,7 @@ def record_interaction_signal():
         
         return jsonify({'success': True})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/personalization/adapt', methods=['POST'])
 @require_auth
@@ -3380,7 +4427,7 @@ def trigger_adaptation():
             **result
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/personalization/reset', methods=['POST'])
 @require_auth
@@ -3398,7 +4445,7 @@ def reset_personalization():
             'reset': category or 'all'
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/personalization/export', methods=['GET'])
 @require_auth
@@ -3412,7 +4459,7 @@ def export_personalization():
             **profile
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/greetings/debug-context', methods=['GET'])
 @require_auth
@@ -3507,7 +4554,7 @@ def debug_context_prompts():
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/user/conversations/<session_id>/messages', methods=['POST'])
 @require_auth
@@ -3570,7 +4617,14 @@ def add_conversation_message(session_id):
             
             # === SHARED PIPELINE: Pre-AI enrichment ===
             # This gives philosophy chars the same intelligence as domain chars
-            context = {'user_id': user_id, 'is_admin': False, 'timestamp': datetime.now().isoformat()}
+            detail_requested = data.get('detail_requested', False)
+            direction_change = data.get('direction_change', False)
+            context = {
+                'user_id': user_id, 'is_admin': False,
+                'timestamp': datetime.now().isoformat(),
+                'detail_requested': detail_requested,
+                'direction_change': direction_change,
+            }
             if conversation_pipeline:
                 context = conversation_pipeline.enrich_context(user_id, content, char_id, context)
             
@@ -3634,7 +4688,7 @@ def add_conversation_message(session_id):
         
         return jsonify({'success': True, 'message': 'Message added successfully'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/')
 def index():
@@ -3662,6 +4716,11 @@ def admin_settings_page():
     """Admin settings configuration page"""
     return render_template('admin_settings.html')
 
+@app.route('/onboarding')
+def onboarding_page():
+    """Persona selection onboarding — shown after first signup"""
+    return render_template('onboarding.html')
+
 @app.route('/user_logon')
 def user_logon_interface():
     """User login interface - same as chatchat but without signup option"""
@@ -3682,21 +4741,48 @@ def ask_question():
     try:
         data = request.get_json()
         question = data.get('question', '')
-        
+        include_metrics = data.get('include_metrics', True)
+
         if not question.strip():
             return jsonify({'error': 'Please enter a question'})
-        
+
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         responses = loop.run_until_complete(ai_compare.ask_all(question))
         loop.close()
-        
+
+        # Attach advanced comparison metrics to each model response
+        comparison_metrics = {}
+        rankings = {}
+        if include_metrics:
+            try:
+                from advanced_comparison_metrics import AdvancedResponseEvaluator
+                evaluator = AdvancedResponseEvaluator()
+                model_texts = {
+                    k: v for k, v in responses.items()
+                    if not k.startswith('_') and isinstance(v, str) and not v.startswith('Error:')
+                }
+                if model_texts:
+                    loop2 = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop2)
+                    eval_results = loop2.run_until_complete(
+                        evaluator.evaluate_responses(question, model_texts)
+                    )
+                    loop2.close()
+                    comparison_metrics = eval_results.get('individual_metrics', {})
+                    rankings = eval_results.get('rankings', {})
+            except Exception as _me:
+                comparison_metrics = {}
+                rankings = {}
+
         return jsonify({
             'success': True,
             'responses': responses,
-            'question': question
+            'question': question,
+            'comparison_metrics': comparison_metrics,
+            'rankings': rankings
         })
-        
+
     except Exception as e:
         return jsonify({'error': str(e)})
 
@@ -3720,7 +4806,7 @@ def summarize():
             'consolidated': consolidated
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # Chatbot routes
 @app.route('/chat')
@@ -3766,7 +4852,7 @@ def chat_session():
                 })
     except Exception as e:
         print(f"Error in chat_session: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/chat/history/<session_id>')
 def chat_history(session_id):
@@ -3776,7 +4862,7 @@ def chat_history(session_id):
         messages = chatbot.conversation_manager.get_conversation_history(session_id, force_reload=True)
         return jsonify({'messages': messages, 'session_id': session_id})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/chat/message', methods=['POST'])
 def chat_message():
@@ -3919,7 +5005,7 @@ def chat_message():
         return jsonify(response)
     except Exception as e:
         print(f"Error in chat_message: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/chat/personality', methods=['POST'])
 def change_personality():
@@ -3933,7 +5019,7 @@ def change_personality():
         else:
             return jsonify({'error': 'Invalid personality preset'}), 400
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/chat/perspectives', methods=['POST'])
 def get_more_perspectives():
@@ -3977,7 +5063,7 @@ def get_more_perspectives():
         })
     except Exception as e:
         print(f"Error in get_more_perspectives: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/chat/summary')
 def chat_summary():
@@ -3985,7 +5071,7 @@ def chat_summary():
         summary = chatbot.get_conversation_summary()
         return jsonify(summary)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/chat/personality-compare', methods=['POST'])
 def personality_compare():
@@ -4003,7 +5089,7 @@ def personality_compare():
         
         return jsonify(responses)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # Session Management Routes
 @app.route('/chat/sessions', methods=['GET'])
@@ -4012,7 +5098,7 @@ def list_chat_sessions():
         sessions = chatbot.list_sessions()
         return jsonify({'sessions': sessions})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/chat/sessions', methods=['POST'])
 def create_chat_session():
@@ -4020,7 +5106,7 @@ def create_chat_session():
         session_id = chatbot.create_new_session()
         return jsonify({'session_id': session_id, 'message': 'New session created'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/chat/sessions/<session_id>', methods=['GET'])
 def load_chat_session(session_id):
@@ -4032,7 +5118,7 @@ def load_chat_session(session_id):
         else:
             return jsonify({'error': 'Session not found'}), 404
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/chat/sessions/<session_id>', methods=['DELETE'])
 def delete_chat_session(session_id):
@@ -4043,7 +5129,7 @@ def delete_chat_session(session_id):
         else:
             return jsonify({'error': 'Session not found'}), 404
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/chat/export', methods=['GET'])
 def export_chat_session():
@@ -4059,7 +5145,7 @@ def export_chat_session():
         else:
             return jsonify({'error': 'Export failed'}), 500
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/personality-test')
 def personality_test_page():
@@ -4141,7 +5227,7 @@ def get_personality_assessment_history():
             'count': len(flattened_history)
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/personality/compare', methods=['GET'])
 @require_auth
@@ -4165,7 +5251,7 @@ def compare_personality_assessments():
             'comparison': comparison
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/personality/trends/<trait_name>', methods=['GET'])
 @require_auth
@@ -4184,7 +5270,7 @@ def get_personality_trait_trends(trait_name):
             'trend': trend
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/test-session')
 def test_session_page():
@@ -4200,7 +5286,7 @@ def toggle_reminders():
         motivational_bot.toggle_reminders(active)
         return jsonify({'success': True, 'reminders_active': active})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # Smart Response System Stats Endpoint
 @app.route('/api/smart-response/stats', methods=['GET'])
@@ -4216,7 +5302,7 @@ def smart_response_stats():
         stats = smart_handler.get_user_stats(user_id)
         return jsonify(stats)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/context/<character>', methods=['GET'])
 @require_auth
@@ -4240,7 +5326,7 @@ def get_conversation_context(character):
             'message_count': context.get('message_count', 0)
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # Frontend Error Logging Endpoint
 @app.route('/api/log-error', methods=['POST'])
@@ -4303,7 +5389,7 @@ def get_explicit_context():
             'items': context_items
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/explicit-context/<int:context_id>', methods=['PUT'])
 @require_auth
@@ -4345,7 +5431,7 @@ def update_explicit_context(context_id):
         
         return jsonify({'success': True, 'message': 'Context updated'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/explicit-context/<int:context_id>', methods=['DELETE'])
 @require_auth
@@ -4375,7 +5461,7 @@ def delete_explicit_context_legacy(context_id):
         
         return jsonify({'success': True, 'message': 'Context removed'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/explicit-context/<int:context_id>/reclassify', methods=['POST'])
 @require_auth
@@ -4415,7 +5501,7 @@ def reclassify_explicit_context(context_id):
         
         return jsonify({'success': True, 'message': 'Context reclassified'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/explicit-context', methods=['POST'])
 @require_auth
@@ -4446,7 +5532,7 @@ def add_explicit_context():
             'message': 'Context added'
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # Dual-Layer History Endpoints
 @app.route('/api/history/<character>', methods=['GET'])
@@ -4472,7 +5558,7 @@ def get_conversation_history(character):
             'history': history
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/history/<character>/stats', methods=['GET'])
 @require_auth
@@ -4488,7 +5574,7 @@ def get_history_stats(character):
         
         return jsonify(stats)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # AI Budget Management Endpoints
 @app.route('/api/ai-budget/status', methods=['GET'])
@@ -4541,7 +5627,7 @@ def get_ai_budget_status():
         return jsonify(report)
     except Exception as e:
         print(f"Error in get_ai_budget_status: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/ai-budget/notifications', methods=['GET'])
 def get_ai_notifications():
@@ -4556,7 +5642,7 @@ def get_ai_notifications():
             'notifications': notifications
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/ai-budget/notifications/clear', methods=['POST'])
 @require_auth
@@ -4576,7 +5662,7 @@ def clear_ai_notifications():
         
         return jsonify({'success': True, 'message': 'All notifications cleared'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/ai-budget/notifications/acknowledge', methods=['POST'])
 def acknowledge_ai_notifications():
@@ -4597,7 +5683,7 @@ def acknowledge_ai_notifications():
         else:
             return jsonify({'error': 'notification_id required'}), 400
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/admin/ai-quota-status', methods=['GET'])
 @require_auth
@@ -4716,7 +5802,7 @@ def get_ai_quota_status():
         return jsonify(result)
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/ai-budget/reset-circuit-breaker', methods=['POST'])
 def reset_ai_circuit_breaker():
@@ -4739,7 +5825,7 @@ def reset_ai_circuit_breaker():
             'message': 'Circuit breaker reset successfully'
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/ai-budget/limits', methods=['GET'])
 @require_auth
@@ -4752,7 +5838,7 @@ def get_ai_limits():
         limits = ai_budget.get_limits()
         return jsonify(limits)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/ai-budget/limits', methods=['PUT'])
 @require_auth
@@ -4798,7 +5884,7 @@ def update_ai_limits():
             'current_limits': ai_budget.get_limits()
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # Character Trait System Endpoints (Phase 5)
 @app.route('/api/character-traits/match', methods=['POST'])
@@ -4860,7 +5946,7 @@ def match_character_to_situation():
         })
     except Exception as e:
         print(f"Error in match_character_to_situation: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/character-traits/characters', methods=['GET'])
 @require_auth
@@ -4888,7 +5974,7 @@ def get_all_trait_characters():
             'characters': characters
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/character-traits/analyze', methods=['POST'])
 @require_auth
@@ -4922,7 +6008,7 @@ def analyze_situation_traits():
             'ideal_traits': ideal_traits.to_dict()
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/character-traits/effectiveness', methods=['GET'])
 @require_auth
@@ -4968,7 +6054,7 @@ def get_character_effectiveness():
             'recent_outcomes': recent_outcomes
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # Phase 5 Enhancement Endpoints
 
@@ -5034,7 +6120,7 @@ def personality_weighted_match():
     except Exception as e:
         print(f"Error in personality_weighted_match: {e}")
         import traceback; traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/character-traits/preferences', methods=['GET'])
 @require_auth
@@ -5049,7 +6135,7 @@ def get_user_character_preferences():
         
         return jsonify(preferences)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/character-traits/interact', methods=['POST'])
 @require_auth
@@ -5077,7 +6163,7 @@ def record_character_interaction():
             'character_id': character_id
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/character-traits/coverage', methods=['GET'])
 @require_auth
@@ -5091,7 +6177,7 @@ def get_trait_space_coverage():
         
         return jsonify(coverage)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # Character-Specific Context Endpoints (Phase 6)
 @app.route('/api/character-context/interpret', methods=['POST'])
@@ -5161,7 +6247,7 @@ def get_multi_perspective_interpretation():
     except Exception as e:
         print(f"Error in get_multi_perspective_interpretation: {e}")
         import traceback; traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/character-context/history', methods=['GET'])
 @require_auth
@@ -5182,7 +6268,7 @@ def get_interpretation_history():
             'history': history
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/character-context/event/<event_id>', methods=['GET'])
 @require_auth
@@ -5210,7 +6296,7 @@ def get_event_perspectives(event_id):
             } for i in interpretations]
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # Phase 4: Proactive Clarification Endpoints
 
@@ -5251,7 +6337,7 @@ def analyze_message_clarity():
         })
     except Exception as e:
         print(f"Error in analyze_message_clarity: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/clarification/pending', methods=['GET'])
 @require_auth
@@ -5267,7 +6353,7 @@ def get_pending_clarifications():
         pending = clarification_system.get_pending_clarifications(user_id, character_id)
         return jsonify({'pending': pending})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/clarification/stats', methods=['GET'])
 @require_auth
@@ -5281,7 +6367,7 @@ def get_clarification_stats():
         stats = clarification_system.get_clarification_stats(user_id)
         return jsonify(stats)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # Phase 7: Effectiveness Learning Endpoints
 
@@ -5296,7 +6382,7 @@ def get_character_effectiveness_data(character_id):
         data = effectiveness_learner.get_character_effectiveness(character_id)
         return jsonify(data)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/effectiveness/best', methods=['GET'])
 @require_auth
@@ -5313,7 +6399,7 @@ def get_best_performing_characters():
         results = effectiveness_learner.get_best_characters(situation, user_id, limit)
         return jsonify({'characters': results})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/effectiveness/user', methods=['GET'])
 @require_auth
@@ -5327,7 +6413,7 @@ def get_user_engagement():
         stats = effectiveness_learner.get_user_engagement_stats(user_id)
         return jsonify(stats)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/effectiveness/trends/<character_id>', methods=['GET'])
 @require_auth
@@ -5341,7 +6427,7 @@ def get_effectiveness_trends(character_id):
         trends = effectiveness_learner.get_effectiveness_trends(character_id, days)
         return jsonify({'trends': trends, 'character_id': character_id, 'days': days})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/effectiveness/feedback', methods=['POST'])
 @require_auth
@@ -5374,7 +6460,7 @@ def submit_conversation_feedback():
         
         return jsonify({'success': True, 'message': 'Feedback recorded'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/effectiveness/stats', methods=['GET'])
 @require_auth
@@ -5387,7 +6473,7 @@ def get_effectiveness_system_stats():
         stats = effectiveness_learner.get_system_stats()
         return jsonify(stats)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/effectiveness/analyze/<session_id>', methods=['POST'])
 @require_auth
@@ -5415,7 +6501,7 @@ def analyze_conversation_effectiveness(session_id):
             'outcome': outcome.to_dict()
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # Phase 8: Character Expansion Endpoints
 
@@ -5442,7 +6528,7 @@ def get_trait_space_gaps():
             } for g in gaps]
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/expansion/run', methods=['POST'])
 @require_auth
@@ -5458,7 +6544,7 @@ def trigger_character_expansion():
             'result': result or {'gaps_found': 0, 'characters_added': 0}
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/expansion/stats', methods=['GET'])
 @require_auth
@@ -5475,7 +6561,7 @@ def get_expansion_stats():
         
         return jsonify(stats)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/expansion/characters', methods=['GET'])
 @require_auth
@@ -5504,7 +6590,7 @@ def get_expanded_characters():
         
         return jsonify({'characters': expanded, 'count': len(expanded)})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # Phase 6 Enhancement Endpoints
 
@@ -5539,7 +6625,7 @@ def compare_character_interpretations():
         return jsonify(result)
     except Exception as e:
         print(f"Error in compare_character_interpretations: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/character-context/situation-perspectives', methods=['POST'])
 @require_auth
@@ -5577,7 +6663,7 @@ def get_situation_aware_perspectives():
         return jsonify(result)
     except Exception as e:
         print(f"Error in get_situation_aware_perspectives: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # Character Collaboration Endpoints (Phase 6.5)
 @app.route('/api/collaboration/check', methods=['POST'])
@@ -5602,7 +6688,7 @@ def check_collaboration_trigger():
             'detected_domains': domains
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/collaboration/orchestrate', methods=['POST'])
 @require_auth
@@ -5655,7 +6741,7 @@ def orchestrate_collaboration():
         })
     except Exception as e:
         print(f"Error in orchestrate_collaboration: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/collaboration/history', methods=['GET'])
 @require_auth
@@ -5676,7 +6762,7 @@ def get_collaboration_history():
             'history': history
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/collaboration/stats', methods=['GET'])
 @require_auth
@@ -5689,7 +6775,7 @@ def get_collaboration_stats():
         stats = collaboration_system.get_collaboration_stats()
         return jsonify(stats)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/collaboration/rules', methods=['GET'])
 @require_auth
@@ -5702,7 +6788,7 @@ def get_collaboration_rules():
         rules = collaboration_system.get_rules()
         return jsonify({'rules': rules})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/collaboration/domains', methods=['GET'])
 @require_auth
@@ -5715,7 +6801,7 @@ def get_collaboration_domains():
         domains = collaboration_system.get_domains()
         return jsonify({'domains': domains})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # Phase 6.5 Enhancement Endpoints
 
@@ -5772,7 +6858,7 @@ def personality_aware_collaboration():
         })
     except Exception as e:
         print(f"Error in personality_aware_collaboration: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/collaboration/feedback', methods=['POST'])
 @require_auth
@@ -5797,7 +6883,7 @@ def record_collaboration_feedback():
             'satisfaction': satisfaction
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/collaboration/effectiveness', methods=['GET'])
 @require_auth
@@ -5810,7 +6896,7 @@ def get_collaboration_effectiveness():
         effectiveness = collaboration_system.get_collaboration_effectiveness()
         return jsonify(effectiveness)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/personality/profile', methods=['GET'])
 @app.route('/api/personality/profile/<int:user_id>', methods=['GET'])
@@ -5831,7 +6917,7 @@ def get_personality_profile(user_id=None):
         
         return jsonify(profile)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/personality/interpretations', methods=['GET'])
 @app.route('/api/personality/interpretations/<int:user_id>', methods=['GET'])
@@ -5860,7 +6946,7 @@ def get_personality_interpretations(user_id=None):
             'interpretations': interpretations
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/personality/stats', methods=['GET'])
 @app.route('/api/personality/stats/<int:user_id>', methods=['GET'])
@@ -5882,7 +6968,7 @@ def get_personality_stats(user_id=None):
         
         return jsonify(stats)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/personality/conversation-stats', methods=['GET'])
 @require_auth
@@ -5919,7 +7005,7 @@ def get_personality_conversation_stats():
             'total_conversations': len(by_conversation)
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # Note: Coach, Sage, Marcus, Psychologist routes now handled by dynamic character system
 
@@ -5932,7 +7018,7 @@ def get_personality_feedback(session_id):
         feedback = feedback_window.get_current_feedback()
         return jsonify(feedback)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/personality/assessment/start', methods=['POST'])
 def start_personality_assessment():
@@ -5944,7 +7030,7 @@ def start_personality_assessment():
         assessment_ui = personality_assessment_ui.start_assessment_ui(user_id)
         return jsonify(assessment_ui)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/personality/assessment/question/<user_id>')
 def get_assessment_question(user_id):
@@ -5956,7 +7042,7 @@ def get_assessment_question(user_id):
         else:
             return jsonify({'error': 'No active assessment or assessment complete'}), 404
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/personality/assessment/respond', methods=['POST'])
 def respond_to_assessment():
@@ -5973,7 +7059,7 @@ def respond_to_assessment():
         result = personality_assessment_ui.process_question_response(user_id, question_id, option_id)
         return jsonify(result)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/personality/assessment/pause/<user_id>', methods=['POST'])
 def pause_assessment(user_id):
@@ -5982,7 +7068,7 @@ def pause_assessment(user_id):
         result = personality_assessment_ui.pause_assessment(user_id)
         return jsonify(result)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/personality/assessment/back/<user_id>', methods=['POST'])
 def go_back_assessment(user_id):
@@ -5995,7 +7081,7 @@ def go_back_assessment(user_id):
         else:
             return jsonify({'error': 'Cannot go back'}), 400
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/personality/profile/<user_id>')
 def get_detailed_profile(user_id):
@@ -6004,7 +7090,7 @@ def get_detailed_profile(user_id):
         profile_ui = personality_assessment_ui.get_detailed_profile_ui(user_id)
         return jsonify(profile_ui)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/personality/check_assessment/<user_id>')
 def check_assessment_needed(user_id):
@@ -6019,7 +7105,7 @@ def check_assessment_needed(user_id):
             'assessment_prompt': prompt
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # Debug and maintenance endpoints
 @app.route('/debug/conversations')
@@ -6037,7 +7123,7 @@ def debug_conversations():
             'cache_size': len(chatbot.conversation_manager.conversation_cache)
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/debug/session/<session_id>')
 def debug_session(session_id):
@@ -6058,7 +7144,7 @@ def debug_session(session_id):
                 'searched_path': str(chatbot.conversation_manager.storage_dir / f"{session_id}.json")
             })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/restore_session', methods=['POST'])
 def restore_session():
@@ -6085,7 +7171,7 @@ def restore_session():
             'error': 'No sessions found to restore'
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # User Profile Management Routes
 @app.route('/profile')
@@ -6104,7 +7190,7 @@ def create_user_profile():
             'message': 'Profile created successfully'
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/profile/<user_id>')
 def get_user_profile(user_id):
@@ -6116,7 +7202,7 @@ def get_user_profile(user_id):
         else:
             return jsonify({'error': 'Profile not found'}), 404
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/profile/personal-info', methods=['POST'])
 def update_personal_info():
@@ -6137,7 +7223,7 @@ def update_personal_info():
         else:
             return jsonify({'error': 'Failed to update personal information'}), 400
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/profile/preferences', methods=['POST'])
 def update_preferences():
@@ -6158,7 +7244,7 @@ def update_preferences():
         else:
             return jsonify({'error': 'Failed to update preferences'}), 400
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/profile/privacy', methods=['POST'])
 def update_privacy_settings():
@@ -6179,7 +7265,7 @@ def update_privacy_settings():
         else:
             return jsonify({'error': 'Failed to update privacy settings'}), 400
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/profile/<user_id>', methods=['DELETE'])
 def delete_user_profile(user_id):
@@ -6191,7 +7277,7 @@ def delete_user_profile(user_id):
         else:
             return jsonify({'error': 'Failed to delete profile'}), 400
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/profile/export/<user_id>')
 def export_user_profile(user_id):
@@ -6214,7 +7300,7 @@ def export_user_profile(user_id):
         else:
             return jsonify({'error': 'Profile not found or export failed'}), 404
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/profile/list')
 def list_user_profiles():
@@ -6223,7 +7309,7 @@ def list_user_profiles():
         profiles = user_profile_manager.list_all_profiles()
         return jsonify({'profiles': profiles})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/profile/summary/<user_id>')
 def get_user_summary(user_id):
@@ -6235,7 +7321,7 @@ def get_user_summary(user_id):
         else:
             return jsonify({'error': 'Profile not found'}), 404
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/profile/interaction', methods=['POST'])
 def record_interaction():
@@ -6254,7 +7340,7 @@ def record_interaction():
         else:
             return jsonify({'error': 'Failed to record interaction'}), 400
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/psychological-assessment', methods=['POST'])
 def save_psychological_assessment():
@@ -6361,11 +7447,11 @@ def save_psychological_assessment():
         
         return jsonify(response_data)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # Register dynamic character routes for ALL characters with Smart Response and Database
 print("\n=== Registering Character Routes ===")
-register_character_routes(app, all_characters, process_with_smart_response, integrated_db)
+register_character_routes(app, all_characters, process_with_smart_response, integrated_db, ai_budget=ai_budget)
 print("✓ Dynamic routes registered for all 8 characters with Smart Response + Database")
 
 
@@ -6387,7 +7473,7 @@ def get_domain_characters():
             'total': len(characters)
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/domain-characters/session')
@@ -6409,7 +7495,7 @@ def get_domain_session():
             'message': 'Domain characters use per-character conversation tracking'
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/domain-characters/<character_id>')
@@ -6436,7 +7522,7 @@ def get_domain_character(character_id):
             }
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/domain-characters/route', methods=['POST'])
@@ -6470,12 +7556,22 @@ def route_to_domain_characters():
         except Exception as e:
             print(f"[DOMAIN-CHAT] Error getting user role: {e}")
         
+        # Detect special action flags from frontend buttons
+        detail_requested = data.get('detail_requested', False)
+        direction_change = data.get('direction_change', False)
+        
         # Build context for routing
         context = {
             'user_id': user_id,
             'is_admin': is_admin,
-            'timestamp': datetime.now().isoformat()
+            'timestamp': datetime.now().isoformat(),
+            'detail_requested': detail_requested,
+            'direction_change': direction_change,
         }
+        if detail_requested:
+            print(f"[DOMAIN-CHAT] User requested more detail")
+        if direction_change:
+            print(f"[DOMAIN-CHAT] User wants different direction")
         print(f"[DOMAIN-CHAT] Context built with is_admin={is_admin}")
         
         # If replying to a specific message, fetch it and add to context
@@ -6695,7 +7791,7 @@ def route_to_domain_characters():
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/domain-characters/analyze', methods=['POST'])
@@ -6743,7 +7839,7 @@ def analyze_with_domain_characters():
             'message': message
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/domain-characters/interpretations/<int:history_id>')
@@ -6764,7 +7860,7 @@ def get_character_interpretations(history_id):
             'critical_perspectives': critical
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/domain-characters/cross-domain', methods=['POST'])
@@ -6830,7 +7926,7 @@ def get_cross_domain_insights():
         print(f"Error in cross-domain insights: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/domain-characters/user-insights', methods=['GET'])
@@ -6890,7 +7986,7 @@ def get_user_insights():
         print(f"Error getting user insights: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 # =============================================================================
@@ -6916,7 +8012,7 @@ def get_admin_settings():
         })
     except Exception as e:
         print(f"Error getting admin settings: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/admin/settings/<key>', methods=['PUT'])
@@ -6955,7 +8051,7 @@ def update_admin_setting(key):
             
     except Exception as e:
         print(f"Error updating admin setting: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/admin/data-cleanup/stats', methods=['GET'])
@@ -6976,7 +8072,7 @@ def get_data_cleanup_stats():
         })
     except Exception as e:
         print(f"Error getting cleanup stats: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/admin/data-cleanup/run', methods=['POST'])
@@ -7002,7 +8098,7 @@ def run_data_cleanup():
         })
     except Exception as e:
         print(f"Error running cleanup: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 # =============================================================================
@@ -7033,7 +8129,7 @@ def get_user_data():
         })
     except Exception as e:
         print(f"Error getting user data: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/user/my-data/export', methods=['GET'])
@@ -7063,7 +8159,7 @@ def export_user_data():
         return response
     except Exception as e:
         print(f"Error exporting user data: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/user/my-data/delete', methods=['DELETE'])
@@ -7091,7 +8187,7 @@ def delete_user_insights():
         })
     except Exception as e:
         print(f"Error deleting user data: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/domain-characters/feedback', methods=['POST'])
@@ -7127,7 +8223,7 @@ def submit_character_feedback():
             'message': f'Feedback recorded for {character_id}'
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/domain-characters/preferences')
@@ -7147,7 +8243,7 @@ def get_character_preferences():
             'preferences': preferences
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/domain-characters/history/<character_id>')
@@ -7219,7 +8315,7 @@ def get_character_history(character_id):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 print("✓ Domain Character API endpoints registered")
@@ -7264,7 +8360,7 @@ def get_ai_provider_errors():
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/admin/ai-errors/<int:error_id>/resolve', methods=['POST'])
@@ -7281,7 +8377,7 @@ def resolve_ai_error(error_id):
         else:
             return jsonify({'error': 'Error logging not initialized'}), 500
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/admin/ai-provider-status')
@@ -7302,7 +8398,7 @@ def get_ai_provider_status():
                 'error': 'AI integration not initialized'
             }), 500
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/admin/ai-errors')
@@ -7508,7 +8604,7 @@ def get_agent_dashboard_data():
         
         return jsonify(dashboard)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 print("✓ Admin AI Error Log API endpoints registered")
@@ -7568,7 +8664,7 @@ def run_self_improvement_analysis():
             ],
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/admin/ab-testing/experiments', methods=['GET'])
@@ -7585,7 +8681,7 @@ def get_ab_experiments():
         
         return jsonify(ab_testing_agent.get_results_summary())
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/admin/ab-testing/experiments', methods=['POST'])
@@ -7619,7 +8715,7 @@ def create_ab_experiment():
         )
         return jsonify(exp.to_dict())
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/admin/ab-testing/experiments/<experiment_id>/start', methods=['POST'])
@@ -7639,7 +8735,7 @@ def start_ab_experiment(experiment_id):
             return jsonify({'status': 'running', 'experiment_id': experiment_id})
         return jsonify({'error': 'Experiment not found'}), 404
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/admin/quality-scoring/run', methods=['POST'])
@@ -7679,7 +8775,7 @@ def run_quality_scoring_manual():
             'scores': scores_data,
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 print("✓ Self-Improvement & A/B Testing API endpoints registered")
@@ -7769,7 +8865,7 @@ def get_user_context():
         print(f"❌ Error in get_user_context: {str(e)}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/user/context/<int:context_id>', methods=['PUT'])
@@ -7837,7 +8933,7 @@ def update_user_context(context_id):
         print(f"❌ Error in update_user_context: {str(e)}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/user/context/<int:context_id>', methods=['DELETE'])
@@ -7887,7 +8983,7 @@ def delete_user_context(context_id):
         print(f"❌ Error in delete_user_context: {str(e)}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 # ============================================
@@ -7920,7 +9016,7 @@ def get_pattern_suggestions():
         })
     except Exception as e:
         print(f"❌ Error getting pattern suggestions: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/admin/patterns/analyze', methods=['POST'])
@@ -7947,7 +9043,7 @@ def run_pattern_analysis():
         })
     except Exception as e:
         print(f"❌ Error running pattern analysis: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/admin/patterns/<int:pattern_id>/approve', methods=['POST'])
@@ -7972,7 +9068,7 @@ def approve_pattern(pattern_id):
         })
     except Exception as e:
         print(f"❌ Error approving pattern: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/admin/patterns/<int:pattern_id>/reject', methods=['POST'])
@@ -7997,7 +9093,7 @@ def reject_pattern(pattern_id):
         })
     except Exception as e:
         print(f"❌ Error rejecting pattern: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/admin/archival/run', methods=['POST'])
@@ -8019,7 +9115,7 @@ def run_archival_maintenance():
         })
     except Exception as e:
         print(f"❌ Error running archival: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/admin/archival/stats')
@@ -8041,7 +9137,7 @@ def get_archival_stats():
         })
     except Exception as e:
         print(f"❌ Error getting archival stats: {e}")
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 # ============================================
@@ -8066,7 +9162,7 @@ def get_backup_status():
         status = backup_manager.get_backup_status()
         return jsonify({'success': True, **status})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/admin/backup/list')
@@ -8082,7 +9178,7 @@ def list_backups():
         backups = backup_manager.list_backups(db_name)
         return jsonify({'success': True, 'backups': backups, 'count': len(backups)})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/admin/backup/run', methods=['POST'])
@@ -8111,7 +9207,7 @@ def run_backup():
             'results': results
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/admin/backup/restore', methods=['POST'])
@@ -8144,7 +9240,7 @@ def restore_backup():
         else:
             return jsonify({'success': False, 'error': result['error']}), 500
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/admin/backup/download/<path:backup_path>')
@@ -8170,7 +9266,7 @@ def download_backup(backup_path):
             download_name=full_path.name
         )
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 # ============================================
@@ -8189,7 +9285,7 @@ def get_alert_stats():
             return jsonify({'error': 'Alert notifier not initialized'}), 500
         return jsonify(alert_notifier.get_stats())
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/admin/alerts/test', methods=['POST'])
@@ -8208,7 +9304,7 @@ def send_test_alert():
         else:
             return jsonify({'success': False, 'error': 'Email not configured or send failed'}), 400
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/admin/alerts/config', methods=['POST'])
@@ -8234,7 +9330,7 @@ def update_alert_config():
 
         return jsonify({'success': True, **alert_notifier.get_stats()})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/admin/alerts/history', methods=['GET'])
@@ -8251,7 +9347,7 @@ def get_alert_history():
         limit = int(request.args.get('limit', 50))
         return jsonify({'alerts': alert_notifier.get_recent_alerts(limit=limit, level=level)})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 # ============================================
@@ -8326,7 +9422,7 @@ def get_ai_usage_summary():
         print(f"❌ Error in get_ai_usage_summary: {str(e)}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/admin/ai-usage/daily-chart')
@@ -8405,7 +9501,7 @@ def get_daily_chart_data():
         return jsonify(result)
     except Exception as e:
         print(f"❌ Error in get_daily_chart_data: {str(e)}", flush=True)
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/admin/ai-usage/daily')
@@ -8467,7 +9563,7 @@ def get_daily_ai_usage():
         print(f"❌ Error in get_daily_ai_usage: {str(e)}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 @app.route('/api/admin/ai-usage/monthly')
@@ -8572,7 +9668,7 @@ def get_monthly_ai_usage():
         print(f"❌ Error in get_monthly_ai_usage: {str(e)}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 # =============================================================================
@@ -8608,7 +9704,7 @@ def get_developer_metrics():
         metrics = developer_analytics.get_system_metrics()
         return jsonify(metrics)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/developer/ai-calls', methods=['GET'])
 @require_auth
@@ -8644,7 +9740,7 @@ def get_developer_ai_calls():
         calls = developer_analytics.get_ai_call_details(limit, filters if filters else None)
         return jsonify(calls)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/developer/user-context', methods=['GET'])
 @require_auth
@@ -8663,7 +9759,7 @@ def get_developer_user_context():
         analysis = developer_analytics.get_user_context_analysis(user_id)
         return jsonify(analysis)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/developer/character-effectiveness', methods=['GET'])
 @require_auth
@@ -8681,7 +9777,7 @@ def get_developer_character_effectiveness():
         effectiveness = developer_analytics.get_character_effectiveness()
         return jsonify(effectiveness)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/developer/clarification-stats', methods=['GET'])
 @require_auth
@@ -8699,7 +9795,7 @@ def get_developer_clarification_stats():
         stats = developer_analytics.get_clarification_effectiveness()
         return jsonify(stats)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/developer/export/<table>', methods=['GET'])
 @require_auth
@@ -8730,7 +9826,7 @@ def export_developer_data(table):
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/developer/query', methods=['POST'])
 @require_auth
@@ -8756,7 +9852,7 @@ def run_developer_query():
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/developer/debug', methods=['GET'])
 @require_auth
@@ -8775,7 +9871,7 @@ def get_developer_debug():
         debug_info = developer_analytics.get_debug_info(component)
         return jsonify(debug_info)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/developer/health-snapshot', methods=['POST'])
 @require_auth
@@ -8793,7 +9889,7 @@ def take_health_snapshot():
         snapshot_id = developer_analytics.take_health_snapshot()
         return jsonify({'success': True, 'snapshot_id': snapshot_id})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/developer/health-history', methods=['GET'])
 @require_auth
@@ -8812,7 +9908,7 @@ def get_health_history():
         history = developer_analytics.get_health_history(days)
         return jsonify(history)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/developer/access-log', methods=['GET'])
 @require_auth
@@ -8833,7 +9929,7 @@ def get_developer_access_log():
         ]
         return jsonify(logs)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 
 # ============================================================
@@ -9005,7 +10101,7 @@ def system_errors():
             'summary': summary
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/system/cache')
 def cache_stats():
@@ -9014,7 +10110,7 @@ def cache_stats():
         cache = get_cache()
         return jsonify(cache.get_stats())
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/system/cache/clear', methods=['POST'])
 def clear_cache():
@@ -9024,7 +10120,7 @@ def clear_cache():
         cache.clear()
         return jsonify({'status': 'success', 'message': 'Cache cleared'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # ============================================================
 # USER ANALYTICS ENDPOINTS
@@ -9042,7 +10138,7 @@ def get_user_analytics(user_id):
         conn.close()
         return jsonify(stats)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/analytics/engagement')
 def get_engagement_analytics():
@@ -9056,7 +10152,7 @@ def get_engagement_analytics():
         conn.close()
         return jsonify(metrics)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/analytics/conversations')
 def get_conversation_analytics():
@@ -9070,7 +10166,7 @@ def get_conversation_analytics():
         conn.close()
         return jsonify(insights)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/analytics/hourly')
 def get_hourly_analytics():
@@ -9084,7 +10180,7 @@ def get_hourly_analytics():
         conn.close()
         return jsonify(hourly)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 @app.route('/api/analytics/trends/<metric>')
 def get_trend_analytics(metric):
@@ -9098,7 +10194,7 @@ def get_trend_analytics(metric):
         conn.close()
         return jsonify({'metric': metric, 'days': days, 'data': trends})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return _safe_error(e, 'api')
 
 # GITHUB WEBHOOK FOR AUTO-DEPLOYMENT (DISABLED - use deploy_anywhere.py instead)
 # Uncomment to enable automatic deployment on GitHub push

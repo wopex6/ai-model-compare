@@ -598,6 +598,12 @@ class IntegratedAIChatbot {
         document.getElementById('chat-input').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') this.sendChatMessage();
         });
+        // Clear stale action flags when user manually types
+        document.getElementById('chat-input').addEventListener('input', () => {
+            if (this._nextMessageFlags && !this._nextMessageFlags._auto) {
+                this._nextMessageFlags = null;
+            }
+        });
 
         // Admin Chat
         document.getElementById('send-admin-message-btn').addEventListener('click', () => this.sendAdminMessage());
@@ -813,7 +819,8 @@ class IntegratedAIChatbot {
                 };
                 localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
                 this.showNotification('Account created successfully!', 'success');
-                this.showDashboard();
+                // Redirect new users to persona onboarding
+                window.location.href = '/onboarding';
             } else {
                 this.showNotification(result.error || 'Signup failed', 'error');
             }
@@ -963,8 +970,51 @@ class IntegratedAIChatbot {
         document.getElementById(screenId).classList.add('active');
     }
 
+    async applyPersonaTheme() {
+        // 1. Try localStorage first (instant, no flash)
+        let persona = localStorage.getItem('persona');
+        if (persona) {
+            document.documentElement.dataset.persona = persona;
+        }
+        // 2. Fetch from server (authoritative) and reconcile
+        try {
+            const token = localStorage.getItem('token');
+            if (token) {
+                const res = await fetch('/api/user/persona', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.persona) {
+                        persona = data.persona;
+                        localStorage.setItem('persona', persona);
+                        document.documentElement.dataset.persona = persona;
+                    }
+                }
+            }
+        } catch (e) { /* offline — keep localStorage value */ }
+        // 3. Update welcome message based on persona
+        this.updateWelcomeForPersona(persona || 'spark');
+    }
+
+    updateWelcomeForPersona(persona) {
+        const welcomeEl = document.querySelector('.welcome-message');
+        if (!welcomeEl) return;
+        const cfg = {
+            serenity:  { icon: 'fas fa-spa',     title: 'Welcome to your calm space',           sub: 'Track your mood, practice mindfulness, and find emotional balance with your AI guides.' },
+            momentum:  { icon: 'fas fa-rocket',   title: 'Ready to build momentum?',             sub: 'Set goals, track habits, and make better decisions with your AI coaching team.' },
+            odyssey:   { icon: 'fas fa-compass',  title: 'Your journey of self-discovery awaits', sub: 'Explore your values, reflect on life patterns, and grow through philosophical dialogue.' },
+            spark:     { icon: 'fas fa-bolt',      title: 'Welcome to AI Chatbot!',               sub: 'Start a conversation or select an existing chat from the sidebar.' }
+        };
+        const c = cfg[persona] || cfg.spark;
+        welcomeEl.innerHTML = `<h3><i class="${c.icon}" style="margin-right:8px"></i>${c.title}</h3><p>${c.sub}</p>`;
+    }
+
     async showDashboard() {
         console.log('🔧 Dashboard Debug: showDashboard called at', performance.now(), 'ms');
+        
+        // Apply persona theme before showing UI
+        await this.applyPersonaTheme();
         
         // Show the dashboard screen (single method)
         this.showScreen('dashboard-screen');
@@ -1049,6 +1099,43 @@ class IntegratedAIChatbot {
         if (typeof window.checkPersonalityTestStatus === 'function') {
             window.checkPersonalityTestStatus();
         }
+        
+        // Initialize shared modules (also used by domain_characters page)
+        this.initSharedModules();
+    }
+
+    initSharedModules() {
+        // MessageHandler — unified message display
+        if (typeof MessageHandler !== 'undefined' && !MessageHandler.characterName) {
+            MessageHandler.init('ai-chat', {
+                characterDisplayName: 'Alex',
+                messageClass: 'message',
+                bubbleClass: 'message-bubble'
+            });
+            // Point to the correct container for this page
+            MessageHandler.messagesContainer = document.getElementById('chat-messages');
+        }
+        
+        // ExplicitContextUI — show user's stated goals/preferences
+        if (typeof ExplicitContextUI !== 'undefined') {
+            const panel = document.getElementById('explicit-context-panel');
+            if (panel) {
+                panel.style.display = 'block';
+                ExplicitContextUI.init('explicit-context-panel', 'ai-chat');
+            }
+        }
+        
+        // ProactiveClarificationUI — floating clarification questions
+        if (typeof ProactiveClarificationUI !== 'undefined') {
+            ProactiveClarificationUI.init();
+        }
+        
+        // AIBudgetNotifications — usage budget alerts
+        if (typeof AIBudgetNotifications !== 'undefined') {
+            AIBudgetNotifications.init();
+        }
+        
+        // GreetingHandler auto-initializes on DOMContentLoaded (no manual call needed)
     }
 
     updateNavUsername() {
@@ -2378,11 +2465,20 @@ class IntegratedAIChatbot {
             messagesContainer.appendChild(thinkingMessage);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
-            // Send to API
-            const response = await this.apiCall(`/api/user/conversations/${this.currentChatSession}/messages`, 'POST', {
-                senderType: 'user',
-                content: content
-            });
+            // Send to API (include action flags if set by Tell me more / Not what I meant buttons)
+            const payload = { senderType: 'user', content: content };
+            if (this._nextMessageFlags) {
+                // Expire stale flags (>60s old)
+                const age = Date.now() - (this._nextMessageFlags._ts || 0);
+                if (age < 60000) {
+                    const flags = {...this._nextMessageFlags};
+                    delete flags._ts;
+                    delete flags._auto;
+                    Object.assign(payload, flags);
+                }
+                this._nextMessageFlags = null;
+            }
+            const response = await this.apiCall(`/api/user/conversations/${this.currentChatSession}/messages`, 'POST', payload);
 
             // Remove thinking indicator
             const thinkingIndicator = document.getElementById('thinking-indicator');
@@ -2466,6 +2562,42 @@ class IntegratedAIChatbot {
                     feedbackRow.appendChild(thumbsDown);
                     aiMessage.appendChild(feedbackRow);
                     
+                    // Response action buttons: "Tell me more" + "Not what I meant"
+                    const actionRow = document.createElement('div');
+                    actionRow.className = 'response-actions';
+                    
+                    const moreBtn = document.createElement('button');
+                    moreBtn.className = 'response-action-btn more-detail-btn';
+                    moreBtn.textContent = 'Tell me more';
+                    moreBtn.title = 'Get a more detailed response';
+                    moreBtn.addEventListener('click', () => {
+                        actionRow.remove();
+                        const chatInput = document.getElementById('chat-input');
+                        chatInput.value = 'Could you elaborate on that?';
+                        // Flag the next message as detail_requested
+                        this._nextMessageFlags = { detail_requested: true, _ts: Date.now(), _auto: true };
+                        this.sendChatMessage();
+                    });
+                    
+                    const redirectBtn = document.createElement('button');
+                    redirectBtn.className = 'response-action-btn redirect-btn';
+                    redirectBtn.textContent = 'Not what I meant';
+                    redirectBtn.title = 'Try a different approach';
+                    redirectBtn.addEventListener('click', () => {
+                        actionRow.remove();
+                        const chatInput = document.getElementById('chat-input');
+                        chatInput.value = "That's not quite what I meant. Let me clarify:";
+                        chatInput.focus();
+                        // Flag the next message as direction_change
+                        this._nextMessageFlags = { direction_change: true, _ts: Date.now() };
+                        // Place cursor at end so user can type their clarification
+                        chatInput.setSelectionRange(chatInput.value.length, chatInput.value.length);
+                    });
+                    
+                    actionRow.appendChild(moreBtn);
+                    actionRow.appendChild(redirectBtn);
+                    aiMessage.appendChild(actionRow);
+                    
                     // Quick-reply buttons for clarification questions (standard + perspective)
                     if (result.clarification) {
                         const allQuestions = [];
@@ -2507,6 +2639,11 @@ class IntegratedAIChatbot {
                     
                     messagesContainer.appendChild(aiMessage);
                     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+                    
+                    // Let shared ProactiveClarificationUI check for extra questions
+                    if (typeof ProactiveClarificationUI !== 'undefined') {
+                        ProactiveClarificationUI.checkResponse(result);
+                    }
                     
                     // Play notification sound when AI response is ready
                     this.playNotificationSound();

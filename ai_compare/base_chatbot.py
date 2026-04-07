@@ -59,7 +59,7 @@ class BaseChatbot(ABC):
         self.conversation_history = []
         self.adaptive_personality = AdaptivePersonality(self.session_id, self.personality_profiler)
     
-    async def chat(self, user_message: str, include_context: bool = True, save_user_message: bool = True) -> Dict[str, any]:
+    async def chat(self, user_message: str, include_context: bool = True, save_user_message: bool = True, user_id: int = None) -> Dict[str, any]:
         """
         CORE PROCESSING PIPELINE - Shared by all characters
         
@@ -81,7 +81,7 @@ class BaseChatbot(ABC):
         preprocessed_message = await self._preprocess_message(user_message)
         
         # STEP 2: CORE AI PROCESSING (shared by all)
-        response_data = await self._core_process(preprocessed_message, include_context)
+        response_data = await self._core_process(preprocessed_message, include_context, user_id=user_id)
         
         # STEP 3: Post-processing (can be enhanced by characters)
         final_response_data = await self._postprocess_response(response_data, user_message)
@@ -106,7 +106,7 @@ class BaseChatbot(ABC):
         # Characters can override to add their own context
         return user_message
     
-    async def _core_process(self, enhanced_message: str, include_context: bool) -> Dict[str, any]:
+    async def _core_process(self, enhanced_message: str, include_context: bool, user_id: int = None) -> Dict[str, any]:
         """
         CORE AI PROCESSING - SHARED BY ALL CHARACTERS
         This is the heart of the system and should NOT be overridden
@@ -114,6 +114,7 @@ class BaseChatbot(ABC):
         Args:
             enhanced_message: Pre-processed message
             include_context: Whether to include conversation history
+            user_id: Optional user ID for personalisation
             
         Returns:
             Dict with AI response and metadata
@@ -127,7 +128,7 @@ class BaseChatbot(ABC):
         )
         
         # Build context-aware prompt with personality
-        enhanced_prompt = self._build_enhanced_prompt(tool_enhanced_message, include_context)
+        enhanced_prompt = self._build_enhanced_prompt(tool_enhanced_message, include_context, user_id=user_id)
         
         # Get response from AI models (Claude Sonnet 4.5 + others)
         model_responses = await self.ai_compare.ask_all(enhanced_prompt)
@@ -226,24 +227,40 @@ class BaseChatbot(ABC):
         }
         self.conversation_history.append(conversation_entry)
     
-    def _build_enhanced_prompt(self, user_message: str, include_context: bool) -> str:
+    def _build_enhanced_prompt(self, user_message: str, include_context: bool, user_id: int = None) -> str:
         """
         Build personality and context-aware prompt - SHARED
         
         Args:
             user_message: User's message
             include_context: Whether to include conversation history
+            user_id: Optional user ID for personalisation (verbosity, emotional context)
             
         Returns:
             Enhanced prompt for AI models
         """
         personality_prompt = self.personality.get_personality_prompt()
         guidelines = self.personality.get_response_guidelines()
-        
+
+        # --- Personalization pipeline (all modules, shared across chatbots) ---
+        from smart_response.personalization_pipeline import build_personalization
+        _p = build_personalization(user_message, user_id, 'general')
+        explicit_context_block = _p.explicit_context_block
+        progress_context_block = _p.progress_context_block
+        goal_checkin_block     = _p.goal_checkin_block
+        engagement_block       = _p.engagement_block
+        frustration_block      = _p.frustration_block
+        milestone_block        = _p.milestone_block
+        verbosity_instruction  = _p.verbosity_instruction
+        tone_instruction       = _p.tone_instruction
+        format_instruction     = _p.format_instruction
+        emotional_instruction  = _p.emotional_instruction
+        need_instruction       = _p.need_instruction
+
         # Add conversation context if requested
         context = ""
         if include_context and self.conversation_history:
-            recent_history = self.conversation_history[-3:]
+            recent_history = self.conversation_history[-8:]  # Last 8 exchanges
             context = "\n\nRecent conversation context:\n"
             for entry in recent_history:
                 context += f"User: {entry['user_message']}\n"
@@ -259,6 +276,18 @@ Response Guidelines:
 - Include examples: {guidelines['include_examples']}
 - Show empathy: {guidelines['show_empathy']}
 - Encourage exploration: {guidelines['encourage_exploration']}
+
+{explicit_context_block}{progress_context_block}{goal_checkin_block}{engagement_block}{frustration_block}{milestone_block}
+CRITICAL RESPONSE RULES:
+1. BE SPECIFIC, NOT GENERIC: Never give vague advice. Ask ONE specific question if you lack information.
+2. LENGTH: Use 2-3 sentences by default unless the user's verbosity preference or topic complexity calls for more or less.
+3. NO FILLER: Skip greetings and pleasantries. Every sentence should deliver value.
+4. CHECK DIRECTION: Occasionally ask if this is the kind of help they want.
+{verbosity_instruction}
+{tone_instruction}
+{format_instruction}
+{emotional_instruction}
+{need_instruction}
 
 {context}
 

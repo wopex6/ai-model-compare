@@ -36,7 +36,7 @@ def _run_async(coroutine):
     return future.result()
 
 
-def register_character_routes(app, characters_dict, smart_response_processor=None, integrated_db=None):
+def register_character_routes(app, characters_dict, smart_response_processor=None, integrated_db=None, ai_budget=None):
     """
     Dynamically register routes for all characters
     
@@ -45,6 +45,7 @@ def register_character_routes(app, characters_dict, smart_response_processor=Non
         characters_dict: Dict mapping character_id to chatbot instance
         smart_response_processor: Optional Smart Response processing function
         integrated_db: IntegratedDatabase instance for user+character sessions
+        ai_budget: Optional AIBudgetManager instance for call enforcement
     """
     
     # Get all character IDs
@@ -59,7 +60,7 @@ def register_character_routes(app, characters_dict, smart_response_processor=Non
         # Create route functions with proper closures
         _register_character_page(app, char_id)
         _register_session_endpoint(app, char_id, integrated_db)  # NEW: Session management
-        _register_chat_endpoint(app, char_id, characters_dict, smart_response_processor, integrated_db)
+        _register_chat_endpoint(app, char_id, characters_dict, smart_response_processor, integrated_db, ai_budget)
         _register_insight_endpoint(app, char_id, characters_dict)
         _register_stats_endpoint(app, char_id, characters_dict)
         _register_history_endpoint(app, char_id, characters_dict, integrated_db)  # Updated with database
@@ -134,7 +135,7 @@ def _register_character_page(app, character_id):
     )
 
 
-def _register_chat_endpoint(app, character_id, characters_dict, smart_response_processor=None, integrated_db=None):
+def _register_chat_endpoint(app, character_id, characters_dict, smart_response_processor=None, integrated_db=None, ai_budget=None):
     """Register chat endpoint for character with Smart Response support and database integration"""
     
     def character_chat():
@@ -174,26 +175,118 @@ def _register_chat_endpoint(app, character_id, characters_dict, smart_response_p
             # Set the bot's session_id
             bot.session_id = session_id
             
-            # Use Smart Response if available
-            if smart_response_processor:
-                # DATABASE MIGRATION: Save original message to database (not JSON)
+            # ── Save user message (always, regardless of path) ───────────────
+            if integrated_db:
+                integrated_db.save_character_message(user_id, character_id, "user", message, {"source": "user"})
+                print(f"💾 Saved user message to DATABASE for user {user_id}, character {character_id}")
+            else:
+                bot.conversation_manager.save_message(session_id, "user", message, {"source": "user"})
+
+            # ── Explicit Context Extraction (always) ─────────────────────────
+            try:
+                from smart_response.explicit_context_handler import ExplicitContextHandler
                 if integrated_db:
-                    integrated_db.save_character_message(user_id, character_id, "user", message, {"source": "user"})
-                    print(f"💾 Saved user message to DATABASE for user {user_id}, character {character_id}")
-                else:
-                    # Fallback to old system
-                    bot.conversation_manager.save_message(session_id, "user", message, {"source": "user"})
-                
+                    _ec_conn = integrated_db.get_connection()
+                    _ech = ExplicitContextHandler(_ec_conn)
+                    _ech.extract_explicit_context(user_id, character_id, message)
+                    _ec_conn.close()
+            except Exception:
+                pass
+
+            # ── Verbosity signal recording (always) ──────────────────────────
+            _msg_lower = message.lower()
+            if any(p in _msg_lower for p in ['keep it short', 'be brief', 'briefly', 'quick answer', 'in short']):
+                try:
+                    from smart_response.user_personalization import UserPersonalization
+                    UserPersonalization().record_signal(user_id, 'response_length_feedback', 'brief', context=character_id)
+                except Exception:
+                    pass
+            elif any(p in _msg_lower for p in ['in detail', 'detailed', 'explain fully', 'thorough', 'elaborate']):
+                try:
+                    from smart_response.user_personalization import UserPersonalization
+                    UserPersonalization().record_signal(user_id, 'response_length_feedback', 'detailed', context=character_id)
+                except Exception:
+                    pass
+
+            # ── Proactive Clarification (always) ────────────────────────────
+            _clarification_response = None
+            try:
+                from smart_response.response_need_classifier import get_need_classifier
+                from smart_response.proactive_clarifier import get_clarifier
+                _classification = get_need_classifier().classify(message)
+                _clarifier_decision = get_clarifier().decide(
+                    message,
+                    need_confidence=_classification.confidence,
+                    primary_need=_classification.primary_need,
+                    secondary_need=_classification.secondary_need,
+                )
+                if _clarifier_decision.should_clarify:
+                    _clarification_response = get_clarifier().format_clarification_response(_clarifier_decision)
+            except Exception:
+                _classification = None
+                _clarifier_decision = None
+
+            if _clarification_response:
+                _clarification_response['session_id'] = session_id
+                if integrated_db:
+                    integrated_db.save_character_message(
+                        user_id, character_id, "assistant",
+                        _clarification_response['response'],
+                        {"source": "proactive_clarification", "urgency": _clarification_response.get('urgency', 'normal')}
+                    )
+                return jsonify(_clarification_response)
+
+            # ── Budget check (before AI call) ────────────────────────────────
+            if ai_budget:
+                try:
+                    _is_admin = False
+                    if integrated_db:
+                        _role_conn = integrated_db.get_connection()
+                        _role_cur = _role_conn.cursor()
+                        _role_cur.execute('SELECT role FROM users WHERE id = ?', (user_id,))
+                        _role_row = _role_cur.fetchone()
+                        if _role_row:
+                            _is_admin = _role_row[0] in ('administrator', 'developer')
+                        _role_conn.close()
+                    _allowed, _budget_reason = ai_budget.can_make_ai_call(
+                        user_id=user_id, is_admin=_is_admin
+                    )
+                    if not _allowed:
+                        print(f"[AI-BUDGET] ❌ Denied for user {user_id}: {_budget_reason}")
+                        return jsonify({
+                            'response': 'Daily AI limit reached. Please try again tomorrow or contact an admin to adjust your quota.',
+                            'budget_exceeded': True,
+                            'reason': _budget_reason
+                        }), 429
+                except Exception as _be:
+                    print(f"[AI-BUDGET] Warning: budget check failed: {_be}")
+
+            # ── AI call ──────────────────────────────────────────────────────
+            _ai_call_start = __import__('time').time()
+            if smart_response_processor:
                 def ai_function(enhanced_message):
                     # Use persistent event loop (no create/close warnings)
                     # enhanced_message includes explicit context prepended by Smart Response
                     # Pass save_user_message=False to prevent double-saving user message
                     # Pass message_source to tag where the response came from
-                    return _run_async(bot.chat(enhanced_message, include_context, save_user_message=False, message_source="smart_response"))
+                    return _run_async(bot.chat(enhanced_message, include_context, save_user_message=False, message_source="smart_response", user_id=user_id))
                 
                 try:
                     response = smart_response_processor(message, character_id, ai_function)
                     
+                    # Log successful AI call to budget manager
+                    if ai_budget:
+                        try:
+                            ai_budget.log_ai_call(
+                                call_type='chat',
+                                purpose=f'character_chat_{character_id}',
+                                success=True,
+                                user_id=user_id,
+                                character=character_id
+                            )
+                        except Exception:
+                            pass
+
                     # DATABASE MIGRATION: Save ALL bot responses to database
                     if isinstance(response, dict) and response.get('response'):
                         response_text = response.get('response', '')
@@ -234,7 +327,18 @@ def _register_chat_endpoint(app, character_id, characters_dict, smart_response_p
                 # Fallback to direct AI if Smart Response not available
                 # Use persistent event loop (no create/close warnings)
                 try:
-                    response = _run_async(bot.chat(message, include_context))
+                    response = _run_async(bot.chat(message, include_context, user_id=user_id))
+                    if ai_budget:
+                        try:
+                            ai_budget.log_ai_call(
+                                call_type='chat',
+                                purpose=f'character_chat_{character_id}_direct',
+                                success=True,
+                                user_id=user_id,
+                                character=character_id
+                            )
+                        except Exception:
+                            pass
                 except Exception as e:
                     print(f"❌ Error in direct chat for {character_id}: {e}")
                     return jsonify({'error': str(e)}), 500
@@ -244,7 +348,69 @@ def _register_chat_endpoint(app, character_id, characters_dict, smart_response_p
                 response['session_id'] = session_id
             else:
                 response = {'response': response, 'session_id': session_id}
-            
+
+            # ── Character Suggestion ─────────────────────────────────────────
+            try:
+                from smart_response.response_need_classifier import get_need_classifier
+                from smart_response.character_suggester import get_character_suggester
+                _cls = get_need_classifier().classify(message)
+                if _cls.confidence >= 0.5:
+                    _suggestion = get_character_suggester().suggest(
+                        current_character_id=character_id,
+                        primary_need=_cls.primary_need,
+                        need_confidence=_cls.confidence,
+                    )
+                    if _suggestion.should_suggest:
+                        response['character_suggestion'] = {
+                            'character_id': _suggestion.suggested_character_id,
+                            'character_name': _suggestion.suggested_character_name,
+                            'reason': _suggestion.reason,
+                            'message': get_character_suggester().format_suggestion_message(_suggestion),
+                        }
+                    response['detected_need'] = _cls.primary_need
+            except Exception:
+                pass
+
+            # ── Dual-Layer History Storage ────────────────────────────────────
+            # Store interaction in the analytical history layer so
+            # ProgressContextBuilder and long-term trend analysis have data
+            try:
+                from smart_response.dual_layer_history import DualLayerHistorySystem
+                if integrated_db:
+                    _dlh_conn = integrated_db.get_connection()
+                    _dlh = DualLayerHistorySystem(_dlh_conn)
+                    _ai_text = response.get('response', '') if isinstance(response, dict) else str(response)
+                    _response_type = response.get('type', 'direct_ai') if isinstance(response, dict) else 'direct_ai'
+                    _primary_id = _dlh.store_interaction(
+                        user_id, character_id,
+                        message, _ai_text,
+                        _response_type,
+                        metadata={'session_id': session_id}
+                    )
+                    if _primary_id:
+                        _dlh.analyze_and_store_secondary(_primary_id, user_id, character_id)
+                    _dlh_conn.close()
+            except Exception:
+                pass
+
+            # ── Expire stale explicit context (emotional states, intentions) ──
+            try:
+                from smart_response.explicit_context_handler import ExplicitContextHandler
+                if integrated_db:
+                    _exp_conn = integrated_db.get_connection()
+                    _ech_exp = ExplicitContextHandler(_exp_conn)
+                    _ech_exp.expire_old_context()
+                    _exp_conn.close()
+            except Exception:
+                pass
+
+            # Process accumulated signals to adapt user preferences (non-blocking)
+            try:
+                from smart_response.user_personalization import UserPersonalization
+                UserPersonalization().process_signals_and_adapt(user_id)
+            except Exception:
+                pass
+
             return jsonify(response)
         except Exception as e:
             print(f"Error in {character_id} chat: {e}")

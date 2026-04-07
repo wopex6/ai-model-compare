@@ -1,0 +1,305 @@
+{
+  "summary": {
+    "total": 59,
+    "passed": 59,
+    "failed": 0,
+    "success_rate": 100.0
+  },
+  "tests": [
+    {
+      "test": "Navigation structure",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Toolbar items",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Message scrolling",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Lazy message loading",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Message component",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Text input field",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Send button",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Voice input button",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Model selector",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Sheet presentation",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Model selector trigger",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Streaming indicator",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Loading indicator",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Prompt input area",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Run comparison button",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Progress indicator",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Results scrolling",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Lazy results loading",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Result card component",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Rating stars",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Winner selection",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Export functionality",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Model selection chips",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Selected models display",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Search bar",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Search field",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Tab selector",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Chat history tab",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Comparison history tab",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Chat history cards",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Comparison history cards",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Empty state handling",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "API Keys section",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "API key rows",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "API key input sheet",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Theme picker",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Segmented control",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Voice input toggle",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Auto-save toggle",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Token usage slider",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Token usage display",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Responsive layout patterns",
+      "status": "\u2705 PASS",
+      "details": "100% of views use responsive layouts"
+    },
+    {
+      "test": "VoiceOver support",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Dynamic type support",
+      "status": "\u2705 PASS",
+      "details": "4 views use font sizing"
+    },
+    {
+      "test": "Theme selection system",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "System theme support",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Dark theme support",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Light theme support",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "TabView navigation",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Chat tab",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Compare tab",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "History tab",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Settings tab",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Modal sheets",
+      "status": "\u2705 PASS",
+      "details": "4 views use sheets"
+    },
+    {
+      "test": "Alert dialogs",
+      "status": "\u2705 PASS",
+      "details": "3 views use alerts"
+    },
+    {
+      "test": "User feedback mechanisms",
+      "status": "\u2705 PASS",
+      "details": "100% of views have feedback"
+    },
+    {
+      "test": "List components",
+      "status": "\u2705 PASS",
+      "details": "4 views use lists"
+    },
+    {
+      "test": "Lazy loading",
+      "status": "\u2705 PASS",
+      "details": "3 views use lazy loading"
+    },
+    {
+      "test": "Card-based layouts",
+      "status": "\u2705 PASS",
+      "details": "2 views use cards"
+    }
+  ]
+}

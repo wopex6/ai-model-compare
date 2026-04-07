@@ -532,6 +532,41 @@ class DomainCharacterAI:
         if style_instructions:
             parts.append(f"\nStyle: {style_instructions}")
         
+        # === RESPONSE QUALITY RULES (applies to ALL characters) ===
+        situation = context.get('situation_analysis', {})
+        emotional_state = situation.get('emotional_state', 'neutral') if isinstance(situation, dict) else 'neutral'
+        
+        # Determine target length based on situation
+        if emotional_state in ('crisis', 'distressed', 'very_negative'):
+            length_guide = "Use 3-5 sentences. The user needs support — be warm but focused."
+        elif emotional_state in ('excited', 'positive', 'celebrating'):
+            length_guide = "Use 2-4 sentences. Match their energy briefly, then focus."
+        elif context.get('is_follow_up') or context.get('detail_requested'):
+            length_guide = "Provide a thorough response (up to 6-8 sentences) since the user asked for more detail."
+        else:
+            length_guide = "Use 2-3 sentences. Be concise — the user can always ask for more."
+        
+        # Extra instruction when user indicated the previous response missed the mark
+        direction_note = ""
+        if context.get('direction_change'):
+            direction_note = """
+6. DIRECTION CHANGE REQUESTED: The user indicated your previous response was NOT what they were looking for. Take a COMPLETELY different angle. Ask what specifically they need instead of guessing. Be humble and direct: "I may have misread that — what specifically would be most helpful right now?"
+"""
+        
+        parts.append(f"""
+CRITICAL RESPONSE RULES — follow these strictly:
+
+1. BE SPECIFIC, NOT GENERIC: Never give vague advice like "focus on what matters" or "take it one step at a time." Instead, ask what specifically they're dealing with and give targeted, actionable responses. If you don't have enough information, ASK for it.
+
+2. RESPONSE LENGTH: {length_guide} Users lose interest reading long responses. Keep it punchy and focused. A short, specific response beats a long, generic one every time.
+
+3. ASK FOR DIRECTION: If the user's message is vague or broad, ask ONE specific question to narrow down what they actually need. Example: Instead of giving generic stress advice, ask "Is this work stress, relationship stress, or something else?"
+
+4. CHECK YOUR DIRECTION: Occasionally (not every message) ask a brief check-in like "Is this the kind of help you're looking for?" or "Want me to go deeper on this or try a different angle?" — keep it natural, not formulaic.
+
+5. NO FILLER: Skip greetings, pleasantries, and throat-clearing. Get straight to the point. Every sentence should deliver value.
+{direction_note}""")
+        
         # Context information (if available)
         if context.get('user_profile'):
             user_profile = context.get('user_profile')
@@ -581,6 +616,22 @@ class DomainCharacterAI:
         
         return "\n".join(parts)
     
+    def _get_max_tokens(self, context: Dict) -> int:
+        """Determine max_tokens dynamically based on situation and user request."""
+        # If user explicitly asked for more detail
+        if context.get('detail_requested'):
+            return 700
+        
+        situation = context.get('situation_analysis', {})
+        emotional_state = situation.get('emotional_state', 'neutral') if isinstance(situation, dict) else 'neutral'
+        
+        if emotional_state in ('crisis', 'distressed', 'very_negative'):
+            return 400  # Supportive but focused
+        elif context.get('is_follow_up'):
+            return 500  # Follow-up can be slightly longer
+        else:
+            return 300  # Default: short and punchy, but enough for complete thoughts
+    
     def _generate_openai(self, system_prompt: str, message: str, 
                         context: Dict) -> Tuple[str, Dict]:
         """Generate response using OpenAI. Returns (response, metadata)"""
@@ -607,10 +658,12 @@ class DomainCharacterAI:
         import time
         start_time = time.time()
         
+        max_tokens = self._get_max_tokens(context)
+        
         response = self.openai_client.chat.completions.create(
             model=model,
             messages=messages,
-            max_tokens=500,
+            max_tokens=max_tokens,
             temperature=0.7
         )
         
@@ -656,9 +709,11 @@ class DomainCharacterAI:
         import time
         start_time = time.time()
         
+        max_tokens = self._get_max_tokens(context)
+        
         response = self.anthropic_client.messages.create(
             model=model,
-            max_tokens=500,
+            max_tokens=max_tokens,
             system=system_prompt,
             messages=messages
         )

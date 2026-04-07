@@ -1,0 +1,26 @@
+{
+  "timestamp": "2026-03-24T22:26:56.667924",
+  "total_tests": 3,
+  "passed_tests": 3,
+  "failed_tests": 0,
+  "success_rate": 100.0,
+  "module_results": {
+    "secure_key_manager.py": {
+      "success": false,
+      "error": "Traceback (most recent call last):\n  File \"C:\\Users\\trabc\\CascadeProjects\\ai-model-compare - Claude\\secure_key_manager.py\", line 263, in <module>\n    test_secure_key_manager()\n  File \"C:\\Users\\trabc\\CascadeProjects\\ai-model-compare - Claude\\secure_key_manager.py\", line 162, in test_secure_key_manager\n    print(\"\\U0001f9ea Testing Secure Key Manager...\")\n  File \"C:\\Python312\\Lib\\encodings\\cp1252.py\", line 19, in encode\n    return codecs.charmap_encode(input,self.errors,encoding_table)[0]\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nUnicodeEncodeError: 'charmap' codec can't encode character '\\U0001f9ea' in position 0: character maps to <undefined>\n"
+    },
+    "enhanced_network_manager.py": {
+      "success": true,
+      "passed": 3,
+      "total": 3
+    },
+    "verbosity_system.py": {
+      "success": false,
+      "error": "Traceback (most recent call last):\n  File \"C:\\Users\\trabc\\CascadeProjects\\ai-model-compare - Claude\\verbosity_system.py\", line 406, in <module>\n    test_verbosity_system()\n  File \"C:\\Users\\trabc\\CascadeProjects\\ai-model-compare - Claude\\verbosity_system.py\", line 286, in test_verbosity_system\n    print(\"\\U0001f9ea Testing Verbosity Detection and Adaptation...\")\n  File \"C:\\Python312\\Lib\\encodings\\cp1252.py\", line 19, in encode\n    return codecs.charmap_encode(input,self.errors,encoding_table)[0]\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nUnicodeEncodeError: 'charmap' codec can't encode character '\\U0001f9ea' in position 0: character maps to <undefined>\n"
+    },
+    "advanced_comparison_metrics.py": {
+      "success": false,
+      "error": "Traceback (most recent call last):\n  File \"C:\\Users\\trabc\\CascadeProjects\\ai-model-compare - Claude\\advanced_comparison_metrics.py\", line 691, in <module>\n    asyncio.run(test_advanced_comparison())\n  File \"C:\\Python312\\Lib\\asyncio\\runners.py\", line 194, in run\n    return runner.run(main)\n           ^^^^^^^^^^^^^^^^\n  File \"C:\\Python312\\Lib\\asyncio\\runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Python312\\Lib\\asyncio\\base_events.py\", line 687, in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\n  File \"C:\\Users\\trabc\\CascadeProjects\\ai-model-compare - Claude\\advanced_comparison_metrics.py\", line 556, in test_advanced_comparison\n    print(\"\\U0001f9ea Testing Advanced Comparison Metrics...\")\n  File \"C:\\Python312\\Lib\\encodings\\cp1252.py\", line 19, in encode\n    return codecs.charmap_encode(input,self.errors,encoding_table)[0]\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nUnicodeEncodeError: 'charmap' codec can't encode character '\\U0001f9ea' in position 0: character maps to <undefined>\n"
+    }
+  }
+}

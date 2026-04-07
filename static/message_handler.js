@@ -2001,3 +2001,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }, 100); // Small delay to ensure sendMessage is defined
 });
+
+// Export for use
+window.MessageHandler = MessageHandler;

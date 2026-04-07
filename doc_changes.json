@@ -2,12 +2,12 @@
   "file_hashes": {
     "ai_compare\\adaptive_personality.py": "3b294733e2fead11a2e1189770156190",
     "ai_compare\\admin_logger.py": "bc84a8a3407fd69c6b6eea16e89ae757",
-    "ai_compare\\base_chatbot.py": "84a10ec8aa5c38ff31502bb76c32d777",
+    "ai_compare\\base_chatbot.py": "aad47c730da2bbc98d6fb87d1197e11a",
     "ai_compare\\base_enhanced_chatbot.py": "aced404cf45fd1ea0b2025f1df85b64d",
     "ai_compare\\character_configs.py": "378d1d49f96d5c92f6b727947924378e",
     "ai_compare\\character_factory.py": "20d2cdb76163504543f68581ee40bdd2",
-    "ai_compare\\character_routes.py": "2beadc58def397f1aee202e583320efd",
-    "ai_compare\\chatbot.py": "63ff4938c6c4d3175a5f52af5afdf6d1",
+    "ai_compare\\character_routes.py": "ad02adb0cb0849380f38b1619763ba82",
+    "ai_compare\\chatbot.py": "7724a8f6c267a5f5f194b1a115e3e5d3",
     "ai_compare\\chatbot_personality.py": "025d04afba774d1b46ffec853e44e7f2",
     "ai_compare\\compare.py": "cbd13ee42e1e6a0d8f49ec43be482aaa",
     "ai_compare\\conversation_manager.py": "f4dbc4026ad7f2def70f0c847c5e1018",
@@ -19,9 +19,9 @@
     "ai_compare\\knowledge_system.py": "4c533ece7efa5d899a0f161a42b1d4be",
     "ai_compare\\knowledge_tracker.py": "f94636b48d6fffff12b9f006abb5efd9",
     "ai_compare\\knowledge_vector_store.py": "86c32ac7bc562af8b68bbc1f579e232f",
-    "ai_compare\\models.py": "e6358b1407033021fa791f788ad824ae",
+    "ai_compare\\models.py": "86ce5ff7775206303f5b2fb8a3e063ec",
     "ai_compare\\model_config.py": "9bca8ae2ed9abeb45c33f0bfdad9674e",
-    "ai_compare\\model_discovery.py": "22b92bbfe36cf045ab3ec348f9587632",
+    "ai_compare\\model_discovery.py": "3de3b5ea6f833e3597d60c4af9bb09b1",
     "ai_compare\\motivational_chatbot.py": "79398d8ba95d6f7aabbb6e9c0f40b5a3",
     "ai_compare\\motivational_system.py": "4bb6ed5038ffa11462b3464e083544db",
     "ai_compare\\personality_profiler.py": "c7d70386f6782545319c89da05072991",
@@ -37,10 +37,10 @@
     "ai_compare\\user_profile_manager.py": "ba541700b0809395afa6046e650a7d80",
     "ai_compare\\wisdom_chatbot.py": "f301c62c04a4d0cba9cc8004ebee4c7c",
     "ai_compare\\__init__.py": "d41d8cd98f00b204e9800998ecf8427e",
-    "app.py": "3341aecb1ab2b7f59e9806978082005d",
+    "app.py": "2db3809bf8a7856a819a1f427dd83790",
     "requirements.txt": "a0c0ba845255584721907b0ff0aabe84",
-    ".env": "58519513bede96b32b8ed2989901a0eb"
+    ".env": "6d04563c4a625f55cbebc670677104e1"
   },
-  "last_update": "2026-02-14T18:11:18.474934",
-  "update_count": 1542
+  "last_update": "2026-04-07T13:53:25.031494",
+  "update_count": 209
 }

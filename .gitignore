@@ -1,6 +1,8 @@
 # Environment and secrets
 .env
 *.env
+.encryption_key
+*.secure_keys*.json
 
 # Database files
 *.db

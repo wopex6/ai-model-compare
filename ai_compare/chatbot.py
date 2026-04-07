@@ -51,7 +51,7 @@ class AIChatbot:
         # Initialize adaptive personality for this session
         self.adaptive_personality = AdaptivePersonality(self.session_id, self.personality_profiler)
     
-    async def chat(self, user_message: str, include_context: bool = True, save_user_message: bool = True, message_source: str = "direct_ai") -> Dict[str, any]:
+    async def chat(self, user_message: str, include_context: bool = True, save_user_message: bool = True, message_source: str = "direct_ai", user_id: int = None) -> Dict[str, any]:
         """
         Process user message and generate personality-aware response
         
@@ -70,7 +70,7 @@ class AIChatbot:
         enhanced_message, tool_results = self.function_parser.enhance_prompt_with_tools(user_message, self.tools)
         
         # Build context-aware prompt
-        enhanced_prompt = self._build_enhanced_prompt(enhanced_message, include_context)
+        enhanced_prompt = self._build_enhanced_prompt(enhanced_message, include_context, user_id=user_id)
         
         # Get response from model comparison system
         model_responses = await self.ai_compare.ask_all(enhanced_prompt)
@@ -163,15 +163,42 @@ class AIChatbot:
         """Get current personality feedback"""
         return self.adaptive_personality.get_personality_feedback()
     
-    def _build_enhanced_prompt(self, user_message: str, include_context: bool) -> str:
+    def _get_situation_rule(self, user_message: str) -> str:
+        """Detect detail/direction patterns in user message and return extra prompt rule."""
+        msg_lower = user_message.lower()
+        if any(p in msg_lower for p in ['elaborate on that', 'more detail', 'tell me more', 'go deeper', 'explain further']):
+            return "5. DETAIL REQUESTED: The user wants more depth. Provide a thorough response (up to 6-8 sentences) with specific examples or actionable steps."
+        if any(p in msg_lower for p in ["not quite what i meant", "not what i meant", "let me clarify", "different angle", "try again"]):
+            return '5. DIRECTION CHANGE: The user says your previous response missed the mark. Take a COMPLETELY different angle. Ask what specifically they need: "I may have misread that — what specifically would be most helpful right now?"'
+        return ""
+    
+    def _build_enhanced_prompt(self, user_message: str, include_context: bool, user_id: int = None) -> str:
         """Build personality and context-aware prompt"""
         personality_prompt = self.personality.get_personality_prompt()
         guidelines = self.personality.get_response_guidelines()
-        
+
+        # --- Personalization pipeline (all modules, shared across chatbots) ---
+        from smart_response.personalization_pipeline import build_personalization
+        _p = build_personalization(
+            user_message, user_id,
+            self.character_id if hasattr(self, 'character_id') else 'general',
+        )
+        explicit_context_block = _p.explicit_context_block
+        progress_context_block = _p.progress_context_block
+        goal_checkin_block     = _p.goal_checkin_block
+        engagement_block       = _p.engagement_block
+        frustration_block      = _p.frustration_block
+        milestone_block        = _p.milestone_block
+        verbosity_instruction  = _p.verbosity_instruction
+        tone_instruction       = _p.tone_instruction
+        format_instruction     = _p.format_instruction
+        emotional_instruction  = _p.emotional_instruction
+        need_instruction       = _p.need_instruction
+
         # Add conversation context if requested and available
         context = ""
         if include_context and self.conversation_history:
-            recent_history = self.conversation_history[-3:]  # Last 3 exchanges
+            recent_history = self.conversation_history[-8:]  # Last 8 exchanges for better continuity
             context = "\n\nRecent conversation context:\n"
             for entry in recent_history:
                 context += f"User: {entry['user_message']}\n"
@@ -187,6 +214,19 @@ Response Guidelines:
 - Include examples: {guidelines['include_examples']}
 - Show empathy: {guidelines['show_empathy']}
 - Encourage exploration: {guidelines['encourage_exploration']}
+
+{explicit_context_block}{progress_context_block}{goal_checkin_block}{engagement_block}{frustration_block}{milestone_block}
+CRITICAL RESPONSE RULES:
+1. BE SPECIFIC, NOT GENERIC: Never give vague advice. If you lack information, ask ONE specific question to narrow down what the user needs.
+2. LENGTH: Use 2-3 sentences by default unless the user's verbosity preference or topic complexity calls for more or less.
+3. NO FILLER: Skip greetings, pleasantries, and throat-clearing. Every sentence should deliver value.
+4. CHECK DIRECTION: Occasionally ask if this is the kind of help they want, or offer a different angle.
+{self._get_situation_rule(user_message)}
+{verbosity_instruction}
+{tone_instruction}
+{format_instruction}
+{emotional_instruction}
+{need_instruction}
 
 {context}
 
