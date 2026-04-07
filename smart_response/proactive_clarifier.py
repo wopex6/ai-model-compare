@@ -190,7 +190,7 @@ class ProactiveClarifier:
             'type': 'clarification',
             'urgency': decision.urgency,
             'detected_need': decision.detected_need,
-            'clarification_reason': decision.reason,
+            'clarification_reason': decision.reason.value if hasattr(decision.reason, 'value') else str(decision.reason),
             'skip_history_save': decision.urgency != 'critical',  # Save critical interactions
         }
 
