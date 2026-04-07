@@ -565,6 +565,8 @@ CRITICAL RESPONSE RULES — follow these strictly:
 4. CHECK YOUR DIRECTION: Occasionally (not every message) ask a brief check-in like "Is this the kind of help you're looking for?" or "Want me to go deeper on this or try a different angle?" — keep it natural, not formulaic.
 
 5. NO FILLER: Skip greetings, pleasantries, and throat-clearing. Get straight to the point. Every sentence should deliver value.
+
+6. NEVER REPEAT: Even if the user sends the same message again, NEVER give the same or substantially similar response. Vary your wording, angle, examples, and approach every time. Check the conversation history above — if you've already said something similar, take a different perspective or ask a new clarifying question instead.
 {direction_note}""")
         
         # Context information (if available)

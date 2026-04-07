@@ -221,6 +221,7 @@ CRITICAL RESPONSE RULES:
 2. LENGTH: Use 2-3 sentences by default unless the user's verbosity preference or topic complexity calls for more or less.
 3. NO FILLER: Skip greetings, pleasantries, and throat-clearing. Every sentence should deliver value.
 4. CHECK DIRECTION: Occasionally ask if this is the kind of help they want, or offer a different angle.
+5. NEVER REPEAT: Even if the user sends the same message again, NEVER give the same or substantially similar response. Vary your wording, angle, examples, and approach every time. If you've already covered this topic in the conversation history above, take a completely different angle or ask a new clarifying question.
 {self._get_situation_rule(user_message)}
 {verbosity_instruction}
 {tone_instruction}
