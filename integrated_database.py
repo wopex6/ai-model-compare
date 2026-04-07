@@ -741,6 +741,39 @@ class IntegratedDatabase:
         conn.close()
         return False
     
+    # ==================== PERSONA PREFERENCE ====================
+    VALID_PERSONAS = ('serenity', 'momentum', 'odyssey', 'spark')
+
+    def get_user_persona(self, user_id: int) -> str:
+        """Return the user's chosen UI persona (defaults to 'spark')."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT preferences FROM user_profiles WHERE user_id = ?', (user_id,))
+        row = cursor.fetchone()
+        conn.close()
+        if row and row[0]:
+            prefs = json.loads(row[0])
+            return prefs.get('persona', 'spark')
+        return 'spark'
+
+    def set_user_persona(self, user_id: int, persona: str) -> bool:
+        """Store the user's chosen UI persona."""
+        if persona not in self.VALID_PERSONAS:
+            return False
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('SELECT preferences FROM user_profiles WHERE user_id = ?', (user_id,))
+        row = cursor.fetchone()
+        existing = json.loads(row[0]) if row and row[0] else {}
+        existing['persona'] = persona
+        cursor.execute(
+            'UPDATE user_profiles SET preferences = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?',
+            (json.dumps(existing), user_id))
+        conn.commit()
+        success = cursor.rowcount > 0
+        conn.close()
+        return success
+
     # Psychology traits methods
     def get_psychology_traits(self, user_id: int) -> List[Dict[str, Any]]:
         """Get user's psychology traits"""

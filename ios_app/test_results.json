@@ -1,0 +1,310 @@
+{
+  "summary": {
+    "total": 60,
+    "passed": 60,
+    "failed": 0,
+    "success_rate": 100.0
+  },
+  "tests": [
+    {
+      "test": "File exists: AIModelCompare.xcodeproj/project.pbxproj",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "File exists: AIModelCompare/App.swift",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "File exists: AIModelCompare/ContentView.swift",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "File exists: AIModelCompare/Info.plist",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "File exists: AIModelCompare/Assets.xcassets/Contents.json",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "File exists: AIModelCompareTests/AIModelCompareTests.swift",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "File exists: AIModelCompareUITests/AIModelCompareUITests.swift",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Swift syntax: App.swift",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Swift syntax: ContentView.swift",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Swift syntax: AIModelCompareTests.swift",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Swift syntax: AIModelCompareUITests.swift",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Swift syntax: DataModels.swift",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Swift syntax: AIService.swift",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Swift syntax: DataStore.swift",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Swift syntax: ChatViewModel.swift",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Swift syntax: CompareViewModel.swift",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Swift syntax: ChatView.swift",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Swift syntax: CompareView.swift",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Swift syntax: HistoryView.swift",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Swift syntax: SettingsView.swift",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "ChatViewModel structure",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "CompareViewModel structure",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "AI Service protocol",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "OpenAI Service",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Anthropic Service",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Google AI Service",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Streaming support",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "AIModel struct",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Message struct",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "ChatSession struct",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "ComparisonResult struct",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "UserSettings struct",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Identifiable protocol",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Codable protocol",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "ChatSessionEntity",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "MessageEntity",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "ComparisonResultEntity",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "ModelResponseEntity",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "SettingsEntity",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "View structure: ChatView.swift",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "View structure: CompareView.swift",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "View structure: HistoryView.swift",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "View structure: SettingsView.swift",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Navigation structure",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Text input component",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Button components",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "List/ScrollView",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Sheet presentation",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Alert handling",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "URLSession networking",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "JSON parsing",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Error handling",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Async/await",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "HTTP methods",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Microphone permission",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Speech recognition permission",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "App transport security",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "Interface orientations",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "iOS 13.0 deployment target",
+      "status": "\u2705 PASS",
+      "details": ""
+    },
+    {
+      "test": "64-bit architecture support",
+      "status": "\u2705 PASS",
+      "details": ""
+    }
+  ]
+}

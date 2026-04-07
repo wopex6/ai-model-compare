@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>AI Chatbot - User Login</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='themes.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='multi_user_styles.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
@@ -14,6 +15,13 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
 <body>
+    <script>
+        // Apply persona theme instantly from localStorage (prevents FOUC)
+        (function() {
+            var p = localStorage.getItem('persona');
+            if (p) document.documentElement.dataset.persona = p;
+        })();
+    </script>
     <div id="app">
         <!-- Message Notification (Top Right) -->
         <div id="message-notification" class="message-notification" style="display: none;">
@@ -175,6 +183,7 @@
                                     <i class="fas fa-robot"></i> <span class="typing-dots">Thinking</span>
                                 </div>
                             </div>
+                            <div id="explicit-context-panel" style="display:none; padding:10px 12px; border-top:1px solid var(--border-light,#eee); max-height:200px; overflow-y:auto; font-size:0.85rem;"></div>
                             <div id="message-usage-info" class="message-usage-container"></div>
                             <div id="chat-input-area" class="message-input-area">
                                 <div class="message-input" style="display: flex; gap: 8px; align-items: flex-end;">
@@ -451,6 +460,67 @@
                         </form>
                     </div>
                     
+                    <div class="settings-section" style="margin-top: 30px;">
+                        <h3><i class="fas fa-palette"></i> Experience Style</h3>
+                        <p style="color:#666; margin-bottom:14px;">Choose a UI theme that matches how you use the app. This changes colours, welcome messages, and featured characters.</p>
+                        <div id="persona-picker" style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px;">
+                            <label class="persona-option" data-persona="serenity" style="cursor:pointer; flex:1; min-width:140px; padding:14px; border:2px solid var(--border-light); border-radius:var(--radius-lg); text-align:center; transition:all .2s;">
+                                <input type="radio" name="persona-radio" value="serenity" style="display:none">
+                                <div style="font-size:24px; margin-bottom:4px;"><i class="fas fa-spa" style="color:#14b8a6"></i></div>
+                                <strong>Serenity</strong><br><small style="color:#666">Wellness &amp; calm</small>
+                            </label>
+                            <label class="persona-option" data-persona="momentum" style="cursor:pointer; flex:1; min-width:140px; padding:14px; border:2px solid var(--border-light); border-radius:var(--radius-lg); text-align:center; transition:all .2s;">
+                                <input type="radio" name="persona-radio" value="momentum" style="display:none">
+                                <div style="font-size:24px; margin-bottom:4px;"><i class="fas fa-rocket" style="color:#2563eb"></i></div>
+                                <strong>Momentum</strong><br><small style="color:#666">Goals &amp; productivity</small>
+                            </label>
+                            <label class="persona-option" data-persona="odyssey" style="cursor:pointer; flex:1; min-width:140px; padding:14px; border:2px solid var(--border-light); border-radius:var(--radius-lg); text-align:center; transition:all .2s;">
+                                <input type="radio" name="persona-radio" value="odyssey" style="display:none">
+                                <div style="font-size:24px; margin-bottom:4px;"><i class="fas fa-compass" style="color:#7c3aed"></i></div>
+                                <strong>Odyssey</strong><br><small style="color:#666">Growth &amp; philosophy</small>
+                            </label>
+                            <label class="persona-option" data-persona="spark" style="cursor:pointer; flex:1; min-width:140px; padding:14px; border:2px solid var(--border-light); border-radius:var(--radius-lg); text-align:center; transition:all .2s;">
+                                <input type="radio" name="persona-radio" value="spark" style="display:none">
+                                <div style="font-size:24px; margin-bottom:4px;"><i class="fas fa-bolt" style="color:#e11d48"></i></div>
+                                <strong>Spark</strong><br><small style="color:#666">Explore everything</small>
+                            </label>
+                        </div>
+                        <script>
+                        (function(){
+                            const picker = document.getElementById('persona-picker');
+                            if (!picker) return;
+                            // Highlight current
+                            function highlight(p) {
+                                picker.querySelectorAll('.persona-option').forEach(el => {
+                                    const match = el.dataset.persona === p;
+                                    el.style.borderColor = match ? 'var(--primary)' : 'var(--border-light)';
+                                    el.style.background = match ? 'var(--bg-tertiary)' : '';
+                                    el.querySelector('input').checked = match;
+                                });
+                            }
+                            highlight(localStorage.getItem('persona') || 'spark');
+                            picker.addEventListener('change', async function(e) {
+                                const val = e.target.value;
+                                if (!val) return;
+                                document.documentElement.dataset.persona = val;
+                                localStorage.setItem('persona', val);
+                                highlight(val);
+                                // Persist to server
+                                const token = localStorage.getItem('token');
+                                try {
+                                    await fetch('/api/user/persona', {
+                                        method:'POST',
+                                        headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+                                        body: JSON.stringify({persona:val})
+                                    });
+                                } catch(err){}
+                                // Update welcome message
+                                if (window.app && app.updateWelcomeForPersona) app.updateWelcomeForPersona(val);
+                            });
+                        })();
+                        </script>
+                    </div>
+
                     <div class="settings-section" style="margin-top: 30px;">
                         <h3><i class="fas fa-bell"></i> Notification Settings</h3>
                         <div class="form-group">
@@ -747,6 +817,13 @@
 
     <div id="notification" class="notification"></div>
 
+    <script src="{{ url_for('static', filename='theme_manager.js') }}"></script>
+    <script src="{{ url_for('static', filename='auth_helper.js') }}"></script>
+    <script src="{{ url_for('static', filename='message_handler.js') }}"></script>
+    <script src="{{ url_for('static', filename='explicit_context_ui.js') }}"></script>
+    <script src="{{ url_for('static', filename='proactive_clarification_ui.js') }}"></script>
+    <script src="{{ url_for('static', filename='ai_budget_notifications.js') }}"></script>
+    <script src="{{ url_for('static', filename='greeting_handler.js') }}"></script>
     <script src="{{ url_for('static', filename='file_upload_handler.js') }}"></script>
     <script src="{{ url_for('static', filename='multi_user_app.js') }}?v=20251105_1542"></script>
     <style>

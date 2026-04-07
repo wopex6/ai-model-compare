@@ -320,6 +320,36 @@
     font-style: italic;
 }
 
+/* Response action buttons: "Tell me more" / "Not what I meant" */
+.response-actions {
+    display: flex;
+    gap: 6px;
+    margin: 6px 0 8px 48px;
+    flex-wrap: wrap;
+}
+
+.response-action-btn {
+    background: transparent;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 14px;
+    padding: 3px 10px;
+    font-size: 0.75rem;
+    color: rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    line-height: 1.4;
+}
+
+.response-action-btn:hover {
+    border-color: rgba(102, 126, 234, 0.5);
+    color: #667eea;
+    background: rgba(102, 126, 234, 0.05);
+}
+
+.response-action-btn:active {
+    transform: scale(0.97);
+}
+
 /* Multi-Response Container */
 .multi-response-container {
     display: flex;

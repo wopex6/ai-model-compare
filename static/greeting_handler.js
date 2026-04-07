@@ -240,6 +240,9 @@ style.textContent = `
 `;
 document.head.appendChild(style);
 
+// Export for use
+window.GreetingHandler = GreetingHandler;
+
 // Auto-initialize when DOM is ready
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => GreetingHandler.init());

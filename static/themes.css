@@ -511,3 +511,168 @@ textarea::placeholder {
 .rounded-md { border-radius: var(--radius-md); }
 .rounded-lg { border-radius: var(--radius-lg); }
 .rounded-full { border-radius: var(--radius-full); }
+
+/* ========================================
+   PERSONA THEMES — User-segment UI styles
+   Apply via: document.documentElement.dataset.persona = 'serenity'
+   ======================================== */
+
+/* --- SERENITY: Wellness & Mental Health --- */
+[data-persona="serenity"] {
+    --primary: #14b8a6;
+    --primary-light: #2dd4bf;
+    --primary-dark: #0d9488;
+    --primary-gradient: linear-gradient(135deg, #14b8a6 0%, #06b6d4 100%);
+    --secondary: #64748b;
+    --accent: #a78bfa;
+    --bg-secondary: #f0fdfa;
+    --bg-tertiary: #ccfbf1;
+    --bg-hover: #ccfbf1;
+    --chat-user-bg: #0d9488;
+    --chat-bot-bg: #f0fdfa;
+    --text-link: #0d9488;
+    --persona-hero-bg: linear-gradient(135deg, #0d9488 0%, #06b6d4 50%, #a78bfa 100%);
+    --persona-hero-text: #ffffff;
+    --persona-card-accent: #14b8a6;
+    --persona-sidebar-bg: #f0fdfa;
+    --persona-nav-active: #14b8a6;
+}
+[data-persona="serenity"][data-theme="dark"] {
+    --primary: #2dd4bf;
+    --primary-light: #5eead4;
+    --primary-dark: #14b8a6;
+    --primary-gradient: linear-gradient(135deg, #2dd4bf 0%, #22d3ee 100%);
+    --bg-secondary: #042f2e;
+    --bg-tertiary: #134e4a;
+    --bg-hover: #134e4a;
+    --chat-user-bg: #14b8a6;
+    --chat-bot-bg: #134e4a;
+    --text-link: #2dd4bf;
+    --persona-hero-bg: linear-gradient(135deg, #134e4a 0%, #164e63 50%, #4c1d95 100%);
+    --persona-sidebar-bg: #042f2e;
+}
+
+/* --- MOMENTUM: Career & Productivity --- */
+[data-persona="momentum"] {
+    --primary: #2563eb;
+    --primary-light: #3b82f6;
+    --primary-dark: #1d4ed8;
+    --primary-gradient: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+    --secondary: #475569;
+    --accent: #f97316;
+    --bg-secondary: #eff6ff;
+    --bg-tertiary: #dbeafe;
+    --bg-hover: #dbeafe;
+    --chat-user-bg: #1d4ed8;
+    --chat-bot-bg: #eff6ff;
+    --text-link: #1d4ed8;
+    --persona-hero-bg: linear-gradient(135deg, #1e3a8a 0%, #2563eb 50%, #f97316 100%);
+    --persona-hero-text: #ffffff;
+    --persona-card-accent: #2563eb;
+    --persona-sidebar-bg: #eff6ff;
+    --persona-nav-active: #2563eb;
+}
+[data-persona="momentum"][data-theme="dark"] {
+    --primary: #3b82f6;
+    --primary-light: #60a5fa;
+    --primary-dark: #2563eb;
+    --primary-gradient: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+    --bg-secondary: #172554;
+    --bg-tertiary: #1e3a8a;
+    --bg-hover: #1e3a8a;
+    --chat-user-bg: #2563eb;
+    --chat-bot-bg: #1e3a8a;
+    --text-link: #60a5fa;
+    --persona-hero-bg: linear-gradient(135deg, #172554 0%, #1e3a8a 50%, #9a3412 100%);
+    --persona-sidebar-bg: #172554;
+}
+
+/* --- ODYSSEY: Personal Growth & Philosophy --- */
+[data-persona="odyssey"] {
+    --primary: #7c3aed;
+    --primary-light: #8b5cf6;
+    --primary-dark: #6d28d9;
+    --primary-gradient: linear-gradient(135deg, #6d28d9 0%, #a78bfa 100%);
+    --secondary: #78716c;
+    --accent: #d97706;
+    --bg-secondary: #faf5ff;
+    --bg-tertiary: #f3e8ff;
+    --bg-hover: #f3e8ff;
+    --chat-user-bg: #6d28d9;
+    --chat-bot-bg: #faf5ff;
+    --text-link: #6d28d9;
+    --persona-hero-bg: linear-gradient(135deg, #4c1d95 0%, #7c3aed 40%, #d97706 100%);
+    --persona-hero-text: #ffffff;
+    --persona-card-accent: #7c3aed;
+    --persona-sidebar-bg: #faf5ff;
+    --persona-nav-active: #7c3aed;
+}
+[data-persona="odyssey"][data-theme="dark"] {
+    --primary: #a78bfa;
+    --primary-light: #c4b5fd;
+    --primary-dark: #8b5cf6;
+    --primary-gradient: linear-gradient(135deg, #4c1d95 0%, #a78bfa 100%);
+    --bg-secondary: #2e1065;
+    --bg-tertiary: #3b0764;
+    --bg-hover: #3b0764;
+    --chat-user-bg: #7c3aed;
+    --chat-bot-bg: #3b0764;
+    --text-link: #c4b5fd;
+    --persona-hero-bg: linear-gradient(135deg, #2e1065 0%, #4c1d95 40%, #78350f 100%);
+    --persona-sidebar-bg: #2e1065;
+}
+
+/* --- SPARK: Creative & Exploratory --- */
+[data-persona="spark"] {
+    --primary: #e11d48;
+    --primary-light: #fb7185;
+    --primary-dark: #be123c;
+    --primary-gradient: linear-gradient(135deg, #e11d48 0%, #f97316 50%, #eab308 100%);
+    --secondary: #64748b;
+    --accent: #06b6d4;
+    --bg-secondary: #fff1f2;
+    --bg-tertiary: #ffe4e6;
+    --bg-hover: #ffe4e6;
+    --chat-user-bg: #be123c;
+    --chat-bot-bg: #fff1f2;
+    --text-link: #be123c;
+    --persona-hero-bg: linear-gradient(135deg, #e11d48 0%, #f97316 40%, #eab308 70%, #06b6d4 100%);
+    --persona-hero-text: #ffffff;
+    --persona-card-accent: #e11d48;
+    --persona-sidebar-bg: #fff1f2;
+    --persona-nav-active: #e11d48;
+}
+[data-persona="spark"][data-theme="dark"] {
+    --primary: #fb7185;
+    --primary-light: #fda4af;
+    --primary-dark: #f43f5e;
+    --primary-gradient: linear-gradient(135deg, #be123c 0%, #ea580c 50%, #ca8a04 100%);
+    --bg-secondary: #4c0519;
+    --bg-tertiary: #881337;
+    --bg-hover: #881337;
+    --chat-user-bg: #e11d48;
+    --chat-bot-bg: #881337;
+    --text-link: #fda4af;
+    --persona-hero-bg: linear-gradient(135deg, #4c0519 0%, #9a3412 40%, #713f12 70%, #164e63 100%);
+    --persona-sidebar-bg: #4c0519;
+}
+
+/* --- Persona-specific component styles --- */
+[data-persona] .navbar {
+    background: var(--persona-hero-bg, var(--primary-gradient));
+}
+[data-persona] .chat-sidebar,
+[data-persona] .conversations-sidebar {
+    background: var(--persona-sidebar-bg, var(--bg-secondary));
+}
+[data-persona] .nav-btn.active {
+    color: var(--persona-nav-active, var(--primary));
+    border-bottom-color: var(--persona-nav-active, var(--primary));
+}
+[data-persona] .personality-preset.active {
+    background: var(--persona-nav-active, var(--primary));
+    color: #fff;
+}
+[data-persona] .welcome-message h3 {
+    color: var(--persona-card-accent, var(--primary));
+}

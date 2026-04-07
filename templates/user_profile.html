@@ -176,6 +176,18 @@
                             <i class="fas fa-shield-alt me-2"></i>Privacy
                         </button>
                     </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="activity-tab" data-bs-toggle="tab" data-bs-target="#activity" type="button"
+                                onclick="loadConversationSummary()">
+                            <i class="fas fa-chart-bar me-2"></i>Activity
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="companion-tab" data-bs-toggle="tab" data-bs-target="#companion" type="button"
+                                onclick="loadCompanionDashboard()">
+                            <i class="fas fa-heart me-2"></i>Life Companion
+                        </button>
+                    </li>
                 </ul>
                 
                 <!-- Tab Content -->
@@ -357,8 +369,281 @@
                             </button>
                         </form>
                     </div>
+                    
+                    <!-- Activity / Conversation Summary Tab -->
+                    <div class="tab-pane fade" id="activity" role="tabpanel">
+                        <div class="mt-4">
+                            <h5 class="section-title">Conversation Activity</h5>
+                            <p class="text-muted small">A summary of your AI conversations across all characters.</p>
+
+                            <!-- Loading spinner -->
+                            <div id="activity-loading" class="text-center py-4">
+                                <div class="spinner-border text-primary" role="status"></div>
+                                <p class="mt-2 text-muted">Loading your activity&hellip;</p>
+                            </div>
+
+                            <!-- Error banner -->
+                            <div id="activity-error" class="alert alert-warning d-none">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                <span id="activity-error-msg">Could not load activity.</span>
+                            </div>
+
+                            <!-- Summary cards -->
+                            <div id="activity-content" class="d-none">
+                                <!-- Row 1: headline numbers -->
+                                <div class="row g-3 mb-4">
+                                    <div class="col-6 col-md-3">
+                                        <div class="card text-center border-0 shadow-sm h-100">
+                                            <div class="card-body py-3">
+                                                <div class="fs-2 fw-bold text-primary" id="act-total-messages">—</div>
+                                                <div class="small text-muted">Total messages</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="card text-center border-0 shadow-sm h-100">
+                                            <div class="card-body py-3">
+                                                <div class="fs-2 fw-bold text-success" id="act-active-goals">—</div>
+                                                <div class="small text-muted">Active goals</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="card text-center border-0 shadow-sm h-100">
+                                            <div class="card-body py-3">
+                                                <div class="fs-4 fw-bold text-info" id="act-mood">—</div>
+                                                <div class="small text-muted">Current mood</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-6 col-md-3">
+                                        <div class="card text-center border-0 shadow-sm h-100">
+                                            <div class="card-body py-3">
+                                                <div class="fs-5 fw-bold text-warning" id="act-fav-char">—</div>
+                                                <div class="small text-muted">Favourite character</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Row 2: timeline + per-character breakdown -->
+                                <div class="row g-3 mb-4">
+                                    <div class="col-md-6">
+                                        <div class="card border-0 shadow-sm h-100">
+                                            <div class="card-body">
+                                                <h6 class="fw-semibold mb-3"><i class="fas fa-calendar-alt me-2 text-muted"></i>Timeline</h6>
+                                                <div class="d-flex justify-content-between mb-2">
+                                                    <span class="text-muted small">First conversation</span>
+                                                    <span class="fw-medium small" id="act-first">—</span>
+                                                </div>
+                                                <div class="d-flex justify-content-between">
+                                                    <span class="text-muted small">Last conversation</span>
+                                                    <span class="fw-medium small" id="act-last">—</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card border-0 shadow-sm h-100">
+                                            <div class="card-body">
+                                                <h6 class="fw-semibold mb-3"><i class="fas fa-users me-2 text-muted"></i>Messages per character</h6>
+                                                <div id="act-characters">—</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Row 3: goals + topics -->
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <div class="card border-0 shadow-sm h-100">
+                                            <div class="card-body">
+                                                <h6 class="fw-semibold mb-3"><i class="fas fa-bullseye me-2 text-muted"></i>Active Goals</h6>
+                                                <div id="act-goals-list"><span class="text-muted small">None recorded</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card border-0 shadow-sm h-100">
+                                            <div class="card-body">
+                                                <h6 class="fw-semibold mb-3"><i class="fas fa-tags me-2 text-muted"></i>Recent Topics</h6>
+                                                <div id="act-topics-list"><span class="text-muted small">None recorded</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Life Companion Dashboard Tab -->
+                    <div class="tab-pane fade" id="companion" role="tabpanel">
+                        <div class="mt-4">
+                            <h5 class="section-title">Life Companion Dashboard</h5>
+                            <p class="text-muted small">Your AI companion learns about you over time to provide deeper, more personal support.</p>
+
+                            <!-- Loading -->
+                            <div id="lc-loading" class="text-center py-4">
+                                <div class="spinner-border text-primary" role="status"></div>
+                                <p class="mt-2 text-muted">Loading your companion data&hellip;</p>
+                            </div>
+                            <div id="lc-error" class="alert alert-warning d-none">
+                                <i class="fas fa-exclamation-triangle me-2"></i><span id="lc-error-msg"></span>
+                            </div>
+
+                            <div id="lc-content" class="d-none">
+
+                                <!-- Row 1: Emotional Summary + Daily Check-in -->
+                                <div class="row g-3 mb-4">
+                                    <div class="col-md-6">
+                                        <div class="card border-0 shadow-sm h-100">
+                                            <div class="card-body">
+                                                <h6 class="fw-semibold mb-3"><i class="fas fa-brain me-2 text-info"></i>Emotional Landscape</h6>
+                                                <div id="lc-emo-dominant" class="mb-2"></div>
+                                                <div id="lc-emo-chart"></div>
+                                                <div id="lc-emo-triggers" class="mt-2"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card border-0 shadow-sm h-100">
+                                            <div class="card-body">
+                                                <h6 class="fw-semibold mb-3"><i class="fas fa-sun me-2 text-warning"></i>Daily Check-in</h6>
+                                                <div id="lc-checkin-today"></div>
+                                                <div id="lc-checkin-form" class="d-none mt-3">
+                                                    <div class="mb-2">
+                                                        <label class="form-label small fw-medium">Mood</label>
+                                                        <div class="btn-group w-100" role="group">
+                                                            <input type="radio" class="btn-check" name="lc-mood" id="mood-great" value="great">
+                                                            <label class="btn btn-outline-success btn-sm" for="mood-great">Great</label>
+                                                            <input type="radio" class="btn-check" name="lc-mood" id="mood-good" value="good">
+                                                            <label class="btn btn-outline-success btn-sm" for="mood-good">Good</label>
+                                                            <input type="radio" class="btn-check" name="lc-mood" id="mood-okay" value="okay" checked>
+                                                            <label class="btn btn-outline-secondary btn-sm" for="mood-okay">Okay</label>
+                                                            <input type="radio" class="btn-check" name="lc-mood" id="mood-low" value="low">
+                                                            <label class="btn btn-outline-warning btn-sm" for="mood-low">Low</label>
+                                                            <input type="radio" class="btn-check" name="lc-mood" id="mood-bad" value="bad">
+                                                            <label class="btn btn-outline-danger btn-sm" for="mood-bad">Bad</label>
+                                                        </div>
+                                                    </div>
+                                                    <div class="mb-2">
+                                                        <label class="form-label small fw-medium">Energy</label>
+                                                        <div class="btn-group w-100" role="group">
+                                                            <input type="radio" class="btn-check" name="lc-energy" id="energy-high" value="high">
+                                                            <label class="btn btn-outline-primary btn-sm" for="energy-high">High</label>
+                                                            <input type="radio" class="btn-check" name="lc-energy" id="energy-medium" value="medium" checked>
+                                                            <label class="btn btn-outline-primary btn-sm" for="energy-medium">Medium</label>
+                                                            <input type="radio" class="btn-check" name="lc-energy" id="energy-low" value="low">
+                                                            <label class="btn btn-outline-primary btn-sm" for="energy-low">Low</label>
+                                                        </div>
+                                                    </div>
+                                                    <div class="mb-2">
+                                                        <input type="text" class="form-control form-control-sm" id="lc-priority" placeholder="Today's top priority...">
+                                                    </div>
+                                                    <div class="mb-2">
+                                                        <input type="text" class="form-control form-control-sm" id="lc-gratitude" placeholder="One thing you're grateful for...">
+                                                    </div>
+                                                    <button class="btn btn-primary btn-sm w-100" onclick="submitCheckin()">
+                                                        <i class="fas fa-check me-1"></i>Save Check-in
+                                                    </button>
+                                                </div>
+                                                <div id="lc-mood-history" class="mt-3"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Row 2: Habits + Values -->
+                                <div class="row g-3 mb-4">
+                                    <div class="col-md-6">
+                                        <div class="card border-0 shadow-sm h-100">
+                                            <div class="card-body">
+                                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                                    <h6 class="fw-semibold mb-0"><i class="fas fa-check-circle me-2 text-success"></i>Habits</h6>
+                                                    <button class="btn btn-outline-primary btn-sm" onclick="toggleNewHabit()">
+                                                        <i class="fas fa-plus"></i>
+                                                    </button>
+                                                </div>
+                                                <div id="lc-new-habit" class="d-none mb-3">
+                                                    <div class="input-group input-group-sm">
+                                                        <input type="text" class="form-control" id="lc-habit-name" placeholder="New habit name...">
+                                                        <select class="form-select" id="lc-habit-category" style="max-width:120px">
+                                                            <option value="health">Health</option>
+                                                            <option value="productivity">Productivity</option>
+                                                            <option value="mindfulness">Mindfulness</option>
+                                                            <option value="social">Social</option>
+                                                            <option value="learning">Learning</option>
+                                                            <option value="general" selected>General</option>
+                                                        </select>
+                                                        <button class="btn btn-success" onclick="createHabit()"><i class="fas fa-check"></i></button>
+                                                    </div>
+                                                </div>
+                                                <div id="lc-habits-list"></div>
+                                                <div id="lc-habits-nudges" class="mt-2"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card border-0 shadow-sm h-100">
+                                            <div class="card-body">
+                                                <h6 class="fw-semibold mb-3"><i class="fas fa-gem me-2 text-purple"></i>Your Values & Profile</h6>
+                                                <div id="lc-values"></div>
+                                                <div id="lc-domains" class="mt-3"></div>
+                                                <div id="lc-people" class="mt-3"></div>
+                                                <div class="mt-2">
+                                                    <span class="text-muted small">Trust level: </span>
+                                                    <span id="lc-trust" class="small fw-medium"></span>
+                                                    <span class="text-muted small ms-2">| Depth: </span>
+                                                    <span id="lc-depth" class="small fw-medium"></span>
+                                                    <span class="text-muted small ms-2">| Interactions: </span>
+                                                    <span id="lc-interactions" class="small fw-medium"></span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Row 3: Transitions + Decisions -->
+                                <div class="row g-3 mb-4">
+                                    <div class="col-md-6">
+                                        <div class="card border-0 shadow-sm h-100">
+                                            <div class="card-body">
+                                                <h6 class="fw-semibold mb-3"><i class="fas fa-road me-2 text-primary"></i>Life Transitions</h6>
+                                                <div id="lc-transitions"><span class="text-muted small">No active transitions detected</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="card border-0 shadow-sm h-100">
+                                            <div class="card-body">
+                                                <h6 class="fw-semibold mb-3"><i class="fas fa-balance-scale me-2 text-warning"></i>Open Decisions</h6>
+                                                <div id="lc-decisions"><span class="text-muted small">No open decisions</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Row 4: Privacy Controls -->
+                                <div class="card border-0 shadow-sm mb-4">
+                                    <div class="card-body">
+                                        <h6 class="fw-semibold mb-3"><i class="fas fa-user-shield me-2 text-secondary"></i>Companion Privacy</h6>
+                                        <p class="text-muted small mb-3">Control what your AI companion remembers about you.</p>
+                                        <div class="d-flex gap-2 flex-wrap">
+                                            <button class="btn btn-outline-info btn-sm" onclick="downloadCompanionData()">
+                                                <i class="fas fa-download me-1"></i>Download My Data
+                                            </button>
+                                            <button class="btn btn-outline-danger btn-sm" onclick="clearCompanionData()">
+                                                <i class="fas fa-eraser me-1"></i>Clear Companion Memory
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                
+
                 <!-- Action Buttons -->
                 <div class="mt-4 pt-4 border-top">
                     <div class="row">
@@ -380,9 +665,20 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // Set Wai's user ID directly
-        let currentUserId = 'eb049813-e28a-4ae6-8c7b-fa80250d0e51';
-        localStorage.setItem('user_id', currentUserId);
+        // Derive user ID from stored JWT token (never hardcode)
+        let currentUserId = localStorage.getItem('user_id') || null;
+        (function _initUserId() {
+            const token = localStorage.getItem('token');
+            if (token) {
+                try {
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    if (payload.user_id) {
+                        currentUserId = payload.user_id;
+                        localStorage.setItem('user_id', currentUserId);
+                    }
+                } catch(e) { /* malformed token – fall through */ }
+            }
+        })();
         
         // Initialize profile on page load
         document.addEventListener('DOMContentLoaded', function() {
@@ -620,6 +916,421 @@
                     showAlert('Error deleting profile', 'danger');
                 }
             }
+        }
+
+        // ── Conversation Activity (fetches /api/user/conversation-summary) ──
+        let _activityLoaded = false;
+
+        async function loadConversationSummary() {
+            if (_activityLoaded) return;  // only fetch once per page load
+
+            const token = localStorage.getItem('auth_token') || localStorage.getItem('token');
+            if (!token) {
+                _showActivityError('Not logged in — please sign in to view your activity.');
+                return;
+            }
+
+            try {
+                const resp = await fetch('/api/user/conversation-summary', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+
+                if (!resp.ok) {
+                    _showActivityError(`Server returned ${resp.status}.`);
+                    return;
+                }
+
+                const data = await resp.json();
+                if (!data.success) {
+                    _showActivityError(data.error || 'Unknown error from server.');
+                    return;
+                }
+
+                _renderActivitySummary(data.summary);
+                _activityLoaded = true;
+            } catch (err) {
+                console.error('Activity fetch error:', err);
+                _showActivityError('Could not reach the server.');
+            }
+        }
+
+        function _showActivityError(msg) {
+            document.getElementById('activity-loading').classList.add('d-none');
+            document.getElementById('activity-error-msg').textContent = msg;
+            document.getElementById('activity-error').classList.remove('d-none');
+        }
+
+        function _fmt(iso) {
+            if (!iso) return '—';
+            try { return new Date(iso).toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' }); }
+            catch { return iso; }
+        }
+
+        function _esc(s) {
+            if (!s) return '';
+            const d = document.createElement('div');
+            d.textContent = s;
+            return d.innerHTML;
+        }
+
+        function _cap(s) {
+            if (!s) return '—';
+            return _esc(s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()));
+        }
+
+        function _renderActivitySummary(s) {
+            // Headline numbers
+            document.getElementById('act-total-messages').textContent = s.total_messages ?? 0;
+            document.getElementById('act-active-goals').textContent   = (s.active_goals || []).length;
+            document.getElementById('act-mood').textContent           = _cap(s.emotional_state);
+            document.getElementById('act-fav-char').textContent       = _cap(s.most_active_character);
+
+            // Timeline
+            document.getElementById('act-first').textContent = _fmt(s.first_interaction);
+            document.getElementById('act-last').textContent  = _fmt(s.last_interaction);
+
+            // Per-character breakdown
+            const cu = s.characters_used || {};
+            const charEntries = Object.entries(cu).sort((a, b) => b[1] - a[1]);
+            const charEl = document.getElementById('act-characters');
+            if (charEntries.length === 0) {
+                charEl.innerHTML = '<span class="text-muted small">No conversations yet</span>';
+            } else {
+                const max = charEntries[0][1];
+                charEl.innerHTML = charEntries.map(([char, count]) => `
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="small">${_cap(char)}</span>
+                            <span class="small fw-medium">${count}</span>
+                        </div>
+                        <div class="progress" style="height:6px">
+                            <div class="progress-bar bg-primary" style="width:${Math.round(count/max*100)}%"></div>
+                        </div>
+                    </div>`).join('');
+            }
+
+            // Goals
+            const goals = s.active_goals || [];
+            document.getElementById('act-goals-list').innerHTML = goals.length
+                ? goals.map(g => `<span class="badge bg-success-subtle text-success me-1 mb-1">${g}</span>`).join('')
+                : '<span class="text-muted small">None recorded</span>';
+
+            // Topics
+            const topics = s.recent_topics || [];
+            document.getElementById('act-topics-list').innerHTML = topics.length
+                ? topics.map(t => `<span class="badge bg-primary-subtle text-primary me-1 mb-1">${_cap(t)}</span>`).join('')
+                : '<span class="text-muted small">None recorded</span>';
+
+            // Show cards, hide spinner
+            document.getElementById('activity-loading').classList.add('d-none');
+            document.getElementById('activity-content').classList.remove('d-none');
+        }
+
+        // ── Life Companion Dashboard ──
+        let _companionLoaded = false;
+        const _lcToken = () => localStorage.getItem('auth_token') || localStorage.getItem('token');
+        const _lcHeaders = () => ({ 'Authorization': 'Bearer ' + _lcToken(), 'Content-Type': 'application/json' });
+
+        async function loadCompanionDashboard() {
+            if (_companionLoaded) return;
+            const token = _lcToken();
+            if (!token) { _lcError('Not logged in.'); return; }
+            try {
+                const [emoResp, habResp, chkResp, decResp, trResp, profResp] = await Promise.all([
+                    fetch('/api/user/emotional-summary?days=30', { headers: _lcHeaders() }),
+                    fetch('/api/user/habits', { headers: _lcHeaders() }),
+                    fetch('/api/user/checkin', { headers: _lcHeaders() }),
+                    fetch('/api/user/decisions', { headers: _lcHeaders() }),
+                    fetch('/api/user/life-transitions', { headers: _lcHeaders() }),
+                    fetch('/api/user/companion-profile', { headers: _lcHeaders() }),
+                ]);
+                const [emo, hab, chk, dec, tr, prof] = await Promise.all([
+                    emoResp.ok ? emoResp.json() : null,
+                    habResp.ok ? habResp.json() : null,
+                    chkResp.ok ? chkResp.json() : null,
+                    decResp.ok ? decResp.json() : null,
+                    trResp.ok ? trResp.json() : null,
+                    profResp.ok ? profResp.json() : null,
+                ]);
+                _renderEmotional(emo);
+                _renderHabits(hab);
+                _renderCheckin(chk);
+                _renderDecisions(dec);
+                _renderTransitions(tr);
+                _renderProfile(prof);
+                document.getElementById('lc-loading').classList.add('d-none');
+                document.getElementById('lc-content').classList.remove('d-none');
+                _companionLoaded = true;
+            } catch(e) {
+                console.error('Companion load error:', e);
+                _lcError('Could not load companion data.');
+            }
+        }
+
+        function _lcError(msg) {
+            document.getElementById('lc-loading').classList.add('d-none');
+            document.getElementById('lc-error-msg').textContent = msg;
+            document.getElementById('lc-error').classList.remove('d-none');
+        }
+
+        // ── Emotional landscape ──
+        function _renderEmotional(data) {
+            const el = document.getElementById('lc-emo-dominant');
+            const chartEl = document.getElementById('lc-emo-chart');
+            const trigEl = document.getElementById('lc-emo-triggers');
+            if (!data || !data.summary || !data.summary.distribution) {
+                el.innerHTML = '<span class="text-muted small">Not enough data yet. Keep chatting!</span>';
+                return;
+            }
+            const s = data.summary;
+            el.innerHTML = `<span class="badge bg-info-subtle text-info fs-6">${_cap(s.dominant_family)}</span>
+                <span class="text-muted small ms-2">dominant over ${s.period_days} days</span>`;
+            const dist = s.distribution;
+            const entries = Object.entries(dist).sort((a,b) => b[1].count - a[1].count);
+            const maxCount = entries.length ? entries[0][1].count : 1;
+            chartEl.innerHTML = entries.slice(0, 6).map(([fam, d]) => `
+                <div class="mb-1">
+                    <div class="d-flex justify-content-between">
+                        <span class="small">${_cap(fam)}</span>
+                        <span class="small text-muted">${d.count}x (avg ${Math.round(d.avg_intensity*100)}%)</span>
+                    </div>
+                    <div class="progress" style="height:5px">
+                        <div class="progress-bar bg-info" style="width:${Math.round(d.count/maxCount*100)}%"></div>
+                    </div>
+                </div>`).join('');
+            const triggers = data.triggers || {};
+            const trigEntries = Object.entries(triggers).slice(0, 5);
+            if (trigEntries.length) {
+                trigEl.innerHTML = '<span class="small text-muted">Known triggers: </span>' +
+                    trigEntries.map(([topic, emo]) =>
+                        `<span class="badge bg-warning-subtle text-warning me-1">${topic} → ${emo}</span>`
+                    ).join('');
+            }
+        }
+
+        // ── Habits ──
+        function _renderHabits(data) {
+            const el = document.getElementById('lc-habits-list');
+            const nudgeEl = document.getElementById('lc-habits-nudges');
+            if (!data || !data.habits || data.habits.length === 0) {
+                el.innerHTML = '<span class="text-muted small">No habits yet. Create one to start tracking!</span>';
+                return;
+            }
+            const dueSet = new Set(data.due_today || []);
+            const doneSet = new Set(data.completed_today || []);
+            el.innerHTML = data.habits.map(h => {
+                const isDue = dueSet.has(h.id);
+                const isDone = doneSet.has(h.id);
+                const icon = isDone ? 'check-circle text-success' : (isDue ? 'circle text-warning' : 'circle text-muted');
+                const streakBadge = h.streak > 0 ? `<span class="badge bg-warning-subtle text-warning ms-1">${h.streak}d</span>` : '';
+                const completeBtn = isDue && !isDone
+                    ? `<button class="btn btn-sm btn-outline-success py-0 px-1 ms-auto" onclick="completeHabit(${parseInt(h.id)})"><i class="fas fa-check"></i></button>`
+                    : '';
+                return `<div class="d-flex align-items-center mb-2">
+                    <i class="fas fa-${icon} me-2"></i>
+                    <span class="small ${isDone ? 'text-decoration-line-through text-muted' : ''}">${_esc(h.name)}</span>
+                    ${streakBadge}
+                    <span class="badge bg-secondary-subtle text-secondary ms-1 small">${_esc(h.category)}</span>
+                    ${completeBtn}
+                </div>`;
+            }).join('');
+            const rate = data.weekly_rate;
+            if (rate !== undefined) {
+                el.innerHTML += `<div class="mt-2 small text-muted">Weekly completion: <strong>${Math.round(rate*100)}%</strong></div>`;
+            }
+            if (data.nudges && data.nudges.length) {
+                nudgeEl.innerHTML = data.nudges.map(n =>
+                    `<div class="alert alert-info py-1 px-2 small mb-1"><i class="fas fa-lightbulb me-1"></i>${_esc(n)}</div>`
+                ).join('');
+            }
+        }
+
+        async function completeHabit(habitId) {
+            try {
+                const resp = await fetch(`/api/user/habits/${habitId}/complete`, {
+                    method: 'POST', headers: _lcHeaders(), body: '{}'
+                });
+                if (resp.ok) { _companionLoaded = false; loadCompanionDashboard(); }
+            } catch(e) { console.error('Complete habit error:', e); }
+        }
+
+        function toggleNewHabit() {
+            document.getElementById('lc-new-habit').classList.toggle('d-none');
+            document.getElementById('lc-habit-name').focus();
+        }
+
+        async function createHabit() {
+            const name = document.getElementById('lc-habit-name').value.trim();
+            if (!name) return;
+            const category = document.getElementById('lc-habit-category').value;
+            try {
+                const resp = await fetch('/api/user/habits', {
+                    method: 'POST', headers: _lcHeaders(),
+                    body: JSON.stringify({ name, category, frequency: 'daily' })
+                });
+                if (resp.ok) {
+                    document.getElementById('lc-habit-name').value = '';
+                    document.getElementById('lc-new-habit').classList.add('d-none');
+                    _companionLoaded = false; loadCompanionDashboard();
+                }
+            } catch(e) { console.error('Create habit error:', e); }
+        }
+
+        // ── Check-in ──
+        function _renderCheckin(data) {
+            const todayEl = document.getElementById('lc-checkin-today');
+            const formEl = document.getElementById('lc-checkin-form');
+            const histEl = document.getElementById('lc-mood-history');
+            if (!data) { todayEl.innerHTML = '<span class="text-muted small">Unable to load.</span>'; return; }
+            if (data.today) {
+                const t = data.today;
+                const moodEmoji = {great:'😄',good:'🙂',okay:'😐',low:'😔',bad:'😢'}[t.mood]||'😐';
+                todayEl.innerHTML = `<div class="p-2 bg-light rounded">
+                    <div class="fw-medium">${moodEmoji} ${_cap(t.mood)} mood · ${_cap(t.energy)} energy</div>
+                    ${t.priority ? `<div class="small text-muted mt-1">Priority: ${t.priority}</div>` : ''}
+                    ${t.gratitude ? `<div class="small text-muted">Grateful for: ${t.gratitude}</div>` : ''}
+                </div>`;
+            } else {
+                todayEl.innerHTML = '<span class="text-muted small">No check-in today.</span>';
+                formEl.classList.remove('d-none');
+            }
+            const recent = data.recent || [];
+            if (recent.length > 1) {
+                const moodColors = {5:'#22c55e',4:'#84cc16',3:'#eab308',2:'#f97316',1:'#ef4444'};
+                histEl.innerHTML = '<div class="small text-muted mb-1">Mood this week:</div><div class="d-flex gap-1">' +
+                    recent.slice(0, 7).reverse().map(c => {
+                        const color = moodColors[c.mood_score] || '#9ca3af';
+                        const day = new Date(c.date).toLocaleDateString(undefined, {weekday:'short'});
+                        return `<div class="text-center" style="flex:1">
+                            <div style="height:${c.mood_score*8}px;background:${color};border-radius:3px;min-height:8px" title="${_cap(c.mood)}"></div>
+                            <div class="text-muted" style="font-size:0.6rem">${day}</div>
+                        </div>`;
+                    }).join('') + '</div>';
+            }
+        }
+
+        async function submitCheckin() {
+            const mood = document.querySelector('input[name="lc-mood"]:checked')?.value || 'okay';
+            const energy = document.querySelector('input[name="lc-energy"]:checked')?.value || 'medium';
+            const top_priority = document.getElementById('lc-priority').value.trim();
+            const gratitude = document.getElementById('lc-gratitude').value.trim();
+            try {
+                const resp = await fetch('/api/user/checkin', {
+                    method: 'POST', headers: _lcHeaders(),
+                    body: JSON.stringify({ mood, energy, top_priority, gratitude })
+                });
+                if (resp.ok) { _companionLoaded = false; loadCompanionDashboard(); }
+            } catch(e) { console.error('Checkin error:', e); }
+        }
+
+        // ── Decisions ──
+        function _renderDecisions(data) {
+            const el = document.getElementById('lc-decisions');
+            if (!data || (!data.open?.length && !data.recent_decided?.length)) {
+                el.innerHTML = '<span class="text-muted small">No decisions tracked yet.</span>'; return;
+            }
+            let html = '';
+            (data.open || []).slice(0, 4).forEach(d => {
+                html += `<div class="mb-2 p-2 bg-warning-subtle rounded">
+                    <div class="small fw-medium">${_esc(d.title.substring(0, 80))}</div>
+                    <span class="badge bg-warning-subtle text-warning">${_cap(d.domain)}</span>
+                    <span class="text-muted" style="font-size:0.7rem"> · ${_fmt(d.created_at)}</span>
+                </div>`;
+            });
+            if (data.recent_decided?.length) {
+                html += '<div class="small text-muted mt-2 mb-1">Recently decided:</div>';
+                data.recent_decided.slice(0, 3).forEach(d => {
+                    const stars = d.satisfaction ? '★'.repeat(d.satisfaction) + '☆'.repeat(5-d.satisfaction) : '';
+                    html += `<div class="small mb-1">✓ ${_esc(d.title.substring(0, 60))} ${stars ? '<span class="text-warning">'+stars+'</span>' : ''}</div>`;
+                });
+            }
+            el.innerHTML = html;
+        }
+
+        // ── Transitions ──
+        function _renderTransitions(data) {
+            const el = document.getElementById('lc-transitions');
+            if (!data || !data.transitions?.length) {
+                el.innerHTML = '<span class="text-muted small">No active life transitions detected.</span>'; return;
+            }
+            el.innerHTML = data.transitions.map(t => {
+                const pct = Math.round(((t.progress.split('/')[0]|0) / (t.progress.split('/')[1]|1)) * 100);
+                return `<div class="mb-3 p-2 bg-light rounded">
+                    <div class="d-flex justify-content-between">
+                        <span class="fw-medium small">${_cap(t.type)}</span>
+                        <span class="badge bg-primary-subtle text-primary">${t.progress}</span>
+                    </div>
+                    <div class="progress my-1" style="height:5px">
+                        <div class="progress-bar bg-primary" style="width:${pct}%"></div>
+                    </div>
+                    <div class="small text-muted">${_cap(t.stage)} · Week ${t.weeks}</div>
+                    ${t.guidance ? `<div class="small fst-italic mt-1">${_esc(t.guidance)}</div>` : ''}
+                </div>`;
+            }).join('');
+        }
+
+        // ── Profile / Values ──
+        function _renderProfile(data) {
+            if (!data || !data.profile) return;
+            const p = data.profile;
+            // Values
+            const valEl = document.getElementById('lc-values');
+            const vals = Object.entries(p.values || {});
+            valEl.innerHTML = vals.length
+                ? vals.sort((a,b) => b[1]-a[1]).slice(0,8).map(([v, score]) =>
+                    `<span class="badge bg-purple-subtle text-purple me-1 mb-1" style="background:#f3e8ff;color:#7c3aed">${_esc(v)} (${score})</span>`
+                ).join('')
+                : '<span class="text-muted small">Values will be detected as you chat.</span>';
+            // Domains
+            const domEl = document.getElementById('lc-domains');
+            const doms = Object.entries(p.domains || {});
+            if (doms.length) {
+                domEl.innerHTML = '<span class="small text-muted">Life domains: </span>' +
+                    doms.slice(0,6).map(([d, info]) => {
+                        const sentColor = info.sentiment > 0 ? 'success' : info.sentiment < 0 ? 'danger' : 'secondary';
+                        const arrow = info.trajectory === 'improving' ? '↑' : info.trajectory === 'declining' ? '↓' : '→';
+                        return `<span class="badge bg-${sentColor}-subtle text-${sentColor} me-1">${_cap(d)} ${arrow} (${info.mentions})</span>`;
+                    }).join('');
+            }
+            // People
+            const peopleEl = document.getElementById('lc-people');
+            const people = Object.entries(p.people || {});
+            if (people.length) {
+                peopleEl.innerHTML = '<span class="small text-muted">People mentioned: </span>' +
+                    people.slice(0,6).map(([name, info]) =>
+                        `<span class="badge bg-secondary-subtle text-secondary me-1">${_cap(name)} (${info.relationship})</span>`
+                    ).join('');
+            }
+            document.getElementById('lc-trust').textContent = (p.trust_level * 100).toFixed(0) + '%';
+            document.getElementById('lc-depth').textContent = (p.message_depth || 0).toFixed(1);
+            document.getElementById('lc-interactions').textContent = p.total_interactions || 0;
+        }
+
+        // ── Privacy controls ──
+        async function downloadCompanionData() {
+            try {
+                const resp = await fetch('/api/user/companion-profile', { headers: _lcHeaders() });
+                if (!resp.ok) { alert('Failed to download.'); return; }
+                const data = await resp.json();
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url;
+                a.download = 'companion-data-' + new Date().toISOString().slice(0,10) + '.json';
+                a.click(); URL.revokeObjectURL(url);
+            } catch(e) { alert('Error: ' + e.message); }
+        }
+
+        async function clearCompanionData() {
+            if (!confirm('This will permanently erase all Life Companion data (emotional history, habits, check-ins, transitions, decisions, profile). Continue?')) return;
+            try {
+                const resp = await fetch('/api/user/companion-data', { method: 'DELETE', headers: _lcHeaders() });
+                if (resp.ok) {
+                    alert('Companion memory cleared.');
+                    _companionLoaded = false; loadCompanionDashboard();
+                } else {
+                    alert('Failed to clear data.');
+                }
+            } catch(e) { alert('Error: ' + e.message); }
         }
     </script>
 </body>

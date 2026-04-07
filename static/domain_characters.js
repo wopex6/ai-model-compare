@@ -584,14 +584,28 @@ const DomainCharacters = {
             // Check if replying to a specific message (WhatsApp-style)
             const replyToId = typeof MessageHandler !== 'undefined' ? MessageHandler.getReplyToId() : null;
             
+            // Include action flags if set by response action buttons
+            const payload = {
+                message: message,
+                character_id: this.selectedCharacter,
+                use_ai: useAi,
+                reply_to_message_id: replyToId
+            };
+            if (this._nextMessageFlags) {
+                // Expire stale flags (>60s old)
+                const age = Date.now() - (this._nextMessageFlags._ts || 0);
+                if (age < 60000) {
+                    const flags = {...this._nextMessageFlags};
+                    delete flags._ts;
+                    delete flags._auto;
+                    Object.assign(payload, flags);
+                }
+                this._nextMessageFlags = null;
+            }
+            
             const response = await AuthHelper.authenticatedFetch(this.endpoints.route, {
                 method: 'POST',
-                body: JSON.stringify({
-                    message: message,
-                    character_id: this.selectedCharacter,
-                    use_ai: useAi,
-                    reply_to_message_id: replyToId
-                })
+                body: JSON.stringify(payload)
             });
             
             // Clear the reply state after sending
@@ -636,6 +650,9 @@ const DomainCharacters = {
                             if (metadata.follow_up_suggestions && metadata.follow_up_suggestions.length > 0) {
                                 this._displayFollowUpSuggestions(metadata.follow_up_suggestions, resp.character_id);
                             }
+                            
+                            // Add response action buttons: "Tell me more" + "Not what I meant"
+                            this._addResponseActions(resp.character_id);
                         }
                     });
                 }
@@ -670,6 +687,52 @@ const DomainCharacters = {
      */
     sendQuickMessage(message) {
         this.sendMessage(message, true);
+    },
+    
+    /**
+     * Add response action buttons ("Tell me more" / "Not what I meant") after an AI message
+     * @param {string} characterId - Character that provided the response
+     * @private
+     */
+    _addResponseActions(characterId) {
+        const messagesContainer = document.getElementById('domain-chat-messages');
+        if (!messagesContainer) return;
+        
+        // Get character display name for natural message
+        const charName = this.characters?.[characterId]?.display_name || characterId;
+        
+        const actionRow = document.createElement('div');
+        actionRow.className = 'response-actions';
+        
+        const moreBtn = document.createElement('button');
+        moreBtn.className = 'response-action-btn more-detail-btn';
+        moreBtn.textContent = 'Tell me more';
+        moreBtn.title = 'Get a more detailed response';
+        moreBtn.addEventListener('click', () => {
+            actionRow.remove();
+            this._nextMessageFlags = { detail_requested: true, _ts: Date.now(), _auto: true, character_id: characterId };
+            this.sendMessage(`Could you elaborate on that, ${charName}?`, true);
+        });
+        
+        const redirectBtn = document.createElement('button');
+        redirectBtn.className = 'response-action-btn redirect-btn';
+        redirectBtn.textContent = 'Not what I meant';
+        redirectBtn.title = 'Try a different approach';
+        redirectBtn.addEventListener('click', () => {
+            actionRow.remove();
+            // Flag the next message as direction_change
+            this._nextMessageFlags = { direction_change: true, _ts: Date.now() };
+            const inputEl = document.getElementById('domain-chat-input') || document.getElementById('userInput');
+            if (inputEl) {
+                inputEl.value = "That's not quite what I meant. Let me clarify:";
+                inputEl.focus();
+                inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
+            }
+        });
+        
+        actionRow.appendChild(moreBtn);
+        actionRow.appendChild(redirectBtn);
+        messagesContainer.appendChild(actionRow);
     },
     
     /**

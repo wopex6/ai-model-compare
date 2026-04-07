@@ -179,8 +179,8 @@ const ProactiveClarificationUI = {
         const question = this.currentQuestions[index];
         if (!question) return;
         
-        // Find the input field and insert the answer prompt
-        const input = document.getElementById('userInput');
+        // Find the input field and insert the answer prompt (works on both pages)
+        const input = document.getElementById('userInput') || document.getElementById('chat-input');
         if (input) {
             input.value = `Regarding "${question.question.substring(0, 50)}...": `;
             input.focus();

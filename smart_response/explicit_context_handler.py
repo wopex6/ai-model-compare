@@ -560,15 +560,64 @@ class ExplicitContextHandler:
         
         return results
     
+    def get_cross_character_context(
+        self, user_id: int, current_character: str
+    ) -> List[Dict]:
+        """
+        Return CRITICAL/HIGH priority context from ALL characters for this user,
+        merged with the current-character context.  Deduplicates by value so
+        the same goal doesn't appear twice.
+        """
+        cursor = self.db.cursor()
+        try:
+            cursor.execute('''
+                SELECT id, timestamp, context_type, context_key, context_value,
+                       original_statement, priority, confidence, extracted_via
+                FROM explicit_context
+                WHERE user_id = ?
+                  AND active = 1
+                  AND priority IN ('CRITICAL', 'HIGH')
+                  AND character != ?
+                ORDER BY
+                    CASE priority WHEN 'CRITICAL' THEN 1 WHEN 'HIGH' THEN 2 ELSE 3 END,
+                    timestamp DESC
+            ''', (user_id, current_character))
+            rows = cursor.fetchall()
+        except Exception:
+            return []
+
+        results = []
+        for row in rows:
+            results.append({
+                'id': row[0], 'timestamp': row[1], 'type': row[2],
+                'key': row[3], 'value': row[4], 'original_statement': row[5],
+                'priority': row[6], 'confidence': row[7], 'extracted_via': row[8],
+            })
+        return results
+
     def format_for_ai_prompt(self, user_id: int, character: str) -> str:
         """
         Format explicit context for AI prompt
         This goes at the TOP of context (highest priority)
+
+        Includes CRITICAL/HIGH context from other characters so users don't
+        have to repeat themselves when switching AI characters.
         
         Returns:
             Formatted string for AI prompt
         """
         context_items = self.get_explicit_context(user_id, character)
+
+        # Merge cross-character CRITICAL/HIGH context (deduplicate by value)
+        try:
+            cross = self.get_cross_character_context(user_id, character)
+            existing_values = {item['value'] for item in context_items}
+            for item in cross:
+                if item['value'] not in existing_values:
+                    context_items.append(item)
+                    existing_values.add(item['value'])
+        except Exception:
+            pass
         
         if not context_items:
             return ""

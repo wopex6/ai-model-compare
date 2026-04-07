@@ -683,7 +683,7 @@ Ask about their goal progress or provide actionable guidance."""
         deleted_count = 0
         
         try:
-            cutoff_date = datetime.now() - timedelta(days=days_to_keep)
+            cutoff_date = (datetime.now() - timedelta(days=days_to_keep)).isoformat()
             
             # Delete old greetings from automated_greetings tracking table
             # Keep context-related greetings (triggered_by contains 'context' or 'ai_prompt')
