@@ -1,6 +1,6 @@
 // Service Worker for AI Life Companion PWA
-const CACHE_NAME = 'life-companion-v1';
-const STATIC_CACHE = 'static-v1';
+const CACHE_NAME = 'life-companion-v2';
+const STATIC_CACHE = 'static-v2';
 
 // Files to cache for offline use
 const STATIC_FILES = [
