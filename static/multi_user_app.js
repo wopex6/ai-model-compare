@@ -3638,6 +3638,12 @@ class IntegratedAIChatbot {
             const lastActive = user.last_active ? new Date(user.last_active).toLocaleDateString() : 'Never';
             const isDeleted = user.is_deleted;
             const rowStyle = isDeleted ? 'opacity: 0.5; background: #f9f9f9;' : '';
+            const safeUsername = user.username.replace(/'/g, "\\'");
+            const editBtn = isDeleted
+                ? ''
+                : `<button class="btn-small btn-primary" onclick="app.editUser(${user.id}, '${safeUsername}')" title="Edit User" style="padding: 8px 10px; margin-right: 4px;">
+                       <i class="fas fa-edit"></i>
+                   </button>`;
             const deleteBtn = isDeleted 
                 ? `<button class="btn-small btn-success" onclick="app.restoreUser(${user.id})" title="Restore User" style="padding: 8px 10px;">
                        <i class="fas fa-undo"></i>
@@ -3678,7 +3684,7 @@ class IntegratedAIChatbot {
                     <td>${user.total_conversations}</td>
                     <td>${lastActive}</td>
                     <td>${createdDate}</td>
-                    <td style="white-space: nowrap; text-align: center;">${deleteBtn}</td>
+                    <td style="white-space: nowrap; text-align: center;">${editBtn}${deleteBtn}</td>
                 </tr>
             `;
         }).join('');
@@ -3871,6 +3877,80 @@ class IntegratedAIChatbot {
         }
     }
     
+    async editUser(userId, username) {
+        /**Edit a user's email and/or password */
+        const row = document.querySelector(`tr[data-id="${userId}"]`);
+        const currentEmail = row ? (row.getAttribute('data-email') || '') : '';
+        const newEmail = prompt(`Edit email for ${username}:`, currentEmail);
+        if (newEmail === null) return;
+        const newPassword = prompt(`New password for ${username} (leave blank to keep unchanged):`, '');
+        if (newPassword === null) return;
+
+        const payload = {};
+        const trimmedEmail = newEmail.trim().toLowerCase();
+        if (trimmedEmail && trimmedEmail !== currentEmail) {
+            payload.email = trimmedEmail;
+        }
+        const trimmedPassword = newPassword.trim();
+        if (trimmedPassword) {
+            payload.password = trimmedPassword;
+        }
+        if (Object.keys(payload).length === 0) {
+            this.showNotification('No changes made', 'info');
+            return;
+        }
+
+        try {
+            const response = await this.apiCall(`/api/admin/users/${userId}/edit`, 'POST', payload);
+            if (response.ok) {
+                this.showNotification(`User "${username}" updated`, 'success');
+                await this.loadAdminData();
+            } else {
+                const error = await response.json();
+                this.showNotification(error.error || 'Failed to update user', 'error');
+            }
+        } catch (error) {
+            console.error('Error editing user:', error);
+            this.showNotification('Network error. Please try again.', 'error');
+        }
+    }
+
+    async addUser() {
+        /**Create a new user as admin */
+        const username = prompt('New username:');
+        if (!username || !username.trim()) return;
+        const email = prompt('Email address:');
+        if (!email || !email.trim()) return;
+        const password = prompt('Password:');
+        if (!password || !password.trim()) return;
+        const role = prompt('Role (user, administrator, master, paid, guest, developer):', 'user') || 'user';
+        const validRoles = ['guest', 'user', 'paid', 'master', 'administrator', 'developer'];
+        if (!validRoles.includes(role)) {
+            this.showNotification('Invalid role', 'error');
+            return;
+        }
+
+        try {
+            const response = await this.apiCall('/api/admin/users', 'POST', {
+                username: username.trim(),
+                email: email.trim().toLowerCase(),
+                password: password.trim(),
+                role: role
+            });
+            if (response.ok) {
+                const result = await response.json();
+                this.showNotification(`User "${result.username}" created`, 'success');
+                await this.loadAdminData();
+            } else {
+                const error = await response.json();
+                this.showNotification(error.error || 'Failed to create user', 'error');
+            }
+        } catch (error) {
+            console.error('Error creating user:', error);
+            this.showNotification('Network error. Please try again.', 'error');
+        }
+    }
+
     async permanentDeleteUser(userId, username) {
         /**Permanently delete a user and all their data */
         const confirmed = confirm(
