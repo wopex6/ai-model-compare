@@ -15,9 +15,9 @@ class IntegratedDatabase:
     def __init__(self, db_path: str = "integrated_users.db"):
         self.db_path = Path(db_path)
         self.init_database()
-        self.create_default_user()
         self.add_email_verification_columns()
         self.migrate_add_character_id()  # NEW: Add character_id column
+        self.create_default_user()
         
         # Initialize PersonalityResolver (lazy import to avoid circular dependency)
         self._resolver = None
@@ -41,6 +41,8 @@ class IntegratedDatabase:
                 username TEXT UNIQUE NOT NULL,
                 email TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
+                user_role TEXT DEFAULT 'user',
+                is_deleted INTEGER DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
@@ -391,18 +393,22 @@ class IntegratedDatabase:
         conn = self.get_connection()
         cursor = conn.cursor()
         
-        # Check if user already exists
-        cursor.execute('SELECT id FROM users WHERE username = ?', ('Wai Tse',))
-        if cursor.fetchone():
+        # Check if user already exists and ensure default user is an administrator
+        cursor.execute('SELECT id, user_role FROM users WHERE username = ?', ('Wai Tse',))
+        row = cursor.fetchone()
+        if row:
+            if not row[1]:
+                cursor.execute('UPDATE users SET user_role = ? WHERE id = ?', ('administrator', row[0]))
+                conn.commit()
             conn.close()
             return
         
         # Create user
         password_hash = bcrypt.hashpw('.//'.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         cursor.execute('''
-            INSERT INTO users (username, email, password_hash)
-            VALUES (?, ?, ?)
-        ''', ('Wai Tse', 'wai.tse@example.com', password_hash))
+            INSERT INTO users (username, email, password_hash, user_role)
+            VALUES (?, ?, ?, ?)
+        ''', ('Wai Tse', 'wai.tse@example.com', password_hash, 'administrator'))
         
         user_id = cursor.lastrowid
         
@@ -471,9 +477,9 @@ class IntegratedDatabase:
         try:
             password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
             cursor.execute('''
-                INSERT INTO users (username, email, password_hash)
-                VALUES (?, ?, ?)
-            ''', (username, email, password_hash))
+                INSERT INTO users (username, email, password_hash, user_role)
+                VALUES (?, ?, ?, ?)
+            ''', (username, email, password_hash, 'user'))
             
             user_id = cursor.lastrowid
             
@@ -2109,6 +2115,10 @@ class IntegratedDatabase:
             cursor.execute("PRAGMA table_info(users)")
             columns = [row[1] for row in cursor.fetchall()]
             
+            if 'user_role' not in columns:
+                cursor.execute('ALTER TABLE users ADD COLUMN user_role TEXT DEFAULT "user"')
+            if 'is_deleted' not in columns:
+                cursor.execute('ALTER TABLE users ADD COLUMN is_deleted INTEGER DEFAULT 0')
             if 'email_verified' not in columns:
                 cursor.execute('ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0')
             if 'verification_code' not in columns:
