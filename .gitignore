@@ -6,8 +6,11 @@
 
 # Database files
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
+doc_changes.json
 
 # Python
 __pycache__/
