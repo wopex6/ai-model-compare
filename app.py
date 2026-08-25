@@ -1822,6 +1822,79 @@ def bulk_delete_deleted_users():
     except Exception as e:
         return _safe_error(e, 'api')
 
+@app.route('/api/admin/users', methods=['POST'])
+@require_auth
+def admin_create_user():
+    """Create a new user as an admin"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+
+        data = request.get_json()
+        username = (data.get('username') or '').strip()
+        email = (data.get('email') or '').strip().lower()
+        password = data.get('password') or ''
+        role = data.get('role', 'user')
+
+        valid_roles = ['guest', 'user', 'paid', 'master', 'administrator', 'developer']
+        if not username or not email or not password:
+            return jsonify({'error': 'Username, email and password are required'}), 400
+        if role not in valid_roles:
+            return jsonify({'error': 'Invalid role'}), 400
+
+        user_id = integrated_db.create_user(username, email, password)
+        if not user_id:
+            return jsonify({'error': 'Failed to create user (duplicate username or email)'}), 409
+
+        integrated_db.update_user_role(user_id, role)
+        return jsonify({
+            'success': True,
+            'user_id': user_id,
+            'username': username,
+            'message': 'User created successfully'
+        })
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/admin/users/<int:user_id>/edit', methods=['POST'])
+@require_auth
+def admin_edit_user(user_id):
+    """Edit a user's email and/or password as an admin"""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+
+        # Don't allow editing the currently logged in admin here (use profile page instead)
+        if user_id == request.current_user['user_id']:
+            return jsonify({'error': 'Use the profile page to edit your own account'}), 400
+
+        data = request.get_json()
+        email = (data.get('email') or '').strip().lower()
+        password = data.get('password') or ''
+
+        if not email and not password:
+            return jsonify({'error': 'Email or password required'}), 400
+
+        results = {}
+        if email:
+            if integrated_db.update_user_email(user_id, email):
+                results['email'] = 'updated'
+            else:
+                return jsonify({'error': 'Failed to update email (already in use or invalid)'}), 400
+        if password:
+            if integrated_db.update_user_password(user_id, password):
+                results['password'] = 'updated'
+            else:
+                return jsonify({'error': 'Failed to update password'}), 400
+
+        return jsonify({'success': True, 'message': 'User updated', 'updated': results})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
 @app.route('/api/admin/statistics')
 @require_auth
 def get_statistics():
