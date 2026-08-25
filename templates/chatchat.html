@@ -6,6 +6,7 @@
     <title>AI Chatbot - Multi-User Environment</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='multi_user_styles.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='responsive.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='avatar_styles.css') }}">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <!-- PWA Support -->
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
@@ -63,7 +64,41 @@
                     <div class="auth-links">
                         <p>Don't have an account? <a href="#" id="show-signup">Sign up here</a></p>
                     </div>
+                    <div style="text-align:center; margin-top:16px; padding-top:16px; border-top:1px solid #eee;">
+                        <button id="guest-try-btn" class="btn" style="background:none; color:#667eea; border:1px solid #667eea; border-radius:20px; padding:8px 20px; font-size:0.9rem; cursor:pointer;">
+                            <i class="fas fa-comment-dots"></i> Try it — no signup needed
+                        </button>
+                        <p style="font-size:0.75rem; color:#999; margin-top:6px;">5 free messages to explore</p>
+                    </div>
                     {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Guest Chat Overlay -->
+        <div id="guest-chat-overlay" style="display:none; position:fixed; inset:0; z-index:9998; background:rgba(0,0,0,0.5); backdrop-filter:blur(3px);">
+            <div id="guest-chat-panel" style="position:relative; position:absolute; bottom:0; left:50%; transform:translateX(-50%); width:100%; max-width:520px; height:85vh; background:white; border-radius:20px 20px 0 0; display:flex; flex-direction:column; box-shadow:0 -8px 40px rgba(0,0,0,0.2);">
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid #eee;">
+                    <div>
+                        <strong style="font-size:1rem; color:#333;">✨ Quick Chat</strong>
+                        <span id="guest-msg-counter" style="font-size:0.78rem; color:#999; margin-left:8px;">5 messages left</span>
+                    </div>
+                    <button id="guest-close-btn" style="background:none; border:none; font-size:1.2rem; color:#999; cursor:pointer;">&times;</button>
+                </div>
+                <div id="guest-messages" style="flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:10px;">
+                    <div id="guest-welcome-msg" style="text-align:center; color:#999; padding:20px 0;">
+                        <div style="font-size:2rem; margin-bottom:8px;">👋</div>
+                        <p style="margin:0; font-size:0.9rem;">Hi! I'm your AI companion. Ask me anything.</p>
+                        <div id="guest-starters" style="display:flex; flex-wrap:wrap; gap:8px; justify-content:center; margin-top:12px;"></div>
+                    </div>
+                </div>
+                <div id="guest-gate" style="display:none; padding:14px 20px; background:linear-gradient(135deg, #f0f4ff, #e8edff); border-top:1px solid #d4dcf4; text-align:center;">
+                    <p style="margin:0 0 10px; font-size:0.88rem; color:#555;"><strong>Enjoying the conversation?</strong> Sign up to save it and unlock all characters.</p>
+                    <button id="guest-signup-btn" class="btn btn-primary" style="padding:8px 28px; border-radius:20px; font-size:0.88rem;">Create Free Account</button>
+                </div>
+                <div id="guest-input-area" style="padding:12px 16px; border-top:1px solid #eee; display:flex; gap:8px;">
+                    <input id="guest-input" type="text" placeholder="Type a message..." style="flex:1; padding:10px 14px; border:1px solid #ddd; border-radius:20px; font-size:0.9rem; outline:none;">
+                    <button id="guest-send-btn" class="btn btn-primary" style="border-radius:50%; width:40px; height:40px; padding:0; display:flex; align-items:center; justify-content:center;"><i class="fas fa-paper-plane"></i></button>
                 </div>
             </div>
         </div>
@@ -80,10 +115,6 @@
                             <input type="text" id="signup-username" name="username" required>
                         </div>
                         <div class="form-group">
-                            <label for="signup-email">Email</label>
-                            <input type="email" id="signup-email" name="email" required>
-                        </div>
-                        <div class="form-group">
                             <label for="signup-password">Password</label>
                             <input type="password" id="signup-password" name="password" required>
                         </div>
@@ -92,6 +123,7 @@
                             <input type="password" id="signup-confirm-password" name="confirmPassword" required>
                         </div>
                         <button type="submit" class="btn btn-primary">Sign Up</button>
+                        <p style="font-size:0.78rem; color:#999; margin-top:10px; text-align:center;">You can add your email later in Settings</p>
                     </form>
                     <div class="auth-links">
                         <p>Already have an account? <a href="#" id="show-login">Login here</a></p>
@@ -114,6 +146,7 @@
                     <button class="nav-btn active" data-tab="chat" title="Conversations"><i class="fas fa-comments"></i><span class="nav-text"> Conversations</span></button>
                     <button class="nav-btn" data-tab="ai-characters" title="AI Characters"><i class="fas fa-robot"></i><span class="nav-text"> AI Characters</span></button>
                     <a href="/life-companion" class="nav-btn" title="Life Companion"><i class="fas fa-users"></i><span class="nav-text"> Life Companion</span></a>
+                    <a href="/teams" class="nav-btn" title="Teams"><i class="fas fa-users-cog"></i><span class="nav-text"> Teams</span></a>
                     <button class="nav-btn" data-tab="profile" title="Profile"><i class="fas fa-user"></i><span class="nav-text"> Profile</span></button>
                     <button class="nav-btn" data-tab="psychology" title="Psychology"><i class="fas fa-brain"></i><span class="nav-text"> Psychology</span></button>
                     <a href="/personality-dashboard" class="nav-btn" id="personality-dashboard-btn" title="Personality Insights" style="display: none;">
@@ -134,6 +167,31 @@
                     <button class="btn btn-secondary" id="logout-btn">Logout</button>
                 </div>
             </nav>
+
+            <!-- First-Run Welcome Guide -->
+            <div id="first-run-guide" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.55); backdrop-filter:blur(3px); align-items:center; justify-content:center;">
+                <div style="background:white; border-radius:20px; max-width:520px; width:92%; padding:0; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.3); animation: hintSlideIn 0.35s ease;">
+                    <div id="guide-header" style="background:linear-gradient(135deg, #667eea, #764ba2); color:white; padding:28px 28px 20px; text-align:center;">
+                        <div style="font-size:2.5rem; margin-bottom:8px;" id="guide-step-icon">👋</div>
+                        <h2 style="margin:0 0 4px; font-size:1.4rem;" id="guide-step-title">Welcome aboard!</h2>
+                        <p style="margin:0; opacity:0.9; font-size:0.92rem;" id="guide-step-sub">Here's a quick look at what your AI companion can do.</p>
+                    </div>
+                    <div id="guide-step-body" style="padding:24px 28px 16px; font-size:0.9rem; color:#555; line-height:1.6;">
+                        Your AI remembers conversations, tracks your goals, adapts to your mood, and offers 8 unique character perspectives — from business coaching to philosophical dialogue.
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:12px 28px 24px;">
+                        <div id="guide-dots" style="display:flex; gap:6px;">
+                            <span style="width:8px;height:8px;border-radius:50%;background:#667eea;"></span>
+                            <span style="width:8px;height:8px;border-radius:50%;background:#ddd;"></span>
+                            <span style="width:8px;height:8px;border-radius:50%;background:#ddd;"></span>
+                        </div>
+                        <div style="display:flex; gap:10px;">
+                            <button id="guide-skip" style="background:none; border:none; color:#999; cursor:pointer; font-size:0.85rem;">Skip</button>
+                            <button id="guide-next" style="padding:8px 24px; background:linear-gradient(135deg, #667eea, #764ba2); color:white; border:none; border-radius:20px; font-size:0.9rem; font-weight:600; cursor:pointer;">Next</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <!-- Email Verification Banner -->
             <div id="email-verification-banner" class="notification-banner warning" style="display: none;">
@@ -198,7 +256,10 @@
                                         <span id="botName">Alex</span> • 
                                         <small id="botMood">Helpful</small>
                                     </div>
-                                    <div style="display: flex; gap: 8px; flex-shrink: 0;">
+                                    <div style="display: flex; gap: 8px; flex-shrink: 0; align-items: center;">
+                                        <button class="avatar-toggle-chip" id="avatar-toggle-chip" title="Toggle animated character">
+                                            🧑 Character
+                                        </button>
                                         <button class="btn btn-outline-secondary btn-sm" id="toggle-sound-quick" title="Toggle notification sound" style="flex-shrink: 0;">
                                             <i class="fas fa-volume-mute" id="sound-icon"></i>
                                         </button>
@@ -209,23 +270,32 @@
                                 </div>
                             </div>
                             
-                            <div id="chat-messages" class="messages-container">
-                                <div class="welcome-message">
-                                    <h3>Welcome to AI Chatbot!</h3>
-                                    <p>Start a conversation or select an existing chat from the sidebar.</p>
-                                    <p>Your conversations are personalized based on your profile and psychology traits.</p>
+                            <!-- Avatar + Chat layout wrapper -->
+                            <div class="chat-with-avatar" id="chat-avatar-wrapper">
+                                <!-- Avatar side panel (hidden by default) -->
+                                <div class="avatar-side" id="avatar-side" style="display:none;">
+                                    <!-- injected by AvatarManager.init() -->
                                 </div>
-                                
-                                <!-- Typing Indicator -->
-                                <div class="typing-indicator" id="typingIndicator" style="display: none;">
-                                    <i class="fas fa-robot"></i> <span class="typing-dots">Thinking</span>
-                                </div>
-                            </div>
-                            <div id="message-usage-info" class="message-usage-container"></div>
-                            <div id="chat-input-area" class="message-input-area">
-                                <div class="message-input" style="display: flex; gap: 8px; align-items: flex-end;">
-                                    <textarea id="chat-input" placeholder="Type your message to the AI..." rows="1" style="resize: none; overflow-y: hidden; max-height: 120px; min-height: 40px; flex: 1;"></textarea>
-                                    <button id="send-chat-btn" class="btn btn-primary" style="align-self: flex-end;">Send</button>
+
+                                <!-- Chat main side -->
+                                <div class="chat-main-side">
+                                    <div id="chat-messages" class="messages-container">
+                                        <div class="welcome-message">
+                                            <!-- Populated by JS: updateWelcomeForPersona() -->
+                                        </div>
+                                        
+                                        <!-- Typing Indicator -->
+                                        <div class="typing-indicator" id="typingIndicator" style="display: none;">
+                                            <i class="fas fa-robot"></i> <span class="typing-dots">Thinking</span>
+                                        </div>
+                                    </div>
+                                    <div id="message-usage-info" class="message-usage-container"></div>
+                                    <div id="chat-input-area" class="message-input-area">
+                                        <div class="message-input" style="display: flex; gap: 8px; align-items: flex-end;">
+                                            <textarea id="chat-input" placeholder="Type your message to the AI..." rows="1" style="resize: none; overflow-y: hidden; max-height: 120px; min-height: 40px; flex: 1;"></textarea>
+                                            <button id="send-chat-btn" class="btn btn-primary" style="align-self: flex-end;">Send</button>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -237,6 +307,19 @@
                     <div class="content-header">
                         <h2><i class="fas fa-robot"></i> AI Characters</h2>
                         <p>Choose an AI character to chat with. Each has a unique personality and purpose.</p>
+                    </div>
+
+                    <div class="smart-features-banner" style="background: linear-gradient(135deg, #f0f4ff, #e8edff); border: 1px solid #d4dcf4; border-radius: 14px; padding: 16px 20px; margin-bottom: 20px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+                        <span style="font-size: 1.5rem;">✨</span>
+                        <div style="flex: 1; min-width: 200px;">
+                            <strong style="color: #333; font-size: 0.95rem;">Every character remembers you</strong>
+                            <div style="font-size: 0.82rem; color: #666; margin-top: 2px;">Conversations carry context, adapt to your mood, and learn your preferences over time.</div>
+                        </div>
+                        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                            <span class="feature-tag" style="background: #667eea15; border: 1px solid #667eea40; color: #555; font-size: 0.75rem; padding: 4px 10px; border-radius: 12px;"><i class="fas fa-memory"></i> Memory</span>
+                            <span class="feature-tag" style="background: #667eea15; border: 1px solid #667eea40; color: #555; font-size: 0.75rem; padding: 4px 10px; border-radius: 12px;"><i class="fas fa-heart"></i> Mood-aware</span>
+                            <span class="feature-tag" style="background: #667eea15; border: 1px solid #667eea40; color: #555; font-size: 0.75rem; padding: 4px 10px; border-radius: 12px;"><i class="fas fa-graduation-cap"></i> Learns you</span>
+                        </div>
                     </div>
                     
                     <div class="characters-grid">
@@ -252,15 +335,22 @@
                                 <span class="feature-tag"><i class="fas fa-check"></i> Adaptive</span>
                                 <span class="feature-tag"><i class="fas fa-check"></i> General purpose</span>
                             </div>
+                            <div class="character-smart-caps" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 4px;">
+                                <span title="Remembers past conversations" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#e8edff;color:#555;">💬 Context memory</span>
+                                <span title="Adjusts personality in real-time" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#e8edff;color:#555;">🎭 4 personality modes</span>
+                            </div>
                             <button class="btn btn-primary btn-block" onclick="window.app.switchTab('chat')">
                                 <i class="fas fa-arrow-right"></i> Go to Conversations
                             </button>
                         </div>
 
                         <!-- Max - Motivational Coach -->
-                        <div class="character-card">
-                            <div class="character-icon" style="background: linear-gradient(45deg, #ff6b6b, #4ecdc4);">
+                        <div class="character-card" data-character-id="super_motivational_coach">
+                            <div style="display:flex;justify-content:center;align-items:flex-end;gap:10px;margin-bottom:4px;">
+                                <div class="char-avatar-badge" id="badge-super_motivational_coach"></div>
+                                <div class="character-icon" style="background: linear-gradient(45deg, #ff6b6b, #4ecdc4);">
                                 <i class="fas fa-rocket"></i>
+                            </div>
                             </div>
                             <h3>Max - Motivational Coach</h3>
                             <p class="character-description">Your super energetic motivational coach! Track goals, build streaks, and stay fired up with Max's unstoppable energy.</p>
@@ -269,15 +359,23 @@
                                 <span class="feature-tag"><i class="fas fa-chart-line"></i> Progress monitoring</span>
                                 <span class="feature-tag"><i class="fas fa-bolt"></i> High energy</span>
                             </div>
+                            <div class="character-smart-caps" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 4px;">
+                                <span title="Tracks your goals and streaks" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#ffe8e8;color:#555;">🎯 Goal engine</span>
+                                <span title="Celebrates milestones with you" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#ffe8e8;color:#555;">🔥 Streak tracking</span>
+                                <span title="Adapts encouragement to your mood" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#ffe8e8;color:#555;">📈 Progress stats</span>
+                            </div>
                             <button class="btn btn-primary btn-block" onclick="window.location.href='/super_motivational_coach'">
                                 <i class="fas fa-rocket"></i> Chat with Max
                             </button>
                         </div>
 
                         <!-- Sage Wei - Wisdom Guide -->
-                        <div class="character-card">
-                            <div class="character-icon" style="background: linear-gradient(45deg, #8b7355, #d4a574);">
+                        <div class="character-card" data-character-id="wisdom_sage">
+                            <div style="display:flex;justify-content:center;align-items:flex-end;gap:10px;margin-bottom:4px;">
+                                <div class="char-avatar-badge" id="badge-wisdom_sage"></div>
+                                <div class="character-icon" style="background: linear-gradient(45deg, #8b7355, #d4a574);">
                                 <i class="fas fa-leaf"></i>
+                            </div>
                             </div>
                             <h3>Sage Wei - Wisdom Guide</h3>
                             <p class="character-description">Ancient wisdom meets modern AI. Explore Taoist philosophy, find balance, and gain contemplative insights with Sage Wei.</p>
@@ -286,15 +384,22 @@
                                 <span class="feature-tag"><i class="fas fa-book"></i> Parables</span>
                                 <span class="feature-tag"><i class="fas fa-spa"></i> Contemplative</span>
                             </div>
+                            <div class="character-smart-caps" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 4px;">
+                                <span title="Notices your emotional state" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#f5efe6;color:#555;">🧘 Mood-aware</span>
+                                <span title="Shares relevant wisdom stories" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#f5efe6;color:#555;">📖 Smart parables</span>
+                            </div>
                             <button class="btn btn-primary btn-block" onclick="window.location.href='/wisdom_sage'">
                                 <i class="fas fa-leaf"></i> Chat with Sage Wei
                             </button>
                         </div>
 
                         <!-- Marcus - Stoic Philosopher -->
-                        <div class="character-card">
-                            <div class="character-icon" style="background: linear-gradient(45deg, #4a5568, #718096);">
+                        <div class="character-card" data-character-id="stoic_philosopher">
+                            <div style="display:flex;justify-content:center;align-items:flex-end;gap:10px;margin-bottom:4px;">
+                                <div class="char-avatar-badge" id="badge-stoic_philosopher"></div>
+                                <div class="character-icon" style="background: linear-gradient(45deg, #4a5568, #718096);">
                                 <i class="fas fa-columns"></i>
+                            </div>
                             </div>
                             <h3>Marcus - Stoic Philosopher</h3>
                             <p class="character-description">Rational wisdom for modern challenges. Learn Stoic principles, build resilience, and find tranquility through virtue with Marcus.</p>
@@ -303,15 +408,22 @@
                                 <span class="feature-tag"><i class="fas fa-shield-alt"></i> Resilience</span>
                                 <span class="feature-tag"><i class="fas fa-brain"></i> Rational thinking</span>
                             </div>
+                            <div class="character-smart-caps" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 4px;">
+                                <span title="Notices your emotional state" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#edf0f5;color:#555;">🧘 Mood-aware</span>
+                                <span title="Practical exercises for resilience" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#edf0f5;color:#555;">⚖️ Decision support</span>
+                            </div>
                             <button class="btn btn-primary btn-block" onclick="window.location.href='/stoic_philosopher'">
                                 <i class="fas fa-columns"></i> Chat with Marcus
                             </button>
                         </div>
 
                         <!-- Dr. Elena - Psychologist -->
-                        <div class="character-card">
-                            <div class="character-icon" style="background: linear-gradient(45deg, #66bb6a, #81c784);">
+                        <div class="character-card" data-character-id="psychologist">
+                            <div style="display:flex;justify-content:center;align-items:flex-end;gap:10px;margin-bottom:4px;">
+                                <div class="char-avatar-badge" id="badge-psychologist"></div>
+                                <div class="character-icon" style="background: linear-gradient(45deg, #66bb6a, #81c784);">
                                 <i class="fas fa-brain"></i>
+                            </div>
                             </div>
                             <h3>Dr. Elena - Psychologist</h3>
                             <p class="character-description">Evidence-based psychological insights and compassionate support. Explore CBT, mindfulness, and personal growth with Dr. Elena.</p>
@@ -320,15 +432,23 @@
                                 <span class="feature-tag"><i class="fas fa-book-medical"></i> Evidence-based</span>
                                 <span class="feature-tag"><i class="fas fa-user-friends"></i> Therapeutic</span>
                             </div>
+                            <div class="character-smart-caps" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 4px;">
+                                <span title="Detects mood and adjusts approach" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#e8f5e9;color:#555;">🤝 Crisis-aware</span>
+                                <span title="CBT-based exercises" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#e8f5e9;color:#555;">🧠 CBT techniques</span>
+                                <span title="Tracks emotional patterns" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#e8f5e9;color:#555;">📊 Pattern tracking</span>
+                            </div>
                             <button class="btn btn-primary btn-block" onclick="window.location.href='/psychologist'">
                                 <i class="fas fa-brain"></i> Chat with Dr. Elena
                             </button>
                         </div>
 
                         <!-- Master Kai - Zen Master -->
-                        <div class="character-card">
-                            <div class="character-icon" style="background: linear-gradient(45deg, #8E24AA, #BA68C8);">
+                        <div class="character-card" data-character-id="zen_master">
+                            <div style="display:flex;justify-content:center;align-items:flex-end;gap:10px;margin-bottom:4px;">
+                                <div class="char-avatar-badge" id="badge-zen_master"></div>
+                                <div class="character-icon" style="background: linear-gradient(45deg, #8E24AA, #BA68C8);">
                                 <i class="fas fa-yin-yang"></i>
+                            </div>
                             </div>
                             <h3>Master Kai - Zen Master</h3>
                             <p class="character-description">Mindfulness and present moment awareness. Learn meditation, overcome overthinking, and find inner peace with Master Kai.</p>
@@ -337,15 +457,22 @@
                                 <span class="feature-tag"><i class="fas fa-leaf"></i> Peaceful</span>
                                 <span class="feature-tag"><i class="fas fa-spa"></i> Zen</span>
                             </div>
+                            <div class="character-smart-caps" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 4px;">
+                                <span title="Guided meditation exercises" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#f3e5f5;color:#555;">🧘 Guided meditation</span>
+                                <span title="Notices when you're overthinking" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#f3e5f5;color:#555;">🌊 Calm-mode</span>
+                            </div>
                             <button class="btn btn-primary btn-block" onclick="window.location.href='/zen_master'">
                                 <i class="fas fa-yin-yang"></i> Chat with Master Kai
                             </button>
                         </div>
 
                         <!-- Coach Ryan - Business Coach -->
-                        <div class="character-card">
-                            <div class="character-icon" style="background: linear-gradient(45deg, #1976D2, #42A5F5);">
+                        <div class="character-card" data-character-id="business_coach">
+                            <div style="display:flex;justify-content:center;align-items:flex-end;gap:10px;margin-bottom:4px;">
+                                <div class="char-avatar-badge" id="badge-business_coach"></div>
+                                <div class="character-icon" style="background: linear-gradient(45deg, #1976D2, #42A5F5);">
                                 <i class="fas fa-briefcase"></i>
+                            </div>
                             </div>
                             <h3>Coach Ryan - Business Coach</h3>
                             <p class="character-description">Strategic business and leadership excellence. Build your business, improve productivity, and master leadership with Coach Ryan.</p>
@@ -354,15 +481,22 @@
                                 <span class="feature-tag"><i class="fas fa-lightbulb"></i> Innovative</span>
                                 <span class="feature-tag"><i class="fas fa-users"></i> Leadership</span>
                             </div>
+                            <div class="character-smart-caps" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 4px;">
+                                <span title="Break big goals into steps" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#e3f2fd;color:#555;">🎯 Goal coaching</span>
+                                <span title="Systematic decision frameworks" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#e3f2fd;color:#555;">⚖️ Decision frameworks</span>
+                            </div>
                             <button class="btn btn-primary btn-block" onclick="window.location.href='/business_coach'">
                                 <i class="fas fa-briefcase"></i> Chat with Coach Ryan
                             </button>
                         </div>
 
                         <!-- Coach Jordan - Life Coach -->
-                        <div class="character-card">
-                            <div class="character-icon" style="background: linear-gradient(45deg, #FF6F00, #FFA726);">
+                        <div class="character-card" data-character-id="life_coach">
+                            <div style="display:flex;justify-content:center;align-items:flex-end;gap:10px;margin-bottom:4px;">
+                                <div class="char-avatar-badge" id="badge-life_coach"></div>
+                                <div class="character-icon" style="background: linear-gradient(45deg, #FF6F00, #FFA726);">
                                 <i class="fas fa-compass"></i>
+                            </div>
                             </div>
                             <h3>Coach Jordan - Life Coach</h3>
                             <p class="character-description">Personal development and life balance. Set meaningful goals, find your purpose, and live authentically with Coach Jordan.</p>
@@ -371,15 +505,23 @@
                                 <span class="feature-tag"><i class="fas fa-balance-scale"></i> Balanced</span>
                                 <span class="feature-tag"><i class="fas fa-star"></i> Inspiring</span>
                             </div>
+                            <div class="character-smart-caps" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 4px;">
+                                <span title="Helps you plan life transitions" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#fff3e0;color:#555;">🌱 Life transitions</span>
+                                <span title="Tracks your goals over time" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#fff3e0;color:#555;">🎯 Goal tracking</span>
+                                <span title="Builds your companion profile" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#fff3e0;color:#555;">📋 Profile building</span>
+                            </div>
                             <button class="btn btn-primary btn-block" onclick="window.location.href='/life_coach'">
                                 <i class="fas fa-compass"></i> Chat with Coach Jordan
                             </button>
                         </div>
 
                         <!-- Dr. Nova - Scientist -->
-                        <div class="character-card">
-                            <div class="character-icon" style="background: linear-gradient(45deg, #00695C, #26A69A);">
+                        <div class="character-card" data-character-id="scientist">
+                            <div style="display:flex;justify-content:center;align-items:flex-end;gap:10px;margin-bottom:4px;">
+                                <div class="char-avatar-badge" id="badge-scientist"></div>
+                                <div class="character-icon" style="background: linear-gradient(45deg, #00695C, #26A69A);">
                                 <i class="fas fa-atom"></i>
+                            </div>
                             </div>
                             <h3>Dr. Nova - Scientist</h3>
                             <p class="character-description">Science, curiosity, and critical thinking. Explore the cosmos, understand evidence, and think scientifically with Dr. Nova.</p>
@@ -388,8 +530,55 @@
                                 <span class="feature-tag"><i class="fas fa-rocket"></i> Curious</span>
                                 <span class="feature-tag"><i class="fas fa-brain"></i> Analytical</span>
                             </div>
+                            <div class="character-smart-caps" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 4px;">
+                                <span title="Breaks down complex topics" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#e0f2f1;color:#555;">🔬 Evidence-based</span>
+                                <span title="Socratic questioning method" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#e0f2f1;color:#555;">💡 Critical thinking</span>
+                            </div>
                             <button class="btn btn-primary btn-block" onclick="window.location.href='/scientist'">
                                 <i class="fas fa-atom"></i> Chat with Dr. Nova
+                            </button>
+                        </div>
+
+                        <!-- Dr. Health - Medical Advisor -->
+                        <div class="character-card" data-character-id="medical_advisor">
+                            <div style="display:flex;justify-content:center;align-items:flex-end;gap:10px;margin-bottom:4px;">
+                                <div class="char-avatar-badge" id="badge-medical_advisor"></div>
+                                <div class="character-icon" style="background: linear-gradient(45deg, #E53935, #EF5350);">
+                                <i class="fas fa-heartbeat"></i>
+                            </div>
+                            </div>
+                            <h3>Dr. Health - Medical Advisor</h3>
+                            <p class="character-description">General health information, wellness guidance, and help understanding medical topics. Not a replacement for professional care.</p>
+                            <div class="character-features">
+                                <span class="feature-tag"><i class="fas fa-stethoscope"></i> Evidence-Based</span>
+                                <span class="feature-tag"><i class="fas fa-notes-medical"></i> Wellness</span>
+                                <span class="feature-tag"><i class="fas fa-shield-virus"></i> Preventive</span>
+                            </div>
+                            <div class="character-smart-caps" style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 4px;">
+                                <span title="Explains symptoms and conditions" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#ffebee;color:#555;">🩺 Symptom guide</span>
+                                <span title="Nutrition and lifestyle advice" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;background:#ffebee;color:#555;">🥗 Nutrition & wellness</span>
+                            </div>
+                            <button class="btn btn-primary btn-block" style="background:#E53935;border-color:#E53935;" onclick="window.location.href='/medical_advisor'">
+                                <i class="fas fa-heartbeat"></i> Consult Dr. Health
+                            </button>
+                        </div>
+
+                        <!-- Sam - Gentle Companion -->
+                        <div class="character-card" data-character-id="gentle_companion">
+                            <div style="display:flex;justify-content:center;align-items:flex-end;gap:10px;margin-bottom:4px;">
+                                <div class="char-avatar-badge" id="badge-gentle_companion"></div>
+                                <div class="character-icon" style="background: linear-gradient(45deg, #7E9CB8, #A8C0D6);">
+                                <i class="fas fa-comment-dots"></i>
+                            </div>
+                            </div>
+                            <h3>Sam</h3>
+                            <p class="character-description">Just a quiet space to talk. No agenda, no advice unless you ask. Sam listens.</p>
+                            <div class="character-features">
+                                <span class="feature-tag" style="background:#eef3f8;color:#5a7894;border-color:#c8d6e3;"><i class="fas fa-heart"></i> Low pressure</span>
+                                <span class="feature-tag" style="background:#eef3f8;color:#5a7894;border-color:#c8d6e3;"><i class="fas fa-feather"></i> Gentle</span>
+                            </div>
+                            <button class="btn btn-primary btn-block" style="background:#7E9CB8;border-color:#7E9CB8;" onclick="window.location.href='/gentle_companion'">
+                                <i class="fas fa-comment-dots"></i> Sit with Sam
                             </button>
                         </div>
                     </div>
@@ -1006,13 +1195,20 @@
         </div>
     </div>
 
+    <!-- Floating avatar greeter (dashboard) -->
+    <div class="avatar-floater" id="avatar-floater">
+        <!-- injected by AvatarManager -->
+    </div>
+
     <div id="notification" class="notification"></div>
 
     <script src="{{ url_for('static', filename='pwa-register.js') }}"></script>
     <script src="{{ url_for('static', filename='file_upload_handler.js') }}"></script>
     <script src="{{ url_for('static', filename='personality_interpretation_display.js') }}"></script>
     <script src="{{ url_for('static', filename='proactive_clarification_ui.js') }}"></script>
-    <script src="{{ url_for('static', filename='multi_user_app.js') }}?v=20251218_1500"></script>
+    <script src="{{ url_for('static', filename='avatar_engine.js') + '?v=20261003' }}"></script>
+    <script src="{{ url_for('static', filename='avatar_widget.js') + '?v=20261003' }}"></script>
+    <script src="{{ url_for('static', filename='multi_user_app.js') }}?v=20261003_0001"></script>
     <style>
         /* Prevent scroll flash by setting initial scroll position */
         html {

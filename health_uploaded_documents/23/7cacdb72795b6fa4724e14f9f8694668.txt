@@ -1,0 +1,36 @@
+```
+TSE, WAI
+4 HIGHVALE CRES, BERWICK. 3806
+Phone: 0415511791 Sex: M Medicare Number: 2297496529
+Birthdate: 12/06/1962 Lab Reference: 974710030-C-C010
+Your Reference: FDA0816470
+Laboratory: Melbourne Pathology Referred by: DR JANKI PATEL
+Addressee: DR JANKI PATEL
+
+Name of Test: SE-IRON STUDIES
+Requested: 24/04/2025 Collected: 13/05/2025 Reported: 15/05/2025 22:36
+
+Clinical notes: haemochromatosis to be checked if iron and
+trf-saturation-still high WCC - low , Neutrophil -1.2 & iron high , trsat high so repest it
+
+Clinical Notes : haemochromatosis to be checked if iron and
+trf-saturation-still high WCC - low ,
+Neutrophil -1.2 & iron high , trsat high so repest it
+
+| Date           | 07-Dec-23 | 05-Aug-24 | 03-Apr-25 | 13-May-25  | Reference   | Units   |
+|----------------|-----------|-----------|-----------|------------|------------|--------|
+| Time F-Fast    | 0816 F    | 0928 F    | 0956 F    | 1339       |            |        |
+| Lab Id.        | 967072803 | 97980490  | 972342598 | 974710030  |            |        |
+| S IRON         | 23        | 33        | 33 H      | 38 H       | (5-30)     | umol/L |
+| S TRF          | 2.1       | 2.3       | 2.2       | 2.2        | (2.0-3.2)  | g/L    |
+| S TRF SAT      | 44        | 38        | 60 H      | 60 H       | (10-45)    | %      |
+| S FERRITIN     | 224       | 229       | 251       | 260        | (30-500)   | ng/mL  |
+
+Dept Supervising Pathologist: Dr Andrew Carter
+
+Melbourne Pathology NATA No.:2133
+
+Tests Completed: IS,FBE,HCHROM
+Tests Pending  :
+Sample Pending :
+```

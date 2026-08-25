@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Emergency Info</title>
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Emergency">
+<meta name="theme-color" content="#c62828">
+<style>
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Segoe UI', system-ui, sans-serif; background: #fff; color: #333; overscroll-behavior: none; }
+#app { display: flex; flex-direction: column; min-height: 100vh; }
+.topbar { background: #c62828; color: #fff; padding: calc(env(safe-area-inset-top, 0px) + 14px) 16px 14px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+.topbar h1 { margin: 0; font-size: 1.2rem; }
+button { border: none; background: #fff; color: #c62828; padding: 8px 14px; border-radius: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer; }
+button.secondary { background: transparent; color: #fff; border: 1px solid #fff; }
+.content { flex: 1; padding: 16px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+.emergency-section { margin-bottom: 18px; }
+.emergency-section h2 { color: #c62828; font-size: 0.85rem; margin: 0 0 6px; text-transform: uppercase; letter-spacing: 0.03em; }
+.emergency-section p, .emergency-section ul { margin: 0; font-size: 1.05rem; line-height: 1.4; }
+.emergency-section ul { padding-left: 18px; }
+.emergency-section .big { font-size: 1.4rem; font-weight: 700; }
+.emergency-empty { color: #999; font-style: italic; padding: 20px 0; }
+
+.form-group { margin-bottom: 14px; }
+.form-group label { display: block; font-size: 0.85rem; color: #c62828; margin-bottom: 4px; font-weight: 600; }
+.form-group input, .form-group textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; font-family: inherit; }
+.form-group textarea { min-height: 64px; resize: vertical; }
+.actions { display: flex; gap: 10px; margin-top: 18px; }
+.actions button { flex: 1; padding: 12px; font-size: 1rem; }
+
+.notice { background: #fff3cd; border: 1px solid #f0ad4e; color: #856404; padding: 10px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 16px; }
+.footer { padding: 12px 16px; text-align: center; color: #888; font-size: 0.75rem; }
+</style>
+</head>
+<body>
+<div id="app">
+    <div class="topbar">
+        <h1>Emergency Info</h1>
+        <button type="button" id="edit-btn" class="secondary" style="display:none">Edit</button>
+    </div>
+    <div class="content" id="content">
+        <div id="view"></div>
+        <form id="edit-form" style="display:none">
+            <div class="notice">Fill in the details and tap Save. The information is stored on this phone.</div>
+            <div class="form-group"><label for="v-name">Full name</label><input id="v-name" type="text"></div>
+            <div class="form-group"><label for="v-age">Age</label><input id="v-age" type="text"></div>
+            <div class="form-group"><label for="v-blood">Blood type</label><input id="v-blood" type="text"></div>
+            <div class="form-group"><label for="v-conditions">Medical conditions</label><textarea id="v-conditions" placeholder="e.g. diabetes, asthma"></textarea></div>
+            <div class="form-group"><label for="v-medications">Current medications</label><textarea id="v-medications"></textarea></div>
+            <div class="form-group"><label for="v-allergies">Allergies</label><textarea id="v-allergies"></textarea></div>
+            <div class="form-group"><label for="v-history">Medical history</label><textarea id="v-history"></textarea></div>
+            <div class="form-group"><label for="v-doctors">Doctors &amp; contact details</label><textarea id="v-doctors"></textarea></div>
+            <div class="form-group"><label for="v-ec-name">Emergency contact name</label><input id="v-ec-name" type="text"></div>
+            <div class="form-group"><label for="v-ec-rel">Relationship</label><input id="v-ec-rel" type="text"></div>
+            <div class="form-group"><label for="v-ec-phone">Emergency contact phone</label><input id="v-ec-phone" type="tel"></div>
+            <div class="actions">
+                <button type="button" id="save-btn">Save</button>
+                <button type="button" id="cancel-btn" class="secondary" style="color:#c62828; border-color:#c62828; background:#fff">Cancel</button>
+            </div>
+        </form>
+    </div>
+    <div class="footer">Stored only on this phone.</div>
+</div>
+
+<script>
+const STORAGE_KEY = 'drHealth.emergencyCard.v1';
+function loadData() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; } }
+function saveData(v) { localStorage.setItem(STORAGE_KEY, JSON.stringify(v)); }
+function defaultData() { return { name:'', age:'', blood:'', conditions:'', medications:'', allergies:'', history:'', doctors:'', ecName:'', ecRel:'', ecPhone:'' }; }
+function getData() { return { ...defaultData(), ...loadData() }; }
+
+const fields = ['name','age','blood','conditions','medications','allergies','history','doctors','ecName','ecRel','ecPhone'];
+
+function section(title, text) { return text ? `<div class="emergency-section"><h2>${title}</h2><p>${text.replace(/\n/g,'<br>')}</p></div>` : ''; }
+function list(title, text) {
+    if (!text) return '';
+    const items = text.split(/[\n,]+/).map(s=>s.trim()).filter(Boolean);
+    if (!items.length) return '';
+    return `<div class="emergency-section"><h2>${title}</h2><ul>${items.map(i=>`<li>${i}</li>`).join('')}</ul></div>`;
+}
+function renderView() {
+    const v = getData();
+    const view = document.getElementById('view');
+    const hasData = fields.some(f => v[f]);
+    if (!hasData) {
+        view.innerHTML = '<p class="emergency-empty">No emergency information saved yet. Tap <b>Edit</b> to add it.</p>';
+        return;
+    }
+    let html = '';
+    html += section('Name', v.name);
+    html += section('Age / Blood type', [v.age, v.blood].filter(Boolean).join(' / '));
+    html += list('Medical conditions', v.conditions);
+    html += list('Current medications', v.medications);
+    html += list('Allergies', v.allergies);
+    html += section('Medical history', v.history);
+    html += section('Doctors', v.doctors);
+    html += `<div class="emergency-section"><h2>Emergency contact</h2>`;
+    html += v.ecName ? `<p class="big">${v.ecName}</p>` : '';
+    html += v.ecRel ? `<p>${v.ecRel}</p>` : '';
+    html += v.ecPhone ? `<p class="big">${v.ecPhone}</p>` : '';
+    html += '</div>';
+    view.innerHTML = html;
+}
+function showEdit() {
+    const v = getData();
+    fields.forEach(f => document.getElementById('v-' + f).value = v[f] || '');
+    document.getElementById('view').style.display = 'none';
+    document.getElementById('edit-form').style.display = 'block';
+    document.getElementById('edit-btn').style.display = 'none';
+}
+function showView() {
+    document.getElementById('view').style.display = 'block';
+    document.getElementById('edit-form').style.display = 'none';
+    document.getElementById('edit-btn').style.display = 'inline-block';
+    renderView();
+}
+function saveForm() {
+    const v = {};
+    fields.forEach(f => v[f] = document.getElementById('v-' + f).value.trim());
+    saveData(v);
+    showView();
+}
+
+document.getElementById('edit-btn').addEventListener('click', showEdit);
+document.getElementById('save-btn').addEventListener('click', saveForm);
+document.getElementById('cancel-btn').addEventListener('click', showView);
+
+showView();
+</script>
+</body>
+</html>

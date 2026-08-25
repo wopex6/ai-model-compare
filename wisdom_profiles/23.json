@@ -1,0 +1,65 @@
+{
+  "user_id": "23",
+  "patterns": [
+    {
+      "pattern_type": "avoidance",
+      "description": "Wai tends to avoid confronting health issues directly, such as discussing symptoms and their implications.",
+      "evidence": [
+        "Symptoms of urge incontinence triggered by running tap water are not being addressed directly."
+      ],
+      "frequency": 2,
+      "first_seen": "2026-06-13T20:07:49.435000",
+      "last_seen": "2026-06-13T20:07:49.435000",
+      "resolved": false,
+      "confidence": 0.8
+    },
+    {
+      "pattern_type": "growth",
+      "description": "Wai shows a consistent interest in understanding complex topics like philosophy and health.",
+      "evidence": [
+        "Interest in philosophy, psychology, and health management."
+      ],
+      "frequency": 3,
+      "first_seen": "2026-06-13T20:07:49.435000",
+      "last_seen": "2026-06-13T20:07:49.435000",
+      "resolved": false,
+      "confidence": 0.7
+    }
+  ],
+  "strengths": [
+    "Proactive in health management, as seen in active action plans.",
+    "Strong analytical skills evidenced by interest in physics and mathematics."
+  ],
+  "growth_areas": [
+    "Addressing health concerns proactively.",
+    "Emotional expression and exploration, as indicated by avoidance of emotional discussions."
+  ],
+  "pending_nudges": [
+    {
+      "user_id": "23",
+      "nudge_type": "warning",
+      "title": "Confront Health Concerns",
+      "message": "Wai, it's essential to address your health symptoms directly rather than avoiding them. Consider scheduling a discussion with your healthcare provider about your urge incontinence and other symptoms.",
+      "pattern_reference": "avoidance",
+      "historical_anchor": "Marcus Aurelius, Meditations: 'The impediment to action advances action. What stands in the way becomes the way.'",
+      "urgency": "high",
+      "created_at": "2026-06-13T20:07:49.435000",
+      "delivered": false
+    },
+    {
+      "user_id": "23",
+      "nudge_type": "reflection",
+      "title": "Reflect on Learning",
+      "message": "Wai, take a moment to reflect on how your interests in philosophy and psychology can help you navigate your health challenges. Engaging with these subjects might provide insights into your current situation.",
+      "pattern_reference": "growth",
+      "historical_anchor": "Confucius, Analects: 'Real knowledge is to know the extent of one's ignorance.'",
+      "urgency": "medium",
+      "created_at": "2026-06-13T20:07:49.435000",
+      "delivered": false
+    }
+  ],
+  "conversation_count": 19,
+  "last_analyzed": "2026-06-13T20:07:49.435000",
+  "wisdom_score": 45,
+  "_data_hash": "5928c816527c28175c07d2d33da7581b"
+}

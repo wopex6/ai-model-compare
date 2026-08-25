@@ -32,6 +32,7 @@ from agents.quality_scorer import ConversationQualityScorer
 from agents.admin_utils import upgrade_roles_via_api, SIM_USER_NAMES
 from agents.self_improvement import SelfImprovementAgent
 from agents.ab_testing import ABTestingAgent
+from agents.wisdom_agent import WisdomAgent
 
 
 @dataclass

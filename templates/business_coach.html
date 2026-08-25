@@ -9,6 +9,11 @@
     <script src="/static/auth_helper.js"></script>
     <script src="/static/message_handler.js"></script>
     <script src="/static/conversation_box.js"></script>
+    <link href="/static/avatar_styles.css" rel="stylesheet">
+    <div id="avatar-floater" style="position:fixed;bottom:90px;right:20px;z-index:1000;display:none;"></div>
+    <script src="/static/avatar_engine.js?v=20261008"></script>
+    <script src="/static/avatar_widget.js?v=20261008"></script>
+
     <style>
         body {
             background: #f5f7fa;
@@ -518,6 +523,13 @@
         MessageHandler.enableHighlights('business_coach');
 
         // Initialize ConversationBox with callbacks for KPI tracking
+        let _avatarCtrl = null;
+        if (window.AvatarWidget) {
+            const r = AvatarWidget.init({ characterId: 'business_coach', floatContainerId: 'avatar-floater', greeting: "Hello! I'm Coach Ryan. Ready to build something great? Let's get started.", greetingDelay: 1000, showByDefault: false });
+            _avatarCtrl = r.float;
+            setTimeout(() => { document.getElementById('avatar-floater').style.display = 'flex'; }, 800);
+        }
+
         ConversationBox.init('business_coach', {
             onMessageSent: (message) => {
                 messageCount++;
@@ -556,6 +568,7 @@
         function sendQuickMessage(message) {
             ConversationBox.sendQuickMessage(message);
         }
+
     </script>
 </body>
 </html>

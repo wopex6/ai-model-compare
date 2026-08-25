@@ -1,0 +1,2181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Health Profile Manager</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #fafafa 0%, #f0f4f8 100%);
+            color: #333;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            min-height: 100vh;
+        }
+        .back-button {
+            position: fixed; top: 20px; left: 20px; z-index: 1000;
+            background: white; color: #E53935; padding: 10px 20px;
+            border-radius: 25px; text-decoration: none; font-weight: 600;
+            box-shadow: 0 2px 12px rgba(229,57,53,0.15); border: 1px solid #ffcdd2;
+        }
+        .back-button:hover { background: #E53935; color: white; }
+        .container-main { max-width: 1200px; margin: 0 auto; padding: 80px 20px 40px; }
+        .page-header {
+            background: linear-gradient(135deg, #E53935, #EF5350);
+            border-radius: 16px; padding: 24px 30px; color: white; margin-bottom: 24px;
+        }
+        .page-header h1 { margin: 0; font-size: 1.6rem; }
+        .page-header p { margin: 4px 0 0; opacity: 0.9; font-size: 0.9rem; }
+        .section-card {
+            background: white; border-radius: 12px; padding: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06); margin-bottom: 20px;
+        }
+        .section-card h3 {
+            font-size: 1.1rem; color: #c62828; margin-bottom: 16px;
+            border-bottom: 2px solid #ffebee; padding-bottom: 8px;
+        }
+        .section-card h3 i { margin-right: 8px; }
+        .info-list { list-style: none; padding: 0; margin: 0; }
+        .info-list li {
+            padding: 8px 12px; border-radius: 6px; margin-bottom: 4px;
+            background: #fafafa; font-size: 0.88rem; border-left: 3px solid #ffcdd2;
+        }
+        .info-list li.warning { border-left-color: #ff9800; background: #fff8e1; }
+        .info-list li.danger { border-left-color: #f44336; background: #ffebee; }
+        .info-list li.success { border-left-color: #4caf50; background: #e8f5e9; }
+        .badge-status {
+            display: inline-block; padding: 2px 8px; border-radius: 10px;
+            font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+        }
+        .badge-active { background: #ffcdd2; color: #c62828; }
+        .badge-investigating { background: #fff3e0; color: #e65100; }
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+
+        /* Daily Summary Box */
+        .daily-summary {
+            background: linear-gradient(135deg, #1a237e 0%, #283593 100%);
+            border-radius: 14px; padding: 24px 28px; margin-bottom: 24px;
+            color: white; position: relative; overflow: hidden;
+        }
+        .daily-summary::before {
+            content: ''; position: absolute; top: -20px; right: -20px;
+            width: 120px; height: 120px; border-radius: 50%;
+            background: rgba(255,255,255,0.05);
+        }
+        .daily-summary h2 {
+            font-size: 1.15rem; margin: 0 0 16px; display: flex;
+            align-items: center; gap: 10px;
+        }
+        .daily-summary h2 i { color: #ffd54f; }
+        .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        @media (max-width: 768px) { .summary-grid { grid-template-columns: 1fr; } }
+        .summary-card {
+            background: rgba(255,255,255,0.1); border-radius: 10px;
+            padding: 14px 16px; backdrop-filter: blur(4px);
+        }
+        .summary-card h4 {
+            font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px;
+            margin: 0 0 8px; opacity: 0.8; font-weight: 600;
+        }
+        .summary-card h4 i { margin-right: 6px; }
+        .summary-card ul { list-style: none; padding: 0; margin: 0; }
+        .summary-card ul li {
+            padding: 4px 0; font-size: 0.84rem; border-bottom: 1px solid rgba(255,255,255,0.08);
+        }
+        .summary-card ul li:last-child { border-bottom: none; }
+        .summary-card ul li i { margin-right: 6px; width: 14px; text-align: center; }
+        .summary-card.urgent { background: rgba(255,82,82,0.2); border: 1px solid rgba(255,82,82,0.3); }
+        .summary-card.meds { background: rgba(76,175,80,0.15); border: 1px solid rgba(76,175,80,0.2); }
+        .summary-empty { opacity: 0.6; font-size: 0.82rem; font-style: italic; }
+
+        /* Delete & action buttons on items */
+        .item-actions { float: right; display: flex; gap: 4px; }
+        .item-actions button {
+            background: none; border: none; cursor: pointer; padding: 2px 6px;
+            border-radius: 4px; font-size: 0.7rem; opacity: 0.5; transition: all 0.2s;
+        }
+        .item-actions button:hover { opacity: 1; }
+        .btn-delete:hover { background: #ffebee; color: #c62828; }
+        .btn-resolve:hover { background: #e8f5e9; color: #2e7d32; }
+        .btn-status:hover { background: #e3f2fd; color: #1565c0; }
+
+        /* Completeness bar */
+        .completeness-bar { background: rgba(255,255,255,0.15); border-radius: 8px; height: 8px; overflow: hidden; margin-top: 8px; }
+        .completeness-fill { height: 100%; border-radius: 8px; transition: width 0.6s ease; }
+
+        /* Sparkline for trends */
+        .sparkline { display: inline-block; vertical-align: middle; margin-left: 6px; }
+        .sparkline svg { vertical-align: middle; }
+
+        /* Insight category tabs */
+        .insight-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
+        .insight-tab {
+            padding: 3px 10px; border-radius: 12px; font-size: 0.72rem;
+            cursor: pointer; border: 1px solid #e0e0e0; background: #f5f5f5;
+            font-weight: 500; transition: all 0.2s;
+        }
+        .insight-tab.active { background: #1565c0; color: white; border-color: #1565c0; }
+        .insight-tab:hover:not(.active) { background: #e3f2fd; }
+
+        /* Export button */
+        .btn-export {
+            background: #2e7d32; color: white; border: none; padding: 8px 16px;
+            border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: 600;
+        }
+        .btn-export:hover { background: #1b5e20; }
+        .btn-summary {
+            background: #1565c0; color: white; border: none; padding: 8px 16px;
+            border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: 600;
+        }
+        .btn-summary:hover { background: #0d47a1; }
+        .header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+        /* Summary report modal */
+        .summary-modal-backdrop {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+            display: none; align-items: center; justify-content: center;
+            z-index: 2000; padding: 20px;
+        }
+        .summary-modal-backdrop.open { display: flex; }
+        .summary-modal {
+            background: white; border-radius: 14px; width: min(920px, 100%);
+            max-height: 90vh; overflow: hidden; box-shadow: 0 12px 40px rgba(0,0,0,0.2);
+            display: flex; flex-direction: column;
+        }
+        .summary-modal-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 16px 20px; border-bottom: 1px solid #eee; background: #f8fbff;
+        }
+        .summary-modal-header h2 { margin: 0; font-size: 1.05rem; color: #1565c0; }
+        .summary-modal-body { padding: 20px; overflow-y: auto; }
+        .summary-overview {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 10px; margin-bottom: 18px;
+        }
+        .summary-stat {
+            background: #f5f9ff; border: 1px solid #dbeafe; border-radius: 10px;
+            padding: 12px 14px;
+        }
+        .summary-stat .label { font-size: 0.72rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.4px; }
+        .summary-stat .value { font-size: 1.1rem; font-weight: 700; color: #0f172a; margin-top: 4px; }
+        .summary-section { margin-bottom: 18px; }
+        .summary-section h3 {
+            font-size: 0.92rem; color: #334155; margin: 0 0 10px;
+            border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;
+        }
+        .summary-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+        .summary-table th, .summary-table td {
+            padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: left; vertical-align: top;
+        }
+        .summary-table th { background: #f8fafc; color: #475569; font-weight: 600; }
+        .status-pill {
+            display: inline-block; padding: 2px 8px; border-radius: 999px;
+            font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+        }
+        .status-normal { background: #dcfce7; color: #166534; }
+        .status-high { background: #fee2e2; color: #991b1b; }
+        .status-low { background: #ffedd5; color: #9a3412; }
+        .status-unknown { background: #e2e8f0; color: #475569; }
+        .trend-up { color: #dc2626; }
+        .trend-down { color: #16a34a; }
+        .trend-stable { color: #64748b; }
+        .summary-insights li { margin-bottom: 6px; font-size: 0.84rem; color: #334155; }
+        .summary-modal-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .summary-modal-actions button {
+            border: none; border-radius: 8px; padding: 8px 14px; cursor: pointer;
+            font-size: 0.82rem; font-weight: 600;
+        }
+        .btn-copy-summary { background: #475569; color: white; }
+        .btn-print-summary { background: #1565c0; color: white; }
+        .btn-close-summary { background: #e2e8f0; color: #334155; }
+        .section-inline-actions { float: right; display: flex; gap: 6px; }
+        .btn-inline-summary {
+            background: #e3f2fd; color: #1565c0; border: 1px solid #bbdefb;
+            padding: 4px 10px; border-radius: 8px; font-size: 0.72rem; font-weight: 600; cursor: pointer;
+        }
+        .btn-inline-summary:hover { background: #bbdefb; }
+
+        /* Insight search */
+        .insight-search {
+            width: 100%; padding: 8px 12px; border: 1px solid #e0e0e0;
+            border-radius: 8px; font-size: 0.82rem; margin-bottom: 10px;
+        }
+
+        .test-group {
+            margin-bottom: 12px;
+            padding: 10px;
+            border-radius: 8px;
+            background: #fafcff;
+            border: 1px solid #e3f2fd;
+        }
+        .test-group-title {
+            font-size: 0.82rem;
+            font-weight: 700;
+            color: #1565c0;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .test-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+        .test-table th { text-align: left; padding: 4px 6px; border-bottom: 1px solid #e0e0e0; color: #666; font-weight: 600; }
+        .test-table td { padding: 6px; border-bottom: 1px solid #f0f0f0; }
+        .tt-name { font-weight: 700; }
+        .tt-meta { color: #666; font-weight: 400; }
+        .tt-value { font-weight: 600; }
+        .tt-date { white-space: nowrap; color: #555; }
+        .tt-delete { text-align: right; }
+        .flag { font-size: 0.7rem; font-weight: 700; padding: 1px 4px; border-radius: 4px; margin-left: 4px; display: inline-block; min-width: 14px; text-align: center; }
+        .flag-h { background: #ffebee; color: #c62828; }
+        .flag-l { background: #e3f2fd; color: #1565c0; }
+        .flag-none { color: #999; font-weight: 400; }
+        .tt-editable { display: inline-block; min-width: 20px; padding: 2px 4px; border: 1px dashed transparent; border-radius: 4px; cursor: text; }
+        .tt-editable:hover { border-color: #90caf9; background: #e3f2fd; }
+        .tt-editable:focus { background: #fff; border-color: #1565c0; outline: none; }
+
+        /* Add info form */
+        .add-section { background: #f5f5f5; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+        .add-section h3 { color: #1565c0; }
+        textarea.paste-area {
+            width: 100%; min-height: 200px; border: 2px dashed #ccc;
+            border-radius: 8px; padding: 16px; font-size: 0.9rem;
+            resize: vertical; font-family: inherit;
+        }
+        textarea.paste-area:focus { border-color: #E53935; outline: none; }
+        .btn-add {
+            background: #E53935; color: white; border: none; padding: 12px 24px;
+            border-radius: 8px; font-weight: 600; cursor: pointer; margin-top: 12px;
+        }
+        .btn-add:hover { background: #c62828; }
+        .btn-add:disabled { background: #ccc; cursor: not-allowed; }
+        .status-msg { margin-top: 12px; padding: 12px; border-radius: 8px; display: none; }
+        .status-msg.success { display: block; background: #e8f5e9; color: #2e7d32; }
+        .status-msg.error { display: block; background: #ffebee; color: #c62828; }
+        .status-msg.info { display: block; background: #e3f2fd; color: #1565c0; }
+
+        /* Quick add form */
+        .quick-add { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 12px; }
+        .quick-add input { padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.88rem; }
+        .quick-add button { padding: 8px 16px; background: #43a047; color: white; border: none; border-radius: 6px; cursor: pointer; }
+        .quick-add button:hover { background: #2e7d32; }
+        select.form-select-sm { font-size: 0.85rem; padding: 6px 10px; }
+    </style>
+</head>
+<body>
+    <a href="/medical_advisor" class="back-button"><i class="fas fa-arrow-left"></i> Dr. Health</a>
+
+    <div class="container-main">
+        <div class="page-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+            <div>
+                <h1><i class="fas fa-clipboard-list"></i> Health Profile Manager</h1>
+                <p>View, add, and update your stored health information. This data personalizes Dr. Health's responses.</p>
+            </div>
+            <div class="header-actions">
+                <button class="btn-summary" onclick="generateTestResultsSummary()"><i class="fas fa-file-medical-alt"></i> Test Results Summary</button>
+                <button class="btn-export" onclick="exportPDF()"><i class="fas fa-file-pdf"></i> Export PDF</button>
+            </div>
+        </div>
+
+        <!-- ADD NEW INFO -->
+        <div class="add-section">
+            <h3><i class="fas fa-plus-circle"></i> Add New Health Information</h3>
+            <p style="font-size:0.85rem;color:#666;">Paste a health conversation or notes below. AI will automatically analyze, extract, and categorize the information into your profile.</p>
+            
+            <textarea id="pasteArea" class="paste-area" placeholder="Paste health conversation, notes, or new information here...
+
+Examples:
+- A conversation about diet, symptoms, or medications
+- New test results
+- Notes from a doctor visit
+- Information about herbs or supplements"></textarea>
+            <div style="display:flex;gap:10px;margin-top:12px;">
+                <button class="btn-add" id="btnAnalyze" onclick="analyzeAndStore()">
+                    <i class="fas fa-brain"></i> Analyze & Store
+                </button>
+                <button class="btn-add" style="background:#666;" onclick="saveRawInsight()">
+                    <i class="fas fa-save"></i> Save Raw (no AI)
+                </button>
+            </div>
+            <div id="statusMsg" class="status-msg"></div>
+            <div id="analysisResults" style="display:none;margin-top:16px;padding:16px;background:white;border-radius:8px;border:1px solid #e0e0e0;"></div>
+
+            <!-- FILE UPLOAD -->
+            <div style="margin-top:20px;padding:16px;background:#f0f7ff;border-radius:10px;border:1px dashed #90caf9;">
+                <h4 style="margin:0 0 8px;font-size:0.95rem;color:#1565c0;"><i class="fas fa-file-upload"></i> Upload Health Document</h4>
+                <p style="font-size:0.8rem;color:#666;margin:0 0 12px;">Upload a PDF lab report, prescription photo, or medical document image.</p>
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+                    <label for="retentionDays" style="font-size:0.8rem;color:#444;font-weight:600;">Keep uploaded files for</label>
+                    <input type="number" id="retentionDays" min="1" max="3650" value="365"
+                           style="width:110px;padding:6px 8px;border:1px solid #cfd8dc;border-radius:6px;font-size:0.82rem;">
+                    <span style="font-size:0.8rem;color:#666;">days</span>
+                    <button type="button" onclick="saveUploadRetention()"
+                            style="padding:6px 10px;background:#1976d2;color:white;border:none;border-radius:6px;font-size:0.78rem;cursor:pointer;">
+                        Save Retention
+                    </button>
+                </div>
+                <div id="retentionStatus" style="display:none;margin-bottom:8px;font-size:0.78rem;"></div>
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                    <input type='file' id='healthFileInput' accept='.pdf,.png,.jpg,.jpeg,.webp,.gif,.bmp' multiple
+                           style='font-size:0.85rem;flex:1;min-width:200px;'>
+                    <button class="btn-add" style="background:#1565c0;" onclick="uploadHealthFile()">
+                        <i class="fas fa-cloud-upload-alt"></i> Upload & Analyze
+                    </button>
+                </div>
+                <div id="uploadedDocsInfo" style="margin-top:10px;font-size:0.78rem;color:#546e7a;max-height:160px;overflow-y:auto;"></div>
+                <div id="uploadStatus" style="display:none;margin-top:10px;font-size:0.85rem;color:#555;"></div>
+                <div id="uploadResults" style="display:none;margin-top:12px;padding:12px;background:white;border-radius:8px;border:1px solid #e0e0e0;"></div>
+            </div>
+
+            <hr style="margin:20px 0;">
+            <h4 style="font-size:0.95rem;color:#333;"><i class="fas fa-bolt"></i> Quick Add</h4>
+            <div style="display:grid;gap:12px;">
+                <div>
+                    <label style="font-size:0.8rem;font-weight:600;">Add Symptom:</label>
+                    <div style="display:grid;grid-template-columns:1fr 100px 130px auto;gap:8px;margin-top:8px;">
+                        <input type="text" id="newSymptom" placeholder="Description (e.g. Headache)" style="padding:8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;">
+                        <input type="text" id="newSymptomSeverity" placeholder="Severity" style="padding:8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;">
+                        <input type="date" id="newSymptomOnset" style="padding:8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;">
+                        <button type="button" onclick="quickAddSymptom()" style="padding:8px 16px;background:#43a047;color:white;border:none;border-radius:6px;cursor:pointer;">+ Add</button>
+                    </div>
+                </div>
+                <div>
+                    <label style="font-size:0.8rem;font-weight:600;">Add Medication:</label>
+                    <div style="display:grid;grid-template-columns:1fr 90px 100px 130px auto;gap:8px;margin-top:8px;">
+                        <input type="text" id="newMedName" placeholder="Drug name (e.g. Metformin)" style="padding:8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;">
+                        <input type="text" id="newMedDose" placeholder="Dose" style="padding:8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;">
+                        <input type="text" id="newMedFrequency" placeholder="Frequency" style="padding:8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;">
+                        <input type="date" id="newMedDate" style="padding:8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;">
+                        <button type="button" onclick="quickAddMedication()" style="padding:8px 16px;background:#1565c0;color:white;border:none;border-radius:6px;cursor:pointer;">+ Add</button>
+                    </div>
+                </div>
+                <div>
+                    <label style="font-size:0.8rem;font-weight:600;">Add Supplement:</label>
+                    <div style="display:grid;grid-template-columns:1fr 90px 100px 130px auto;gap:8px;margin-top:8px;">
+                        <input type="text" id="newSupplementName" placeholder="Name (e.g. Magnesium)" style="padding:8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;">
+                        <input type="text" id="newSupplementDose" placeholder="Dose" style="padding:8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;">
+                        <input type="text" id="newSupplementFrequency" placeholder="Frequency" style="padding:8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;">
+                        <input type="date" id="newSupplementDate" style="padding:8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;">
+                        <button type="button" onclick="quickAddSupplement()" style="padding:8px 16px;background:#43a047;color:white;border:none;border-radius:6px;cursor:pointer;">+ Add</button>
+                    </div>
+                </div>
+                <div>
+                    <label style="font-size:0.8rem;font-weight:600;">Add Test Result:</label>
+                    <div style="display:grid;grid-template-columns:1fr 100px 120px 130px auto;gap:8px;margin-top:8px;">
+                        <input type="text" id="testName" placeholder="Test name (e.g. S TRF)" style="padding:8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;">
+                        <input type="text" id="testValue" placeholder="Value" style="padding:8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;">
+                        <input type="text" id="testReference" placeholder="Use Default" style="padding:8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;">
+                        <input type="date" id="testDate" style="padding:8px;border:1px solid #ddd;border-radius:6px;font-size:0.85rem;">
+                        <button type="button" onclick="quickAddTest()" style="padding:8px 16px;background:#1565c0;color:white;border:none;border-radius:6px;cursor:pointer;">+ Add</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CURRENT PROFILE -->
+        <div id="profileDisplay">
+            <div style="text-align:center;padding:40px;color:#999;">
+                <i class="fas fa-spinner fa-spin fa-2x"></i>
+                <p>Loading your health profile...</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="testSummaryModal" class="summary-modal-backdrop" onclick="if(event.target===this) closeTestSummaryModal()">
+        <div class="summary-modal" role="dialog" aria-labelledby="testSummaryTitle">
+            <div class="summary-modal-header">
+                <h2 id="testSummaryTitle"><i class="fas fa-file-medical-alt"></i> Test Results Summary</h2>
+                <div class="summary-modal-actions">
+                    <button class="btn-copy-summary" onclick="copyTestSummary()"><i class="fas fa-copy"></i> Copy</button>
+                    <button class="btn-print-summary" onclick="printTestSummary()"><i class="fas fa-print"></i> Print</button>
+                    <button class="btn-close-summary" onclick="closeTestSummaryModal()"><i class="fas fa-times"></i> Close</button>
+                </div>
+            </div>
+            <div id="testSummaryBody" class="summary-modal-body"></div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='auth_helper.js') }}"></script>
+    <script>
+        let currentProfile = null;
+
+        async function loadProfile() {
+            const display = document.getElementById('profileDisplay');
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile');
+                if (!resp.ok) { display.innerHTML = '<p style="color:#999;text-align:center;">No health profile found. Start chatting with Dr. Health to build one.</p>'; return; }
+                const data = await resp.json();
+                if (!data.success || !data.profile) { display.innerHTML = '<p>No profile data.</p>'; return; }
+                currentProfile = data.profile;
+                hydrateUploadSettings(data.profile);
+                renderProfile(data.profile);
+            } catch(e) {
+                display.innerHTML = '<p style="color:#c62828;">Error loading profile. Please sign in first.</p>';
+            }
+        }
+
+        function escapeHtml(text) {
+            return String(text || '').replace(/[&<>\"']/g, ch => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[ch]));
+        }
+
+        function hydrateUploadSettings(profile) {
+            const settings = profile.upload_settings || {};
+            const docs = profile.uploaded_documents || [];
+            const retentionDays = Number(settings.retention_days) || 365;
+
+            const retentionInput = document.getElementById('retentionDays');
+            if (retentionInput) retentionInput.value = retentionDays;
+
+            const docsInfo = document.getElementById('uploadedDocsInfo');
+            if (!docsInfo) return;
+
+            if (!docs.length) {
+                docsInfo.innerHTML = `<i class="fas fa-folder-open"></i> No retained uploads yet. Files will be kept for ${retentionDays} day(s).`;
+                return;
+            }
+
+            const sortedDocs = docs.slice().sort((a, b) => (b.uploaded_at || '').localeCompare(a.uploaded_at || ''));
+            const allDocs = sortedDocs.map(doc => {
+                const when = doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleDateString('en-AU') : 'unknown date';
+                const name = escapeHtml(doc.original_name || doc.stored_name || 'document');
+                const rawSn = doc.stored_name || '';
+                const sn = escapeHtml(rawSn);
+                return `<label style="display:block;margin:3px 0;font-size:0.85rem;cursor:pointer;">
+                    <input type="checkbox" class="reanalyse-cb" value="${sn}" style="margin-right:6px;">
+                    ${name} (${when})
+                    <a href='javascript:void(0)' onclick='viewDocument(${JSON.stringify(rawSn)})' style='font-size:0.78rem;color:#2e7d32;cursor:pointer;'>View</a>
+                </label>`;
+            });
+
+            docsInfo.innerHTML = `<i class='fas fa-folder'></i> ${docs.length} retained upload(s), kept for ${retentionDays} day(s).<br>
+                <div style="display:flex;align-items:center;gap:10px;margin:6px 0;">
+                    <label style="font-size:0.85rem;cursor:pointer;margin:0;">
+                        <input type="checkbox" id="selectAllReanalyse" style="margin-right:6px;" onchange="document.querySelectorAll('.reanalyse-cb').forEach(cb => cb.checked = this.checked)">
+                        Select all
+                    </label>
+                    <button style="background:#1565c0;color:#fff;border:none;border-radius:5px;padding:4px 9px;font-size:0.75rem;cursor:pointer;" onclick="reanalyseSelected()">
+                        <i class="fas fa-redo"></i> Re-analyse selected
+                    </button>
+                </div>
+                ${allDocs.join('')}
+                <button class="btn-add" style="background:#1565c0;margin-top:10px;" onclick="reanalyseSelected()">
+                    <i class="fas fa-redo"></i> Re-analyse selected
+                </button>`;
+        }
+
+        async function saveUploadRetention() {
+            const statusEl = document.getElementById('retentionStatus');
+            const input = document.getElementById('retentionDays');
+            const days = Number(input.value);
+
+            if (!Number.isInteger(days) || days < 1 || days > 3650) {
+                statusEl.style.display = 'block';
+                statusEl.style.color = '#c62828';
+                statusEl.innerHTML = '<i class="fas fa-exclamation-circle"></i> Retention must be between 1 and 3650 days.';
+                return;
+            }
+
+            statusEl.style.display = 'block';
+            statusEl.style.color = '#1565c0';
+            statusEl.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving retention setting...';
+
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile', {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ upload_settings: { retention_days: days } })
+                });
+
+                const data = await resp.json();
+                if (!resp.ok || data.error) {
+                    statusEl.style.color = '#c62828';
+                    statusEl.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${escapeHtml(data.error || 'Failed to save retention settings.')}`;
+                    return;
+                }
+
+                statusEl.style.color = '#2e7d32';
+                statusEl.innerHTML = '<i class="fas fa-check-circle"></i> Retention updated successfully.';
+                if (data.profile) {
+                    currentProfile = data.profile;
+                    hydrateUploadSettings(data.profile);
+                    renderProfile(data.profile);
+                }
+            } catch (e) {
+                statusEl.style.color = '#c62828';
+                statusEl.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${escapeHtml(e.message || 'Failed to save retention settings.')}`;
+            }
+        }
+
+        function renderDailySummary(p) {
+            const today = new Date().toLocaleDateString('en-AU', {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'});
+
+            // Medications (prescribed drugs) + Supplements (herbs/vitamins)
+            const meds = (p.medications || []).concat(p.supplements || []);
+            // Categorized warnings
+            const allInsights = p.conversation_insights || [];
+            const warnings = allInsights.filter(i => i.category === 'warning');
+            const interactions = allInsights.filter(i => i.category === 'interaction');
+            const recentAlerts = warnings.concat(interactions).sort((a,b) => (b.date||'').localeCompare(a.date||'')).slice(0, 8);
+            // Active conditions
+            const activeConditions = (p.conditions || []).filter(c => c.status === 'active');
+            // Active action plan steps
+            const activePlans = (p.action_plans || []).filter(a => a.status === 'active');
+            // Restrictions / Allergies
+            const restrictions = (p.diet || {}).restrictions || [];
+            const allergies = restrictions.filter(r => r.startsWith('ALLERGY:'));
+
+            let html = `<div class="daily-summary">`;
+            html += `<h2><i class="fas fa-sun"></i> Daily Health Summary <span style="font-size:0.75rem;opacity:0.7;margin-left:auto;font-weight:400;">${today}</span></h2>`;
+
+            // Completeness bar (loaded async)
+            html += `<div id="completenessArea" style="margin-bottom:14px;"></div>`;
+
+            html += `<div class="summary-grid">`;
+
+            // Medications card
+            html += `<div class="summary-card meds"><h4><i class="fas fa-pills"></i> Daily Medications & Supplements</h4>`;
+            if (meds.length) {
+                html += '<ul>';
+                meds.forEach(m => {
+                    html += `<li><i class="fas fa-check-circle" style="color:#81c784;"></i> <strong>${m.name}</strong>`;
+                    if (m.dose) html += ` — ${m.dose}`;
+                    else if (m.purpose) html += ` <span style="opacity:0.7;font-size:0.78rem;">(${m.purpose})</span>`;
+                    html += `</li>`;
+                });
+                html += '</ul>';
+            } else {
+                html += '<p class="summary-empty">No medications recorded yet.</p>';
+            }
+            html += '</div>';
+
+            // Warnings & Interactions card (categorized with timestamps)
+            html += `<div class="summary-card urgent"><h4><i class="fas fa-exclamation-triangle"></i> Warnings & Interactions (${recentAlerts.length})</h4>`;
+            if (recentAlerts.length) {
+                html += '<ul>';
+                recentAlerts.slice(0, 6).forEach(w => {
+                    const text = w.insight.split(' — Reason:')[0];
+                    const icon = w.category === 'interaction' ? 'exchange-alt' : 'exclamation-circle';
+                    const color = w.category === 'interaction' ? '#ffab40' : '#ff8a80';
+                    const age = w.date ? timeAgo(w.date) : '';
+                    html += `<li><i class="fas fa-${icon}" style="color:${color};"></i> ${text.length > 90 ? text.slice(0,90) + '...' : text}`;
+                    if (age) html += ` <span style="opacity:0.5;font-size:0.65rem;">${age}</span>`;
+                    html += `</li>`;
+                });
+                if (recentAlerts.length > 6) html += `<li style="opacity:0.7;font-size:0.78rem;">+ ${recentAlerts.length - 6} more</li>`;
+                html += '</ul>';
+            } else {
+                html += '<p class="summary-empty">No active warnings.</p>';
+            }
+            html += '</div>';
+
+            // Active conditions card
+            html += `<div class="summary-card"><h4><i class="fas fa-heartbeat"></i> Active Conditions (${activeConditions.length})</h4>`;
+            if (activeConditions.length) {
+                html += '<ul>';
+                activeConditions.forEach(c => {
+                    html += `<li><i class="fas fa-circle" style="color:#ef9a9a;font-size:0.5rem;vertical-align:middle;"></i> ${c.name}`;
+                    if (c.diagnosed_date) html += ` <span style="opacity:0.5;font-size:0.65rem;">(${c.diagnosed_date})</span>`;
+                    html += `</li>`;
+                });
+                html += '</ul>';
+            } else {
+                html += '<p class="summary-empty">No active conditions.</p>';
+            }
+            html += '</div>';
+
+            // Action plans & reminders card
+            html += `<div class="summary-card"><h4><i class="fas fa-clipboard-check"></i> Action Plans & Reminders</h4>`;
+            if (activePlans.length) {
+                html += '<ul>';
+                activePlans.forEach(plan => {
+                    html += `<li><i class="fas fa-arrow-right" style="color:#90caf9;"></i> <strong>${plan.title}</strong>`;
+                    if (plan.priority === 'high') html += ` <span style="background:rgba(255,82,82,0.3);padding:1px 6px;border-radius:8px;font-size:0.65rem;">HIGH</span>`;
+                    html += `</li>`;
+                });
+                html += '</ul>';
+            } else {
+                html += '<p class="summary-empty">No active action plans.</p>';
+            }
+            if (allergies.length) {
+                html += `<div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.15);"><span style="font-size:0.75rem;opacity:0.8;"><i class="fas fa-allergies"></i> Allergies: ${allergies.map(a => a.replace('ALLERGY: ','')).join(', ')}</span></div>`;
+            }
+            html += '</div>';
+
+            html += '</div></div>';
+            return html;
+        }
+
+        function timeAgo(dateStr) {
+            const d = new Date(dateStr);
+            const now = new Date();
+            const diffMs = now - d;
+            const mins = Math.floor(diffMs / 60000);
+            if (mins < 60) return mins + 'm ago';
+            const hrs = Math.floor(mins / 60);
+            if (hrs < 24) return hrs + 'h ago';
+            const days = Math.floor(hrs / 24);
+            return days + 'd ago';
+        }
+
+        function parseReferenceRange(ref) {
+            const nums = String(ref || '').match(/\d+(?:\.\d+)?/g) || [];
+            if (nums.length >= 2) {
+                const [a, b] = nums.map(parseFloat);
+                return [Math.min(a, b), Math.max(a, b)];
+            }
+            return [null, null];
+        }
+        function testStatus(num, lower, upper) {
+            if (lower === null || upper === null) return 'normal';
+            if (num > upper) return 'high';
+            if (num < lower) return 'low';
+            return 'normal';
+        }
+        function statusColor(status) {
+            return { high: '#e6a000', low: '#1565c0', normal: '#43a047' }[status] || '#999';
+        }
+        function computeTestFlag(num, ref) {
+            if (isNaN(num)) return '';
+            const [lower, upper] = parseReferenceRange(ref);
+            if (lower === null || upper === null) return '';
+            const s = testStatus(num, lower, upper);
+            return s === 'high' ? 'H' : s === 'low' ? 'L' : '';
+        }
+
+        function buildSparkline(values, referenceRange = '') {
+            const nums = values.map(v => parseFloat(v)).filter(v => !isNaN(v));
+            if (nums.length < 2) return '';
+            const [lower, upper] = parseReferenceRange(referenceRange);
+            const statuses = nums.map(v => testStatus(v, lower, upper));
+            const min = Math.min(...nums), max = Math.max(...nums);
+            const range = max - min || 1;
+            const w = 60, h = 18;
+            const step = w / (nums.length - 1);
+            const points = nums.map((v, i) => [i * step, h - ((v - min) / range) * h]);
+            let svg = `<svg width="${w}" height="${h}" class="sparkline">`;
+            for (let i = 0; i < points.length - 1; i++) {
+                const [x1, y1] = points[i];
+                const [x2, y2] = points[i+1];
+                const color = statusColor(statuses[i+1]);
+                svg += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${color}" stroke-width="1.5" stroke-linecap="round"/>`;
+                if (statuses[i+1] === 'high') {
+                    const y1b = Math.min(h - 1, y1 + 1.8);
+                    const y2b = Math.min(h - 1, y2 + 1.8);
+                    svg += `<line x1="${x1.toFixed(1)}" y1="${y1b.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2b.toFixed(1)}" stroke="#fff176" stroke-width="1.5" stroke-linecap="round"/>`;
+                }
+            }
+            for (let i = 0; i < points.length; i++) {
+                const [x, y] = points[i];
+                if (statuses[i] === 'high') svg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="#000"/>`;
+                if (statuses[i] === 'low') svg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="#c62828"/>`;
+            }
+            svg += `</svg>`;
+            return svg;
+        }
+
+        function extractTestUnit(value) {
+            const m = String(value || '').match(/^-?\d+(?:\.\d+)?(?:\s+(?:H|L|High|Low))?\s*(.*)$/i);
+            if (!m) return '';
+            return m[1].replace(/(?:\s+|^)(H|L|High|Low)$/i, '').trim();
+        }
+        function stripTestUnit(value, unit) {
+            if (!unit) return String(value || '');
+            const esc = unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const re = new RegExp('\\s*' + esc + '(?=\\s+(?:H|L|High|Low)\\b|\\s*$)', 'i');
+            return String(value || '').replace(re, '').trim();
+        }
+        function extractTestFlag(value) {
+            const m = String(value || '').match(/\b(H|L)\b/i);
+            return m ? m[1].toUpperCase() : '';
+        }
+
+        function normalizeTestType(testName) {
+            if (!testName) return 'Unknown Test';
+            return testName
+                .replace(/\(.*?\)/g, '')
+                .replace(/historical/ig, '')
+                .replace(/\s+/g, ' ')
+                .trim() || testName.trim();
+        }
+
+        function parseMedicalDate(dateStr, addedAtStr = '') {
+            const text = (dateStr || '').trim();
+            if (text) {
+                const patterns = [
+                    /^(\d{4})-(\d{2})-(\d{2})$/,
+                    /^(\d{4})-(\d{2})$/,
+                    /^(\d{4})$/,
+                    /^(\d{2})\/(\d{2})\/(\d{4})$/,
+                    /^(\d{2})-([A-Za-z]{3})-(\d{2,4})$/,
+                    /^(\d{2})\s+([A-Za-z]{3,9})\s+(\d{4})$/
+                ];
+
+                for (let i = 0; i < patterns.length; i++) {
+                    const m = text.match(patterns[i]);
+                    if (!m) continue;
+
+                    if (i === 0) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+                    if (i === 1) return new Date(Number(m[1]), Number(m[2]) - 1, 1);
+                    if (i === 2) return new Date(Number(m[1]), 0, 1);
+                    if (i === 3) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+
+                    if (i === 4 || i === 5) {
+                        const day = Number(m[1]);
+                        const monthRaw = m[2].slice(0, 3).toLowerCase();
+                        const monthMap = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11 };
+                        const month = monthMap[monthRaw];
+                        if (month === undefined) continue;
+
+                        let year = Number(m[3]);
+                        if (year < 100) year += year >= 70 ? 1900 : 2000;
+                        return new Date(year, month, day);
+                    }
+                }
+
+                const nativeDate = new Date(text);
+                if (!Number.isNaN(nativeDate.getTime())) return nativeDate;
+            }
+
+            if (addedAtStr) {
+                const addedDate = new Date(addedAtStr);
+                if (!Number.isNaN(addedDate.getTime())) return addedDate;
+            }
+
+            return new Date(0);
+        }
+
+        function normalizeDateInput(text) {
+            const t = (text || '').trim();
+            if (!t) return null;
+            let m;
+            if ((m = t.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/))) return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;
+            if ((m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/))) return `${m[3]}-${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;
+            if ((m = t.match(/^(\d{4})-(\d{1,2})$/))) return `${m[1]}-${String(m[2]).padStart(2,'0')}-01`;
+            if ((m = t.match(/^(\d{4})$/))) return `${m[1]}-01-01`;
+            const d = new Date(t);
+            if (!Number.isNaN(d.getTime())) return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+            return null;
+        }
+
+        function renderProfile(p) {
+            let html = '';
+
+            // Daily Summary Box (top of profile)
+            html += renderDailySummary(p);
+
+            // Personal
+            if (p.name) {
+                html += `<div class="section-card"><h3><i class="fas fa-user"></i> ${p.name}</h3>`;
+                const pers = p.personal || {};
+                html += `<ul class="info-list">`;
+                if (pers.gender) html += `<li class="success">Gender: ${pers.gender}</li>`;
+                if (pers.location) html += `<li class="success">Location: ${pers.location}</li>`;
+                if (pers.age) html += `<li>Age: ${pers.age}</li>`;
+                if (pers.blood_type) html += `<li>Blood Type: ${pers.blood_type}</li>`;
+                html += `</ul></div>`;
+            }
+
+            html += '<div class="two-col">';
+
+            // Conditions (with status controls + delete)
+            if (p.conditions && p.conditions.length) {
+                html += `<div class="section-card"><h3><i class="fas fa-heartbeat"></i> Conditions (${p.conditions.length})</h3><ul class="info-list">`;
+                p.conditions.forEach((c, idx) => {
+                    const badgeClass = c.status === 'active' ? 'badge-active' : c.status === 'resolved' ? 'badge-status' : 'badge-investigating';
+                    const liClass = c.status === 'investigating' ? ' class="warning"' : c.status === 'resolved' ? ' style="opacity:0.6;"' : '';
+                    html += `<li${liClass}>`;
+                    html += `<span class="item-actions">`;
+                    if (c.status === 'active') html += `<button class="btn-resolve" onclick="changeConditionStatus(${idx},'resolved')" title="Mark resolved"><i class="fas fa-check"></i></button>`;
+                    if (c.status === 'active') html += `<button class="btn-status" onclick="changeConditionStatus(${idx},'investigating')" title="Set investigating"><i class="fas fa-search"></i></button>`;
+                    if (c.status !== 'active') html += `<button class="btn-status" onclick="changeConditionStatus(${idx},'active')" title="Set active"><i class="fas fa-redo"></i></button>`;
+                    html += `<button class="btn-delete" onclick="deleteItem('conditions',${idx},'${c.name}')" title="Delete"><i class="fas fa-trash"></i></button>`;
+                    html += `</span>`;
+                    html += `<span class="badge-status ${badgeClass}">${c.status}</span> <strong>${c.name}</strong>`;
+                    if (c.diagnosed_date) html += ` <small style="color:#888;">[${c.diagnosed_date}]</small>`;
+                    if (c.details) html += `<br><small>${c.details}</small>`;
+                    html += `</li>`;
+                });
+                html += `</ul></div>`;
+            }
+
+            // Symptoms (with delete)
+            if (p.symptoms && p.symptoms.length) {
+                html += `<div class="section-card"><h3><i class="fas fa-exclamation-circle"></i> Symptoms (${p.symptoms.length})</h3><ul class="info-list">`;
+                p.symptoms.forEach((s, idx) => {
+                    html += `<li><span class="item-actions"><button class="btn-delete" onclick="deleteItem('symptoms',${idx},'${s.description.replace(/'/g,"\\\'")}')" title="Delete"><i class="fas fa-trash"></i></button></span>`;
+                    html += `${s.description}`;
+                    if (s.triggers && s.triggers.length) html += `<br><small style="color:#888;">Triggers: ${s.triggers.join(', ')}</small>`;
+                    html += `</li>`;
+                });
+                html += `</ul></div>`;
+            }
+
+            html += '</div><div class="two-col">';
+
+            // Test Results (grouped by type, sorted by date desc, with sparkline trends + delete)
+            if (p.test_results && p.test_results.length) {
+                const testGroups = {};
+                p.test_results.forEach((t, idx) => {
+                    const groupKey = normalizeTestType(t.test_name).toLowerCase();
+                    if (!testGroups[groupKey]) {
+                        testGroups[groupKey] = {
+                            displayName: normalizeTestType(t.test_name),
+                            entries: []
+                        };
+                    }
+                    testGroups[groupKey].entries.push({ ...t, _sourceIndex: idx });
+                });
+
+                const sortedGroups = Object.values(testGroups).map(g => {
+                    g.entries.sort((a, b) => parseMedicalDate(b.date, b.added_at) - parseMedicalDate(a.date, a.added_at));
+                    return g;
+                }).sort((a, b) => {
+                    const da = a.entries.length ? parseMedicalDate(a.entries[0].date, a.entries[0].added_at) : new Date(0);
+                    const db = b.entries.length ? parseMedicalDate(b.entries[0].date, b.entries[0].added_at) : new Date(0);
+                    if (db.getTime() !== da.getTime()) return db - da;
+                    return a.displayName.localeCompare(b.displayName);
+                });
+
+                html += `<div class="section-card"><h3><i class="fas fa-flask"></i> Test Results (${p.test_results.length})`;
+                html += `<span class="section-inline-actions"><button class="btn-inline-summary" onclick="generateTestResultsSummary()"><i class="fas fa-file-medical-alt"></i> Summary Report</button><button class="btn-inline-summary" onclick="generateConciseTestSummary()"><i class="fas fa-file-alt"></i> Concise 1-page</button></span></h3>`;
+                sortedGroups.forEach(group => {
+                    const unit = group.entries.map(e => extractTestUnit(e.value)).find(u => u) || '';
+                    const ref = group.entries.map(e => e.reference_range || '').find(r => r.trim()) || '';
+                    const escUnit = unit ? unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : '';
+                    const displayName = unit ? group.displayName.replace(new RegExp('(?:^|\\s)' + escUnit + '(?:\\s|$)', 'ig'), ' ').replace(/\s+/g, ' ').trim() : group.displayName;
+                    const metaUnit = unit && !ref.toLowerCase().includes(unit.toLowerCase()) ? unit : '';
+                    const meta = [ref, metaUnit].filter(Boolean).join(' ');
+                    const spark = buildSparkline(group.entries.slice().reverse().map(e => e.value), ref);
+                    html += `<div class="test-group">`;
+                    html += `<div class="test-group-title"><i class="fas fa-vial"></i> <span class="tt-name">${displayName}</span> <span class="tt-meta">${meta}</span> ${spark}</div>`;
+                    html += `<table class="test-table"><thead><tr><th>Date</th><th>Value</th><th></th></tr></thead><tbody>`;
+
+                    group.entries.forEach(t => {
+                        const testLabel = (t.test_name || '').replace(/'/g, "\\'");
+                        const stripped = stripTestUnit(t.value, unit);
+                        const displayVal = stripped.replace(/^(?:H|L|High|Low)\s+/i, '').replace(/\s+(?:H|L|High|Low)$/i, '').trim();
+                        const num = parseFloat(displayVal);
+                        let flag = computeTestFlag(num, ref) || extractTestFlag(stripped);
+                        const flagHtml = flag ? `<span class="flag flag-${flag.toLowerCase()}">${flag}</span>` : '<span class="flag flag-none">—</span>';
+                        html += `<tr>`;
+                        html += `<td class="tt-date"><span class="tt-editable" contenteditable="true" data-idx="${t._sourceIndex}" data-field="date" onblur="saveTestResult(this)">${t.date || ''}</span></td>`;
+                        html += `<td class="tt-value"><span class="tt-editable" contenteditable="true" data-idx="${t._sourceIndex}" data-field="value" data-unit="${unit.replace(/"/g, '&quot;')}" onblur="saveTestResult(this)">${displayVal}</span> ${flagHtml}</td>`;
+                        html += `<td class="tt-delete"><button class="btn-delete" onclick="deleteItem('test_results',${t._sourceIndex},'${testLabel}')" title="Delete"><i class="fas fa-trash"></i></button></td>`;
+                        html += `</tr>`;
+                    });
+
+                    html += `</tbody></table></div>`;
+                });
+                html += `</div>`;
+            }
+
+            // Medications (with delete)
+            if (p.medications && p.medications.length) {
+                html += `<div class="section-card"><h3><i class="fas fa-prescription-bottle-alt"></i> Medications (${p.medications.length})</h3><ul class="info-list">`;
+                p.medications.forEach((m, idx) => {
+                    html += `<li style="border-left-color:#1565c0;"><span class="item-actions"><button class="btn-delete" onclick="deleteItem('medications',${idx},'${m.name}')" title="Delete"><i class="fas fa-trash"></i></button></span>`;
+                    html += `<strong>${m.name}</strong>`;
+                    if (m.dose) html += ` — ${m.dose}`;
+                    if (m.purpose) html += `<br><small>${m.purpose}</small>`;
+                    html += `</li>`;
+                });
+                html += `</ul></div>`;
+            }
+
+            // Supplements & Herbs (with delete)
+            if (p.supplements && p.supplements.length) {
+                html += `<div class="section-card"><h3><i class="fas fa-pills"></i> Supplements & Herbs (${p.supplements.length})</h3><ul class="info-list">`;
+                p.supplements.forEach((s, idx) => {
+                    html += `<li class="success"><span class="item-actions"><button class="btn-delete" onclick="deleteItem('supplements',${idx},'${s.name}')" title="Delete"><i class="fas fa-trash"></i></button></span>`;
+                    html += `<strong>${s.name}</strong>`;
+                    if (s.dose) html += ` — ${s.dose}`;
+                    if (s.purpose) html += `<br><small>${s.purpose}</small>`;
+                    html += `</li>`;
+                });
+                html += `</ul></div>`;
+            }
+
+            html += '</div><div class="two-col">';
+
+            // Diet
+            if (p.diet) {
+                html += `<div class="section-card"><h3><i class="fas fa-utensils"></i> Diet</h3>`;
+                if (p.diet.daily_foods && p.diet.daily_foods.length) {
+                    html += `<p style="font-size:0.82rem;color:#666;margin-bottom:8px;"><strong>Daily Foods:</strong> ${p.diet.daily_foods.join(', ')}</p>`;
+                }
+                if (p.diet.cooking_methods && p.diet.cooking_methods.length) {
+                    html += `<p style="font-size:0.82rem;"><strong>Cooking:</strong> ${p.diet.cooking_methods.join(', ')}</p>`;
+                }
+                if (p.diet.restrictions && p.diet.restrictions.length) {
+                    html += `<ul class="info-list">`;
+                    p.diet.restrictions.forEach(r => html += `<li class="danger">${r}</li>`);
+                    html += `</ul>`;
+                }
+                if (p.diet.notes && p.diet.notes.length) {
+                    html += `<ul class="info-list" style="margin-top:8px;">`;
+                    p.diet.notes.forEach(n => html += `<li>${n}</li>`);
+                    html += `</ul>`;
+                }
+                html += `</div>`;
+            }
+
+            // Lifestyle
+            if (p.lifestyle) {
+                html += `<div class="section-card"><h3><i class="fas fa-running"></i> Lifestyle</h3>`;
+                if (p.lifestyle.sleep && Object.keys(p.lifestyle.sleep).length) {
+                    html += `<p style="font-size:0.82rem;margin-bottom:8px;"><strong>Sleep:</strong></p><ul class="info-list">`;
+                    Object.entries(p.lifestyle.sleep).forEach(([k,v]) => html += `<li><strong>${k}:</strong> ${v}</li>`);
+                    html += `</ul>`;
+                }
+                if (p.lifestyle.exercise && p.lifestyle.exercise.length) {
+                    html += `<p style="font-size:0.82rem;margin-top:12px;"><strong>Exercise:</strong></p><ul class="info-list">`;
+                    p.lifestyle.exercise.forEach(e => html += `<li>${e}</li>`);
+                    html += `</ul>`;
+                }
+                html += `</div>`;
+            }
+
+            html += '</div>';
+
+            // Action Plans (with delete)
+            if (p.action_plans && p.action_plans.length) {
+                html += `<div class="section-card"><h3><i class="fas fa-tasks"></i> Action Plans (${p.action_plans.length})</h3>`;
+                p.action_plans.forEach((plan, idx) => {
+                    const isActive = plan.status === 'active';
+                    html += `<div style="margin-bottom:16px;padding:12px;background:${isActive?'#f9fbe7':'#f5f5f5'};border-radius:8px;border-left:3px solid ${isActive?'#8bc34a':'#bdbdbd'};${isActive?'':'opacity:0.7;'}">`;
+                    html += `<span class="item-actions"><button class="btn-delete" onclick="deleteItem('action_plans',${idx},'${plan.title.replace(/'/g,"\\\'")}')" title="Delete"><i class="fas fa-trash"></i></button></span>`;
+                    html += `<strong style="color:${isActive?'#33691e':'#666'};">${plan.title}</strong> <span class="badge-status ${isActive?'badge-active':'badge-investigating'}">${plan.priority}</span>`;
+                    if (plan.steps && plan.steps.length) {
+                        html += `<ol style="margin:8px 0 0;padding-left:20px;font-size:0.84rem;">`;
+                        plan.steps.forEach(s => html += `<li>${s}</li>`);
+                        html += `</ol>`;
+                    }
+                    html += `</div>`;
+                });
+                html += `</div>`;
+            }
+
+            // Conversation Insights (with search/filter + delete + timestamps)
+            if (p.conversation_insights && p.conversation_insights.length) {
+                const cats = [...new Set(p.conversation_insights.map(i => i.category))];
+                html += `<div class="section-card"><h3><i class="fas fa-lightbulb"></i> Conversation Insights (${p.conversation_insights.length})</h3>`;
+                html += `<input type="text" class="insight-search" id="insightSearch" placeholder="Search insights..." oninput="filterInsights()">`;
+                html += `<div class="insight-tabs">`;
+                html += `<span class="insight-tab active" data-cat="all" onclick="setInsightFilter('all',this)">All</span>`;
+                cats.forEach(c => html += `<span class="insight-tab" data-cat="${c}" onclick="setInsightFilter('${c}',this)">${c}</span>`);
+                html += `</div>`;
+                html += `<ul class="info-list" id="insightsList">`;
+                p.conversation_insights.forEach((ins, idx) => {
+                    const catColors = {warning:'#ffebee',interaction:'#fff3e0',lifestyle:'#e8f5e9',diet:'#f1f8e9',symptom:'#fce4ec',family_history:'#f3e5f5',advice_from_conversation:'#e3f2fd',general:'#f5f5f5'};
+                    const bg = catColors[ins.category] || '#f5f5f5';
+                    const age = ins.date ? timeAgo(ins.date) : '';
+                    html += `<li class="insight-item" data-cat="${ins.category}" style="background:${bg};">`;
+                    html += `<span class="item-actions"><button class="btn-delete" onclick="deleteItem('conversation_insights',${idx},'insight')" title="Delete"><i class="fas fa-trash"></i></button></span>`;
+                    html += `<span style="background:#e3f2fd;padding:1px 6px;border-radius:4px;font-size:0.7rem;color:#1565c0;">${ins.category}</span> `;
+                    html += `${ins.insight}`;
+                    if (age) html += ` <span style="color:#999;font-size:0.7rem;">${age}</span>`;
+                    html += `</li>`;
+                });
+                html += `</ul></div>`;
+            }
+
+            document.getElementById('profileDisplay').innerHTML = html;
+
+            // Load completeness score async
+            loadCompleteness();
+        }
+
+        // --- AI-powered analysis and storage ---
+        async function analyzeAndStore() {
+            const text = document.getElementById('pasteArea').value.trim();
+            if (!text) { showStatus('Please paste some text first.', 'error'); return; }
+            if (text.length > 15000) { showStatus('Text too long (max 15,000 characters).', 'error'); return; }
+
+            const btn = document.getElementById('btnAnalyze');
+            const resultsDiv = document.getElementById('analysisResults');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing...';
+            resultsDiv.style.display = 'none';
+            showStatus('AI is analyzing your health information...', 'info');
+
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/analyze', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ text: text })
+                });
+                const result = await resp.json();
+
+                if (result.actions && result.actions.length) {
+                    let html = '<h4 style="margin:0 0 12px;color:#2e7d32;font-size:0.95rem;"><i class="fas fa-check-circle"></i> Analysis Complete</h4>';
+                    html += '<ul style="margin:0 0 16px;padding-left:18px;font-size:0.85rem;">';
+                    result.actions.forEach(a => html += `<li style="margin-bottom:4px;">${a}</li>`);
+                    html += '</ul>';
+
+                    // Health advice section
+                    if (result.health_advice && result.health_advice.length) {
+                        html += '<h4 style="margin:0 0 10px;color:#1565c0;font-size:0.95rem;"><i class="fas fa-stethoscope"></i> Personalized Health Advice</h4>';
+                        const priorityColors = {high: '#c62828', medium: '#e65100', low: '#2e7d32'};
+                        const priorityIcons = {high: 'exclamation-triangle', medium: 'info-circle', low: 'check-circle'};
+                        result.health_advice.forEach(adv => {
+                            const color = priorityColors[adv.priority] || '#333';
+                            const icon = priorityIcons[adv.priority] || 'info-circle';
+                            html += `<div style="padding:10px 12px;margin-bottom:8px;border-radius:8px;border-left:3px solid ${color};background:${adv.priority==='high'?'#ffebee':adv.priority==='medium'?'#fff8e1':'#e8f5e9'};font-size:0.85rem;">`;
+                            html += `<div style="font-weight:600;color:${color};margin-bottom:4px;"><i class="fas fa-${icon}"></i> ${adv.advice}</div>`;
+                            if (adv.reason) html += `<div style="color:#555;font-size:0.8rem;">${adv.reason}</div>`;
+                            html += `</div>`;
+                        });
+                    }
+
+                    if (result.error) html += `<p style="color:#e65100;font-size:0.8rem;margin-top:8px;"><i class="fas fa-exclamation-triangle"></i> ${result.error}</p>`;
+                    resultsDiv.innerHTML = html;
+                    resultsDiv.style.display = 'block';
+                    showStatus(`Stored ${result.actions.length} item(s) with ${(result.health_advice||[]).length} advice note(s).`, 'success');
+                    document.getElementById('pasteArea').value = '';
+                    loadProfile();
+                } else if (result.error) {
+                    showStatus(result.error, 'error');
+                } else {
+                    showStatus('No data extracted. Try pasting more detailed information.', 'info');
+                }
+            } catch(e) {
+                showStatus('Analysis failed: ' + e.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-brain"></i> Analyze & Store';
+            }
+        }
+
+        // --- Save raw text without AI ---
+        async function saveRawInsight() {
+            const text = document.getElementById('pasteArea').value.trim();
+            if (!text) { showStatus('Please paste some text first.', 'error'); return; }
+
+            const chunks = splitIntoChunks(text, 800);
+            let saved = 0;
+            for (const chunk of chunks) {
+                try {
+                    const resp = await AuthHelper.authenticatedFetch('/api/health-profile', {
+                        method: 'PUT',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({ insight: { insight: chunk, category: 'general' } })
+                    });
+                    if (resp.ok) saved++;
+                } catch(e) { /* continue */ }
+            }
+            if (saved > 0) {
+                showStatus(`Saved ${saved} raw insight(s).`, 'success');
+                document.getElementById('pasteArea').value = '';
+                loadProfile();
+            } else {
+                showStatus('Failed to save. Please sign in first.', 'error');
+            }
+        }
+
+        function playNotificationSound() {
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContext) return;
+                const ctx = new AudioContext();
+                if (ctx.state === 'suspended') ctx.resume();
+                const osc = ctx.createOscillator();
+                osc.type = 'sine';
+                osc.frequency.value = 1200;
+                const gain = ctx.createGain();
+                gain.gain.value = 0.15;
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.25);
+            } catch (e) { console.error('sound', e); }
+        }
+
+        function renderPendingReview(extracted) {
+            const cats = ['conditions','medications','supplements','symptoms','test_results','action_plans','conversation_insights','vitals'];
+            let html = "<div style='font-size:0.85rem;'>";
+            for (const cat of cats) {
+                const items = extracted[cat];
+                if (!Array.isArray(items) || !items.length) continue;
+                html += `<h5 style='margin:8px 0 6px;color:#333;'>${cat.replace(/_/g,' ')} (${items.length})</h5>`;
+                if (cat === 'test_results') {
+                    html += "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'><thead><tr style='background:#f5f5f5;'>";
+                    html += "<th style='text-align:left;padding:4px;'>Test</th><th style='text-align:left;padding:4px;'>Value</th><th style='text-align:left;padding:4px;'>Date</th><th style='text-align:left;padding:4px;'>Reference</th></tr></thead><tbody>";
+                    for (let i = 0; i < items.length; i++) {
+                        const t = items[i];
+                        html += `<tr style='border-bottom:1px solid #eee;' data-cat='test_results' data-idx='${i}'>`;
+                        html += `<td style='padding:4px;'><input type='text' data-field='test_name' value='${t.test_name || ''}' style='width:100%;border:1px solid #ccc;border-radius:4px;padding:3px;font-size:0.78rem;box-sizing:border-box;'></td>`;
+                        html += `<td style='padding:4px;'><input type='text' data-field='value' value='${t.value || ''}' style='width:100%;border:1px solid #ccc;border-radius:4px;padding:3px;font-size:0.78rem;box-sizing:border-box;'></td>`;
+                        html += `<td style='padding:4px;'><input type='text' data-field='date' value='${t.date || ''}' style='width:100%;border:1px solid #ccc;border-radius:4px;padding:3px;font-size:0.78rem;box-sizing:border-box;'></td>`;
+                        html += `<td style='padding:4px;'><input type='text' data-field='reference_range' value='${t.reference_range || ''}' style='width:100%;border:1px solid #ccc;border-radius:4px;padding:3px;font-size:0.78rem;box-sizing:border-box;'></td>`;
+                        html += `</tr>`;
+                    }
+                    html += "</tbody></table>";
+                    html += `<button class='btn-add' style='background:#666;margin:6px 0 10px 0;padding:5px 10px;font-size:0.78rem;' onclick='addTestResultRow(this)'><i class='fas fa-plus'></i> Add test result row</button>`;
+                } else {
+                    html += "<ul style='margin:0 0 8px;padding-left:18px;'>";
+                    for (const item of items) {
+                        const label = item.name || item.test_name || item.action || item.topic || '';
+                        html += `<li style='margin-bottom:3px;'>${label}</li>`;
+                    }
+                    html += "</ul>";
+                }
+            }
+            html += "</div>";
+            return html;
+        }
+
+        function addTestResultRow(btn) {
+            const table = btn.previousElementSibling;
+            if (!table || table.tagName !== 'TABLE') return;
+            const tbody = table.querySelector('tbody');
+            if (!tbody) return;
+            const tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid #eee';
+            tr.dataset.cat = 'test_results';
+            ['test_name','value','date','reference_range'].forEach(field => {
+                const td = document.createElement('td');
+                td.style.padding = '4px';
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.dataset.field = field;
+                input.value = '';
+                input.style = 'width:100%;border:1px solid #ccc;border-radius:4px;padding:3px;font-size:0.78rem;box-sizing:border-box;';
+                td.appendChild(input);
+                tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+            tr.scrollIntoView({behavior:'smooth', block:'nearest'});
+        }
+
+        async function confirmPendingReview(btn) {
+            const card = btn.closest('.pending-review-card');
+            const extracted = JSON.parse(decodeURIComponent(btn.dataset.extracted));
+            const testResults = [];
+            card.querySelectorAll('tr[data-cat=test_results]').forEach(row => {
+                const obj = {};
+                row.querySelectorAll('input[data-field]').forEach(inp => {
+                    obj[inp.dataset.field] = inp.value;
+                });
+                testResults.push(obj);
+            });
+            extracted.test_results = testResults;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/apply-review', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ extracted })
+                });
+                const data = await resp.json();
+                if (resp.ok && data.success !== false) {
+                    card.innerHTML = `<div style='padding:10px;background:#e8f5e9;border-radius:6px;color:#2e7d32;'><i class='fas fa-check-circle'></i> Saved. ${data.actions ? data.actions.join('; ') : ''}</div>`;
+                    loadProfile();
+                } else {
+                    card.innerHTML = `<div style='padding:10px;background:#ffebee;border-radius:6px;color:#c62828;'>Save failed: ${data.error || 'Unknown error'}</div>`;
+                }
+            } catch (e) {
+                card.innerHTML = `<div style='padding:10px;background:#ffebee;border-radius:6px;color:#c62828;'>Network error: ${e.message}</div>`;
+            }
+        }
+
+        // --- View a previously uploaded document ---
+        async function viewDocument(stored_name) {
+            const token = localStorage.getItem('authToken');
+            if (!token) { alert('Not authenticated.'); return; }
+            try {
+                const resp = await fetch('/api/health-profile/document?stored_name=' + encodeURIComponent(stored_name), {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!resp.ok) {
+                    const data = await resp.json().catch(() => ({}));
+                    alert(data.error || 'Unable to open file.');
+                    return;
+                }
+                const blob = await resp.blob();
+                const url = URL.createObjectURL(blob);
+                window.open(url, '_blank');
+                setTimeout(() => URL.revokeObjectURL(url), 60000);
+            } catch (e) { alert('Network error.'); }
+        }
+
+        // --- Re-analyse a previously uploaded document ---
+        async function reanalyseDocument(stored_name, {append=false, playSound=true}={}) {
+            const statusDiv = document.getElementById('uploadStatus');
+            const resultsDiv = document.getElementById('uploadResults');
+            statusDiv.style.display = 'block';
+            if (!append) {
+                resultsDiv.style.display = 'none';
+                resultsDiv.innerHTML = '';
+            }
+            statusDiv.innerHTML = `<i class='fas fa-spinner fa-spin'></i> Re-analysing ${escapeHtml(stored_name)}... (may take 15-30s)`;
+            const token = localStorage.getItem('authToken');
+
+            try {
+                const resp = await fetch('/api/health-profile/reparse', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ stored_name })
+                });
+                const result = await resp.json();
+
+                const label = escapeHtml(result.source_file || stored_name);
+                // Render a visible card so a failure is never mistaken for success,
+                // and expose the OCR text so the cause can be seen.
+                const failureCard = (msg) => {
+                    let html = `<div class='pending-review-card' style='margin-bottom:16px;padding:10px;background:#ffebee;border-radius:6px;'>`;
+                    html += `<h4 style='margin:0 0 6px;color:#c62828;font-size:0.9rem;'><i class='fas fa-exclamation-triangle'></i> ${label}</h4>`;
+                    html += `<div style='font-size:0.8rem;color:#c62828;'>${escapeHtml(msg)}</div>`;
+                    if (result.extracted_text_preview) {
+                        html += `<details style='margin-top:8px;'><summary style='cursor:pointer;font-size:0.8rem;color:#666;'>Show extracted text</summary><pre style='font-size:0.75rem;white-space:pre-wrap;max-height:200px;overflow-y:auto;background:#f5f5f5;padding:8px;border-radius:6px;margin-top:6px;'>${escapeHtml(result.extracted_text_preview)}</pre></details>`;
+                    }
+                    html += `</div>`;
+                    if (append) {
+                        resultsDiv.insertAdjacentHTML('beforeend', html);
+                    } else {
+                        resultsDiv.innerHTML = html;
+                    }
+                    resultsDiv.style.display = 'block';
+                    if (!append) statusDiv.style.display = 'none';
+                };
+
+                if (result.error) {
+                    failureCard(result.error);
+                    return false;
+                }
+
+                const pending = result.pending_review;
+                if (pending && Object.keys(pending).length > 0) {
+                    const encoded = encodeURIComponent(JSON.stringify(pending));
+                    let allHtml = `<div class='pending-review-card' data-extracted='${encoded}'>`;
+                    allHtml += `<h4 style='margin:0 0 10px;color:#1565c0;font-size:0.9rem;'><i class='fas fa-clipboard-check'></i> Review before saving: ${result.source_file || stored_name}</h4>`;
+                    if (result.stored_document) {
+                        const sd = result.stored_document;
+                        const expires = sd.expires_at ? new Date(sd.expires_at).toLocaleDateString('en-AU') : 'unknown';
+                        allHtml += `<div style='margin-bottom:8px;font-size:0.78rem;color:#455a64;background:#e3f2fd;padding:6px 8px;border-radius:6px;'>`;
+                        allHtml += `<i class='fas fa-archive'></i> File retained for ${sd.retention_days} day(s) until ${expires}.`;
+                        allHtml += `</div>`;
+                    }
+                    if (result.extracted_text_preview) {
+                        allHtml += `<details style='margin-bottom:8px;'><summary style='cursor:pointer;font-size:0.8rem;color:#666;'>Show extracted text</summary><pre style='font-size:0.75rem;white-space:pre-wrap;max-height:150px;overflow-y:auto;background:#f5f5f5;padding:8px;border-radius:6px;margin-top:6px;'>${result.extracted_text_preview}</pre></details>`;
+                    }
+                    allHtml += renderPendingReview(pending);
+                    allHtml += `<div style='margin-top:10px;text-align:right;'>`;
+                    allHtml += `<button class='btn-add' style='background:#2e7d32;' onclick='confirmPendingReview(this)' data-extracted='${encoded}'><i class='fas fa-check-circle'></i> Confirm & Save</button>`;
+                    allHtml += ` <button class='btn-add' style='background:#c62828;' onclick='this.closest(&quot;.pending-review-card&quot;).remove()'><i class='fas fa-times-circle'></i> Reject</button>`;
+                    allHtml += `</div></div>`;
+
+                    if (append) {
+                        resultsDiv.insertAdjacentHTML('beforeend', allHtml);
+                    } else {
+                        resultsDiv.innerHTML = allHtml;
+                    }
+                    resultsDiv.style.display = 'block';
+                    if (!append) statusDiv.style.display = 'none';
+                    if (playSound) playNotificationSound();
+                    return true;
+                } else {
+                    failureCard('No structured data could be extracted from this document. '
+                        + 'The text below is what was read from the image - if it looks wrong, '
+                        + 're-take the photo with the table filling the frame.');
+                    return false;
+                }
+            } catch (e) {
+                statusDiv.innerHTML = `<span style='color:#c62828;'><i class='fas fa-exclamation-circle'></i> Network error: ${e.message}</span>`;
+                return false;
+            }
+        }
+
+        async function reanalyseSelected() {
+            const checkboxes = document.querySelectorAll('.reanalyse-cb:checked');
+            if (!checkboxes.length) {
+                const statusDiv = document.getElementById('uploadStatus');
+                statusDiv.style.display = 'block';
+                statusDiv.innerHTML = '<span style="color:#c62828;"><i class="fas fa-exclamation-circle"></i> Select at least one file to re-analyse.</span>';
+                return;
+            }
+            const resultsDiv = document.getElementById('uploadResults');
+            const statusDiv = document.getElementById('uploadStatus');
+            resultsDiv.innerHTML = '';
+            resultsDiv.style.display = 'none';
+            statusDiv.style.display = 'block';
+            const names = Array.from(checkboxes).map(cb => cb.value);
+            const total = names.length;
+            let done = 0;
+            let succeeded = 0;
+            for (const stored_name of names) {
+                done++;
+                statusDiv.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Re-analysing ${done}/${total}: ${escapeHtml(stored_name)}...`;
+                if (await reanalyseDocument(stored_name, {append: true, playSound: false})) {
+                    succeeded++;
+                }
+            }
+            const failed = total - succeeded;
+            if (succeeded && !failed) {
+                statusDiv.innerHTML = `<span style="color:#2e7d32;"><i class="fas fa-check-circle"></i> Re-analysed ${succeeded} file(s). Review each below and click Confirm & Save.</span>`;
+            } else if (succeeded) {
+                statusDiv.innerHTML = `<span style="color:#ef6c00;"><i class="fas fa-exclamation-triangle"></i> ${succeeded} of ${total} file(s) produced data; ${failed} failed. See details below.</span>`;
+            } else {
+                statusDiv.innerHTML = `<span style="color:#c62828;"><i class="fas fa-exclamation-circle"></i> No data could be extracted from ${total} file(s). See details below.</span>`;
+            }
+            playNotificationSound();
+        }
+
+        // --- Upload file(s) (PDF/Image) ---
+        async function uploadHealthFile() {
+            const fileInput = document.getElementById('healthFileInput');
+            const statusDiv = document.getElementById('uploadStatus');
+            const resultsDiv = document.getElementById('uploadResults');
+            
+            if (!fileInput.files || !fileInput.files.length) {
+                statusDiv.style.display = 'block';
+                statusDiv.innerHTML = '<span style="color:#c62828;"><i class="fas fa-exclamation-circle"></i> Please select file(s) first.</span>';
+                return;
+            }
+
+            const files = Array.from(fileInput.files);
+            for (const f of files) {
+                if (f.size > 10 * 1024 * 1024) {
+                    statusDiv.style.display = 'block';
+                    statusDiv.innerHTML = `<span style="color:#c62828;"><i class="fas fa-exclamation-circle"></i> ${f.name} is too large (max 10MB).</span>`;
+                    return;
+                }
+            }
+
+            statusDiv.style.display = 'block';
+            resultsDiv.style.display = 'none';
+            let allHtml = '';
+            let totalActions = 0;
+            let completed = 0;
+            const token = localStorage.getItem('authToken');
+
+            for (const file of files) {
+                completed++;
+                statusDiv.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Processing file ${completed}/${files.length}: <b>${file.name}</b>... (may take 15-30s for images)`;
+
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+
+                    const resp = await fetch('/api/health-profile/upload', {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${token}` },
+                        body: formData
+                    });
+                    const result = await resp.json();
+
+                    if (result.error) {
+                        allHtml += `<div style="padding:8px;margin-bottom:8px;background:#ffebee;border-radius:6px;font-size:0.8rem;"><b>${file.name}</b>: <span style="color:#c62828;">${result.error}</span></div>`;
+                        continue;
+                    }
+
+                    const pending = result.pending_review;
+                    if (pending && Object.keys(pending).length > 0) {
+                        const encoded = encodeURIComponent(JSON.stringify(pending));
+                        allHtml += `<div style='margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #e0e0e0;' class='pending-review-card'>`;
+                        allHtml += `<h4 style='margin:0 0 10px;color:#1565c0;font-size:0.9rem;'><i class='fas fa-clipboard-check'></i> Review before saving: ${result.source_file || file.name}</h4>`;
+                        if (result.stored_document) {
+                            const sd = result.stored_document;
+                            const expires = sd.expires_at ? new Date(sd.expires_at).toLocaleDateString('en-AU') : 'unknown';
+                            allHtml += `<div style='margin-bottom:8px;font-size:0.78rem;color:#455a64;background:#e3f2fd;padding:6px 8px;border-radius:6px;'>`;
+                            allHtml += `<i class='fas fa-archive'></i> File retained for ${sd.retention_days} day(s) until ${expires}.`;
+                            allHtml += `</div>`;
+                        }
+                        if (result.extracted_text_preview) {
+                            allHtml += `<details style='margin-bottom:8px;'><summary style='cursor:pointer;font-size:0.8rem;color:#666;'>Show extracted text</summary><pre style='font-size:0.75rem;white-space:pre-wrap;max-height:150px;overflow-y:auto;background:#f5f5f5;padding:8px;border-radius:6px;margin-top:6px;'>${result.extracted_text_preview}</pre></details>`;
+                        }
+                        allHtml += renderPendingReview(pending);
+                        allHtml += `<div style='margin-top:10px;'>`;
+                        allHtml += `<button class='btn-add' style='background:#2e7d32;margin-right:6px;' onclick='confirmPendingReview(this)' data-extracted='${encoded}'><i class='fas fa-save'></i> Confirm & Save to Profile</button>`;
+                        allHtml += `<button class='btn-add' style='background:#c62828;' onclick='this.closest(".pending-review-card").remove()'><i class='fas fa-trash'></i> Discard</button>`;
+                        allHtml += `</div></div>`;
+                    } else if (result.actions && result.actions.length) {
+                        totalActions += result.actions.length;
+                        allHtml += `<div style="margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #e0e0e0;">`;
+                        allHtml += `<h4 style="margin:0 0 10px;color:#1565c0;font-size:0.9rem;"><i class="fas fa-file-medical"></i> ${result.source_file || file.name}</h4>`;
+                        if (result.stored_document) {
+                            const sd = result.stored_document;
+                            const expires = sd.expires_at ? new Date(sd.expires_at).toLocaleDateString('en-AU') : 'unknown';
+                            allHtml += `<div style="margin-bottom:8px;font-size:0.78rem;color:#455a64;background:#e3f2fd;padding:6px 8px;border-radius:6px;">`;
+                            allHtml += `<i class="fas fa-archive"></i> File retained for ${sd.retention_days} day(s) until ${expires}.`;
+                            allHtml += `</div>`;
+                        }
+                        if (result.extracted_text_preview) {
+                            allHtml += `<details style="margin-bottom:8px;"><summary style="cursor:pointer;font-size:0.8rem;color:#666;">Show extracted text</summary><pre style="font-size:0.75rem;white-space:pre-wrap;max-height:150px;overflow-y:auto;background:#f5f5f5;padding:8px;border-radius:6px;margin-top:6px;">${result.extracted_text_preview}</pre></details>`;
+                        }
+                        allHtml += '<ul style="margin:0 0 8px;padding-left:18px;font-size:0.85rem;">';
+                        result.actions.forEach(a => allHtml += `<li style="margin-bottom:3px;">${a}</li>`);
+                        allHtml += '</ul>';
+
+                        if (result.health_advice && result.health_advice.length) {
+                            allHtml += '<h5 style="margin:0 0 6px;color:#2e7d32;font-size:0.85rem;"><i class="fas fa-stethoscope"></i> Health Advice</h5>';
+                            const priorityColors = {high: '#c62828', medium: '#e65100', low: '#2e7d32'};
+                            result.health_advice.forEach(adv => {
+                                const color = priorityColors[adv.priority] || '#333';
+                                allHtml += `<div style="padding:6px 10px;margin-bottom:4px;border-radius:6px;border-left:3px solid ${color};background:${adv.priority==='high'?'#ffebee':'#f9fbe7'};font-size:0.8rem;">`;
+                                allHtml += `<div style="font-weight:600;color:${color};">${adv.advice}</div>`;
+                                if (adv.reason) allHtml += `<div style="color:#555;font-size:0.75rem;">${adv.reason}</div>`;
+                                allHtml += '</div>';
+                            });
+                        }
+                        allHtml += '</div>';
+                    } else {
+                        allHtml += `<div style="padding:8px;margin-bottom:8px;background:#fff8e1;border-radius:6px;font-size:0.8rem;"><b>${file.name}</b>: No health data extracted.</div>`;
+                    }
+                } catch(e) {
+                    allHtml += `<div style="padding:8px;margin-bottom:8px;background:#ffebee;border-radius:6px;font-size:0.8rem;"><b>${file.name}</b>: <span style="color:#c62828;">Upload failed: ${e.message}</span></div>`;
+                }
+            }
+
+            resultsDiv.innerHTML = allHtml;
+            resultsDiv.style.display = allHtml ? 'block' : 'none';
+            statusDiv.innerHTML = `<span style="color:#2e7d32;"><i class="fas fa-check-circle"></i> Processed ${files.length} file(s) — stored ${totalActions} item(s) total.</span>`;
+            playNotificationSound();
+            fileInput.value = '';
+            loadProfile();
+        }
+
+        function splitIntoChunks(text, maxLen) {
+            const sentences = text.split(/(?<=[.!?])\s+/);
+            const chunks = [];
+            let current = '';
+            for (const s of sentences) {
+                if ((current + ' ' + s).length > maxLen && current) {
+                    chunks.push(current.trim());
+                    current = s;
+                } else {
+                    current += (current ? ' ' : '') + s;
+                }
+            }
+            if (current.trim()) chunks.push(current.trim());
+            return chunks;
+        }
+
+        // --- Quick add functions ---
+        async function quickAddSymptom() {
+            try {
+                const description = document.getElementById('newSymptom').value.trim();
+                const severity = document.getElementById('newSymptomSeverity').value.trim() || 'moderate';
+                const onset = document.getElementById('newSymptomOnset').value.trim();
+                if (!description) return;
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile', {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ symptom: { description, severity, onset } })
+                });
+                if (resp.ok) {
+                    document.getElementById('newSymptom').value = '';
+                    document.getElementById('newSymptomSeverity').value = '';
+                    document.getElementById('newSymptomOnset').value = '';
+                    showStatus('Symptom added!', 'success');
+                    loadProfile();
+                } else {
+                    const err = await resp.json().catch(() => ({}));
+                    console.error('quickAddSymptom failed', resp.status, err);
+                    showStatus(err.error || 'Failed to add symptom.', 'error');
+                }
+            } catch (e) { console.error(e); showStatus('Error adding symptom: ' + e.message, 'error'); }
+        }
+
+        async function quickAddSupplement() {
+            try {
+                const name = document.getElementById('newSupplementName').value.trim();
+                const dose = document.getElementById('newSupplementDose').value.trim();
+                const frequency = document.getElementById('newSupplementFrequency').value.trim();
+                const prescribed_date = document.getElementById('newSupplementDate').value.trim();
+                if (!name) return;
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile', {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ supplement: { name, dose, frequency, prescribed_date } })
+                });
+                if (resp.ok) {
+                    document.getElementById('newSupplementName').value = '';
+                    document.getElementById('newSupplementDose').value = '';
+                    document.getElementById('newSupplementFrequency').value = '';
+                    document.getElementById('newSupplementDate').value = '';
+                    showStatus('Supplement added!', 'success');
+                    loadProfile();
+                } else {
+                    const err = await resp.json().catch(() => ({}));
+                    console.error('quickAddSupplement failed', resp.status, err);
+                    showStatus(err.error || 'Failed to add supplement.', 'error');
+                }
+            } catch (e) { console.error(e); showStatus('Error adding supplement: ' + e.message, 'error'); }
+        }
+
+        function updateTestRefPlaceholder() {
+            const refInput = document.getElementById('testReference');
+            if (!refInput) return;
+            const name = document.getElementById('testName').value.trim();
+            if (!name || !currentProfile || !currentProfile.test_results) {
+                refInput.placeholder = 'Reference range';
+                return;
+            }
+            const key = normalizeTestType(name).toLowerCase();
+            const existing = currentProfile.test_results.find(t => normalizeTestType(t.test_name).toLowerCase() === key && (t.reference_range || '').trim());
+            refInput.placeholder = existing ? 'Use default' : 'Reference range';
+        }
+
+        async function quickAddTest() {
+            try {
+                const name = document.getElementById('testName').value.trim();
+                const value = document.getElementById('testValue').value.trim();
+                let reference_range = document.getElementById('testReference').value.trim();
+                const date = document.getElementById('testDate').value.trim();
+                if (!name || !value) return;
+                if (!reference_range && currentProfile && currentProfile.test_results) {
+                    const key = normalizeTestType(name).toLowerCase();
+                    const existing = currentProfile.test_results.find(t => normalizeTestType(t.test_name).toLowerCase() === key && (t.reference_range || '').trim());
+                    if (existing) reference_range = existing.reference_range.trim();
+                }
+                if (!reference_range) {
+                    document.getElementById('testReference').placeholder = 'Reference range';
+                    document.getElementById('testReference').focus();
+                    showStatus('Reference range is required when no default is available.', 'error');
+                    return;
+                }
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile', {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ test_result: { test_name: name, value, reference_range, date } })
+                });
+                if (resp.ok) {
+                    document.getElementById('testName').value = '';
+                    document.getElementById('testValue').value = '';
+                    document.getElementById('testReference').value = '';
+                    document.getElementById('testReference').placeholder = 'Use Default';
+                    document.getElementById('testDate').value = '';
+                    showStatus('Test result added!', 'success');
+                    loadProfile();
+                } else {
+                    const err = await resp.json().catch(() => ({}));
+                    console.error('quickAddTest failed', resp.status, err);
+                    showStatus(err.error || 'Failed to add test result.', 'error');
+                }
+            } catch (e) { console.error(e); showStatus('Error adding test result: ' + e.message, 'error'); }
+        }
+
+        async function saveTestResult(el) {
+            const idx = parseInt(el.dataset.idx, 10);
+            const field = el.dataset.field;
+            if (isNaN(idx) || !field || !currentProfile || !currentProfile.test_results) return;
+            const orig = currentProfile.test_results[idx];
+            if (!orig) return;
+            let raw = el.textContent.trim();
+            if (field === 'date') {
+                const nd = normalizeDateInput(raw);
+                if (nd) { raw = nd; el.textContent = raw; }
+            }
+            let updates = { [field]: raw };
+            if (field === 'value') {
+                const unit = (el.dataset.unit || '').trim();
+                const flagMatch = raw.match(/(?:^|\s)(H|L|High|Low)(?:\s|$)/i);
+                const typedFlag = flagMatch ? flagMatch[1][0].toUpperCase() : '';
+                const numMatch = raw.match(/-?\d+(?:\.\d+)?/);
+                const num = numMatch ? parseFloat(numMatch[0]) : NaN;
+                const numText = numMatch ? numMatch[0] : raw;
+                const ref = orig.reference_range || '';
+                let computedFlag = '';
+                if (!isNaN(num) && ref) {
+                    const [lower, upper] = parseReferenceRange(ref);
+                    if (lower !== null && upper !== null) {
+                        if (num > upper) computedFlag = 'H';
+                        else if (num < lower) computedFlag = 'L';
+                    }
+                }
+                const flag = computedFlag || typedFlag;
+                const value = (numText + (flag ? ' ' + flag : '') + (unit ? ' ' + unit : '')).trim();
+                updates = { value: value };
+            }
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/item', {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ category: 'test_results', index: idx, updates: updates })
+                });
+                if (resp.ok) {
+                    showStatus('Test result updated.', 'success');
+                    loadProfile();
+                } else {
+                    const err = await resp.json().catch(() => ({}));
+                    console.error('saveTestResult failed', resp.status, err);
+                    showStatus(err.error || 'Update failed.', 'error');
+                }
+            } catch (e) { console.error(e); showStatus('Update failed: ' + e.message, 'error'); }
+        }
+
+        function showStatus(msg, type) {
+            const el = document.getElementById('statusMsg');
+            msg = (msg == null ? '' : String(msg).trim()) || 'An unknown error occurred';
+            el.className = 'status-msg ' + type;
+            el.textContent = msg;
+            if (type === 'error') {
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            } else {
+                setTimeout(() => { el.className = 'status-msg'; }, 5000);
+            }
+        }
+
+        // --- Delete item from profile ---
+        async function deleteItem(category, index, label) {
+            if (!confirm(`Delete "${label}" from ${category}?`)) return;
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/item', {
+                    method: 'DELETE',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ category, index })
+                });
+                if (resp.ok) {
+                    showStatus(`Deleted "${label}" from ${category}.`, 'success');
+                    loadProfile();
+                } else {
+                    const err = await resp.json();
+                    showStatus(err.error || 'Delete failed.', 'error');
+                }
+            } catch(e) { showStatus('Delete failed: ' + e.message, 'error'); }
+        }
+
+        // --- Change condition status ---
+        async function changeConditionStatus(index, newStatus) {
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/condition-status', {
+                    method: 'PATCH',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ index, status: newStatus })
+                });
+                if (resp.ok) {
+                    showStatus(`Condition status changed to "${newStatus}".`, 'success');
+                    loadProfile();
+                } else {
+                    const err = await resp.json();
+                    showStatus(err.error || 'Status update failed.', 'error');
+                }
+            } catch(e) { showStatus('Status update failed: ' + e.message, 'error'); }
+        }
+
+        // --- Quick add medication ---
+        async function quickAddMedication() {
+            const name = document.getElementById('newMedName').value.trim();
+            const dose = document.getElementById('newMedDose').value.trim();
+            const frequency = document.getElementById('newMedFrequency').value.trim();
+            const prescribed_date = document.getElementById('newMedDate').value.trim();
+            if (!name) return;
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile', {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ medication: { name, dose, frequency, prescribed_date } })
+                });
+                if (resp.ok) {
+                    document.getElementById('newMedName').value = '';
+                    document.getElementById('newMedDose').value = '';
+                    document.getElementById('newMedFrequency').value = '';
+                    document.getElementById('newMedDate').value = '';
+                    showStatus('Medication added!', 'success');
+                    loadProfile();
+                } else {
+                    const err = await resp.json().catch(() => ({}));
+                    console.error('quickAddMedication failed', resp.status, err);
+                    showStatus(err.error || 'Failed to add medication.', 'error');
+                }
+            } catch(e) { console.error(e); showStatus('Error adding medication: ' + e.message, 'error'); }
+        }
+
+        // --- Load completeness score ---
+        async function loadCompleteness() {
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/completeness');
+                if (!resp.ok) return;
+                const data = await resp.json();
+                const area = document.getElementById('completenessArea');
+                if (!area) return;
+                const score = data.score;
+                const color = score >= 80 ? '#81c784' : score >= 50 ? '#ffd54f' : '#ef9a9a';
+                area.innerHTML = `<div style="display:flex;align-items:center;gap:10px;">
+                    <span style="font-size:0.78rem;opacity:0.8;">Profile completeness</span>
+                    <div class="completeness-bar" style="flex:1;"><div class="completeness-fill" style="width:${score}%;background:${color};"></div></div>
+                    <span style="font-size:0.85rem;font-weight:700;">${score}%</span>
+                    <span style="font-size:0.68rem;opacity:0.6;">(${data.filled}/${data.total} fields)</span>
+                </div>`;
+            } catch(e) { /* silent */ }
+        }
+
+        // --- Insight filter/search ---
+        let currentInsightCat = 'all';
+        function setInsightFilter(cat, el) {
+            currentInsightCat = cat;
+            document.querySelectorAll('.insight-tab').forEach(t => t.classList.remove('active'));
+            el.classList.add('active');
+            filterInsights();
+        }
+        function filterInsights() {
+            const search = (document.getElementById('insightSearch')?.value || '').toLowerCase();
+            document.querySelectorAll('.insight-item').forEach(li => {
+                const cat = li.dataset.cat;
+                const text = li.textContent.toLowerCase();
+                const catMatch = currentInsightCat === 'all' || cat === currentInsightCat;
+                const searchMatch = !search || text.includes(search);
+                li.style.display = (catMatch && searchMatch) ? '' : 'none';
+            });
+        }
+
+        // --- Test Results Summary Report ---
+        let latestTestSummary = null;
+
+        function statusPill(status) {
+            const cls = ['normal', 'high', 'low'].includes(status) ? `status-${status}` : 'status-unknown';
+            if (status === 'normal') {
+                return `<span class="status-pill ${cls}"><i class="fas fa-check"></i></span>`;
+            }
+            const label = (status || 'unknown').toUpperCase();
+            return `<span class="status-pill ${cls}">${escapeHtml(label)}</span>`;
+        }
+
+        function trendLabel(trend) {
+            const map = {
+                up: '<span class="trend-up"><i class="fas fa-arrow-up"></i> Rising</span>',
+                down: '<span class="trend-down"><i class="fas fa-arrow-down"></i> Falling</span>',
+                stable: '<span class="trend-stable"><i class="fas fa-minus"></i> Stable</span>',
+                single: '<span class="trend-stable">Single reading</span>',
+                unknown: '<span class="trend-stable">N/A</span>'
+            };
+            return map[trend] || map.unknown;
+        }
+
+        function renderTestSummaryReport(summary) {
+            if (!summary.has_results) {
+                return '<p style="color:#64748b;">No test results on file yet. Upload a lab report or add results manually.</p>';
+            }
+
+            const overview = summary.overview || {};
+            const dateRange = overview.date_range || {};
+            let html = '';
+
+            html += `<div class="summary-overview">
+                <div class="summary-stat"><div class="label">Total Results</div><div class="value">${overview.total_results || 0}</div></div>
+                <div class="summary-stat"><div class="label">Test Types</div><div class="value">${overview.unique_tests || 0}</div></div>
+                <div class="summary-stat"><div class="label">Flagged</div><div class="value">${overview.flagged_count || 0}</div></div>
+                <div class="summary-stat"><div class="label">Date Range</div><div class="value" style="font-size:0.82rem;">${escapeHtml(dateRange.from || '—')} to ${escapeHtml(dateRange.to || '—')}</div></div>
+            </div>`;
+
+            if (summary.flagged?.length) {
+                html += `<div class="summary-section"><h3><i class="fas fa-exclamation-triangle"></i> Flagged Results</h3>`;
+                html += `<table class="summary-table"><thead><tr><th>Test</th><th>Value</th><th>Reference</th><th>Status</th><th>Date</th></tr></thead><tbody>`;
+                summary.flagged.forEach(item => {
+                    html += `<tr>
+                        <td><strong>${escapeHtml(item.test_name)}</strong></td>
+                        <td>${escapeHtml(item.value)}</td>
+                        <td>${escapeHtml(item.reference_range || '—')}</td>
+                        <td>${statusPill(item.status)}</td>
+                        <td>${escapeHtml(item.date || '—')}</td>
+                    </tr>`;
+                });
+                html += `</tbody></table></div>`;
+            }
+
+            if (summary.groups?.length) {
+                html += `<div class="summary-section"><h3><i class="fas fa-vial"></i> Latest Values by Test</h3>`;
+                html += `<table class="summary-table"><thead><tr><th>Test</th><th>Latest</th><th>Reference</th><th>Status</th><th>Date</th><th>Trend</th><th>Readings</th></tr></thead><tbody>`;
+                summary.groups.forEach(group => {
+                    const latest = group.latest || {};
+                    html += `<tr>
+                        <td><strong>${escapeHtml(group.display_name)}</strong></td>
+                        <td>${escapeHtml(latest.value || '—')}</td>
+                        <td>${escapeHtml(latest.reference_range || '—')}</td>
+                        <td>${statusPill(group.status)}</td>
+                        <td>${escapeHtml(latest.date || '—')}</td>
+                        <td>${trendLabel(group.trend)}</td>
+                        <td>${group.reading_count || 0}</td>
+                    </tr>`;
+                });
+                html += `</tbody></table></div>`;
+
+                const withHistory = summary.groups.filter(g => (g.history || []).length > 1);
+                if (withHistory.length) {
+                    html += `<div class="summary-section"><h3><i class="fas fa-history"></i> Recent History</h3>`;
+                    withHistory.forEach(group => {
+                        html += `<div style="margin-bottom:12px;"><strong>${escapeHtml(group.display_name)}</strong>`;
+                        html += `<ul style="margin:6px 0 0 18px;padding:0;font-size:0.82rem;color:#475569;">`;
+                        (group.history || []).slice(0, 5).forEach(entry => {
+                            html += `<li>${escapeHtml(entry.date || 'no date')}: ${escapeHtml(entry.value)} ${statusPill(entry.status)}</li>`;
+                        });
+                        html += `</ul></div>`;
+                    });
+                    html += `</div>`;
+                }
+            }
+
+            if (summary.insights?.length) {
+                html += `<div class="summary-section"><h3><i class="fas fa-lightbulb"></i> Key Insights</h3><ul class="summary-insights">`;
+                summary.insights.forEach(insight => {
+                    html += `<li>${escapeHtml(insight)}</li>`;
+                });
+                html += `</ul></div>`;
+            }
+
+            html += `<p style="font-size:0.75rem;color:#94a3b8;margin:0;">Generated ${new Date(summary.generated_at).toLocaleString('en-AU')}. For informational use — discuss results with your healthcare provider.</p>`;
+            return html;
+        }
+
+        async function generateTestResultsSummary() {
+            const body = document.getElementById('testSummaryBody');
+            const modal = document.getElementById('testSummaryModal');
+            if (!body || !modal) return;
+
+            body.innerHTML = '<p style="color:#64748b;"><i class="fas fa-spinner fa-spin"></i> Generating summary report...</p>';
+            modal.classList.add('open');
+
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/test-results-summary');
+                if (!resp.ok) {
+                    const text = await resp.text();
+                    const snippet = text.trim().startsWith('<') ? 'server returned an HTML page' : escapeHtml(text.slice(0, 200));
+                    body.innerHTML = `<p style="color:#c62828;">Server error ${resp.status}: ${snippet}</p>`;
+                    return;
+                }
+                const data = await resp.json();
+                if (!data.success) {
+                    body.innerHTML = `<p style="color:#c62828;">${escapeHtml(data.error || 'Failed to generate summary report.')}</p>`;
+                    return;
+                }
+                latestTestSummary = data;
+                body.innerHTML = renderTestSummaryReport(data);
+            } catch (e) {
+                body.innerHTML = `<p style="color:#c62828;">Failed to generate summary: ${escapeHtml(e.message)}</p>`;
+            }
+        }
+
+        function closeTestSummaryModal() {
+            document.getElementById('testSummaryModal')?.classList.remove('open');
+        }
+
+        async function copyTestSummary() {
+            if (!latestTestSummary?.text_report) {
+                showStatus('No summary available to copy.', 'error');
+                return;
+            }
+            try {
+                await navigator.clipboard.writeText(latestTestSummary.text_report);
+                showStatus('Summary copied to clipboard.', 'success');
+            } catch (e) {
+                showStatus('Could not copy summary: ' + e.message, 'error');
+            }
+        }
+
+        function printTestSummary() {
+            if (!latestTestSummary) {
+                showStatus('Generate a summary first.', 'error');
+                return;
+            }
+
+            const printWin = window.open('', '_blank');
+            const patient = escapeHtml(latestTestSummary.patient_name || 'Patient');
+            const content = renderTestSummaryReport(latestTestSummary);
+            const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Test Results Summary - ${patient}</title>
+                <style>
+                    body { font-family: 'Segoe UI', Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 24px; color: #1e293b; }
+                    h1 { color: #1565c0; font-size: 20pt; margin-bottom: 4px; }
+                    .meta { color: #64748b; font-size: 10pt; margin-bottom: 20px; }
+                    .summary-overview { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
+                    .summary-stat { border: 1px solid #dbeafe; border-radius: 8px; padding: 10px; background: #f8fbff; }
+                    .summary-stat .label { font-size: 8pt; color: #64748b; text-transform: uppercase; }
+                    .summary-stat .value { font-size: 14pt; font-weight: 700; }
+                    .summary-section { margin-bottom: 18px; }
+                    .summary-section h3 { font-size: 12pt; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+                    table { width: 100%; border-collapse: collapse; font-size: 10pt; margin-top: 8px; }
+                    th, td { border: 1px solid #e2e8f0; padding: 6px 8px; text-align: left; }
+                    th { background: #f8fafc; }
+                    .status-pill { font-size: 8pt; font-weight: 700; }
+                    ul { padding-left: 18px; }
+                    @media print { body { padding: 0; } }
+                </style></head><body>
+                <h1>Test Results Summary</h1>
+                <p class="meta">Patient: ${patient} | Generated: ${new Date(latestTestSummary.generated_at).toLocaleString('en-AU')}</p>
+                ${content}
+                </body></html>`;
+
+            printWin.document.write(html);
+            printWin.document.close();
+            printWin.focus();
+            setTimeout(() => printWin.print(), 400);
+        }
+
+        async function generateConciseTestSummary() {
+            try {
+                if (!currentProfile) { showStatus('Load your profile first.', 'error'); return; }
+                showStatus('Generating concise 1-page report...', 'success');
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/test-results-summary?view=concise&format=text');
+                const text = resp.ok ? await resp.text() : '';
+                if (!resp.ok) {
+                    const detail = text.trim().startsWith('<') ? `server returned ${resp.status} (HTML)` : (text.slice(0, 120) || `HTTP ${resp.status}`);
+                    showStatus(`Report failed: ${detail}`, 'error');
+                    return;
+                }
+                if (text.trim().startsWith('<')) {
+                    showStatus('Server returned a web page instead of the report. Please restart the app and try again.', 'error');
+                    return;
+                }
+                const patient = escapeHtml(currentProfile.name || 'Patient');
+                const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Concise Test History - ${patient}</title>
+                <style>
+                    body { font-family: 'Segoe UI', Arial, sans-serif; padding: 22px; color: #1e293b; }
+                    h1 { font-size: 15pt; color: #1565c0; margin: 0 0 4px; }
+                    .meta { color: #64748b; font-size: 9pt; margin: 0 0 14px; }
+                    pre { font-family: 'Segoe UI', Consolas, monospace; font-size: 9.5pt; line-height: 1.35; white-space: pre-wrap; }
+                    @media print { body { padding: 0; } pre { font-size: 8.5pt; } }
+                </style></head><body>
+                <h1>Concise Test Results History</h1>
+                <p class="meta">Patient: ${patient} | Generated: ${new Date().toLocaleString('en-AU')}</p>
+                <pre>${escapeHtml(text)}</pre>
+                </body></html>`;
+                const win = window.open('', '_blank');
+                win.document.write(html);
+                win.document.close();
+                win.focus();
+                setTimeout(() => win.print(), 400);
+            } catch (e) {
+                showStatus('Concise report failed: ' + e.message, 'error');
+            }
+        }
+
+        // --- Export PDF ---
+        function exportPDF() {
+            const el = document.getElementById('profileDisplay');
+            if (!el || !currentProfile) { showStatus('No profile to export.', 'error'); return; }
+
+            const printWin = window.open('', '_blank');
+            const p = currentProfile;
+            let html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Health Profile - ${p.name || 'Patient'}</title>
+            <style>
+                body { font-family: 'Segoe UI', Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; color: #333; font-size: 11pt; }
+                h1 { color: #c62828; border-bottom: 2px solid #c62828; padding-bottom: 8px; font-size: 18pt; }
+                h2 { color: #1565c0; font-size: 13pt; margin-top: 20px; border-bottom: 1px solid #e0e0e0; padding-bottom: 4px; }
+                .meta { color: #666; font-size: 9pt; margin-bottom: 16px; }
+                table { width: 100%; border-collapse: collapse; margin: 8px 0 16px; font-size: 10pt; }
+                th, td { padding: 5px 8px; border: 1px solid #ddd; text-align: left; }
+                th { background: #f5f5f5; font-weight: 600; }
+                .badge { display: inline-block; padding: 1px 6px; border-radius: 8px; font-size: 8pt; font-weight: 600; }
+                .badge-active { background: #ffcdd2; color: #c62828; }
+                .badge-resolved { background: #c8e6c9; color: #2e7d32; }
+                .badge-investigating { background: #fff3e0; color: #e65100; }
+                ul { padding-left: 18px; }
+                li { margin-bottom: 3px; }
+                @media print { body { padding: 0; } }
+            </style></head><body>`;
+            html += `<h1>Health Profile: ${p.name || 'Patient'}</h1>`;
+            html += `<p class="meta">Generated: ${new Date().toLocaleDateString('en-AU', {day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'})} | This is an auto-generated summary.</p>`;
+
+            // Personal
+            const pers = p.personal || {};
+            if (p.name || pers.gender || pers.age) {
+                html += `<h2>Personal Information</h2><table>`;
+                if (p.name) html += `<tr><th>Name</th><td>${p.name}</td></tr>`;
+                if (pers.gender) html += `<tr><th>Gender</th><td>${pers.gender}</td></tr>`;
+                if (pers.age) html += `<tr><th>Age</th><td>${pers.age}</td></tr>`;
+                if (pers.location) html += `<tr><th>Location</th><td>${pers.location}</td></tr>`;
+                if (pers.blood_type) html += `<tr><th>Blood Type</th><td>${pers.blood_type}</td></tr>`;
+                html += `</table>`;
+            }
+
+            // Conditions
+            if (p.conditions?.length) {
+                html += `<h2>Conditions (${p.conditions.length})</h2><table><tr><th>Condition</th><th>Status</th><th>Date</th><th>Details</th></tr>`;
+                p.conditions.forEach(c => html += `<tr><td><strong>${c.name}</strong></td><td><span class="badge badge-${c.status}">${c.status}</span></td><td>${c.diagnosed_date||''}</td><td>${c.details||''}</td></tr>`);
+                html += `</table>`;
+            }
+
+            // Medications
+            if (p.medications?.length) {
+                html += `<h2>Medications (${p.medications.length})</h2><table><tr><th>Name</th><th>Dose</th><th>Purpose</th></tr>`;
+                p.medications.forEach(m => html += `<tr><td><strong>${m.name}</strong></td><td>${m.dose||''}</td><td>${m.purpose||''}</td></tr>`);
+                html += `</table>`;
+            }
+
+            // Supplements
+            if (p.supplements?.length) {
+                html += `<h2>Supplements & Herbs (${p.supplements.length})</h2><table><tr><th>Name</th><th>Dose</th><th>Purpose</th></tr>`;
+                p.supplements.forEach(s => html += `<tr><td><strong>${s.name}</strong></td><td>${s.dose||''}</td><td>${s.purpose||''}</td></tr>`);
+                html += `</table>`;
+            }
+
+            // Test Results (grouped by type, newest first)
+            if (p.test_results?.length) {
+                const exportGroups = {};
+                p.test_results.forEach(t => {
+                    const groupName = normalizeTestType(t.test_name || 'Unknown Test');
+                    const key = groupName.toLowerCase();
+                    if (!exportGroups[key]) exportGroups[key] = { name: groupName, entries: [] };
+                    exportGroups[key].entries.push(t);
+                });
+
+                const grouped = Object.values(exportGroups).map(g => {
+                    g.entries.sort((a, b) => parseMedicalDate(b.date, b.added_at) - parseMedicalDate(a.date, a.added_at));
+                    return g;
+                }).sort((a, b) => {
+                    const da = a.entries.length ? parseMedicalDate(a.entries[0].date, a.entries[0].added_at) : new Date(0);
+                    const db = b.entries.length ? parseMedicalDate(b.entries[0].date, b.entries[0].added_at) : new Date(0);
+                    if (db.getTime() !== da.getTime()) return db - da;
+                    return a.name.localeCompare(b.name);
+                });
+
+                html += `<h2>Test Results (${p.test_results.length})</h2>`;
+                grouped.forEach(group => {
+                    html += `<h3 style="font-size:11pt;margin:10px 0 6px;color:#1565c0;">${group.name} (${group.entries.length})</h3>`;
+                    html += `<table><tr><th>Test</th><th>Value</th><th>Ref Range</th><th>Date</th><th>Notes</th></tr>`;
+                    group.entries.forEach(t => {
+                        html += `<tr><td><strong>${t.test_name}</strong></td><td>${t.value}</td><td>${t.reference_range||''}</td><td>${t.date||''}</td><td>${t.notes||''}</td></tr>`;
+                    });
+                    html += `</table>`;
+                });
+            }
+
+            // Symptoms
+            if (p.symptoms?.length) {
+                html += `<h2>Symptoms</h2><ul>`;
+                p.symptoms.forEach(s => {
+                    html += `<li><strong>${s.description}</strong>`;
+                    if (s.severity) html += ` (${s.severity})`;
+                    if (s.triggers?.length) html += ` — Triggers: ${s.triggers.join(', ')}`;
+                    html += `</li>`;
+                });
+                html += `</ul>`;
+            }
+
+            // Allergies & Restrictions
+            const restrictions = p.diet?.restrictions || [];
+            if (restrictions.length) {
+                html += `<h2>Allergies & Restrictions</h2><ul>`;
+                restrictions.forEach(r => html += `<li>${r}</li>`);
+                html += `</ul>`;
+            }
+
+            // Warnings
+            const warns = (p.conversation_insights || []).filter(i => i.category === 'warning' || i.category === 'interaction');
+            if (warns.length) {
+                html += `<h2>Active Warnings & Interactions (${warns.length})</h2><ul>`;
+                warns.forEach(w => html += `<li>${w.insight}</li>`);
+                html += `</ul>`;
+            }
+
+            html += `<hr><p class="meta" style="text-align:center;">End of Health Profile Report</p></body></html>`;
+
+            printWin.document.write(html);
+            printWin.document.close();
+            printWin.focus();
+            setTimeout(() => printWin.print(), 500);
+        }
+
+        // --- Delete item from profile ---
+        async function deleteItem(category, index, label) {
+            if (!confirm(`Delete "${label}" from ${category}?`)) return;
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/item', {
+                    method: 'DELETE',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ category, index })
+                });
+                if (resp.ok) {
+                    showStatus(`Deleted "${label}" from ${category}.`, 'success');
+                    loadProfile();
+                } else {
+                    const err = await resp.json();
+                    showStatus(err.error || 'Delete failed.', 'error');
+                }
+            } catch(e) { showStatus('Delete failed: ' + e.message, 'error'); }
+        }
+
+        // --- Change condition status ---
+        async function changeConditionStatus(index, newStatus) {
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/condition-status', {
+                    method: 'PATCH',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ index, status: newStatus })
+                });
+                if (resp.ok) {
+                    showStatus(`Condition status changed to "${newStatus}".`, 'success');
+                    loadProfile();
+                } else {
+                    const err = await resp.json();
+                    showStatus(err.error || 'Status update failed.', 'error');
+                }
+            } catch(e) { showStatus('Status update failed: ' + e.message, 'error'); }
+        }
+
+        // --- Quick add medication ---
+        async function quickAddMedication() {
+            const name = document.getElementById('newMedName').value.trim();
+            const dose = document.getElementById('newMedDose').value.trim();
+            const frequency = document.getElementById('newMedFrequency').value.trim();
+            const prescribed_date = document.getElementById('newMedDate').value.trim();
+            if (!name) return;
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile', {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ medication: { name, dose, frequency, prescribed_date } })
+                });
+                if (resp.ok) {
+                    document.getElementById('newMedName').value = '';
+                    document.getElementById('newMedDose').value = '';
+                    document.getElementById('newMedFrequency').value = '';
+                    document.getElementById('newMedDate').value = '';
+                    showStatus('Medication added!', 'success');
+                    loadProfile();
+                } else {
+                    const err = await resp.json().catch(() => ({}));
+                    console.error('quickAddMedication failed', resp.status, err);
+                    showStatus(err.error || 'Failed to add medication.', 'error');
+                }
+            } catch(e) { console.error(e); showStatus('Error adding medication: ' + e.message, 'error'); }
+        }
+
+        // --- Load completeness score ---
+        async function loadCompleteness() {
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/completeness');
+                if (!resp.ok) return;
+                const data = await resp.json();
+                const area = document.getElementById('completenessArea');
+                if (!area) return;
+                const score = data.score;
+                const color = score >= 80 ? '#81c784' : score >= 50 ? '#ffd54f' : '#ef9a9a';
+                area.innerHTML = `<div style="display:flex;align-items:center;gap:10px;">
+                    <span style="font-size:0.78rem;opacity:0.8;">Profile completeness</span>
+                    <div class="completeness-bar" style="flex:1;"><div class="completeness-fill" style="width:${score}%;background:${color};"></div></div>
+                    <span style="font-size:0.85rem;font-weight:700;">${score}%</span>
+                    <span style="font-size:0.68rem;opacity:0.6;">(${data.filled}/${data.total} fields)</span>
+                </div>`;
+            } catch(e) { /* silent */ }
+        }
+
+        // Auth check - redirect to login if not signed in
+        function checkAuth() {
+            if (typeof AuthHelper !== 'undefined' && !AuthHelper.isAuthenticated()) {
+                window.location.href = '/chatchat';
+                return false;
+            }
+            const token = localStorage.getItem('authToken');
+            if (!token) {
+                window.location.href = '/chatchat';
+                return false;
+            }
+            return true;
+        }
+
+        // Load on page ready
+        window.addEventListener('load', () => {
+            if (checkAuth()) loadProfile();
+        });
+    </script>
+</body>
+</html>

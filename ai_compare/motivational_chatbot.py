@@ -20,7 +20,7 @@ class MotivationalChatbot(AIChatbot):
         self.last_check_in = datetime.now()
         self.reminder_active = True
         
-    async def chat(self, user_message: str, include_context: bool = True, save_user_message: bool = True, message_source: str = "direct_ai") -> Dict[str, any]:
+    async def chat(self, user_message: str, include_context: bool = True, save_user_message: bool = True, message_source: str = "direct_ai", user_id: int = None) -> Dict[str, any]:
         """Enhanced chat with motivational features"""
         # Check for motivational commands first
         if await self._handle_motivational_commands(user_message):
@@ -43,7 +43,7 @@ class MotivationalChatbot(AIChatbot):
         
         # Get base response with enhanced message
         # Pass save_user_message=False since we already saved above (or it was already saved by Smart Response)
-        response_data = await super().chat(enhanced_message, include_context, save_user_message=False, message_source=message_source)
+        response_data = await super().chat(enhanced_message, include_context, save_user_message=False, message_source=message_source, user_id=user_id)
         
         # Add motivational enhancements
         response_data = await self._add_motivational_enhancements(response_data, user_message)

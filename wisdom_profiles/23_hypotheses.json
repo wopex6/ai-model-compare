@@ -1,0 +1,38 @@
+[
+  {
+    "id": "23_avoiding_discomfort_stoic",
+    "user_id": "23",
+    "pattern_id": "avoiding_discomfort",
+    "pattern_description": "Wai's tendency to avoid confronting health issues directly.",
+    "school_of_thought": "Stoic",
+    "hypothesis_text": "If this interpretation is correct, then Wai will take proactive steps to address health concerns.",
+    "predicted_change": "Increased engagement with healthcare providers regarding symptoms.",
+    "nudge_given": "Wai, it's essential to address your health symptoms directly rather than avoiding them. Consider scheduling a discussion with your healthcare provider about your urge incontinence and other symptoms.",
+    "status": "testing",
+    "confidence": 0.5,
+    "cycles_tested": 0,
+    "evidence_for": [],
+    "evidence_against": [],
+    "created_at": "2026-06-13T20:07:49.435000",
+    "updated_at": "2026-06-13T20:07:49.435000",
+    "revised_to_school": ""
+  },
+  {
+    "id": "23_growth_through_learning_confucian",
+    "user_id": "23",
+    "pattern_id": "growth_through_learning",
+    "pattern_description": "Wai's interest in understanding complex topics.",
+    "school_of_thought": "Confucian",
+    "hypothesis_text": "If this interpretation is correct, then Wai will actively seek knowledge that aids in health management.",
+    "predicted_change": "Increased exploration of health-related philosophical and psychological literature.",
+    "nudge_given": "Wai, take a moment to reflect on how your interests in philosophy and psychology can help you navigate your health challenges. Engaging with these subjects might provide insights into your current situation.",
+    "status": "testing",
+    "confidence": 0.5,
+    "cycles_tested": 0,
+    "evidence_for": [],
+    "evidence_against": [],
+    "created_at": "2026-06-13T20:07:49.435000",
+    "updated_at": "2026-06-13T20:07:49.435000",
+    "revised_to_school": ""
+  }
+]

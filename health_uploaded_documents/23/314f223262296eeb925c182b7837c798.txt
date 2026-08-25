@@ -1,0 +1,35 @@
+```
+TSE, WAI
+4 HIGHVALE CRES, BERWICK.     3806
+Phone:  0415151791
+Birthdate:  12/06/1962          Sex:  M       Medicare Number:  2297496529
+Your Reference:                 Lab Reference: 972342598-C-C052
+Laboratory:  Melbourne Pathology     Referred by:  DR SUSHMITA GHOSH
+Addressee:  DR SUSHMITA GHOSH
+Name of Test:  SE-TSH(Roche)
+Requested:  01/04/2025     Collected:  03/04/2025     Reported:  03/04/2025
+                                                    21:06
+
+Clinical notes:  hyperlipidaemia
+
+Latest Results
+Clinical Notes : hyperlipidaemia
+
+Date               17-May-23  07-Dec-23  05-Aug-24  03-Apr-25
+Time F-Fast         0819 F     0816 F     0928 F     0956 F
+Lab Id.           395072921  967607283  970980440  972342598  Reference      Units
+
+S TSH(Roche)         3.91       2.29      2.99      2.33      (0.5-5.5)    mU/L
+
+Comments on Collection 03-Apr-25 0956 F:
+A normal TSH is consistent with a euthyroid state.
+
+Dept Supervising Pathologist: Dr Andrew Carter
+
+Melbourne Pathology NATA No.:2133
+
+Tests Completed: FLS,TSH,EUC,LET,GF,FOL,B12, A1C,FBE
+Tests Pending  : IS
+Sample Pending : 
+
+```

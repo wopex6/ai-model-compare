@@ -1,0 +1,54 @@
+```
+TSE, WAI
+4 HIGHVALE CRES, BERWICK. 3806
+Phone: 0415151791 Sex: M Medicare Number: 2297496529 
+Birthdate: 12/06/1962 Lab Reference: 974170030-D-T152 
+Your Reference: FDA0816470 
+Laboratory: Melbourne Pathology
+Addressee: DR JANKI PATEL Referred by: DR JANKI PATEL
+
+Name of Test: ED-HAEMOCHROMATOSIS
+Requested: 24/04/2025 Collected: 13/05/2025 Reported: 15/05/2025
+13:36
+
+Clinical notes: haemochromatosis to be checked if iron and 
+trf-saturation-still high WCC - low , Neutrophil -1.2 & iron high , trsat high
+so repest it
+
+Clinical Notes : haemochromatosis to be checked if iron and
+trf-saturation-still high WCC - low ,
+Neutrophil -1.2 & iron high , trsat high so
+repest it
+
+Haemochromatosis Gene (Blood)
+C282Y Mutation Negative
+H63D Mutation Heterozygous
+Comments on Lab Id. 974170030
+
+There is heterozygosity for the H63D mutation. This genotype carries
+only a very slight increased relative risk of hereditary
+Patients with hereditary haemochromatosis usually have a serum 
+transferrin saturation greater than 50% and an elevated ferritin. 
+Approximately 90% of people with symptoms of hereditary
+haemochromatosis are homozygous for the C282Y mutation, while
+approximately 2% of affected individuals are compound heterozygotes
+for both the C282Y and H63D mutations. Those individuals who are 
+heterozygous for only the C282Y mutation account for approximately 1%
+of people with symptoms of hereditary haemochromatosis, while those
+who are homozygous for the H63D mutation only rarely develop the condition. Approximately 8-10% of people with the symptoms of
+haemochromatosis do not exhibit either of these genetic abnormalities.
+
+Testing performed by High Resolution MeltGenotyping on the Roche 
+Lightcycler 480. This assay reports the HFE DNA variations encoding for
+p.H63D and p.C282Y. These variations are known as c.187C>G (H63D),
+c.845G>A (C282Y) respectively under HVGS nomenclature(Version 19.01) 
+; RefsegGene NM_004010.3(HFE)
+
+Pathologist: Dr L Waring/Dr L Akesson
+
+Melbourne Pathology NATA No.:2133
+
+Tests Completed: FBE,HCHROM
+Tests Pending : IS
+Sample Pending :
+```

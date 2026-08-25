@@ -25,7 +25,13 @@ class CharacterFactory:
         # Legacy characters (use existing custom classes)
         "super_motivational_coach": {"personality": "super_motivational_coach", "class": "MotivationalChatbot"},
         "wisdom_sage": {"personality": "wisdom_sage", "class": "WisdomChatbot"},
-        "stoic_philosopher": {"personality": "stoic_philosopher", "class": "StoicChatbot"}
+        "stoic_philosopher": {"personality": "stoic_philosopher", "class": "StoicChatbot"},
+
+        # Gentle companion - custom prompt to bypass coaching-style base rules
+        "gentle_companion": {"personality": "gentle_companion", "class": "GentleCompanionChatbot"},
+
+        # Medical advisor - general health information companion
+        "medical_advisor": {"personality": "medical_advisor", "class": None}
     }
     
     @staticmethod
@@ -62,6 +68,10 @@ class CharacterFactory:
             elif custom_class == "StoicChatbot":
                 from .stoic_chatbot import StoicChatbot
                 return StoicChatbot(personality_preset, user_preset)
+            elif custom_class == "GentleCompanionChatbot":
+                from .gentle_companion_chatbot import GentleCompanionChatbot
+                config = CHARACTER_CONFIGS.get(character_id, {})
+                return GentleCompanionChatbot(personality_preset, user_preset, config=config)
         
         # Otherwise use new base class
         config = CHARACTER_CONFIGS.get(character_id, {})

@@ -179,7 +179,7 @@ class PsychologistChatbot(KnowledgeEnhancedMixin, AIChatbot):
             ]
         }
     
-    async def chat(self, user_message: str, include_context: bool = True) -> Dict:
+    async def chat(self, user_message: str, include_context: bool = True, save_user_message: bool = True, message_source: str = "direct_ai", user_id: int = None) -> Dict:
         """
         Enhanced chat with psychological insights
         Detects emotional content and provides appropriate therapeutic responses
@@ -189,20 +189,20 @@ class PsychologistChatbot(KnowledgeEnhancedMixin, AIChatbot):
         
         # Check if asking about specific approach or concept
         if topic_area == "concept_inquiry":
-            return await self._explain_concept(user_message)
+            return await self._explain_concept(user_message, user_id=user_id)
         
         if topic_area == "coping_request":
-            return await self._provide_coping_strategies(user_message)
+            return await self._provide_coping_strategies(user_message, user_id=user_id)
         
         if topic_area == "therapy_question":
-            return await self._explain_therapy_approach(user_message)
+            return await self._explain_therapy_approach(user_message, user_id=user_id)
         
         # For general conversation, use knowledge-enhanced chat if available
         # This will search psychology literature and add relevant context
         if hasattr(self, '_knowledge_enabled') and self._knowledge_enabled:
-            response = await self.chat_with_knowledge(user_message, include_context)
+            response = await self.chat_with_knowledge(user_message, include_context, save_user_message, user_id=user_id)
         else:
-            response = await super().chat(user_message, include_context)
+            response = await super().chat(user_message, include_context, save_user_message, message_source, user_id=user_id)
         
         # Add therapeutic enhancement
         response = self._add_therapeutic_elements(response, user_message)
@@ -233,7 +233,7 @@ class PsychologistChatbot(KnowledgeEnhancedMixin, AIChatbot):
         
         return "general"
     
-    async def _explain_concept(self, message: str) -> Dict:
+    async def _explain_concept(self, message: str, user_id: int = None) -> Dict:
         """Explain a psychological concept"""
         message_lower = message.lower()
         
@@ -258,11 +258,11 @@ class PsychologistChatbot(KnowledgeEnhancedMixin, AIChatbot):
         
         # If no specific concept found, use knowledge-enhanced chat if available
         if hasattr(self, '_knowledge_enabled') and self._knowledge_enabled:
-            return await self.chat_with_knowledge(message)
+            return await self.chat_with_knowledge(message, user_id=user_id)
         else:
-            return await super().chat(message)
+            return await super().chat(message, user_id=user_id)
     
-    async def _provide_coping_strategies(self, message: str) -> Dict:
+    async def _provide_coping_strategies(self, message: str, user_id: int = None) -> Dict:
         """Provide evidence-based coping strategies (CONTEXT-AWARE)"""
         message_lower = message.lower()
         
@@ -316,11 +316,11 @@ class PsychologistChatbot(KnowledgeEnhancedMixin, AIChatbot):
         
         # General coping response
         if hasattr(self, '_knowledge_enabled') and self._knowledge_enabled:
-            return await self.chat_with_knowledge(message)
+            return await self.chat_with_knowledge(message, user_id=user_id)
         else:
-            return await super().chat(message)
+            return await super().chat(message, user_id=user_id)
     
-    async def _explain_therapy_approach(self, message: str) -> Dict:
+    async def _explain_therapy_approach(self, message: str, user_id: int = None) -> Dict:
         """Explain a therapeutic approach"""
         message_lower = message.lower()
         
@@ -341,9 +341,9 @@ class PsychologistChatbot(KnowledgeEnhancedMixin, AIChatbot):
                 return {"response": response, "approach_explained": approach_key}
         
         if hasattr(self, '_knowledge_enabled') and self._knowledge_enabled:
-            return await self.chat_with_knowledge(message)
+            return await self.chat_with_knowledge(message, user_id=user_id)
         else:
-            return await super().chat(message)
+            return await super().chat(message, user_id=user_id)
     
     def _add_therapeutic_elements(self, response: Dict, user_message: str) -> Dict:
         """Add therapeutic elements like validation and reflection"""

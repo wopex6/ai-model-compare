@@ -172,7 +172,7 @@ class StoicChatbot(AIChatbot):
             }
         ]
     
-    async def chat(self, user_message: str, include_context: bool = True, save_user_message: bool = True, message_source: str = "direct_ai") -> Dict[str, any]:
+    async def chat(self, user_message: str, include_context: bool = True, save_user_message: bool = True, message_source: str = "direct_ai", user_id: int = None) -> Dict[str, any]:
         """Enhanced chat with Stoic philosophical guidance"""
         
         # Check for specific Stoic guidance requests
@@ -194,7 +194,7 @@ class StoicChatbot(AIChatbot):
         
         # Get base response from parent chatbot with enhanced message
         # Pass save_user_message=False since we already saved above (or it was already saved by Smart Response)
-        response_data = await super().chat(enhanced_message, include_context, save_user_message=False, message_source=message_source)
+        response_data = await super().chat(enhanced_message, include_context, save_user_message=False, message_source=message_source, user_id=user_id)
         
         # Add Stoic enhancements
         response_data = await self._add_stoic_enhancements(response_data, user_message)
