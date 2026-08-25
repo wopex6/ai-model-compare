@@ -81,7 +81,9 @@ class KnowledgeEnhancedMixin:
     
     async def chat_with_knowledge(self, 
                                   user_message: str,
-                                  include_context: bool = True) -> Dict:
+                                  include_context: bool = True,
+                                  save_user_message: bool = True,
+                                  user_id: int = None) -> Dict:
         """
         Chat with automatic knowledge enhancement
         Override this in your chatbot class
@@ -96,7 +98,7 @@ class KnowledgeEnhancedMixin:
         
         # Call parent chat method (must be implemented by child)
         if hasattr(super(), 'chat'):
-            return await super().chat(enhanced_message, include_context)
+            return await super().chat(enhanced_message, include_context, save_user_message, user_id=user_id)
         else:
             raise NotImplementedError("Child class must implement chat() method")
     

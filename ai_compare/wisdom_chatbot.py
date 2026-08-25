@@ -104,7 +104,7 @@ class WisdomChatbot(AIChatbot):
             "pu": "The uncarved block - original simplicity and potential"
         }
     
-    async def chat(self, user_message: str, include_context: bool = True, save_user_message: bool = True, message_source: str = "direct_ai") -> Dict[str, any]:
+    async def chat(self, user_message: str, include_context: bool = True, save_user_message: bool = True, message_source: str = "direct_ai", user_id: int = None) -> Dict[str, any]:
         """Enhanced chat with wisdom and philosophical insights"""
         
         # Detect if user is seeking specific wisdom
@@ -126,7 +126,7 @@ class WisdomChatbot(AIChatbot):
         
         # Get base response from parent chatbot with enhanced message
         # Pass save_user_message=False since we already saved above (or it was already saved by Smart Response)
-        response_data = await super().chat(enhanced_message, include_context, save_user_message=False, message_source=message_source)
+        response_data = await super().chat(enhanced_message, include_context, save_user_message=False, message_source=message_source, user_id=user_id)
         
         # Add wisdom enhancements
         response_data = await self._add_wisdom_enhancements(response_data, user_message)

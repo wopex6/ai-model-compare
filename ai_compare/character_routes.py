@@ -7,6 +7,10 @@ import asyncio
 import threading
 from .character_factory import CharacterFactory
 
+# Characters for which the smart response system must never serve a
+# cached quick-reply (e.g. medical advice needs full AI context).
+QUICK_REPLY_OPTOUT = {"medical_advisor"}
+
 # Create a persistent event loop for async operations
 # This prevents "Event loop is closed" warnings
 _event_loop = None
@@ -208,23 +212,28 @@ def _register_chat_endpoint(app, character_id, characters_dict, smart_response_p
                 except Exception:
                     pass
 
-            # ── Proactive Clarification (always) ────────────────────────────
+            # ── Proactive Clarification ──────────────────────────────────────
+            # Skipped for characters where interrogating the user contradicts
+            # their persona (Sam exists to listen, not to ask "what specific
+            # outcome are you hoping for?").
+            _CLARIFIER_OPTOUT = {"gentle_companion", "medical_advisor"}
             _clarification_response = None
-            try:
-                from smart_response.response_need_classifier import get_need_classifier
-                from smart_response.proactive_clarifier import get_clarifier
-                _classification = get_need_classifier().classify(message)
-                _clarifier_decision = get_clarifier().decide(
-                    message,
-                    need_confidence=_classification.confidence,
-                    primary_need=_classification.primary_need,
-                    secondary_need=_classification.secondary_need,
-                )
-                if _clarifier_decision.should_clarify:
-                    _clarification_response = get_clarifier().format_clarification_response(_clarifier_decision)
-            except Exception:
-                _classification = None
-                _clarifier_decision = None
+            if character_id not in _CLARIFIER_OPTOUT:
+                try:
+                    from smart_response.response_need_classifier import get_need_classifier
+                    from smart_response.proactive_clarifier import get_clarifier
+                    _classification = get_need_classifier().classify(message)
+                    _clarifier_decision = get_clarifier().decide(
+                        message,
+                        need_confidence=_classification.confidence,
+                        primary_need=_classification.primary_need,
+                        secondary_need=_classification.secondary_need,
+                    )
+                    if _clarifier_decision.should_clarify:
+                        _clarification_response = get_clarifier().format_clarification_response(_clarifier_decision)
+                except Exception:
+                    _classification = None
+                    _clarifier_decision = None
 
             if _clarification_response:
                 _clarification_response['session_id'] = session_id
@@ -410,6 +419,37 @@ def _register_chat_endpoint(app, character_id, characters_dict, smart_response_p
                 UserPersonalization().process_signals_and_adapt(user_id)
             except Exception:
                 pass
+
+            # ── Health Profile Learning (medical_advisor only) ─────────────────
+            # Parse structured profile updates from the AI response (no extra AI call)
+            if character_id == "medical_advisor" and user_id:
+                try:
+                    from .medical_advisor_health_context import HealthContextManager
+                    import json as _json
+                    _ai_resp = response.get('response', '') if isinstance(response, dict) else str(response)
+                    if '---PROFILE_UPDATE---' in _ai_resp:
+                        parts = _ai_resp.split('---PROFILE_UPDATE---', 1)
+                        clean_response = parts[0].strip()
+                        profile_json_str = parts[1].strip()
+
+                        # Update the response to remove the profile update section
+                        if isinstance(response, dict):
+                            response['response'] = clean_response
+                        else:
+                            response = clean_response
+
+                        # Parse and store using shared method
+                        try:
+                            update_data = _json.loads(profile_json_str)
+                            profile = HealthContextManager.get_profile(str(user_id))
+                            _stored = profile.apply_extracted_data(update_data)
+                            if _stored:
+                                response['profile_updated'] = True
+                                response['profile_actions'] = _stored[:5]
+                        except (_json.JSONDecodeError, KeyError):
+                            pass
+                except Exception:
+                    pass
 
             return jsonify(response)
         except Exception as e:

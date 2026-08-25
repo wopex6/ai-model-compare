@@ -159,13 +159,13 @@ body {
 /* Navigation */
 .navbar {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    padding: 15px 30px;
+    padding: 12px 20px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
     display: flex;
     justify-content: space-between;
     align-items: center;
     flex-wrap: nowrap;
-    gap: 15px;
+    gap: 10px;
 }
 
 .nav-brand {
@@ -201,25 +201,34 @@ body {
 .nav-menu {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     flex-wrap: nowrap;
     overflow-x: auto;
     overflow-y: hidden;
+    min-width: 0;
+    flex: 1 1 auto;
+    scrollbar-width: none; /* Firefox */
+}
+
+.nav-menu::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
 }
 
 .nav-btn {
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.2);
-    padding: 10px 20px;
+    padding: 8px 14px;
     border-radius: 6px;
     cursor: pointer;
     font-weight: 500;
+    font-size: 0.92rem;
     transition: all 0.3s ease;
     color: white;
     white-space: nowrap;
     display: flex;
     align-items: center;
     gap: 6px;
+    flex-shrink: 0;
 }
 
 .nav-btn i {
@@ -375,6 +384,392 @@ body {
 .welcome-message h3 {
     color: #333;
     margin-bottom: 15px;
+}
+
+.welcome-message .welcome-subtitle {
+    margin-bottom: 24px;
+    font-size: 0.95rem;
+}
+
+.welcome-capabilities {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+    margin-bottom: 28px;
+    text-align: left;
+}
+
+.capability-card {
+    background: linear-gradient(135deg, #f8f9ff 0%, #f0f4ff 100%);
+    border: 1px solid #e4e8f4;
+    border-radius: 12px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.capability-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+}
+
+.capability-card .cap-icon {
+    font-size: 1.3rem;
+    min-width: 28px;
+    text-align: center;
+    padding-top: 2px;
+}
+
+.capability-card .cap-text {
+    font-size: 0.82rem;
+    line-height: 1.35;
+    color: #555;
+}
+
+.capability-card .cap-text strong {
+    display: block;
+    font-size: 0.88rem;
+    color: #333;
+    margin-bottom: 2px;
+}
+
+.welcome-starters-label {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: #999;
+    margin-bottom: 10px;
+    font-weight: 600;
+}
+
+.welcome-starters {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+}
+
+.starter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: white;
+    border: 1.5px solid #dde2f0;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    color: #555;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: left;
+}
+
+.starter-chip:hover {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    border-color: transparent;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(102, 126, 234, 0.3);
+}
+
+.starter-chip i {
+    font-size: 0.9rem;
+    opacity: 0.7;
+}
+
+.starter-chip:hover i {
+    opacity: 1;
+}
+
+@media (max-width: 767px) {
+    .welcome-capabilities {
+        grid-template-columns: 1fr;
+        gap: 8px;
+    }
+    .welcome-starters {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .starter-chip {
+        justify-content: center;
+    }
+}
+
+.feature-hint {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 16px;
+    margin: 8px 0;
+    background: linear-gradient(135deg, #f0f4ff 0%, #e8edff 100%);
+    border: 1px solid #d4dcf4;
+    border-radius: 12px;
+    font-size: 0.82rem;
+    color: #555;
+    max-width: 70%;
+    animation: hintSlideIn 0.3s ease;
+}
+
+@keyframes hintSlideIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.feature-hint .hint-icon {
+    font-size: 1.1rem;
+    min-width: 22px;
+    text-align: center;
+    padding-top: 1px;
+}
+
+.feature-hint .hint-body strong {
+    display: block;
+    font-size: 0.85rem;
+    color: #444;
+    margin-bottom: 2px;
+}
+
+.feature-hint .hint-action {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 4px 12px;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 14px;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.feature-hint .hint-action:hover {
+    background: #5568d3;
+}
+
+.feature-hint .hint-dismiss {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: #aaa;
+    cursor: pointer;
+    font-size: 0.85rem;
+    padding: 0 4px;
+    flex-shrink: 0;
+}
+
+.feature-hint .hint-dismiss:hover {
+    color: #666;
+}
+
+.message.assistant.error-state .message-content {
+    background: linear-gradient(135deg, #fff5f5, #fff0f0);
+    border: 1px solid #fed7d7;
+    border-radius: 14px;
+    padding: 14px 16px;
+}
+
+.error-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+}
+
+.error-actions .retry-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 14px;
+    background: #667eea;
+    color: white;
+    border: none;
+    border-radius: 16px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.error-actions .retry-btn:hover {
+    background: #5568d3;
+}
+
+.error-actions .alt-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 14px;
+    background: white;
+    color: #667eea;
+    border: 1px solid #667eea;
+    border-radius: 16px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.error-actions .alt-btn:hover {
+    background: #667eea;
+    color: white;
+}
+
+.milestone-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    z-index: 9998;
+    background: white;
+    border-radius: 16px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    max-width: 460px;
+    width: 90%;
+    animation: milestoneSlideUp 0.4s ease forwards;
+}
+
+@keyframes milestoneSlideUp {
+    from { transform: translateX(-50%) translateY(100px); opacity: 0; }
+    to   { transform: translateX(-50%) translateY(0); opacity: 1; }
+}
+
+.milestone-toast.hiding {
+    animation: milestoneSlideDown 0.3s ease forwards;
+}
+
+@keyframes milestoneSlideDown {
+    from { transform: translateX(-50%) translateY(0); opacity: 1; }
+    to   { transform: translateX(-50%) translateY(100px); opacity: 0; }
+}
+
+.milestone-toast .ms-icon {
+    font-size: 2rem;
+    flex-shrink: 0;
+}
+
+.milestone-toast .ms-body {
+    flex: 1;
+}
+
+.milestone-toast .ms-body strong {
+    display: block;
+    font-size: 0.95rem;
+    color: #333;
+    margin-bottom: 2px;
+}
+
+.milestone-toast .ms-body span {
+    font-size: 0.82rem;
+    color: #666;
+}
+
+.milestone-toast .ms-action {
+    padding: 6px 14px;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    border: none;
+    border-radius: 14px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.milestone-toast .ms-close {
+    background: none;
+    border: none;
+    color: #bbb;
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 0 4px;
+    flex-shrink: 0;
+}
+
+.milestone-toast .ms-close:hover {
+    color: #666;
+}
+
+.progress-ring-widget {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 900;
+    background: white;
+    border-radius: 50%;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    width: 56px;
+    height: 56px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s;
+}
+
+.progress-ring-widget:hover {
+    transform: scale(1.08);
+}
+
+.progress-ring-widget svg {
+    transform: rotate(-90deg);
+}
+
+.progress-ring-pct {
+    position: absolute;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #667eea;
+}
+
+.progress-ring-tooltip {
+    display: none;
+    position: absolute;
+    bottom: 64px;
+    right: 0;
+    background: white;
+    border-radius: 14px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+    padding: 14px 18px;
+    width: 220px;
+    font-size: 0.82rem;
+    color: #555;
+}
+
+.progress-ring-widget:hover .progress-ring-tooltip,
+.progress-ring-tooltip.visible {
+    display: block;
+}
+
+.progress-ring-tooltip .pr-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+}
+
+.progress-ring-tooltip .pr-check {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65rem;
+    flex-shrink: 0;
+}
+
+.progress-ring-tooltip .pr-check.done {
+    background: #e8f5e9;
+    color: #2e7d32;
+}
+
+.progress-ring-tooltip .pr-check.pending {
+    background: #f5f5f5;
+    color: #bbb;
 }
 
 .message {
@@ -1187,20 +1582,20 @@ body {
     color: #333;
 }
 
-/* Icon-only nav buttons on medium screens (horizontal nav, limited space) */
-@media (min-width: 769px) and (max-width: 1400px) {
+/* Icon-only nav buttons on medium/large screens where text doesn't fit */
+@media (min-width: 769px) and (max-width: 1700px) {
     .nav-btn {
-        padding: 10px 12px !important;
-        min-width: 44px;
+        padding: 8px 10px !important;
+        min-width: 40px;
         justify-content: center;
     }
-    
+
     .nav-btn .nav-text {
         display: none !important;
     }
-    
+
     .nav-btn i {
-        font-size: 1.2rem;
+        font-size: 1.1rem;
     }
 }
 

@@ -9,6 +9,11 @@
     <script src="/static/auth_helper.js"></script>
     <script src="/static/message_handler.js"></script>
     <script src="/static/conversation_box.js"></script>
+    <link href="/static/avatar_styles.css" rel="stylesheet">
+    <div id="avatar-floater" style="position:fixed;bottom:90px;right:20px;z-index:1000;display:none;"></div>
+    <script src="/static/avatar_engine.js?v=20261008"></script>
+    <script src="/static/avatar_widget.js?v=20261008"></script>
+
     <style>
         * {
             margin: 0;
@@ -546,6 +551,13 @@
         MessageHandler.enableHighlights('zen_master');
 
         // Initialize ConversationBox with moment count tracking
+        let _avatarCtrl = null;
+        if (window.AvatarWidget) {
+            const r = AvatarWidget.init({ characterId: 'zen_master', floatContainerId: 'avatar-floater', greeting: "Peace be with you. I am Master Kai. Breathe, and tell me what's on your mind.", greetingDelay: 1000, showByDefault: false });
+            _avatarCtrl = r.float;
+            setTimeout(() => { document.getElementById('avatar-floater').style.display = 'flex'; }, 800);
+        }
+
         ConversationBox.init('zen_master', {
             onMessageSent: (message) => {
                 momentCount++;
@@ -558,6 +570,7 @@
         function sendQuickMessage(message) {
             ConversationBox.sendQuickMessage(message);
         }
+
     </script>
 </body>
 </html>

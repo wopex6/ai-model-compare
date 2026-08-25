@@ -277,6 +277,28 @@ PERSONALITY_PRESETS = {
         creativity_level=0.92,
         empathy_level=0.70,
         humor_level=0.5
+    ),
+
+    "gentle_companion": PersonalityTraits(
+        character="Sam",
+        mood=Mood.EMPATHETIC,
+        goal=Goal.COLLABORATE,
+        context_awareness=0.99,
+        formality_level=0.15,   # very casual, like a friend
+        creativity_level=0.55,  # natural language, not flashy
+        empathy_level=0.98,     # primary trait
+        humor_level=0.25        # gentle warmth, not jokey
+    ),
+
+    "medical_advisor": PersonalityTraits(
+        character="Dr. Health",
+        mood=Mood.CALM,
+        goal=Goal.ASSIST,
+        context_awareness=0.96,
+        formality_level=0.6,    # professional but approachable
+        creativity_level=0.5,   # clear, evidence-based language
+        empathy_level=0.85,     # caring but factual
+        humor_level=0.2         # warm but serious about health
     )
 }
 

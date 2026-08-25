@@ -8,6 +8,8 @@ import json
 from pathlib import Path
 from .chatbot import AIChatbot
 from .knowledge_enhanced_chatbot import KnowledgeEnhancedMixin
+from .medical_advisor_health_context import HealthContextManager
+from .medical_knowledge_apis import get_medical_knowledge
 
 
 class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
@@ -77,7 +79,7 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
             "icon": "fa-robot"
         })
     
-    async def chat(self, user_message: str, include_context: bool = True, save_user_message: bool = True, message_source: str = "direct_ai") -> Dict:
+    async def chat(self, user_message: str, include_context: bool = True, save_user_message: bool = True, message_source: str = "direct_ai", user_id: int = None) -> Dict:
         """
         Enhanced chat with specialized knowledge
         Detects topic area and provides appropriate responses
@@ -87,28 +89,42 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
             include_context: Whether to include conversation history
             save_user_message: Whether to save the user message (False when Smart Response already saved it)
             message_source: Source of the message ("smart_response" or "direct_ai")
+            user_id: Authenticated user id (used by personalization / per-user memory)
         """
+        # Fetch medical evidence for medical_advisor (async, before prompt build)
+        self._medical_evidence_cache = ""
+        if self.character_id == "medical_advisor":
+            try:
+                mk = get_medical_knowledge()
+                profile_data = None
+                if user_id:
+                    profile = HealthContextManager.get_profile(str(user_id))
+                    profile_data = profile.data if profile else None
+                self._medical_evidence_cache = await mk.get_evidence_context(user_message, profile_data)
+            except Exception:
+                self._medical_evidence_cache = ""
+
         # Detect what type of inquiry this is
         topic_area = self._detect_topic_area(user_message)
         
         # Route to appropriate handler
         if topic_area == "concept_inquiry" and self.concepts:
-            return await self._explain_concept(user_message)
+            return await self._explain_concept(user_message, user_id=user_id)
         
         if topic_area == "strategy_request" and self.strategies:
-            return await self._provide_strategy(user_message)
+            return await self._provide_strategy(user_message, user_id=user_id)
         
         if topic_area == "approach_question" and self.approaches:
-            return await self._explain_approach(user_message)
+            return await self._explain_approach(user_message, user_id=user_id)
         
         if topic_area == "exercise_request" and self.exercises:
-            return await self._provide_exercise(user_message)
+            return await self._provide_exercise(user_message, user_id=user_id)
         
         # For general conversation, use knowledge-enhanced chat if available
         if self._knowledge_enabled:
-            response = await self.chat_with_knowledge(user_message, include_context, save_user_message)
+            response = await self.chat_with_knowledge(user_message, include_context, save_user_message, user_id=user_id)
         else:
-            response = await super().chat(user_message, include_context, save_user_message, message_source)
+            response = await super().chat(user_message, include_context, save_user_message, message_source, user_id=user_id)
         
         # Add character-specific enhancement
         response = self._add_character_enhancement(response, user_message)
@@ -143,7 +159,7 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
         
         return "general"
     
-    async def _explain_concept(self, message: str) -> Dict:
+    async def _explain_concept(self, message: str, user_id: int = None) -> Dict:
         """Explain a concept from configured concepts"""
         message_lower = message.lower()
         
@@ -176,11 +192,11 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
         # If no specific concept found, use knowledge-enhanced chat
         # Note: save_user_message not available in this context (concept lookup)
         if self._knowledge_enabled:
-            return await self.chat_with_knowledge(message)
+            return await self.chat_with_knowledge(message, user_id=user_id)
         else:
-            return await super().chat(message, message_source="direct_ai")
+            return await super().chat(message, message_source="direct_ai", user_id=user_id)
     
-    async def _provide_strategy(self, message: str) -> Dict:
+    async def _provide_strategy(self, message: str, user_id: int = None) -> Dict:
         """Provide strategy/technique from configured strategies (CONTEXT-AWARE)"""
         message_lower = message.lower()
         
@@ -224,11 +240,11 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
         
         # General fallback
         if self._knowledge_enabled:
-            return await self.chat_with_knowledge(message)
+            return await self.chat_with_knowledge(message, user_id=user_id)
         else:
-            return await super().chat(message, include_context=False, save_user_message=False, message_source="direct_ai")
+            return await super().chat(message, include_context=False, save_user_message=False, message_source="direct_ai", user_id=user_id)
     
-    async def _explain_approach(self, message: str) -> Dict:
+    async def _explain_approach(self, message: str, user_id: int = None) -> Dict:
         """Explain an approach/method from configured approaches"""
         message_lower = message.lower()
         
@@ -261,11 +277,11 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
                 return {"response": response, "approach_explained": approach_key}
         
         if self._knowledge_enabled:
-            return await self.chat_with_knowledge(message)
+            return await self.chat_with_knowledge(message, user_id=user_id)
         else:
-            return await super().chat(message, message_source="direct_ai")
+            return await super().chat(message, message_source="direct_ai", user_id=user_id)
     
-    async def _provide_exercise(self, message: str) -> Dict:
+    async def _provide_exercise(self, message: str, user_id: int = None) -> Dict:
         """Provide an exercise from configured exercises"""
         message_lower = message.lower()
         
@@ -298,9 +314,9 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
                 return {"response": response, "exercise_provided": exercise_key}
         
         if self._knowledge_enabled:
-            return await self.chat_with_knowledge(message)
+            return await self.chat_with_knowledge(message, user_id=user_id)
         else:
-            return await super().chat(message, message_source="direct_ai")
+            return await super().chat(message, message_source="direct_ai", user_id=user_id)
     
     def _add_character_enhancement(self, response: Dict, user_message: str) -> Dict:
         """Add character-specific enhancements to responses"""
@@ -392,6 +408,62 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
         
         return intro
     
+    def _build_enhanced_prompt(self, user_message: str, include_context: bool, user_id: int = None) -> str:
+        """Override to inject health context for medical_advisor"""
+        prompt = super()._build_enhanced_prompt(user_message, include_context, user_id)
+
+        if self.character_id == "medical_advisor" and user_id:
+            health_context = HealthContextManager.get_context_for_prompt(str(user_id))
+            if health_context:
+                profile_instruction = f"""{health_context}
+
+HOW TO USE THE PATIENT HEALTH CONTEXT ABOVE:
+- By DEFAULT, treat it as background for every answer. Tailor your response to THIS patient: take their conditions, medications, supplements, allergies, restrictions and recent test results into account, and proactively flag any interaction, contraindication or dosage concern. Generic or broad guidance is acceptable when it does not conflict with this patient. If a recommendation could conflict, mention the conflict or caveat explicitly and do not recommend it.
+- Weave in only what is relevant to the current question. Do NOT recite the whole profile back to the patient.
+- When a symptom, new condition, test result, or medication change has no clear next step, proactively propose concrete follow-up actions and/or questions to ask the user's doctor, and capture them in the ---PROFILE_UPDATE--- JSON below.
+- EXCEPTION: if the patient explicitly asks for general, generic or textbook information (e.g. "in general", "for most people", "ignore my profile", "just give me the general answer"), answer generally and add one short line noting the answer is not personalized to their profile.
+- If the profile is missing something you need in order to answer safely, say what is missing and ask for it rather than guessing.
+
+IMPORTANT: After your conversational response, append a line "---PROFILE_UPDATE---" followed by a JSON object capturing ALL new health information the patient revealed in THIS message. Format:
+---PROFILE_UPDATE---
+{{
+  "advice": ["actionable advice sentences"],
+  "new_foods": ["foods mentioned as part of diet"],
+  "new_restrictions": ["things to avoid"],
+  "warnings": ["critical safety warnings"],
+  "insights": ["key health observations"],
+  "new_medications": [{{"name": "drug name", "dose": "dosage", "purpose": "reason"}}],
+  "new_supplements": [{{"name": "supplement", "dose": "dosage", "purpose": "reason"}}],
+  "new_conditions": [{{"name": "condition", "details": "brief details", "diagnosed_date": "date if mentioned"}}],
+  "new_symptoms": [{{"description": "symptom", "severity": "mild/moderate/severe"}}],
+  "new_test_results": [{{"test_name": "test", "value": "plain string with unit and H/L flag if present, e.g. '6.4 H mmol/L'", "date": "when taken"}}],
+  "new_allergies": ["allergy or intolerance"],
+  "personal_updates": {{"age": null, "weight": null, "height": null, "blood_type": null}},
+  "lifestyle_updates": ["exercise, sleep, or habit changes"],
+  "procedures": [{{"name": "procedure/surgery", "date": "when", "notes": "outcome"}}],
+  "family_history": ["family member + condition"],
+  "next_steps": [{{"title": "...", "steps": ["..."], "due_date": "...", "priority": "high/medium/low"}}],
+  "questions_for_doctor": [{{"question": "...", "context": "...", "priority": "high/medium/low"}}]
+}}
+Only include keys that have NEW data. Capture EVERYTHING medically relevant: medications, supplements, conditions, symptoms, test results, allergies, personal details (age/weight/height), lifestyle changes, procedures, and family history. If nothing new, still include the separator with {{"advice": []}}."""
+
+                # Add real-time medical evidence from public databases
+                medical_evidence = getattr(self, '_medical_evidence_cache', '')
+                if medical_evidence:
+                    profile_instruction += "\n" + medical_evidence
+
+                # Inject the profile instruction right before the current user message.
+                # Using the exact user_message is more reliable than searching for a
+                # generic marker, because the message itself could contain that text.
+                marker = f"Current user message: {user_message}"
+                if marker in prompt:
+                    pos = prompt.find(marker)
+                    prompt = prompt[:pos] + profile_instruction + "\n\n" + prompt[pos:]
+                else:
+                    # Fallback: prepend to the end of the prompt if marker is missing.
+                    prompt += "\n\n" + profile_instruction
+        return prompt
+
     def get_daily_insight(self) -> str:
         """Get a daily insight from configured insights"""
         if self.insights:

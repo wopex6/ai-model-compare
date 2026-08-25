@@ -195,6 +195,16 @@ class DomainCharacterAI:
     and style configurations.
     """
     
+    # Providers that cost nothing (local/self-hosted). These are ALWAYS exempt
+    # from the AI budget — both the pre-call limit check and post-call logging.
+    # Add any future free/local providers here.
+    FREE_PROVIDERS = frozenset({'ollama'})
+    
+    @classmethod
+    def _is_free_provider(cls, provider: str) -> bool:
+        """Return True if the provider is free/local and exempt from budget."""
+        return provider in cls.FREE_PROVIDERS
+    
     def __init__(self, ai_budget_manager=None, db_connection: sqlite3.Connection = None):
         """
         Initialize AI integration.
@@ -209,13 +219,26 @@ class DomainCharacterAI:
         self.anthropic_client = None
         self.error_log = AIProviderErrorLog(db_connection)
         
-        # Provider health tracking for smart failover (all 4 configured providers)
+        # Provider health tracking for smart failover
         self.provider_status = {
             'openai': {'healthy': True, 'last_error': None, 'consecutive_failures': 0, 'available': False},
             'anthropic': {'healthy': True, 'last_error': None, 'consecutive_failures': 0, 'available': False},
             'google': {'healthy': True, 'last_error': None, 'consecutive_failures': 0, 'available': False},
-            'grok': {'healthy': True, 'last_error': None, 'consecutive_failures': 0, 'available': False}
+            'grok': {'healthy': True, 'last_error': None, 'consecutive_failures': 0, 'available': False},
+            # Ollama: free, local, no API key required
+            'ollama': {'healthy': True, 'last_error': None, 'consecutive_failures': 0, 'available': False},
         }
+        
+        # Ollama config (free local models). Auto-detected if the server is running.
+        # Default to Chinese-capable DeepSeek/Qwen first, then general Llama as fallback.
+        ollama_model_env = os.environ.get('OLLAMA_MODEL', 'deepseek-r1,qwen2.5,llama3.2')
+        self.ollama_config = {
+            'host': os.environ.get('OLLAMA_HOST', 'http://localhost:11434'),
+            'models': [m.strip() for m in ollama_model_env.split(',') if m.strip()],
+            'timeout': int(os.environ.get('OLLAMA_TIMEOUT', '45')),
+            'max_tokens': int(os.environ.get('OLLAMA_MAX_TOKENS', '512')),
+        }
+        self.ollama_available = False
         
         # Initialize available AI clients
         self._init_ai_clients()
@@ -249,9 +272,49 @@ class DomainCharacterAI:
         if grok_key:
             self.provider_status['grok']['available'] = True
             print("✓ Grok API key configured")
+        
+        # Ollama (free, local models — no API key). Auto-detected if reachable.
+        if os.environ.get('OLLAMA_ENABLED', '1').lower() not in ('0', 'false', 'no'):
+            if self._check_ollama():
+                self.ollama_available = True
+                self.provider_status['ollama']['available'] = True
+                print(f"✓ Ollama available ({', '.join(self.ollama_config['models'])} @ {self.ollama_config['host']})")
+    
+    def _check_ollama(self) -> bool:
+        """Check whether a local Ollama server is reachable (short timeout)."""
+        try:
+            import urllib.request
+            url = self.ollama_config['host'].rstrip('/') + '/api/tags'
+            with urllib.request.urlopen(url, timeout=2) as resp:
+                return resp.status == 200
+        except Exception:
+            return False
+    
+    def _build_provider_chain(self, primary: str) -> List[str]:
+        """
+        Build an ordered, de-duplicated list of usable providers to try.
+        Cloud providers first, then Ollama (free/local) as a last resort so it
+        never changes existing behavior unless the cloud providers are down.
+        """
+        candidate_order = [primary, 'anthropic', 'openai', 'ollama']
+        chain = []
+        for p in candidate_order:
+            if p in chain:
+                continue
+            if p == 'anthropic' and self.anthropic_client:
+                chain.append(p)
+            elif p == 'openai' and self.openai_client:
+                chain.append(p)
+            elif p == 'ollama' and self.ollama_available:
+                chain.append(p)
+        return chain
     
     def _get_best_provider(self) -> str:
         """Determine best provider based on health status"""
+        # Opt-in: prefer the free local model to minimize cost.
+        prefer_free = os.environ.get('AI_PREFER_FREE', '').lower() in ('1', 'true', 'yes')
+        if prefer_free and self.ollama_available and self.provider_status['ollama']['healthy']:
+            return 'ollama'
         # Prefer Anthropic if both are healthy (due to OpenAI quota issues)
         if self.provider_status['anthropic']['healthy'] and self.anthropic_client:
             return 'anthropic'
@@ -263,8 +326,12 @@ class DomainCharacterAI:
                self.provider_status['openai']['consecutive_failures']:
                 return 'anthropic'
             return 'openai'
-        # Return whatever is available
-        return 'anthropic' if self.anthropic_client else 'openai'
+        # Return whatever cloud client is available, else fall back to free Ollama
+        if self.anthropic_client:
+            return 'anthropic'
+        if self.openai_client:
+            return 'openai'
+        return 'ollama' if self.ollama_available else 'anthropic'
     
     def _mark_provider_error(self, provider: str, error: Exception, 
                              character_id: str = None, user_id: int = None):
@@ -334,38 +401,85 @@ class DomainCharacterAI:
         self.provider_status[provider]['healthy'] = True
     
     def call_ai_direct(self, system_prompt: str, user_message: str, 
-                       character_id: str = 'coordinator') -> Optional[str]:
+                       character_id: str = 'coordinator',
+                       context: Dict = None,
+                       count_budget: bool = False,
+                       user_id: int = None,
+                       is_admin: bool = False) -> Optional[str]:
         """
         Direct AI call without needing a character object.
-        Used for generating context-aware prompts, greetings, etc.
+        Used for generating context-aware prompts, greetings, deliberation, etc.
         
         Args:
             system_prompt: System instructions for the AI
             user_message: The user message/request
             character_id: Optional character ID for logging
+            context: Optional context dict. Supports 'max_tokens_override' to
+                     raise the output cap (e.g. for batched multi-agent calls).
+            count_budget: When True, this call is checked against and logged to
+                     the AI budget (PAID providers only; free/local exempt).
+                     Used by Teams/deliberation so their calls respect the cap.
+            user_id: User id for budget accounting.
+            is_admin: Whether the caller is an admin (higher budget).
             
         Returns:
             AI-generated response string, or None on failure
         """
+        context = context or {}
         # Auto-select best provider
         provider = self._get_best_provider()
         
-        # Try providers with automatic failover
-        providers_to_try = [provider]
-        fallback = 'openai' if provider == 'anthropic' else 'anthropic'
-        if fallback not in providers_to_try:
-            providers_to_try.append(fallback)
+        # Budget gate — only for PAID providers when counting is requested.
+        force_free = False
+        if count_budget and self.ai_budget and not self._is_free_provider(provider):
+            allowed, deny_reason = self.ai_budget.can_make_ai_call(
+                user_id=user_id, is_admin=is_admin, is_background=False
+            )
+            if not allowed:
+                if self.ollama_available:
+                    print("[BUDGET] Paid budget exhausted — deliberation degrading to free Ollama.")
+                    provider = 'ollama'
+                    force_free = True
+                else:
+                    print("[BUDGET] Paid budget exhausted and no free provider — deliberation call refused.")
+                    return None
+        
+        # Try providers with automatic failover (Ollama included as free fallback)
+        providers_to_try = self._build_provider_chain(provider)
+        if force_free:
+            providers_to_try = [p for p in providers_to_try if self._is_free_provider(p)]
         
         for try_provider in providers_to_try:
             try:
+                response, metadata, used = None, {}, None
                 if try_provider == 'anthropic' and self.anthropic_client:
-                    response, metadata = self._generate_anthropic(system_prompt, user_message, {})
-                    self._mark_provider_success('anthropic')
-                    return response
+                    response, metadata = self._generate_anthropic(system_prompt, user_message, context)
+                    used = 'anthropic'
                 elif try_provider == 'openai' and self.openai_client:
-                    response, metadata = self._generate_openai(system_prompt, user_message, {})
-                    self._mark_provider_success('openai')
-                    return response
+                    response, metadata = self._generate_openai(system_prompt, user_message, context)
+                    used = 'openai'
+                elif try_provider == 'ollama' and self.ollama_available:
+                    response, metadata = self._generate_ollama(system_prompt, user_message, context)
+                    used = 'ollama'
+                else:
+                    continue
+                
+                self._mark_provider_success(used)
+                # Log against budget only for paid providers when requested.
+                if count_budget and self.ai_budget and not self._is_free_provider(used):
+                    self.ai_budget.log_ai_call(
+                        call_type='deliberation',
+                        purpose=character_id,
+                        success=True,
+                        user_id=user_id,
+                        character=character_id,
+                        is_background=False,
+                        input_tokens=metadata.get('input_tokens', 0),
+                        output_tokens=metadata.get('output_tokens', 0),
+                        model=metadata.get('model'),
+                        response_time_ms=metadata.get('response_time_ms')
+                    )
+                return response
             except Exception as e:
                 print(f"[AI DIRECT] {try_provider} failed: {e}")
                 self._mark_provider_error(try_provider, e, character_id, None)
@@ -393,23 +507,36 @@ class DomainCharacterAI:
         # Debug log admin status
         print(f"[AI-INTEGRATION] User {user_id} is_admin={is_admin} (from context)")
         
-        # Check AI budget if available
-        if self.ai_budget:
+        # Decide provider first so free/local models can be exempted from budget
+        if provider is None:
+            provider = self._get_best_provider()
+        
+        # Check AI budget — but only for PAID providers. Free/local providers
+        # (e.g. Ollama) are always allowed and never counted.
+        force_free = False
+        if self.ai_budget and not self._is_free_provider(provider):
             allowed, deny_reason = self.ai_budget.can_make_ai_call(
                 user_id=user_id,
                 is_admin=is_admin,
                 is_background=False
             )
             if not allowed:
-                return CharacterResponse(
-                    character_id=character.character_id,
-                    display_name=character.display_name,
-                    content=f"I've reached my daily conversation limit. Please try again tomorrow!",
-                    concern_level=0.0,
-                    interpretation={},
-                    should_display=True,
-                    metadata={'budget_limited': True, 'reason': deny_reason}
-                )
+                # Paid budget exhausted: degrade to a free local model if we have
+                # one, otherwise inform the user of the limit.
+                if self.ollama_available:
+                    print("[BUDGET] Paid AI budget exhausted — degrading to free Ollama.")
+                    provider = 'ollama'
+                    force_free = True
+                else:
+                    return CharacterResponse(
+                        character_id=character.character_id,
+                        display_name=character.display_name,
+                        content=f"I've reached my daily conversation limit. Please try again tomorrow!",
+                        concern_level=0.0,
+                        interpretation={},
+                        should_display=True,
+                        metadata={'budget_limited': True, 'reason': deny_reason}
+                    )
         
         # Get character config
         config = DOMAIN_CHARACTER_CONFIGS.get(character.character_id, {})
@@ -418,16 +545,12 @@ class DomainCharacterAI:
         # Build the full system prompt with style instructions
         full_system_prompt = self._build_system_prompt(character, system_prompt, context)
         
-        # Auto-select best provider if not specified
-        if provider is None:
-            provider = self._get_best_provider()
-        
-        # Try providers with automatic failover
-        providers_to_try = [provider]
-        # Add fallback provider
-        fallback = 'openai' if provider == 'anthropic' else 'anthropic'
-        if fallback not in providers_to_try:
-            providers_to_try.append(fallback)
+        # Try providers with automatic failover (Ollama included as free fallback)
+        providers_to_try = self._build_provider_chain(provider)
+        # When degraded due to budget, restrict to free providers only so we
+        # never silently spend on a paid fallback after the limit is hit.
+        if force_free:
+            providers_to_try = [p for p in providers_to_try if self._is_free_provider(p)]
         
         ai_response = None
         ai_metadata = {}
@@ -446,6 +569,11 @@ class DomainCharacterAI:
                     used_provider = 'openai'
                     self._mark_provider_success('openai')
                     break
+                elif try_provider == 'ollama' and self.ollama_available:
+                    ai_response, ai_metadata = self._generate_ollama(full_system_prompt, message, context)
+                    used_provider = 'ollama'
+                    self._mark_provider_success('ollama')
+                    break
             except Exception as e:
                 last_error = e
                 print(f"[AI FAILOVER] {try_provider} failed: {e}")
@@ -460,8 +588,10 @@ class DomainCharacterAI:
             ai_response = self._generate_fallback(character, message)
             used_provider = 'fallback'
         
-        # Log AI call if budget manager available
-        if self.ai_budget and used_provider != 'fallback':
+        # Log AI call if budget manager available.
+        # Free/local providers (e.g. Ollama) are exempt — never counted.
+        if self.ai_budget and used_provider != 'fallback' \
+                and not self._is_free_provider(used_provider):
             self.ai_budget.log_ai_call(
                 call_type='domain_character',
                 purpose=f'{character.character_id} chat',
@@ -620,6 +750,10 @@ CRITICAL RESPONSE RULES — follow these strictly:
     
     def _get_max_tokens(self, context: Dict) -> int:
         """Determine max_tokens dynamically based on situation and user request."""
+        # Explicit override (e.g. batched multi-agent calls that need more room).
+        # Clamped to a safe ceiling to stay within provider output limits.
+        if context.get('max_tokens_override'):
+            return max(100, min(int(context['max_tokens_override']), 4000))
         # If user explicitly asked for more detail
         if context.get('detail_requested'):
             return 700
@@ -737,6 +871,81 @@ CRITICAL RESPONSE RULES — follow these strictly:
         }
         
         return response.content[0].text, metadata
+    
+    def _generate_ollama(self, system_prompt: str, message: str,
+                         context: Dict) -> Tuple[str, Dict]:
+        """
+        Generate response using a local Ollama server (free, no API key).
+        Tries multiple models in order so Chinese-capable DeepSeek/Qwen are used
+        if available, falling back to llama3.2.
+        Uses the /api/chat endpoint via urllib (no extra dependency).
+        Returns (response, metadata).
+        """
+        import time
+        import urllib.request
+
+        host = self.ollama_config['host'].rstrip('/')
+        last_error = None
+
+        messages = [{"role": "system", "content": system_prompt}]
+        # Add conversation history if available
+        history = context.get('message_history', [])
+        for hist_msg in history:
+            role = "user" if hist_msg.get('role') == 'user' else "assistant"
+            messages.append({"role": role, "content": hist_msg.get('content', '')})
+        messages.append({"role": "user", "content": message})
+
+        # Clamp output for local models so a request can't block a worker too long.
+        max_tokens = min(self._get_max_tokens(context), self.ollama_config.get('max_tokens', 512))
+        prompt_tokens = len(system_prompt) // 4 + sum(len(m['content']) // 4 for m in messages)
+
+        for model in self.ollama_config['models']:
+            payload = {
+                "model": model,
+                "messages": messages,
+                "stream": False,
+                "options": {
+                    "num_predict": max_tokens,
+                    "temperature": 0.7,
+                },
+            }
+            print(f"[TOKENS] Ollama request: ~{prompt_tokens} prompt tokens (model: {model})")
+
+            data = json.dumps(payload).encode('utf-8')
+            req = urllib.request.Request(
+                host + '/api/chat',
+                data=data,
+                headers={'Content-Type': 'application/json'},
+                method='POST',
+            )
+
+            try:
+                start_time = time.time()
+                with urllib.request.urlopen(req, timeout=self.ollama_config['timeout']) as resp:
+                    body = json.loads(resp.read().decode('utf-8'))
+                response_time_ms = int((time.time() - start_time) * 1000)
+
+                content = (body.get('message', {}) or {}).get('content', '') or ''
+                input_tokens = body.get('prompt_eval_count', 0)
+                output_tokens = body.get('eval_count', 0)
+
+                if input_tokens or output_tokens:
+                    print(f"[TOKENS] Ollama actual: {input_tokens} in, {output_tokens} out ({response_time_ms}ms)")
+
+                metadata = {
+                    'model': model,
+                    'input_tokens': input_tokens,
+                    'output_tokens': output_tokens,
+                    'response_time_ms': response_time_ms,
+                }
+
+                return content, metadata
+            except Exception as e:
+                last_error = e
+                print(f"[OLLAMA] {model} failed: {e}")
+                continue
+
+        raise last_error if last_error else Exception("All Ollama models failed")
     
     def _generate_summary(self, full_response: str, provider: str) -> Optional[str]:
         """Generate a concise summary with action items from a long AI response"""

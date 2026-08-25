@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teams — AI Model Compare</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #667eea;
+            --primary-light: #764ba2;
+            --success: #28a745;
+            --danger: #dc3545;
+            --warning: #ffc107;
+            --bg: #f8f9fa;
+            --card: #ffffff;
+            --text: #333333;
+            --muted: #6c757d;
+            --border: #e9ecef;
+            --shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+            min-height: 100vh;
+            color: var(--text);
+        }
+        .app-shell {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            color: #fff;
+            margin-bottom: 24px;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        header h1 { margin: 0; font-size: 1.8rem; }
+        header p { margin: 4px 0 0; opacity: .9; }
+        .top-actions { display: flex; gap: 10px; }
+        .btn {
+            border: none;
+            border-radius: 8px;
+            padding: 10px 18px;
+            font-size: .95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform .15s, opacity .15s;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn:hover { transform: translateY(-1px); }
+        .btn:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+        .btn-primary { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: #fff; }
+        .btn-secondary { background: #fff; color: var(--primary); border: 1px solid var(--border); }
+        .btn-danger { background: var(--danger); color: #fff; }
+        .card {
+            background: var(--card);
+            border-radius: 14px;
+            box-shadow: var(--shadow);
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+        .section-title {
+            font-size: 1.15rem;
+            font-weight: 700;
+            margin: 0 0 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .form-group { margin-bottom: 16px; }
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            font-size: .9rem;
+            margin-bottom: 6px;
+            color: #555;
+        }
+        .form-group input, .form-group textarea, .form-group select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: .95rem;
+            font-family: inherit;
+        }
+        .form-group textarea { resize: vertical; min-height: 70px; }
+        .form-group small { color: var(--muted); font-size: .8rem; }
+        .character-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 10px;
+            max-height: 280px;
+            overflow-y: auto;
+            padding: 4px;
+        }
+        .character-card {
+            border: 2px solid var(--border);
+            border-radius: 10px;
+            padding: 12px;
+            cursor: pointer;
+            text-align: center;
+            transition: border-color .15s, background .15s;
+            position: relative;
+        }
+        .character-card:hover { background: #f8f9ff; }
+        .character-card.selected {
+            border-color: var(--primary);
+            background: #f0f4ff;
+        }
+        .character-card.coordinator {
+            border-color: var(--warning);
+            background: #fffbf0;
+        }
+        .character-card .icon { font-size: 1.4rem; margin-bottom: 6px; color: var(--primary); }
+        .character-card.coordinator .icon { color: #d39e00; }
+        .character-card .name { font-weight: 600; font-size: .85rem; }
+        .character-card .domain { font-size: .72rem; color: var(--muted); margin-top: 2px; }
+        .character-card .check {
+            position: absolute;
+            top: 6px; right: 8px;
+            color: var(--primary);
+            display: none;
+        }
+        .character-card.selected .check { display: inline; }
+        .coordinator-row { display: flex; gap: 10px; align-items: center; margin-top: 8px; }
+        .coordinator-row select { flex: 1; }
+        .team-list { display: flex; flex-direction: column; gap: 12px; }
+        .team-item {
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+        }
+        .team-item.built-in { background: #f8f9ff; border-left: 4px solid var(--primary); }
+        .team-item .meta { flex: 1; }
+        .team-item .name { font-weight: 700; font-size: 1rem; }
+        .team-item .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+        .chip {
+            background: #eef;
+            color: var(--primary);
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: .75rem;
+            font-weight: 600;
+        }
+        .team-item .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .action-btn {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            color: var(--muted);
+            font-size: 1rem;
+            padding: 6px;
+            border-radius: 6px;
+        }
+        .action-btn:hover { background: #f0f0f0; color: var(--text); }
+        .action-btn.danger:hover { color: var(--danger); background: #fff0f3; }
+        .deliberate-box {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+        }
+        .deliberate-box input { flex: 1; }
+        .conversation-history {
+            max-height: 520px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            padding: 8px 4px;
+            margin-top: 16px;
+        }
+        .message-bubble {
+            max-width: 85%;
+            padding: 12px 14px;
+            border-radius: 14px;
+            line-height: 1.5;
+            white-space: pre-wrap;
+        }
+        .message-bubble.user {
+            align-self: flex-end;
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: #fff;
+            border-bottom-right-radius: 4px;
+        }
+        .message-bubble.assistant {
+            align-self: flex-start;
+            background: #f8f9fa;
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-bottom-left-radius: 4px;
+            width: 100%;
+            max-width: 100%;
+        }
+        .message-bubble .response-text {
+            white-space: pre-wrap;
+        }
+        .response-meta {
+            color: var(--muted);
+            font-size: .82rem;
+            margin-top: 10px;
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .contributions { margin-top: 12px; }
+        .contribution {
+            border-left: 3px solid var(--primary);
+            padding: 10px 14px;
+            margin-bottom: 10px;
+            background: #fff;
+            border-radius: 0 8px 8px 0;
+        }
+        .contribution .author {
+            font-weight: 700;
+            font-size: .85rem;
+            color: var(--primary);
+            margin-bottom: 4px;
+        }
+        .history-empty {
+            text-align: center;
+            color: var(--muted);
+            padding: 30px 0;
+            font-size: .9rem;
+        }
+        .toast {
+            position: fixed;
+            bottom: 20px; right: 20px;
+            background: #333; color: #fff;
+            padding: 12px 18px;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            transform: translateY(120px);
+            transition: transform .3s;
+            z-index: 1000;
+        }
+        .toast.show { transform: translateY(0); }
+        .toast.error { background: var(--danger); }
+        .toast.success { background: var(--success); }
+        .empty-state { text-align: center; color: var(--muted); padding: 30px 0; }
+        .loading { opacity: .6; pointer-events: none; }
+        .badge {
+            display: inline-block;
+            background: var(--primary);
+            color: #fff;
+            font-size: .7rem;
+            padding: 2px 8px;
+            border-radius: 10px;
+            margin-left: 6px;
+            vertical-align: middle;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-shell">
+        <header>
+            <div>
+                <h1><i class="fas fa-users-cog"></i> Teams</h1>
+                <p>Assemble any characters into a deliberation team and run blind, coordinator-led negotiations.</p>
+            </div>
+            <div class="top-actions">
+                <a href="/chatchat" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Back to Chat</a>
+            </div>
+        </header>
+
+        <div class="grid">
+            <div class="card" id="editor-card">
+                <h2 class="section-title"><i class="fas fa-edit"></i> <span id="editor-title">Create Team</span></h2>
+                <div class="form-group">
+                    <label for="team-name">Team name</label>
+                    <input type="text" id="team-name" placeholder="e.g. Career Decision Council">
+                </div>
+                <div class="form-group">
+                    <label for="team-description">Description (optional)</label>
+                    <textarea id="team-description" placeholder="What is this team for?"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Members <small>— pick at least 2 distinct characters</small></label>
+                    <div class="character-grid" id="character-grid">
+                        <div class="empty-state">Loading characters…</div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="coordinator-row">
+                        <label for="team-coordinator">Coordinator:</label>
+                        <select id="team-coordinator"></select>
+                    </div>
+                    <small>The coordinator negotiates the anonymous member takes into one answer.</small>
+                </div>
+                <div class="form-group">
+                    <label for="team-batch">Gather mode</label>
+                    <select id="team-batch">
+                        <option value="1">Batched (one AI call — cheaper)</option>
+                        <option value="0">Sequential (one call per member — higher fidelity)</option>
+                    </select>
+                </div>
+                <div style="display:flex; gap:10px; justify-content:flex-end;">
+                    <button class="btn btn-secondary" id="cancel-edit-btn" style="display:none;">Cancel</button>
+                    <button class="btn btn-primary" id="save-team-btn"><i class="fas fa-save"></i> Save Team</button>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2 class="section-title"><i class="fas fa-layer-group"></i> Your Teams</h2>
+                <div class="team-list" id="team-list">
+                    <div class="empty-state">Loading teams…</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card" id="run-card" style="display:none;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px;">
+                <h2 class="section-title" style="margin:0;"><i class="fas fa-comments"></i> Run <span id="run-team-name">Team</span></h2>
+                <button class="btn btn-secondary" id="clear-history-btn" style="display:none;">
+                    <i class="fas fa-trash-alt"></i> Clear history
+                </button>
+            </div>
+            <div class="deliberate-box">
+                <input type="text" id="deliberate-message" placeholder="Ask the team something…">
+                <button class="btn btn-primary" id="run-deliberate-btn"><i class="fas fa-paper-plane"></i> Ask Team</button>
+            </div>
+            <div>
+                <label style="font-size:.85rem; display:inline-flex; align-items:center; gap:6px; margin-top:8px;">
+                    <input type="checkbox" id="reveal-attribution"> Reveal which member said what
+                </label>
+            </div>
+            <div class="conversation-history" id="conversation-history">
+                <div class="history-empty">Ask the team a question to start the conversation.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+    <script src="/static/teams.js"></script>
+</body>
+</html>

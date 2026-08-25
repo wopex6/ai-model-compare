@@ -9,6 +9,7 @@
     <link href="{{ url_for('static', filename='themes.css') }}" rel="stylesheet">
     <link href="{{ url_for('static', filename='domain_characters.css') }}" rel="stylesheet">
     <link href="{{ url_for('static', filename='responsive.css') }}" rel="stylesheet">
+    <link href="{{ url_for('static', filename='avatar_styles.css') }}" rel="stylesheet">
     <!-- PWA Support -->
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <meta name="theme-color" content="#667eea">
@@ -86,6 +87,22 @@
             gap: 15px;
             height: calc(100vh - 80px);
         }
+
+        /* When avatar is visible, insert its column between sidebar and chat */
+        .chat-section.avatar-open {
+            grid-template-columns: 280px 220px 1fr;
+        }
+
+        /* Avatar side slot */
+        #avatar-side {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            position: sticky;
+            top: 10px;
+            align-self: start;
+        }
+        #avatar-side[style*='flex'] { display: flex !important; }
         
         .characters-sidebar {
             background: rgba(255, 255, 255, 0.98);
@@ -674,6 +691,9 @@
                 </div>
             </div>
             
+            <!-- Avatar side slot -->
+            <div id="avatar-side" style="display:none;"></div>
+
             <!-- Main Chat -->
             <div class="main-chat">
                 <div class="chat-header">
@@ -684,6 +704,8 @@
                         <h3 id="selected-domain-character">Aria</h3>
                         <p id="selected-character-domain">Coordinator - Sees the bigger picture</p>
                     </div>
+                    <!-- Avatar toggle chip -->
+                    <button class="avatar-toggle-chip" id="avatar-toggle-chip" title="Show/hide character avatar" style="margin-left:4px;">🧑 Avatar</button>
                     <!-- Action Buttons Group (icons only) -->
                     <div class="header-actions" style="margin-left: auto; display: flex; gap: 6px; align-items: center;">
                         <button id="pinnedBtn" onclick="MessageHandler.togglePinnedPanel()" 
@@ -918,6 +940,8 @@
     <script src="{{ url_for('static', filename='proactive_clarification_ui.js') }}"></script>
     <script src="{{ url_for('static', filename='ai_budget_notifications.js') }}"></script>
     <script src="{{ url_for('static', filename='greeting_handler.js') }}"></script>
+    <script src="{{ url_for('static', filename='avatar_engine.js') + '?v=20261003' }}"></script>
+    <script src="{{ url_for('static', filename='avatar_widget.js') + '?v=20261003' }}"></script>
     <script>
         // Apply persona theme instantly from localStorage
         (function() {
@@ -940,6 +964,29 @@
             // Enable text highlighting BEFORE loading history
             MessageHandler.enableHighlights('coordinator');
             
+            // ── Avatar system ────────────────────────────────────────────
+            let _avatarCtrl = null;
+            if (window.AvatarWidget) {
+                const result = AvatarWidget.init({
+                    characterId: 'coordinator',
+                    sideContainerId: 'avatar-side',
+                    toggleChipId: 'avatar-toggle-chip',
+                    greeting: null,
+                    showByDefault: true,
+                });
+                _avatarCtrl = result.side;
+                // Sync grid column with avatar visibility
+                const chatGrid = document.querySelector('.chat-section');
+                const sideEl = document.getElementById('avatar-side');
+                const chipEl = document.getElementById('avatar-toggle-chip');
+                function syncDomainGrid() {
+                    if (!chatGrid || !sideEl) return;
+                    chatGrid.classList.toggle('avatar-open', sideEl.style.display !== 'none');
+                }
+                syncDomainGrid();
+                if (chipEl) chipEl.addEventListener('click', () => setTimeout(syncDomainGrid, 0));
+            }
+
             // Initialize DomainCharacters directly (simpler approach)
             await DomainCharacters.init({
                 ui: {
@@ -951,6 +998,26 @@
             
             // Load initial character (coordinator) history
             await DomainCharacters.loadCharacterHistory('coordinator');
+
+            // Wire avatar to domain character selection + message flow
+            DomainCharacters.callbacks.onMessageSent = () => {
+                if (_avatarCtrl) AvatarWidget.onAIThinking([_avatarCtrl]);
+            };
+            DomainCharacters.callbacks.onResponseReceived = (data) => {
+                if (!_avatarCtrl) return;
+                const firstResp = data.responses && data.responses.find(r => r.should_display);
+                const text = firstResp ? firstResp.content : '';
+                AvatarWidget.onAIResponse([_avatarCtrl], text);
+            };
+
+            // Re-apply avatar character when user switches domain character
+            const origSelectChar = DomainCharacters.selectCharacter?.bind(DomainCharacters);
+            if (origSelectChar) {
+                DomainCharacters.selectCharacter = function(charId) {
+                    origSelectChar(charId);
+                    if (_avatarCtrl) _avatarCtrl.applyCharacter(charId, null);
+                };
+            }
             
             // Register callback to reload history after re-authentication
             AuthHelper.onAuthenticated(async () => {

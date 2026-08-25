@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Emergency Info</title>
+
+<link rel="manifest" href="{{ url_for('static', filename='emergency_manifest.json') }}">
+<meta name="theme-color" content="#c62828">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Emergency Info">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/dr_health_icon_192.png') }}">
+<link rel="icon" href="{{ url_for('static', filename='icons/dr_health_icon_192.png') }}">
+
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+<style>
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Segoe UI', system-ui, sans-serif; background: #fff; color: #333; overscroll-behavior: none; }
+#app { display: flex; flex-direction: column; min-height: 100vh; }
+
+.topbar {
+    background: #c62828; color: #fff;
+    padding: calc(env(safe-area-inset-top, 0px) + 14px) 16px 14px;
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 100;
+}
+.topbar h1 { margin: 0; font-size: 1.2rem; }
+.topbar a { color: #fff; text-decoration: none; font-size: 0.85rem; }
+
+.content { flex: 1; padding: 16px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+.emergency-section { margin-bottom: 18px; }
+.emergency-section h2 {
+    color: #c62828; font-size: 0.85rem; margin: 0 0 6px;
+    text-transform: uppercase; letter-spacing: 0.03em;
+}
+.emergency-section p, .emergency-section ul { margin: 0; font-size: 1rem; line-height: 1.4; }
+.emergency-section ul { padding-left: 18px; }
+.emergency-section .big { font-size: 1.3rem; font-weight: 700; }
+
+.emergency-empty { color: #999; font-style: italic; padding: 20px 0; }
+.notice {
+    background: #fff3cd; border: 1px solid #f0ad4e; color: #856404;
+    padding: 10px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px;
+}
+.footer { padding: 12px 16px; text-align: center; color: #888; font-size: 0.75rem; }
+</style>
+</head>
+<body>
+<div id="app">
+    <div class="topbar">
+        <h1><i class="fas fa-kit-medical"></i> Emergency Info</h1>
+        <a href="/dr-health" id="update-link">Update</a>
+    </div>
+    <div class="content" id="emergency-content">
+        <div id="emergency-view"><p class="emergency-empty">Loading...</p></div>
+    </div>
+    <div class="footer">Stored on this phone. Synced to the backend when online.</div>
+</div>
+
+<script src="{{ url_for('static', filename='auth_helper.js') }}"></script>
+<script>
+const VITALS_KEY = 'drHealth.vitals.v1';
+function loadVitals() {
+    try { return JSON.parse(localStorage.getItem(VITALS_KEY) || '{}'); }
+    catch { return {}; }
+}
+function saveVitalsObject(v) { localStorage.setItem(VITALS_KEY, JSON.stringify(v)); }
+function getDefaultVitals() { return { name:'', age:'', blood:'', conditions:'', medications:'', allergies:'', history:'', doctors:'', ecName:'', ecRel:'', ecPhone:'' }; }
+function getVitals() { return { ...getDefaultVitals(), ...loadVitals() }; }
+
+async function syncVitalsFromServer() {
+    if (!AuthHelper.isAuthenticated()) return getVitals();
+    try {
+        const resp = await AuthHelper.authenticatedFetch('/api/health-profile/vitals');
+        if (!resp.ok) throw new Error('Server not available');
+        const data = await resp.json();
+        if (data.success) {
+            const local = loadVitals();
+            const merged = { ...(data.vitals || {}), ...local };
+            saveVitalsObject(merged);
+            return merged;
+        }
+    } catch (e) { console.error('Could not sync vitals from server', e); }
+    return getVitals();
+}
+
+function section(title, text) {
+    return text ? `<div class="emergency-section"><h2>${title}</h2><p>${text.replace(/\n/g,'<br>')}</p></div>` : '';
+}
+function list(title, text) {
+    if (!text) return '';
+    const items = text.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+    if (!items.length) return '';
+    return `<div class="emergency-section"><h2>${title}</h2><ul>${items.map(i => `<li>${i}</li>`).join('')}</ul></div>`;
+}
+function renderEmergency() {
+    const v = getVitals();
+    const view = document.getElementById('emergency-view');
+    const hasData = v.name || v.age || v.blood || v.conditions || v.medications || v.allergies || v.history || v.doctors || v.ecName || v.ecPhone;
+    if (!hasData) {
+        view.innerHTML = '<p class="emergency-empty">No emergency information saved yet. Tap <b>Update</b> to open Dr. Health and add it.</p>';
+        return;
+    }
+    let html = '';
+    html += section('Name', v.name);
+    html += section('Age / Blood type', [v.age, v.blood].filter(Boolean).join(' / '));
+    html += list('Medical conditions', v.conditions);
+    html += list('Current medications', v.medications);
+    html += list('Allergies', v.allergies);
+    html += section('Medical history', v.history);
+    html += section('Doctors', v.doctors);
+    html += `<div class="emergency-section"><h2>Emergency contact</h2>`;
+    html += v.ecName ? `<p class="big">${v.ecName}</p>` : '';
+    html += v.ecRel ? `<p>${v.ecRel}</p>` : '';
+    html += v.ecPhone ? `<p class="big">${v.ecPhone}</p>` : '';
+    html += '</div>';
+    view.innerHTML = html;
+}
+
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/static/emergency_sw.js', { scope: '/emergency' })
+        .catch(err => console.error('SW registration failed', err));
+}
+
+// show local immediately, then try to refresh from the server
+renderEmergency();
+syncVitalsFromServer().then(() => renderEmergency());
+</script>
+</body>
+</html>

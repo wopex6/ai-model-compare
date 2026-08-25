@@ -448,6 +448,50 @@ KNOWLEDGE_PROFILES = {
             "scientific thinking"
         ],
         enable_auto_discovery=True
+    ),
+
+    "medical_advisor": CharacterKnowledgeProfile(
+        character_name="Dr. Health",
+        primary_domains=[KnowledgeDomain.SCIENCE, KnowledgeDomain.SELF_HELP],
+        primary_authors=[
+            "Andrew Huberman",
+            "Peter Attia",
+            "Matthew Walker",
+            "Rhonda Patrick",
+            "David Sinclair"
+        ],
+        related_authors=[
+            "Michael Greger",
+            "Chris Kresser",
+            "Siddhartha Mukherjee",
+            "Atul Gawande"
+        ],
+        fields_of_study=[
+            "General Medicine",
+            "Nutrition Science",
+            "Sleep Medicine",
+            "Preventive Health",
+            "Exercise Physiology"
+        ],
+        core_concepts=[
+            "evidence-based medicine",
+            "preventive care",
+            "nutrition",
+            "sleep hygiene",
+            "immune function",
+            "vital signs",
+            "wellness",
+            "body systems"
+        ],
+        discovery_keywords=[
+            "health",
+            "medical",
+            "wellness",
+            "nutrition",
+            "symptoms",
+            "prevention"
+        ],
+        enable_auto_discovery=True
     )
 }
 

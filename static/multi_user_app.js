@@ -268,6 +268,10 @@ class IntegratedAIChatbot {
         this.soundEnabled = localStorage.getItem('soundNotificationEnabled') === 'true';
         this.notificationSound = null;
         
+        // Feature usage tracking queue (batched, fire-and-forget)
+        this._trackQueue = [];
+        this._trackTimer = null;
+        
         // Initialize general state manager
         this.stateManager = new StateManager();
         this.init();
@@ -456,6 +460,9 @@ class IntegratedAIChatbot {
                 this.showScreen('login-screen');
             });
         }
+
+        // Guest chat mode
+        this.initGuestChat();
 
         // Dashboard navigation
         document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -797,9 +804,10 @@ class IntegratedAIChatbot {
         }
 
         try {
+            const email = signupData.email || `${signupData.username.toLowerCase().replace(/\s+/g, '')}@placeholder.local`;
             const response = await this.apiCall('/api/auth/signup', 'POST', {
                 username: signupData.username,
-                email: signupData.email,
+                email: email,
                 password: signupData.password
             });
             const result = await response.json();
@@ -819,8 +827,8 @@ class IntegratedAIChatbot {
                 };
                 localStorage.setItem('currentUser', JSON.stringify(this.currentUser));
                 this.showNotification('Account created successfully!', 'success');
-                // Redirect new users to persona onboarding
-                window.location.href = '/onboarding';
+                // Go straight to dashboard — persona onboarding surfaces later as a milestone
+                this.showDashboard();
             } else {
                 this.showNotification(result.error || 'Signup failed', 'error');
             }
@@ -1001,13 +1009,96 @@ class IntegratedAIChatbot {
         const welcomeEl = document.querySelector('.welcome-message');
         if (!welcomeEl) return;
         const cfg = {
-            serenity:  { icon: 'fas fa-spa',     title: 'Welcome to your calm space',           sub: 'Track your mood, practice mindfulness, and find emotional balance with your AI guides.' },
-            momentum:  { icon: 'fas fa-rocket',   title: 'Ready to build momentum?',             sub: 'Set goals, track habits, and make better decisions with your AI coaching team.' },
-            odyssey:   { icon: 'fas fa-compass',  title: 'Your journey of self-discovery awaits', sub: 'Explore your values, reflect on life patterns, and grow through philosophical dialogue.' },
-            spark:     { icon: 'fas fa-bolt',      title: 'Welcome to AI Chatbot!',               sub: 'Start a conversation or select an existing chat from the sidebar.' }
+            serenity: {
+                icon: 'fas fa-spa', title: 'Welcome to your calm space',
+                sub: 'Your AI companions remember your journey and adapt to support you.',
+                caps: [
+                    { icon: '🧘', name: 'Mood Tracking', desc: 'I notice emotional patterns and adapt my tone' },
+                    { icon: '🎯', name: 'Goal Support', desc: 'Set intentions and I\'ll check in on progress' },
+                    { icon: '💡', name: 'Mindful Insights', desc: 'I learn what helps you and suggest more of it' },
+                    { icon: '🤝', name: 'Crisis Aware', desc: 'If things get tough, I adjust my support style' },
+                ],
+                starters: [
+                    { icon: 'fas fa-cloud-sun', text: 'How can I manage stress better?' },
+                    { icon: 'fas fa-heart', text: 'I want to build a self-care routine' },
+                    { icon: 'fas fa-moon', text: 'Help me wind down after a tough day' },
+                    { icon: 'fas fa-seedling', text: 'I\'d like to start journaling' },
+                ]
+            },
+            momentum: {
+                icon: 'fas fa-rocket', title: 'Ready to build momentum?',
+                sub: 'Your AI coaching team tracks your progress and keeps you accountable.',
+                caps: [
+                    { icon: '📈', name: 'Habit Tracking', desc: 'Build streaks and I\'ll celebrate milestones' },
+                    { icon: '🎯', name: 'Goal Coaching', desc: 'Break big goals into steps with check-ins' },
+                    { icon: '⚖️', name: 'Decision Support', desc: 'Weigh pros and cons when you\'re stuck' },
+                    { icon: '🔄', name: 'Pattern Detection', desc: 'I spot what works for you and what doesn\'t' },
+                ],
+                starters: [
+                    { icon: 'fas fa-bullseye', text: 'Help me set a goal for this week' },
+                    { icon: 'fas fa-dumbbell', text: 'I want to build a new habit' },
+                    { icon: 'fas fa-balance-scale', text: 'Help me decide between two options' },
+                    { icon: 'fas fa-chart-line', text: 'How am I doing on my goals?' },
+                ]
+            },
+            odyssey: {
+                icon: 'fas fa-compass', title: 'Your journey of self-discovery awaits',
+                sub: 'Explore ideas through dialogue with diverse philosophical perspectives.',
+                caps: [
+                    { icon: '🔮', name: 'Multiple Perspectives', desc: '8 unique characters offer different worldviews' },
+                    { icon: '📖', name: 'Life Patterns', desc: 'I notice themes in your conversations over time' },
+                    { icon: '🧠', name: 'Personality Insights', desc: 'Discover your communication style and values' },
+                    { icon: '🌱', name: 'Growth Tracking', desc: 'See how your thinking evolves across sessions' },
+                ],
+                starters: [
+                    { icon: 'fas fa-book', text: 'What can Stoic philosophy teach me?' },
+                    { icon: 'fas fa-search', text: 'Help me figure out what I really want' },
+                    { icon: 'fas fa-lightbulb', text: 'I\'m at a crossroads in life' },
+                    { icon: 'fas fa-users', text: 'Show me which AI characters are available' },
+                ]
+            },
+            spark: {
+                icon: 'fas fa-bolt', title: 'Welcome to AI Chatbot!',
+                sub: 'I remember our conversations, learn your preferences, and adapt over time.',
+                caps: [
+                    { icon: '🎭', name: '8 AI Characters', desc: 'Each with unique expertise and personality' },
+                    { icon: '🧠', name: 'Learns About You', desc: 'I adapt my style to how you communicate' },
+                    { icon: '🎯', name: 'Goals & Habits', desc: 'Track progress with built-in coaching' },
+                    { icon: '💬', name: 'Smart Follow-ups', desc: 'I remember context across conversations' },
+                ],
+                starters: [
+                    { icon: 'fas fa-hand-wave', text: 'What can you help me with?' },
+                    { icon: 'fas fa-rocket', text: 'I want to improve my daily routine' },
+                    { icon: 'fas fa-brain', text: 'Help me think through a problem' },
+                    { icon: 'fas fa-robot', text: 'Which AI character should I talk to?' },
+                ]
+            }
         };
         const c = cfg[persona] || cfg.spark;
-        welcomeEl.innerHTML = `<h3><i class="${c.icon}" style="margin-right:8px"></i>${c.title}</h3><p>${c.sub}</p>`;
+        const capsHTML = c.caps.map(cap =>
+            `<div class="capability-card"><span class="cap-icon">${cap.icon}</span><div class="cap-text"><strong>${cap.name}</strong>${cap.desc}</div></div>`
+        ).join('');
+        const startersHTML = c.starters.map(s =>
+            `<span class="starter-chip" data-prompt="${s.text.replace(/"/g, '&quot;')}"><i class="${s.icon}"></i> ${s.text}</span>`
+        ).join('');
+        welcomeEl.innerHTML = `
+            <h3><i class="${c.icon}" style="margin-right:8px"></i>${c.title}</h3>
+            <p class="welcome-subtitle">${c.sub}</p>
+            <div class="welcome-capabilities">${capsHTML}</div>
+            <div class="welcome-starters-label">Try asking</div>
+            <div class="welcome-starters">${startersHTML}</div>
+        `;
+        welcomeEl.querySelectorAll('.starter-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                this.trackFeature('starter_chip', 'click', { prompt: chip.dataset.prompt });
+                const input = document.getElementById('chat-input');
+                if (input) {
+                    input.value = chip.dataset.prompt;
+                    input.focus();
+                    input.dispatchEvent(new Event('input'));
+                }
+            });
+        });
     }
 
     async showDashboard() {
@@ -1102,6 +1193,398 @@ class IntegratedAIChatbot {
         
         // Initialize shared modules (also used by domain_characters page)
         this.initSharedModules();
+        
+        // First-run welcome guide for new users
+        this.maybeShowFirstRunGuide();
+        
+        // Animated character system
+        this.initAvatarManager();
+        
+        // Dynamic welcome-back for returning users
+        this.loadWelcomeContext();
+        
+        // Weekly recap (once per week)
+        this.maybeShowWeeklyRecap();
+        
+        // Progress ring widget
+        this.renderProgressRing();
+    }
+
+    maybeShowFirstRunGuide() {
+        if (localStorage.getItem('firstRunGuideDone')) return;
+        const guide = document.getElementById('first-run-guide');
+        if (!guide) return;
+
+        const steps = [
+            { icon: '👋', title: 'Welcome aboard!',
+              sub: 'Here\'s a quick look at what your AI companion can do.',
+              body: 'Your AI remembers conversations, tracks your goals, adapts to your mood, and offers 8 unique character perspectives — from business coaching to philosophical dialogue.' },
+            { icon: '🎭', title: '8 AI Characters',
+              sub: 'Each one has a different expertise and communication style.',
+              body: '<b>Motivational Coach</b> for goals & habits, <b>Psychologist</b> for emotional support, <b>Business Coach</b> for strategy, <b>Stoic Philosopher</b> for resilience, and more. Find them in the <b>AI Characters</b> tab.' },
+            { icon: '💡', title: 'Just start talking',
+              sub: 'No setup needed — your AI learns as you go.',
+              body: 'Ask anything, set goals, brainstorm ideas, or just vent. The more you chat, the better your AI understands you. Use the <b>starter prompts</b> below to jump right in!' },
+        ];
+        let step = 0;
+
+        const render = () => {
+            const s = steps[step];
+            document.getElementById('guide-step-icon').textContent = s.icon;
+            document.getElementById('guide-step-title').textContent = s.title;
+            document.getElementById('guide-step-sub').textContent = s.sub;
+            document.getElementById('guide-step-body').innerHTML = s.body;
+            const dots = document.getElementById('guide-dots');
+            dots.innerHTML = steps.map((_, i) =>
+                `<span style="width:8px;height:8px;border-radius:50%;background:${i === step ? '#667eea' : '#ddd'};transition:background 0.2s;"></span>`
+            ).join('');
+            const nextBtn = document.getElementById('guide-next');
+            nextBtn.textContent = step === steps.length - 1 ? 'Start Chatting' : 'Next';
+        };
+
+        const close = () => {
+            guide.style.display = 'none';
+            localStorage.setItem('firstRunGuideDone', '1');
+            this.trackFeature('onboarding_guide', 'completed', { steps_seen: step + 1 });
+        };
+
+        document.getElementById('guide-next').addEventListener('click', () => {
+            if (step < steps.length - 1) { step++; render(); }
+            else close();
+        });
+        document.getElementById('guide-skip').addEventListener('click', close);
+        guide.addEventListener('click', (e) => { if (e.target === guide) close(); });
+
+        render();
+        guide.style.display = 'flex';
+    }
+
+    initAvatarManager() {
+        if (!window.AvatarEngine || !window.AvatarWidget) return;
+
+        const userGender = this.currentUser && this.currentUser.gender ? this.currentUser.gender : null;
+        const characterId = localStorage.getItem('activeCharacterId') || 'coordinator';
+        const uname = this.currentUser && this.currentUser.username
+            ? this.currentUser.username.split(' ')[0] : 'there';
+
+        // ── Init both panels via shared AvatarWidget ─────────────────────────
+        const result = AvatarWidget.init({
+            characterId,
+            userGender,
+            sideContainerId:  'avatar-side',
+            floatContainerId: 'avatar-floater',
+            toggleChipId:     'avatar-toggle-chip',
+            greeting:         'Hi ' + uname + '! How can I help you today?',
+            greetingDelay:    1200,
+        });
+        this._chatAvatar  = result.side;
+        this._floatAvatar = result.float;
+
+        // ── Populate character card badges (shared helper) ───────────────────
+        AvatarWidget.renderBadges(userGender);
+
+        // ── Wire character card Chat buttons to update activeCharacterId ──────
+        document.querySelectorAll('.character-card[data-character-id]').forEach(card => {
+            const btn = card.querySelector('.btn-primary');
+            if (btn) btn.addEventListener('click', () => {
+                localStorage.setItem('activeCharacterId', card.dataset.characterId);
+            }, true);
+        });
+    }
+
+    async loadWelcomeContext() {
+        if (!this.authToken) return;
+        try {
+            const res = await this.apiCall('/api/user/welcome-context', 'GET');
+            if (!res.ok) return;
+            const ctx = await res.json();
+            if (!ctx.success || ctx.total_messages === 0) return;
+
+            const welcomeEl = document.querySelector('.welcome-message');
+            if (!welcomeEl) return;
+
+            const streakHTML = ctx.streak > 1
+                ? '<span style="display:inline-block;background:#fff3e0;color:#e65100;font-size:0.82rem;padding:3px 10px;border-radius:12px;margin-right:8px;">\uD83D\uDD25 ' + ctx.streak + '-day streak</span>'
+                : '';
+            const msgBadge = '<span style="display:inline-block;background:#e8f5e9;color:#2e7d32;font-size:0.82rem;padding:3px 10px;border-radius:12px;">' + ctx.total_messages + ' messages</span>';
+
+            const daysText = ctx.days_away === 0 ? 'Welcome back!'
+                : ctx.days_away === 1 ? 'Welcome back! You were here yesterday.'
+                : 'Welcome back! It\u2019s been ' + ctx.days_away + ' days.';
+
+            let continueChip = '';
+            if (ctx.last_topic) {
+                const safeTitle = ctx.last_topic.replace(/"/g, '&quot;');
+                continueChip = '<div style="margin-top:14px;"><button class="starter-chip continue-chip" data-topic="' + safeTitle + '" style="padding:8px 16px;border-radius:18px;border:1px solid #667eea;background:white;color:#667eea;font-size:0.85rem;cursor:pointer;">\u27A1\uFE0F Pick up: ' + ctx.last_topic + '</button></div>';
+            }
+
+            const cardHTML = '<div style="background:linear-gradient(135deg,#f8f9ff,#eef1ff);border-radius:16px;padding:20px 24px;margin-bottom:8px;">'
+                + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">' + streakHTML + msgBadge + '</div>'
+                + '<h3 style="margin:0 0 4px;font-size:1.1rem;color:#333;">' + daysText + '</h3>'
+                + '<p style="margin:0;font-size:0.88rem;color:#666;">Your AI remembers your conversations and preferences.</p>'
+                + continueChip
+                + '</div>';
+
+            // Prepend the welcome-back card above the existing persona welcome
+            welcomeEl.insertAdjacentHTML('afterbegin', cardHTML);
+
+            // Wire up continue chip
+            const chip = welcomeEl.querySelector('.continue-chip');
+            if (chip) {
+                chip.addEventListener('click', () => {
+                    this.trackFeature('continue_chip', 'click', { topic: ctx.last_topic });
+                    const input = document.getElementById('chat-input');
+                    if (input) {
+                        input.value = 'Let\u2019s continue our conversation about ' + ctx.last_topic;
+                        input.focus();
+                    }
+                });
+            }
+        } catch (e) {
+            console.error('Welcome context load error:', e);
+        }
+    }
+
+    async renderProgressRing() {
+        if (!this.authToken) return;
+        if (document.querySelector('.progress-ring-widget')) return;
+        try {
+            const [ctxRes, usageRes] = await Promise.all([
+                this.apiCall('/api/user/welcome-context', 'GET'),
+                this.apiCall('/api/user/message-usage', 'GET')
+            ]);
+            if (!ctxRes.ok || !usageRes.ok) return;
+            const ctx = await ctxRes.json();
+            const usage = await usageRes.json();
+
+            const persona = localStorage.getItem('persona');
+            const assessmentDone = localStorage.getItem('achievedMilestones') && JSON.parse(localStorage.getItem('achievedMilestones')).includes(25);
+            const steps = [
+                { label: 'Sent first message', done: (usage.current_count || 0) >= 1 },
+                { label: 'Chose a persona', done: !!persona && persona !== 'default' },
+                { label: 'Reached 10 messages', done: (usage.current_count || 0) >= 10 },
+                { label: 'Took assessment', done: !!assessmentDone },
+                { label: 'Tried 3+ characters', done: (ctx.total_messages || 0) >= 30 },
+            ];
+            const completed = steps.filter(s => s.done).length;
+            const pct = Math.round((completed / steps.length) * 100);
+            if (pct >= 100) return;
+
+            const r = 22, c = 2 * Math.PI * r;
+            const offset = c - (pct / 100) * c;
+            const widget = document.createElement('div');
+            widget.className = 'progress-ring-widget';
+            widget.innerHTML = '<svg width="48" height="48">'
+                + '<circle cx="24" cy="24" r="' + r + '" fill="none" stroke="#eee" stroke-width="4"/>'
+                + '<circle cx="24" cy="24" r="' + r + '" fill="none" stroke="#667eea" stroke-width="4" stroke-linecap="round" stroke-dasharray="' + c + '" stroke-dashoffset="' + offset + '" style="transition:stroke-dashoffset 0.6s;"/>'
+                + '</svg>'
+                + '<span class="progress-ring-pct">' + pct + '%</span>'
+                + '<div class="progress-ring-tooltip"><strong style="display:block;margin-bottom:8px;color:#333;">Your Progress</strong>'
+                + steps.map(s => '<div class="pr-item"><span class="pr-check ' + (s.done ? 'done' : 'pending') + '">' + (s.done ? '&#10003;' : '&bull;') + '</span>' + s.label + '</div>').join('')
+                + '</div>';
+            document.body.appendChild(widget);
+        } catch (e) {
+            console.error('Progress ring error:', e);
+        }
+    }
+
+    async maybeShowWeeklyRecap() {
+        if (!this.authToken) return;
+        const lastShown = localStorage.getItem('weeklyRecapShown');
+        const now = Date.now();
+        if (lastShown && now - parseInt(lastShown, 10) < 6 * 24 * 60 * 60 * 1000) return;
+        try {
+            const res = await this.apiCall('/api/user/weekly-recap', 'GET');
+            if (!res.ok) return;
+            const data = await res.json();
+            if (!data.success || data.messages < 3) return;
+            localStorage.setItem('weeklyRecapShown', String(now));
+
+            const topicsText = data.topics.length > 0
+                ? 'Topics: ' + data.topics.slice(0, 3).join(', ')
+                : '';
+            const toast = document.createElement('div');
+            toast.className = 'milestone-toast';
+            toast.innerHTML = '<span class="ms-icon">\uD83D\uDCCA</span>'
+                + '<div class="ms-body"><strong>Your Week in Review</strong>'
+                + '<span>' + data.messages + ' messages across ' + data.sessions + ' conversations'
+                + (topicsText ? '. ' + topicsText : '') + '</span></div>'
+                + '<button class="ms-close">&times;</button>';
+            const dismiss = () => { toast.classList.add('hiding'); setTimeout(() => toast.remove(), 350); };
+            toast.querySelector('.ms-close').addEventListener('click', dismiss);
+            document.body.appendChild(toast);
+            setTimeout(dismiss, 10000);
+            this.trackFeature('weekly_recap', 'shown', { messages: data.messages });
+        } catch (e) {
+            console.error('Weekly recap error:', e);
+        }
+    }
+
+    initGuestChat() {
+        const tryBtn = document.getElementById('guest-try-btn');
+        if (!tryBtn) return;
+
+        const overlay = document.getElementById('guest-chat-overlay');
+        const msgContainer = document.getElementById('guest-messages');
+        const input = document.getElementById('guest-input');
+        const sendBtn = document.getElementById('guest-send-btn');
+        const closeBtn = document.getElementById('guest-close-btn');
+        const counter = document.getElementById('guest-msg-counter');
+        const gate = document.getElementById('guest-gate');
+        const signupBtn = document.getElementById('guest-signup-btn');
+        const startersEl = document.getElementById('guest-starters');
+
+        const GUEST_LIMIT = 5;
+        let guestCount = parseInt(localStorage.getItem('guestMsgCount') || '0', 10);
+        let guestSession = localStorage.getItem('guestSessionId') || null;
+        let sending = false;
+
+        // ── Persist & restore message history ────────────────────────────────
+        const HISTORY_KEY = 'guestMsgHistory';
+        const saveHistory = () => {
+            const bubbles = [...msgContainer.querySelectorAll('[data-role]')].map(el => ({
+                role: el.dataset.role,
+                text: el.textContent
+            }));
+            localStorage.setItem(HISTORY_KEY, JSON.stringify(bubbles));
+        };
+
+        const addBubble = (text, role, skipSave) => {
+            const b = document.createElement('div');
+            b.dataset.role = role;
+            b.style.cssText = role === 'user'
+                ? 'align-self:flex-end; background:#667eea; color:white; padding:10px 14px; border-radius:16px 16px 4px 16px; max-width:80%; font-size:0.9rem;'
+                : 'align-self:flex-start; background:#f0f2f5; color:#333; padding:10px 14px; border-radius:16px 16px 16px 4px; max-width:80%; font-size:0.9rem;';
+            b.textContent = text;
+            msgContainer.appendChild(b);
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+            if (!skipSave) saveHistory();
+        };
+
+        const welcomeMsg = document.getElementById('guest-welcome-msg');
+
+        const restoreHistory = () => {
+            const saved = localStorage.getItem(HISTORY_KEY);
+            if (!saved) return;
+            try {
+                const history = JSON.parse(saved);
+                if (!history.length) return;
+                if (welcomeMsg) welcomeMsg.style.display = 'none';
+                // Remove any previously restored bubbles (not the welcome div)
+                msgContainer.querySelectorAll('[data-role]').forEach(el => el.remove());
+                history.forEach(({ role, text }) => addBubble(text, role, true));
+                msgContainer.scrollTop = msgContainer.scrollHeight;
+            } catch { /* corrupt data — ignore */ }
+        };
+
+        // ── Starter chips (hide if history already exists) ────────────────────
+        const starters = ['What can you help me with?', 'I need motivation today', 'Help me set a goal'];
+        const hasHistory = !!localStorage.getItem(HISTORY_KEY);
+        if (hasHistory && welcomeMsg) welcomeMsg.style.display = 'none';
+        if (!hasHistory) {
+            startersEl.innerHTML = starters.map(s =>
+                `<button class="starter-chip" data-prompt="${s}" style="padding:6px 14px; border-radius:16px; border:1px solid #667eea; background:white; color:#667eea; font-size:0.8rem; cursor:pointer;">${s}</button>`
+            ).join('');
+            startersEl.querySelectorAll('.starter-chip').forEach(chip => {
+                chip.addEventListener('click', () => { input.value = chip.dataset.prompt; sendGuest(); });
+            });
+        } else {
+            startersEl.style.display = 'none';
+        }
+
+        // ── Dev reset button (localhost only) ─────────────────────────────────
+        const isLocalDev = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+        if (isLocalDev) {
+            const resetBtn = document.createElement('button');
+            resetBtn.textContent = '🔄 Reset (dev)';
+            resetBtn.title = 'Development only — resets guest message count & history';
+            resetBtn.style.cssText = 'position:absolute; top:10px; left:10px; padding:4px 10px; font-size:0.7rem; background:#ff6b6b; color:white; border:none; border-radius:8px; cursor:pointer; opacity:0.8; z-index:10;';
+            resetBtn.addEventListener('click', () => {
+                localStorage.removeItem('guestMsgCount');
+                localStorage.removeItem('guestSessionId');
+                localStorage.removeItem(HISTORY_KEY);
+                guestCount = 0;
+                guestSession = null;
+                // Remove only bubble elements, keep welcome div
+                msgContainer.querySelectorAll('[data-role]').forEach(el => el.remove());
+                if (welcomeMsg) welcomeMsg.style.display = '';
+                input.disabled = false;
+                sendBtn.disabled = false;
+                gate.style.display = 'none';
+                startersEl.style.display = '';
+                startersEl.innerHTML = starters.map(s =>
+                    `<button class="starter-chip" data-prompt="${s}" style="padding:6px 14px; border-radius:16px; border:1px solid #667eea; background:white; color:#667eea; font-size:0.8rem; cursor:pointer;">${s}</button>`
+                ).join('');
+                startersEl.querySelectorAll('.starter-chip').forEach(chip => {
+                    chip.addEventListener('click', () => { input.value = chip.dataset.prompt; sendGuest(); });
+                });
+                updateCounter();
+                input.focus();
+            });
+            // Attach to the named panel
+            const panel = document.getElementById('guest-chat-panel') || overlay.firstElementChild;
+            if (panel) panel.appendChild(resetBtn);
+        }
+
+        const updateCounter = () => {
+            const left = Math.max(0, GUEST_LIMIT - guestCount);
+            counter.textContent = `${left} message${left !== 1 ? 's' : ''} left`;
+            if (left <= 0) {
+                input.disabled = true;
+                sendBtn.disabled = true;
+                gate.style.display = 'block';
+            }
+        };
+
+        const sendGuest = async () => {
+            const msg = input.value.trim();
+            if (!msg || sending || guestCount >= GUEST_LIMIT) return;
+            sending = true;
+            input.value = '';
+            addBubble(msg, 'user');
+            guestCount++;
+            localStorage.setItem('guestMsgCount', String(guestCount));
+            updateCounter();
+
+            const thinking = document.createElement('div');
+            thinking.style.cssText = 'align-self:flex-start; color:#999; font-size:0.85rem; padding:6px 0;';
+            thinking.textContent = 'Thinking...';
+            msgContainer.appendChild(thinking);
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+
+            try {
+                const res = await fetch('/chat/message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: msg, session_id: guestSession })
+                });
+                const data = await res.json();
+                thinking.remove();
+                if (!guestSession && data.session_id) {
+                    guestSession = data.session_id;
+                    localStorage.setItem('guestSessionId', guestSession);
+                }
+                addBubble(data.response || data.ai_response || 'Sorry, something went wrong.', 'ai');
+            } catch {
+                thinking.remove();
+                addBubble('Connection error — please try again.', 'ai');
+            }
+            sending = false;
+        };
+
+        sendBtn.addEventListener('click', sendGuest);
+        input.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendGuest(); });
+        tryBtn.addEventListener('click', () => {
+            overlay.style.display = 'block';
+            restoreHistory();
+            updateCounter();
+            input.focus();
+        });
+        closeBtn.addEventListener('click', () => { overlay.style.display = 'none'; });
+        overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.style.display = 'none'; });
+        signupBtn.addEventListener('click', () => { overlay.style.display = 'none'; this.showScreen('signup-screen'); });
+
+        updateCounter();
     }
 
     initSharedModules() {
@@ -1195,6 +1678,7 @@ class IntegratedAIChatbot {
 
     switchTab(tabName) {
         console.log('🔧 Tab Debug: switchTab called with:', tabName);
+        this.trackFeature('tab_switch', 'navigate', { tab: tabName });
         
         // Update navigation
         const navBtns = document.querySelectorAll('.nav-btn');
@@ -1407,10 +1891,10 @@ class IntegratedAIChatbot {
             personalization: formData.get('personalization') === 'on',
             marketing: formData.get('marketing') === 'on'
         };
-        
+
         try {
             const response = await this.apiCall('/api/user/profile', 'PUT', { privacy_settings: data });
-            
+
             if (response.ok) {
                 this.showNotification('Privacy settings updated successfully', 'success');
             } else {
@@ -1453,7 +1937,7 @@ class IntegratedAIChatbot {
         document.querySelectorAll('.profile-nav-btn').forEach(btn => btn.classList.remove('active'));
         const activeBtn = document.querySelector(`[data-page="${page}"]`);
         if (activeBtn) activeBtn.classList.add('active');
-        
+
         // Update pages
         document.querySelectorAll('.profile-page').forEach(pageEl => pageEl.classList.remove('active'));
         const activePage = document.getElementById(`profile-page-${page}`);
@@ -1507,9 +1991,13 @@ class IntegratedAIChatbot {
         
         if (assessmentHistory.length === 0) {
             container.innerHTML = `
-                <div class="empty-state">
-                    <h3>No Assessment History</h3>
-                    <p>Complete psychological assessments to see your progress over time.</p>
+                <div style="text-align:center; padding:36px 20px; color:#999;">
+                    <div style="font-size:2.5rem; margin-bottom:10px;">🧠</div>
+                    <h3 style="color:#666; margin:0 0 6px;">No Assessment History</h3>
+                    <p style="font-size:0.85rem; margin:0 0 14px;">Take the personality assessment to unlock tailored AI responses.</p>
+                    <button class="btn btn-primary" onclick="window.location.href='/personality-test'" style="padding:8px 20px; border-radius:20px; font-size:0.88rem;">
+                        <i class="fas fa-clipboard-check"></i> Take Assessment
+                    </button>
                 </div>
             `;
             return;
@@ -2039,7 +2527,15 @@ class IntegratedAIChatbot {
         }
         
         if (conversations.length === 0) {
-            conversationsList.innerHTML = '<p style="color: #999; padding: 20px;">No conversations yet</p>';
+            conversationsList.innerHTML = `
+                <div style="text-align:center; padding:40px 20px; color:#999;">
+                    <div style="font-size:2.5rem; margin-bottom:12px;">💬</div>
+                    <h3 style="color:#666; margin:0 0 6px;">No conversations yet</h3>
+                    <p style="font-size:0.88rem; margin:0 0 16px;">Start a conversation to explore AI-assisted topics</p>
+                    <button class="btn btn-primary" onclick="window.app.switchTab('chat')" style="padding:8px 20px; border-radius:20px; font-size:0.88rem;">
+                        <i class="fas fa-plus"></i> Start Your First Chat
+                    </button>
+                </div>`;
             return;
         }
         
@@ -2237,9 +2733,10 @@ class IntegratedAIChatbot {
         
         if (sessions.length === 0) {
             chatSessionsList.innerHTML = `
-                <div class="empty-state">
-                    <h3>No Chat Sessions</h3>
-                    <p>Start your first AI conversation!</p>
+                <div style="text-align:center; padding:36px 16px; color:#999;">
+                    <div style="font-size:2.5rem; margin-bottom:10px;">🚀</div>
+                    <h3 style="color:#666; margin:0 0 6px;">Ready to chat?</h3>
+                    <p style="font-size:0.85rem; margin:0 0 14px;">Click <strong>New Chat</strong> above to start your first AI conversation.</p>
                 </div>
             `;
             return;
@@ -2303,12 +2800,9 @@ class IntegratedAIChatbot {
         const messagesContainer = document.getElementById('chat-messages');
         
         if (messages.length === 0) {
-            messagesContainer.innerHTML = `
-                <div class="welcome-message">
-                    <h3>Start Chatting with AI!</h3>
-                    <p>Your conversation will be personalized based on your profile and psychology traits.</p>
-                </div>
-            `;
+            messagesContainer.innerHTML = `<div class="welcome-message"></div>`;
+            const persona = localStorage.getItem('selectedPersona') || 'spark';
+            this.updateWelcomeForPersona(persona);
             return;
         }
 
@@ -2381,12 +2875,9 @@ class IntegratedAIChatbot {
                 // If the deleted chat was selected, clear the chat area
                 if (this.currentChatSession === sessionId) {
                     this.currentChatSession = null;
-                    document.getElementById('chat-messages').innerHTML = `
-                        <div class="empty-state">
-                            <h3>Start Chatting with AI!</h3>
-                            <p>Your conversation will be personalized based on your profile and psychology traits.</p>
-                        </div>
-                    `;
+                    document.getElementById('chat-messages').innerHTML = `<div class="welcome-message"></div>`;
+                    const persona = localStorage.getItem('selectedPersona') || 'spark';
+                    this.updateWelcomeForPersona(persona);
                 }
                 
                 // Reload the chat list
@@ -2450,6 +2941,8 @@ class IntegratedAIChatbot {
             chatInput.value = '';
             chatInput.disabled = true;
 
+            this.trackFeature('chat_message', 'send', { length: content.length });
+            
             // Show thinking indicator
             const thinkingMessage = document.createElement('div');
             thinkingMessage.className = 'message thinking';
@@ -2464,6 +2957,10 @@ class IntegratedAIChatbot {
             `;
             messagesContainer.appendChild(thinkingMessage);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+            // Avatar: show thinking expression
+            if (this._chatAvatar) this._chatAvatar.setExpression('thinking');
+            if (this._floatAvatar) this._floatAvatar.setExpression('thinking');
 
             // Send to API (include action flags if set by Tell me more / Not what I meant buttons)
             const payload = { senderType: 'user', content: content };
@@ -2502,12 +2999,26 @@ class IntegratedAIChatbot {
                 if (result.usage) {
                     this.messageUsage = result.usage;
                     this.updateUsageDisplay();
+                    this.checkMilestones();
                 }
                 
+                // Avatar: speak the response
+                if (result.ai_response) {
+                    if (this._chatAvatar) {
+                        this._chatAvatar.speak(result.ai_response);
+                    }
+                    if (this._floatAvatar) {
+                        this._floatAvatar.speak(result.ai_response);
+                    }
+                }
+
                 // Show AI response with timestamp
                 if (result.ai_response) {
+                    const isError = result.type === 'api_error' || result.type === 'budget_limited' ||
+                        /technical difficulties|having trouble|try again|limit.*reached|all ai models/i.test(result.ai_response);
+                    
                     const aiMessage = document.createElement('div');
-                    aiMessage.className = 'message assistant';
+                    aiMessage.className = isError ? 'message assistant error-state' : 'message assistant';
                     
                     const aiContent = document.createElement('div');
                     aiContent.className = 'message-content';
@@ -2519,6 +3030,30 @@ class IntegratedAIChatbot {
                     aiTimestamp.textContent = this.formatTimestamp(result.timestamp || new Date());
                     
                     aiMessage.appendChild(aiContent);
+                    
+                    // Error-state: add retry + alternatives
+                    if (isError) {
+                        const errActions = document.createElement('div');
+                        errActions.className = 'error-actions';
+                        const retryBtn = document.createElement('button');
+                        retryBtn.className = 'retry-btn';
+                        retryBtn.innerHTML = '<i class="fas fa-redo"></i> Retry';
+                        retryBtn.addEventListener('click', () => {
+                            errActions.remove();
+                            aiMessage.remove();
+                            const chatInput = document.getElementById('chat-input');
+                            chatInput.value = content;
+                            this.sendChatMessage();
+                        });
+                        const altBtn = document.createElement('button');
+                        altBtn.className = 'alt-btn';
+                        altBtn.innerHTML = '<i class="fas fa-robot"></i> Try a different character';
+                        altBtn.addEventListener('click', () => this.switchTab('ai-characters'));
+                        errActions.appendChild(retryBtn);
+                        errActions.appendChild(altBtn);
+                        aiMessage.appendChild(errActions);
+                    }
+                    
                     aiMessage.appendChild(aiTimestamp);
                     
                     // Feedback buttons (Phase 7: Effectiveness Learning)
@@ -2640,6 +3175,9 @@ class IntegratedAIChatbot {
                     messagesContainer.appendChild(aiMessage);
                     messagesContainer.scrollTop = messagesContainer.scrollHeight;
                     
+                    // Contextual feature discovery hints
+                    this.maybeShowFeatureHint(content, messagesContainer);
+                    
                     // Let shared ProactiveClarificationUI check for extra questions
                     if (typeof ProactiveClarificationUI !== 'undefined') {
                         ProactiveClarificationUI.checkResponse(result);
@@ -2675,6 +3213,162 @@ class IntegratedAIChatbot {
             chatInput.disabled = false;
             chatInput.focus();
         }
+    }
+
+    checkMilestones() {
+        const count = this.messageUsage?.current_count;
+        if (!count) return;
+        const achieved = JSON.parse(localStorage.getItem('achievedMilestones') || '[]');
+        const milestones = [
+            { at: 3, icon: '🎉', title: 'First Steps!',
+              text: 'You\'ve sent 3 messages — pick a persona to personalise your experience.',
+              action: 'Choose Persona', handler: () => { window.location.href = '/onboarding'; } },
+            { at: 5, icon: '🎯', title: 'On a Roll!',
+              text: 'Ready to set a goal? Tell me what you\'re working towards and I\'ll help track it.',
+              action: 'Set a Goal', handler: () => {
+                  const input = document.getElementById('chat-input');
+                  if (input) { input.value = 'I want to set a goal for myself'; input.focus(); }
+              } },
+            { at: 10, icon: '⭐', title: '10 Messages!',
+              text: 'You\'re finding your flow. Explore 8 unique AI characters for fresh perspectives.',
+              action: 'Meet the Team', handler: () => this.switchTab('ai-characters') },
+            { at: 15, icon: '🔀', title: 'Try Something New',
+              text: 'Each character has unique skills — try Coach Motivation for energy or Dr. Mind for reflection.',
+              action: 'Explore Characters', handler: () => this.switchTab('ai-characters') },
+            { at: 25, icon: '🧠', title: 'Getting Personal',
+              text: 'Take the personality assessment so I can tailor my responses to your style.',
+              action: 'Take Assessment', handler: () => { window.location.href = '/personality-test'; } },
+            { at: 50, icon: '🏆', title: 'Power User!',
+              text: 'You\'ve had 50 conversations. Check out your psychology insights.',
+              action: 'View Insights', handler: () => this.switchTab('psychology') },
+            { at: 100, icon: '💎', title: 'Centurion!',
+              text: 'Over 100 messages! Your AI knows you well. Review your profile.',
+              action: 'My Profile', handler: () => this.switchTab('profile') },
+        ];
+        const ms = milestones.find(m => count >= m.at && !achieved.includes(m.at));
+        if (!ms) return;
+        achieved.push(ms.at);
+        localStorage.setItem('achievedMilestones', JSON.stringify(achieved));
+        this.trackFeature('milestone', 'achieved', { milestone: ms.at });
+
+        const toast = document.createElement('div');
+        toast.className = 'milestone-toast';
+        toast.innerHTML = `
+            <span class="ms-icon">${ms.icon}</span>
+            <div class="ms-body"><strong>${ms.title}</strong><span>${ms.text}</span></div>
+            ${ms.action ? `<button class="ms-action">${ms.action}</button>` : ''}
+            <button class="ms-close">&times;</button>
+        `;
+        const dismiss = () => { toast.classList.add('hiding'); setTimeout(() => toast.remove(), 350); };
+        toast.querySelector('.ms-close').addEventListener('click', dismiss);
+        const actionBtn = toast.querySelector('.ms-action');
+        if (actionBtn && ms.handler) {
+            actionBtn.addEventListener('click', () => { ms.handler(); dismiss(); });
+        }
+        document.body.appendChild(toast);
+        setTimeout(dismiss, 8000);
+    }
+
+    trackFeature(feature, action = 'click', meta = {}) {
+        if (!this.authToken) return;
+        fetch('/api/track/feature', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.authToken}` },
+            body: JSON.stringify({ feature, action, meta })
+        }).catch(() => {});
+    }
+
+    maybeShowFeatureHint(userMessage, container) {
+        const shownHints = JSON.parse(localStorage.getItem('shownFeatureHints') || '[]');
+        const hintCount = parseInt(localStorage.getItem('featureHintCount') || '0', 10);
+        // Show at most 1 hint per 5 messages, max 3 per session
+        if (hintCount % 5 !== 2 || shownHints.length >= 20) {
+            localStorage.setItem('featureHintCount', String(hintCount + 1));
+            return;
+        }
+        localStorage.setItem('featureHintCount', String(hintCount + 1));
+
+        const lower = userMessage.toLowerCase();
+        const hints = [
+            { id: 'characters', keywords: ['advice','perspective','opinion','what do you think','confused'],
+              icon: '🎭', title: 'Try a Different Perspective',
+              body: 'You have 8 AI characters — from Stoic philosopher to business coach — each offering unique insights.',
+              action: 'Explore Characters', href: '?tab=ai-characters' },
+            { id: 'goals', keywords: ['goal','habit','routine','improve','achieve','want to','plan'],
+              icon: '🎯', title: 'Goal Tracking Built In',
+              body: 'I can help you set goals, track habits, and check in on your progress over time.',
+              action: 'Try: "Help me set a goal"', prompt: 'Help me set a goal for this week' },
+            { id: 'mood', keywords: ['stress','anxious','sad','worried','overwhelmed','tired','angry','frustrated'],
+              icon: '🧘', title: 'Mood & Wellbeing Support',
+              body: 'I adapt my tone when I sense you\'re going through a tough time. You can also talk to Dr. Elena or Master Kai.',
+              action: 'Meet Dr. Elena', href: '/psychologist' },
+            { id: 'personality', keywords: ['personality','who am i','understand myself','self-aware','traits'],
+              icon: '🧠', title: 'Personality Insights',
+              body: 'Take the personality assessment to get AI responses tailored to your communication style.',
+              action: 'Take Assessment', href: '/personality-test' },
+            { id: 'decision', keywords: ['decide','choice','option','pros and cons','should i','dilemma'],
+              icon: '⚖️', title: 'Decision Support',
+              body: 'I can help you weigh options systematically. Just describe your dilemma.',
+              action: 'Try: "Help me decide"', prompt: 'Help me decide between two options' },
+            { id: 'life-companion', keywords: ['life','meaning','purpose','transition','career change','moving'],
+              icon: '🌱', title: 'Life Companion Mode',
+              body: 'Your conversations build a profile over time. The more we talk, the more I understand your journey.',
+              action: 'Explore', href: '/life-companion' },
+            { id: 'business', keywords: ['business','startup','revenue','market','leadership','productivity','strategy'],
+              icon: '💼', title: 'Business Coaching',
+              body: 'Coach Ryan specializes in strategic business advice, leadership, and productivity.',
+              action: 'Talk to Coach Ryan', href: '/business_coach' },
+            { id: 'philosophy', keywords: ['meaning of life','stoic','philosophy','wisdom','virtue','mindful'],
+              icon: '📖', title: 'Philosophical Dialogues',
+              body: 'Explore Stoic, Taoist, and Zen perspectives with Marcus, Sage Wei, or Master Kai.',
+              action: 'Meet the Sages', href: '?tab=ai-characters' },
+        ];
+
+        const match = hints.find(h => !shownHints.includes(h.id) && h.keywords.some(k => lower.includes(k)));
+        if (!match) return;
+
+        shownHints.push(match.id);
+        localStorage.setItem('shownFeatureHints', JSON.stringify(shownHints));
+        this.trackFeature('feature_hint', 'shown', { hint_id: match.id });
+
+        const hintEl = document.createElement('div');
+        hintEl.className = 'feature-hint';
+        let actionHTML = '';
+        if (match.href) {
+            actionHTML = `<button class="hint-action" data-href="${match.href}">${match.action}</button>`;
+        } else if (match.prompt) {
+            actionHTML = `<button class="hint-action" data-prompt="${match.prompt.replace(/"/g, '&quot;')}">${match.action}</button>`;
+        }
+        hintEl.innerHTML = `
+            <span class="hint-icon">${match.icon}</span>
+            <div class="hint-body">
+                <strong>${match.title}</strong>
+                ${match.body}
+                ${actionHTML}
+            </div>
+            <button class="hint-dismiss" title="Dismiss">&times;</button>
+        `;
+        hintEl.querySelector('.hint-dismiss').addEventListener('click', () => hintEl.remove());
+        const actionBtn = hintEl.querySelector('.hint-action');
+        if (actionBtn) {
+            actionBtn.addEventListener('click', () => {
+                this.trackFeature('feature_hint', 'action_click', { hint_id: match.id });
+                if (actionBtn.dataset.href) {
+                    if (actionBtn.dataset.href.startsWith('?')) {
+                        const tab = new URLSearchParams(actionBtn.dataset.href).get('tab');
+                        if (tab) this.switchTab(tab);
+                    } else {
+                        window.location.href = actionBtn.dataset.href;
+                    }
+                } else if (actionBtn.dataset.prompt) {
+                    const input = document.getElementById('chat-input');
+                    if (input) { input.value = actionBtn.dataset.prompt; input.focus(); }
+                }
+                hintEl.remove();
+            });
+        }
+        container.appendChild(hintEl);
+        container.scrollTop = container.scrollHeight;
     }
 
     // Settings methods
@@ -2755,12 +3449,17 @@ class IntegratedAIChatbot {
 
     // Utility methods
     async apiCall(url, method = 'GET', data = null) {
+        const isFormData = typeof FormData !== 'undefined' && data instanceof FormData;
+        const headers = {
+            'Accept': 'application/json; charset=utf-8',
+        };
+        if (!isFormData) {
+            headers['Content-Type'] = 'application/json; charset=utf-8';
+        }
+
         const options = {
             method,
-            headers: {
-                'Content-Type': 'application/json; charset=utf-8',
-                'Accept': 'application/json; charset=utf-8',
-            }
+            headers,
         };
 
         if (this.authToken) {
@@ -2768,7 +3467,7 @@ class IntegratedAIChatbot {
         }
 
         if (data) {
-            options.body = JSON.stringify(data);
+            options.body = isFormData ? data : JSON.stringify(data);
         }
 
         const response = await fetch(url, options);

@@ -1,0 +1,48 @@
+TSE, WAI  
+4 HIGHVALE CRES, BERWICK. 3806  
+Phone: 0415151791  
+Birthdate: 12/06/1962  Sex: M  Medicare Number: 2297496521  
+Your Reference:  Lab Reference: 981726833-C-0012  
+Laboratory: Melbourne Pathology  
+Addressee: DR SUSHMITA GHOSH  Referred by: DR SUSHMITA GHOSH  
+
+Name of Test: SE-LIPID - HDL/LDL  
+Requested: 18/01/2026  Collected: 20/01/2026  Reported: 22/01/2026 03:06  
+
+Clinical notes: dyslipidaemia  
+
+Clinical Notes: dyslipidaemia  
+
+Latest Results  
+Date  28-Dec-24  03-Apr-25  03-Oct-25  20-Jan-26  
+Time F-Fast  0956 F  0956 F  0809 F  0815 F  
+Lab Id.  9739984415  972342598  978880154  981726833  Reference  Units  
+
+S CHOL  6.4 H  4.3  3.9  4.2  (3.5-5.5)  mmol/L  
+S TRIG  2.6 H  0.6  0.7  <1.7  (<1.7)  mmol/L  
+S HDL-CHOL  1.62  1.66  1.64  1.51  (>1.00)  mmol/L  
+S LDL-CHOL  4.0 H  2.2  1.9  2.3  (<2.5)  mmol/L  
+S Chol/HDLC  4.0  2.6  2.4  2.8  (<4.0)  
+Non HDL C  4.8  2.6  2.3  2.7  (<3.5)  mmol/L  
+
+Comments on Collection 20-Jan-26 0815 F:  
+FLS  
+LIPID TARGET LEVELS:  
+The treatment target levels for people at high risk of cardiovascular disease are:  
+Total Cholesterol <4.0 mmol/L  
+Fasting Triglycerides <2.0 mmol/L  
+HDL-Cholesterol >1.00 mmol/L  
+LDL-Cholesterol <2.5 mmol/L (<1.8 mmol/L if very high risk)  
+Non-HDL Cholesterol <3.3 mmol/L (<2.5 mmol/L if very high risk)  
+
+Source: AACB Harmonised Lipid Reporting Guideline - 2018.  
+
+Risk Calculator available at www.cvdcheck.org.au  
+
+Dept Supervising Pathologist: Dr Andrew Carter  
+
+Melbourne Pathology NATA No.:2133  
+
+Tests Completed: IS,FLS,TSH,EUC,LFT,GF,FOL,B12, A1C,FBE  
+Tests Pending :  
+Sample Pending :

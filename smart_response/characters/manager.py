@@ -13,7 +13,7 @@ import json
 import sqlite3
 
 from .base import BaseCharacter, DomainCharacter, CoordinatorCharacter, CharacterResponse
-from .configs import DOMAIN_CHARACTER_CONFIGS, PHILOSOPHY_CHARACTER_CONFIGS
+from .configs import DOMAIN_CHARACTER_CONFIGS, PHILOSOPHY_CHARACTER_CONFIGS, is_auto_routable
 
 
 class CharacterManager:
@@ -31,6 +31,10 @@ class CharacterManager:
         self.db = db_connection
         self.characters: Dict[str, BaseCharacter] = {}
         self.domain_characters: Dict[str, DomainCharacter] = {}
+        # Domain characters that participate in normal auto-routing (excludes
+        # team-only agents such as the deliberation team). All domain
+        # characters remain in self.domain_characters for Teams to use.
+        self.routable_domain_characters: Dict[str, DomainCharacter] = {}
         self.coordinator: Optional[CoordinatorCharacter] = None
         
         self._initialize_characters()
@@ -59,6 +63,8 @@ class CharacterManager:
                     )
                     self.characters[char_id] = character
                     self.domain_characters[char_id] = character
+                    if is_auto_routable(char_id):
+                        self.routable_domain_characters[char_id] = character
                     print(f"✓ {config.get('display_name', char_id)} ({config.get('domain', 'general')}) initialized")
             except Exception as e:
                 print(f"✗ Error initializing {char_id}: {e}")
@@ -94,7 +100,7 @@ class CharacterManager:
                 # Check if any domain character should handle this
                 print(f"[ROUTING] Coordinator requested - checking if domain experts should handle...")
                 user_id = context.get('user_id')
-                for char_id, character in self.domain_characters.items():
+                for char_id, character in self.routable_domain_characters.items():
                     concern_level = character.analyze_context(message, context)
                     threshold = character.get_threshold_for_user(user_id)
                     print(f"[ROUTING] {char_id}: concern={concern_level:.3f}, threshold={threshold:.3f} (user={user_id})")
@@ -145,10 +151,10 @@ class CharacterManager:
         # Rule 2: Check all domain characters for threshold triggers
         triggered_characters = []
         
-        print(f"[ROUTING] Checking {len(self.domain_characters)} domain characters for message: {message[:50]}...")
+        print(f"[ROUTING] Checking {len(self.routable_domain_characters)} domain characters for message: {message[:50]}...")
         
         user_id = context.get('user_id')
-        for char_id, character in self.domain_characters.items():
+        for char_id, character in self.routable_domain_characters.items():
             concern_level = character.analyze_context(message, context)
             threshold = character.get_threshold_for_user(user_id)
             print(f"[ROUTING] {char_id}: concern={concern_level:.3f}, threshold={threshold:.3f} (user={user_id}), triggers={concern_level >= threshold}")
@@ -207,6 +213,10 @@ class CharacterManager:
         for char_id, character in self.characters.items():
             if char_id in exclude:
                 continue
+            # Skip team-only agents (e.g. deliberation team) — not part of
+            # normal silent observation.
+            if char_id != 'coordinator' and not is_auto_routable(char_id):
+                continue
             
             concern_level = character.analyze_context(message, context)
             interpretation = character.interpret_context(message, context)
@@ -230,6 +240,10 @@ class CharacterManager:
         """Get only domain characters (excluding coordinator)"""
         return self.domain_characters
     
+    def get_routable_domain_characters(self) -> Dict[str, DomainCharacter]:
+        """Get domain characters that participate in normal auto-routing."""
+        return self.routable_domain_characters
+    
     def get_coordinator(self) -> Optional[CoordinatorCharacter]:
         """Get the coordinator character"""
         return self.coordinator
@@ -245,7 +259,8 @@ class CharacterManager:
                 'display_name': character.display_name,
                 'domain': config.get('domain', 'general'),
                 'description': config.get('description', ''),
-                'is_coordinator': char_id == 'coordinator'
+                'is_coordinator': char_id == 'coordinator',
+                'team_only': not is_auto_routable(char_id)
             })
         
         return info
@@ -363,7 +378,7 @@ def get_responding_characters(message: str, context: Dict,
     """Get list of character IDs that would respond to this message"""
     responding = []
     
-    for char_id, character in manager.get_domain_characters().items():
+    for char_id, character in manager.get_routable_domain_characters().items():
         concern_level = character.analyze_context(message, context)
         if character.should_respond(concern_level):
             responding.append(char_id)

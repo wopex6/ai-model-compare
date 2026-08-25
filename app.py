@@ -43,10 +43,13 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import asyncio
 import os
+import json
+import hashlib
 import bcrypt
 import jwt
 import uuid
 from datetime import datetime, timedelta
+import uuid as _uuid
 print(f"{_startup_elapsed()} Flask + stdlib loaded")
 from ai_compare.compare import AICompare
 from ai_compare.chatbot import AIChatbot
@@ -404,7 +407,9 @@ character_ids = [
     "zen_master",                 # Master Kai
     "business_coach",             # Coach Ryan
     "life_coach",                 # Coach Jordan
-    "scientist"                   # Dr. Nova
+    "scientist",                  # Dr. Nova
+    "gentle_companion",           # Sam - low-pressure listening companion
+    "medical_advisor"             # Dr. Health - general health information
 ]
 
 for char_id in character_ids:
@@ -555,6 +560,20 @@ try:
     domain_character_ai = create_ai_integration(ai_budget, smart_response_conn)
     print("✓ Domain Character AI Integration initialized")
     
+    # Initialize Deliberation Team (5 thinking-style agents + blind coordinator negotiation)
+    from smart_response.deliberation_team import create_deliberation_team
+    deliberation_team = create_deliberation_team(
+        domain_character_manager, domain_character_ai, collaboration_system
+    )
+    print(f"✓ Deliberation Team initialized ({len(deliberation_team.available_agents())} agents)")
+    
+    # Initialize Team Manager (user-defined teams of any domain characters)
+    from smart_response.team_manager import create_team_manager
+    team_manager = create_team_manager(
+        smart_response_conn, domain_character_manager, domain_character_ai, collaboration_system
+    )
+    print(f"✓ Team Manager initialized ({len(team_manager.list_teams())} built-in team(s))")
+    
     # Initialize Shared Conversation Enrichment Pipeline
     from smart_response.conversation_pipeline import create_pipeline
     conversation_pipeline = create_pipeline(
@@ -663,6 +682,8 @@ except Exception as e:
     explicit_context_handler = None
     domain_character_manager = None
     domain_character_ai = None
+    deliberation_team = None
+    team_manager = None
     effectiveness_learner = None
     life_stage_adapter = None
     life_companion_profiler = None
@@ -773,7 +794,9 @@ def process_with_smart_response(message, character_name, ai_chat_function):
         print(f"📚 Context loaded: {len(context.get('recent_topics', []))} topics, {context.get('message_count', 0)} messages")
         
         # PROACTIVE CLARIFICATION: Analyze message for ambiguity
-        if clarification_system:
+        # Skip for characters whose persona contradicts goal-style interrogation.
+        _CLARIFIER_OPTOUT = {"gentle_companion"}
+        if clarification_system and character_name not in _CLARIFIER_OPTOUT:
             try:
                 confidence, questions = clarification_system.analyze_message(message, context)
                 print(f"❓ Confidence: {confidence.overall:.0%} (goal={confidence.goal_clarity:.0%}, emotion={confidence.emotional_clarity:.0%})")
@@ -782,6 +805,8 @@ def process_with_smart_response(message, character_name, ai_chat_function):
                     print(f"   → Question: {questions[0].question}")
             except Exception as e:
                 print(f"⚠️ Clarification analysis failed: {e}")
+        elif character_name in _CLARIFIER_OPTOUT:
+            print(f"⏭️ Clarification skipped for '{character_name}' (persona opt-out)")
         else:
             print("⚠️ clarification_system not initialized")
         
@@ -869,7 +894,9 @@ def process_with_smart_response(message, character_name, ai_chat_function):
             user_id, message, character_name
         )
         
-        if response_type == 'quick_reply':
+        # Medical advice requires the full AI (and the patient's health profile) so
+        # it is never served from a quick-reply cache.
+        if response_type == 'quick_reply' and character_name not in QUICK_REPLY_OPTOUT:
             # Use quick reply (instant, no API cost!)
             print(f"💰 COST SAVED ({character_name}) - Quick reply for: '{message}'")
             
@@ -1168,7 +1195,13 @@ def process_with_smart_response(message, character_name, ai_chat_function):
     except Exception as e:
         ai_error = str(e)
         ai_call_success = False
-        
+
+        # Surface the real exception in the terminal — silent swallowing
+        # makes these failures impossible to diagnose.
+        import traceback as _tb
+        print(f"❌ AI call failed for '{character_name}': {ai_error}")
+        _tb.print_exc()
+
         # Provide user-friendly error messages based on error type
         if "timeout" in ai_error.lower():
             user_message = "The AI is taking longer than usual to respond. Please try again - it should work on the next attempt."
@@ -1267,7 +1300,11 @@ def process_with_smart_response(message, character_name, ai_chat_function):
                     response['has_clarification'] = True
                     response['clarification'] = {
                         'questions': [
-                            {'question': q.question, 'reason': getattr(q, 'reason', ''), 'priority': getattr(q, 'priority', 'medium')}
+                            {
+                                'question': q.question,
+                                'reason': getattr(q.reason, 'value', str(getattr(q, 'reason', ''))),
+                                'priority': getattr(getattr(q, 'importance', None), 'value', getattr(q, 'priority', 'medium')),
+                            }
                             for q in clarification_questions
                         ]
                     }
@@ -1336,9 +1373,11 @@ def _is_token_blacklisted(token: str) -> bool:
         return True
 
 def authenticate_token():
-    """Middleware to authenticate JWT tokens"""
+    """Middleware to authenticate JWT tokens; falls back to session cookie for media/download links."""
     auth_header = request.headers.get('Authorization')
     if not auth_header:
+        if 'user_id' in session:
+            return {'user_id': session['user_id'], 'username': session.get('username', '')}
         return None
     
     try:
@@ -1360,6 +1399,27 @@ def require_auth(f):
         return f(*args, **kwargs)
     decorated_function.__name__ = f.__name__
     return decorated_function
+
+@app.before_request
+def _sync_session_from_token():
+    """Keep the Flask session in step with a valid Bearer token.
+
+    Media tags (<img>, <audio>, <video>) and download links cannot send an
+    Authorization header, so serving uploaded files relies on the session cookie.
+    The SPA authenticates with a 24h JWT held in localStorage, which outlives the
+    browser-session cookie. Whenever a token-authenticated request arrives without
+    a session, restore it so file access keeps working.
+    """
+    if 'user_id' in session:
+        return
+    if not request.headers.get('Authorization'):
+        return
+    user_data = authenticate_token()
+    if user_data:
+        session.permanent = True
+        session['user_id'] = user_data.get('user_id')
+        session['username'] = user_data.get('username')
+
 
 def has_admin_access(user_role):
     """Check if user has admin-level access (administrator or developer)"""
@@ -1474,6 +1534,9 @@ def login():
         if not all([username, password]):
             return jsonify({'error': 'Username and password are required'}), 400
         
+        if not isinstance(username, str) or not isinstance(password, str):
+            return jsonify({'error': 'Invalid username or password format'}), 400
+        
         user = integrated_db.authenticate_user(username, password)
         if not user:
             _log.warning("Failed login attempt for user '%s' from %s", username, request.remote_addr)
@@ -1490,6 +1553,9 @@ def login():
         }, JWT_SECRET, algorithm='HS256')
         
         # Also set session for cross-page compatibility
+        # Mark it permanent so media tags / download links continue working
+        # for the lifetime of the JWT, not just the browser session.
+        session.permanent = True
         session['user_id'] = user['id']
         session['username'] = user['username']
         session['role'] = user_role
@@ -1505,6 +1571,50 @@ def login():
         })
     except Exception as e:
         return _safe_error(e, 'login')
+
+@app.route('/api/auth/pwa-guest', methods=['POST'])
+def pwa_guest_login():
+    """Personal-use PWA: create or reuse a built-in guest account and return a JWT.
+    Enable with PWA_GUEST_ENABLED=1 in the environment.
+    """
+    try:
+        if os.environ.get('PWA_GUEST_ENABLED', '').lower() not in ('1', 'true', 'yes'):
+            return jsonify({'error': 'PWA guest login is not enabled'}), 403
+
+        username = 'pwa_guest'
+        email = 'pwa@local'
+        password = 'pwa_guest_local'  # only usable when this route is enabled
+
+        user = integrated_db.authenticate_user(username, password)
+        if not user:
+            # Create the guest account if it does not exist
+            user_id = integrated_db.create_user(username, email, password)
+            if not user_id:
+                return jsonify({'error': 'Could not create PWA guest account'}), 500
+            user = {'id': user_id, 'username': username}
+
+        user_role = integrated_db.get_user_role(user['id'])
+
+        token = jwt.encode({
+            'user_id': user['id'],
+            'username': user['username'],
+            'exp': datetime.utcnow() + timedelta(hours=24)
+        }, JWT_SECRET, algorithm='HS256')
+
+        session.permanent = True
+        session['user_id'] = user['id']
+        session['username'] = user['username']
+        session['role'] = user_role
+
+        return jsonify({
+            'success': True,
+            'token': token,
+            'user_id': user['id'],
+            'username': user['username'],
+            'role': user_role
+        })
+    except Exception as e:
+        return _safe_error(e, 'pwa_guest_login')
 
 @app.route('/api/auth/logout', methods=['POST'])
 @require_auth
@@ -2642,7 +2752,14 @@ def upload_file():
 
 @app.route('/api/files/<filename>', methods=['GET'])
 def download_file(filename):
-    """Download or view a file"""
+    """Download or view a file.
+
+    Requires authentication. Accepts either a Bearer token (fetch/XHR callers) or
+    the Flask session cookie, because <img>, <audio>, <video> and download links
+    cannot send an Authorization header.
+    """
+    if not authenticate_token() and 'user_id' not in session:
+        return jsonify({'error': 'Authentication required'}), 401
     try:
         # Get original filename from query parameter if provided
         original_filename = request.args.get('original_name', filename)
@@ -2768,9 +2885,9 @@ def delete_ai_attachment(attachment_id):
     """Deactivate an AI attachment"""
     try:
         user_id = request.current_user.get('user_id')
-        
+
         success = integrated_db.deactivate_attachment(attachment_id, user_id)
-        
+
         if success:
             return jsonify({'success': True, 'message': 'Attachment removed'})
         else:
@@ -3177,6 +3294,89 @@ def delete_user_conversation(session_id):
     except Exception as e:
         return _safe_error(e, 'api')
 
+@app.route('/api/user/welcome-context')
+@require_auth
+def get_welcome_context():
+    """Get returning-user context for dynamic welcome-back card."""
+    try:
+        user_id = request.current_user['user_id']
+        conn = integrated_db.get_connection()
+        cur = conn.cursor()
+        # Last session title + timestamp
+        cur.execute('''SELECT title, updated_at FROM ai_conversations
+                       WHERE user_id=? ORDER BY updated_at DESC LIMIT 1''', (user_id,))
+        row = cur.fetchone()
+        last_topic = row[0] if row else None
+        last_active = row[1] if row else None
+        # Total message count (join through ai_conversations)
+        cur.execute('''SELECT COUNT(*) FROM messages m
+                       JOIN ai_conversations c ON m.conversation_id=c.id
+                       WHERE c.user_id=?''', (user_id,))
+        total_messages = cur.fetchone()[0]
+        # Streak: consecutive days with at least 1 message
+        cur.execute('''SELECT DISTINCT DATE(m.timestamp) as d FROM messages m
+                       JOIN ai_conversations c ON m.conversation_id=c.id
+                       WHERE c.user_id=? AND m.sender_type='user' ORDER BY d DESC LIMIT 60''', (user_id,))
+        days = [r[0] for r in cur.fetchall()]
+        conn.close()
+        streak = 0
+        from datetime import date as _date
+        today = _date.today()
+        for i, d in enumerate(days):
+            expected = (today - timedelta(days=i)).isoformat()
+            if d == expected:
+                streak += 1
+            else:
+                break
+        days_away = 0
+        if last_active:
+            try:
+                last_dt = datetime.fromisoformat(last_active.replace('Z', '+00:00'))
+                days_away = (datetime.now() - last_dt.replace(tzinfo=None)).days
+            except Exception:
+                pass
+        return jsonify({
+            'success': True,
+            'last_topic': last_topic,
+            'days_away': days_away,
+            'total_messages': total_messages,
+            'streak': streak
+        })
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+@app.route('/api/user/weekly-recap')
+@require_auth
+def get_weekly_recap():
+    """Return past-7-day activity summary for weekly recap."""
+    try:
+        user_id = request.current_user['user_id']
+        conn = integrated_db.get_connection()
+        cur = conn.cursor()
+        cur.execute('''SELECT COUNT(*) FROM messages m
+                       JOIN ai_conversations c ON m.conversation_id=c.id
+                       WHERE c.user_id=? AND m.sender_type='user'
+                       AND m.timestamp >= datetime('now', '-7 days')''', (user_id,))
+        msg_count = cur.fetchone()[0]
+        cur.execute('''SELECT COUNT(DISTINCT m.conversation_id) FROM messages m
+                       JOIN ai_conversations c ON m.conversation_id=c.id
+                       WHERE c.user_id=? AND m.sender_type='user'
+                       AND m.timestamp >= datetime('now', '-7 days')''', (user_id,))
+        sessions_count = cur.fetchone()[0]
+        cur.execute('''SELECT DISTINCT title FROM ai_conversations
+                       WHERE user_id=? AND updated_at >= datetime('now', '-7 days')
+                       ORDER BY updated_at DESC LIMIT 5''', (user_id,))
+        topics = [r[0] for r in cur.fetchall() if r[0]]
+        conn.close()
+        return jsonify({
+            'success': True,
+            'messages': msg_count,
+            'sessions': sessions_count,
+            'topics': topics
+        })
+    except Exception as e:
+        return _safe_error(e, 'api')
+
 @app.route('/api/user/message-usage')
 @require_auth
 def get_message_usage():
@@ -3523,6 +3723,70 @@ def get_intelligence_profile():
         conn.close()
         
         return jsonify({'success': True, 'profile': profile})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+@app.route('/api/track/feature', methods=['POST'])
+@require_auth
+def track_feature_usage():
+    """Record a feature-usage event for engagement analytics."""
+    try:
+        user_id = request.current_user['user_id']
+        data = request.get_json(silent=True) or {}
+        feature = data.get('feature', '')
+        action = data.get('action', 'click')
+        meta = json.dumps(data.get('meta', {}))
+        if not feature:
+            return jsonify({'error': 'feature is required'}), 400
+        conn = integrated_db.get_connection()
+        cur = conn.cursor()
+        cur.execute('''CREATE TABLE IF NOT EXISTS feature_usage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            feature TEXT NOT NULL,
+            action TEXT DEFAULT 'click',
+            meta TEXT,
+            ts DATETIME DEFAULT CURRENT_TIMESTAMP
+        )''')
+        cur.execute('CREATE INDEX IF NOT EXISTS idx_fu_user ON feature_usage(user_id)')
+        cur.execute('CREATE INDEX IF NOT EXISTS idx_fu_feature ON feature_usage(feature)')
+        cur.execute('INSERT INTO feature_usage (user_id, feature, action, meta) VALUES (?,?,?,?)',
+                    (user_id, feature, action, meta))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+@app.route('/api/admin/feature-usage', methods=['GET'])
+@require_auth
+def admin_feature_usage():
+    """Get aggregated feature-usage stats (admin only)."""
+    try:
+        user_role = integrated_db.get_user_role(request.current_user['user_id'])
+        if not has_admin_access(user_role):
+            return jsonify({'error': 'Admin access required'}), 403
+        days = request.args.get('days', 30, type=int)
+        conn = integrated_db.get_connection()
+        cur = conn.cursor()
+        cur.execute('''CREATE TABLE IF NOT EXISTS feature_usage (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            feature TEXT NOT NULL,
+            action TEXT DEFAULT 'click',
+            meta TEXT,
+            ts DATETIME DEFAULT CURRENT_TIMESTAMP
+        )''')
+        cur.execute('''SELECT feature, COUNT(*) as cnt, COUNT(DISTINCT user_id) as users
+                       FROM feature_usage WHERE ts > datetime('now', ?) GROUP BY feature ORDER BY cnt DESC''',
+                    (f'-{days} days',))
+        by_feature = [{'feature': r[0], 'count': r[1], 'unique_users': r[2]} for r in cur.fetchall()]
+        cur.execute('''SELECT DATE(ts) as day, COUNT(*) FROM feature_usage
+                       WHERE ts > datetime('now', ?) GROUP BY day ORDER BY day''',
+                    (f'-{days} days',))
+        daily = [{'date': r[0], 'count': r[1]} for r in cur.fetchall()]
+        conn.close()
+        return jsonify({'success': True, 'by_feature': by_feature, 'daily': daily})
     except Exception as e:
         return _safe_error(e, 'api')
 
@@ -4711,6 +4975,13 @@ def life_companion_interface():
     return render_template('domain_characters.html')
 
 
+@app.route('/teams')
+@require_auth
+def teams_interface():
+    """Team management and deliberation interface"""
+    return render_template('teams.html')
+
+
 @app.route('/admin/settings')
 def admin_settings_page():
     """Admin settings configuration page"""
@@ -5021,38 +5292,255 @@ def change_personality():
     except Exception as e:
         return _safe_error(e, 'api')
 
+def _deliberation_payload(result):
+    """Shape a DeliberationTeam result into the API response body."""
+    return {
+        'success': True,
+        'response': result['final_response'],
+        'contributions': result['contributions'],
+        'participating_agents': result['participating_agents'],
+        'blind': result['blind'],
+        'attribution_revealed': result['attribution_revealed'],
+        'event_id': result['event_id'],
+        'gather_mode': result.get('gather_mode'),
+        'ai_calls': result.get('ai_calls'),
+        'team_id': result.get('team_id'),
+        'team_name': result.get('team_name'),
+    }
+
+
+@app.route('/api/deliberate', methods=['POST'])
+@require_auth
+def deliberate_with_team():
+    """
+    Run the built-in 5-agent Deliberation Team on a message (blind synthesis).
+    Kept for backward compatibility; use /api/teams/<id>/deliberate for custom teams.
+
+    Body:
+        message (str, required)
+        reveal_attribution (bool, optional): expose which agent said what
+        context (dict, optional)
+        batch (bool, optional): True (default) = one combined AI call; False = per-agent.
+    """
+    try:
+        if not deliberation_team:
+            return jsonify({'error': 'Deliberation team not available'}), 500
+
+        data = request.get_json() or {}
+        message = (data.get('message') or '').strip()
+        if not message:
+            return jsonify({'error': 'message is required'}), 400
+
+        user_id = request.current_user['user_id']
+        is_admin = has_admin_access(integrated_db.get_user_role(user_id))
+        reveal_attribution = bool(data.get('reveal_attribution', False))
+        context = data.get('context', {}) or {}
+        batch = data.get('batch')  # None = use team default
+        if batch is not None:
+            batch = bool(batch)
+
+        result = deliberation_team.deliberate(
+            message=message,
+            context=context,
+            reveal_attribution=reveal_attribution,
+            user_id=user_id,
+            batch=batch,
+            is_admin=is_admin,
+        )
+
+        if result.get('error'):
+            # Distinguish budget/rate-limit refusals from validation errors
+            err = result['error']
+            if 'budget' in err.lower() or 'limit' in err.lower() or 'exhausted' in err.lower():
+                return jsonify({'success': False, 'reason': err}), 429
+            return jsonify({'success': False, 'reason': err}), 400
+
+        return jsonify(_deliberation_payload(result))
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+# ============================================================
+# TEAMS: user-defined teams of any domain characters
+# ============================================================
+
+@app.route('/api/teams', methods=['GET'])
+@require_auth
+def list_teams():
+    """List the user's teams + built-in teams, plus characters available to pick."""
+    try:
+        if not team_manager:
+            return jsonify({'error': 'Team manager not available'}), 500
+        user_id = request.current_user['user_id']
+        teams = team_manager.list_teams(user_id)
+        available = domain_character_manager.get_character_info() if domain_character_manager else []
+        return jsonify({'success': True, 'teams': teams, 'available_characters': available})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/teams', methods=['POST'])
+@require_auth
+def create_team():
+    """Create a team. Body: name, member_ids[], description?, coordinator_id?, batch?"""
+    try:
+        if not team_manager:
+            return jsonify({'error': 'Team manager not available'}), 500
+        user_id = request.current_user['user_id']
+        data = request.get_json() or {}
+        result = team_manager.create_team(
+            user_id=user_id,
+            name=data.get('name', ''),
+            member_ids=data.get('member_ids', []),
+            description=data.get('description', ''),
+            coordinator_id=data.get('coordinator_id', 'coordinator'),
+            batch=bool(data.get('batch', True)),
+        )
+        if result.get('error'):
+            return jsonify({'success': False, 'error': result['error']}), 400
+        return jsonify({'success': True, 'team': result})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/teams/<team_id>', methods=['GET'])
+@require_auth
+def get_team(team_id):
+    """Get a single team (built-in or owned by the user)."""
+    try:
+        if not team_manager:
+            return jsonify({'error': 'Team manager not available'}), 500
+        user_id = request.current_user['user_id']
+        team = team_manager.get_team(team_id)
+        if not team:
+            return jsonify({'error': 'Team not found'}), 404
+        if not team['is_builtin'] and team['owner_user_id'] != user_id \
+                and not has_admin_access(integrated_db.get_user_role(user_id)):
+            return jsonify({'error': 'Not authorized'}), 403
+        return jsonify({'success': True, 'team': team})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/teams/<team_id>', methods=['PUT', 'PATCH'])
+@require_auth
+def update_team(team_id):
+    """Update an owned team. Body may include name, description, member_ids, coordinator_id, batch."""
+    try:
+        if not team_manager:
+            return jsonify({'error': 'Team manager not available'}), 500
+        user_id = request.current_user['user_id']
+        is_admin = has_admin_access(integrated_db.get_user_role(user_id))
+        data = request.get_json() or {}
+        result = team_manager.update_team(team_id, user_id, is_admin=is_admin, **data)
+        if result.get('error'):
+            code = 404 if result['error'] == 'Team not found.' else 400
+            return jsonify({'success': False, 'error': result['error']}), code
+        return jsonify({'success': True, 'team': result})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/teams/<team_id>', methods=['DELETE'])
+@require_auth
+def delete_team(team_id):
+    """Delete an owned team (built-in teams cannot be deleted)."""
+    try:
+        if not team_manager:
+            return jsonify({'error': 'Team manager not available'}), 500
+        user_id = request.current_user['user_id']
+        is_admin = has_admin_access(integrated_db.get_user_role(user_id))
+        result = team_manager.delete_team(team_id, user_id, is_admin=is_admin)
+        if result.get('error'):
+            code = 404 if result['error'] == 'Team not found.' else 400
+            return jsonify({'success': False, 'error': result['error']}), code
+        return jsonify({'success': True, 'deleted': result.get('deleted')})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/teams/<team_id>/deliberate', methods=['POST'])
+@require_auth
+def team_deliberate(team_id):
+    """
+    Run a specific team's deliberation on a message.
+    Body: message (required), reveal_attribution?, batch?, context?
+    """
+    try:
+        if not team_manager:
+            return jsonify({'error': 'Team manager not available'}), 500
+        user_id = request.current_user['user_id']
+        is_admin = has_admin_access(integrated_db.get_user_role(user_id))
+
+        team = team_manager.get_team(team_id)
+        if not team:
+            return jsonify({'error': 'Team not found'}), 404
+        if not team['is_builtin'] and team['owner_user_id'] != user_id and not is_admin:
+            return jsonify({'error': 'Not authorized'}), 403
+
+        data = request.get_json() or {}
+        message = (data.get('message') or '').strip()
+        if not message:
+            return jsonify({'error': 'message is required'}), 400
+
+        batch = data.get('batch')
+        if batch is not None:
+            batch = bool(batch)
+
+        result = team_manager.run_team(
+            team_id=team_id,
+            message=message,
+            user_id=user_id,
+            reveal_attribution=bool(data.get('reveal_attribution', False)),
+            batch=batch,
+            is_admin=is_admin,
+            context=data.get('context', {}) or {},
+        )
+        if result.get('error'):
+            err = result['error']
+            if 'budget' in err.lower() or 'limit' in err.lower() or 'exhausted' in err.lower():
+                return jsonify({'success': False, 'reason': err}), 429
+            return jsonify({'success': False, 'reason': err}), 400
+        return jsonify(_deliberation_payload(result))
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
 @app.route('/chat/perspectives', methods=['POST'])
+@require_auth
 def get_more_perspectives():
     """On-demand: Get Moltbook-style multi-character perspectives on any message"""
     try:
         if not collaboration_system:
             return jsonify({'error': 'Collaboration system not available'}), 500
-        
-        data = request.get_json()
+
+        user_id = request.current_user['user_id']
+        data = request.get_json() or {}
         message = data.get('message', '')
         mode = data.get('mode', 'debate')  # Default to debate for on-demand
-        user_id = data.get('user_id', 0)
-        
+        if mode not in ('silent', 'visible', 'debate'):
+            return jsonify({'error': "mode must be 'silent', 'visible', or 'debate'"}), 400
+
         if not message.strip():
             return jsonify({'error': 'message is required'}), 400
-        
+
         # Force collaboration regardless of triggers (user explicitly asked)
         result = collaboration_system.orchestrate_collaboration(
             message, user_id, {}, mode, None
         )
-        
+
         if not result:
             return jsonify({
                 'success': False,
                 'reason': 'Could not generate perspectives'
-            })
-        
+            }), 400
+
         # Strip character names from contributions before sending to frontend
         safe_contributions = []
         for c in result.contributions:
             safe_c = {k: v for k, v in c.items() if k != 'character_name'}
             safe_contributions.append(safe_c)
-        
+
         return jsonify({
             'success': True,
             'response': result.response,
@@ -5885,6 +6373,1067 @@ def update_ai_limits():
         })
     except Exception as e:
         return _safe_error(e, 'api')
+
+# ============================================
+# HEALTH PROFILE API (Medical Advisor)
+# ============================================
+from ai_compare.medical_advisor_health_context import HealthContextManager
+
+HEALTH_UPLOADS_DIR = Path(__file__).parent / "health_uploaded_documents"
+
+
+def _parse_iso_datetime(iso_text):
+    if not iso_text:
+        return None
+    try:
+        return datetime.fromisoformat(iso_text)
+    except Exception:
+        return None
+
+
+def _get_retention_days(profile):
+    settings = profile.data.setdefault('upload_settings', {})
+    raw_days = settings.get('retention_days', 365)
+    try:
+        days = int(raw_days)
+    except (TypeError, ValueError):
+        days = 365
+    days = max(1, min(days, 3650))
+    settings['retention_days'] = days
+    return days
+
+
+def _cleanup_expired_uploaded_documents(profile):
+    docs = profile.data.setdefault('uploaded_documents', [])
+    if not docs:
+        return 0
+
+    retention_days = _get_retention_days(profile)
+    cutoff = datetime.now() - timedelta(days=retention_days)
+    kept = []
+    removed = 0
+
+    for doc in docs:
+        uploaded_at = _parse_iso_datetime(doc.get('uploaded_at'))
+        if uploaded_at and uploaded_at < cutoff:
+            for key in ('stored_path', 'extracted_text_path', 'result_path'):
+                abs_path = doc.get(key)
+                if abs_path and os.path.exists(abs_path):
+                    try:
+                        os.remove(abs_path)
+                    except OSError:
+                        pass
+            removed += 1
+            continue
+
+        abs_path = doc.get('stored_path')
+        if abs_path and not os.path.exists(abs_path):
+            # The original file is gone; clean up any cached sidecars too
+            for key in ('extracted_text_path', 'result_path'):
+                side_path = doc.get(key)
+                if side_path and os.path.exists(side_path):
+                    try:
+                        os.remove(side_path)
+                    except OSError:
+                        pass
+            removed += 1
+            continue
+
+        kept.append(doc)
+
+    if removed:
+        profile.data['uploaded_documents'] = kept
+
+    return removed
+
+
+def _store_uploaded_health_document(user_id, file_storage, file_bytes, content_hash=None):
+    safe_name = secure_filename(file_storage.filename) or 'uploaded_document'
+    if content_hash is None:
+        content_hash = hashlib.sha256(file_bytes).hexdigest()[:32]
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+    unique = _uuid.uuid4().hex[:8]
+    stored_name = f"{ts}_{unique}_{safe_name}"
+
+    user_dir = HEALTH_UPLOADS_DIR / str(user_id)
+    user_dir.mkdir(parents=True, exist_ok=True)
+    target_path = user_dir / stored_name
+    with open(target_path, 'wb') as f:
+        f.write(file_bytes)
+
+    return {
+        'original_name': file_storage.filename,
+        'stored_name': stored_name,
+        'stored_path': str(target_path),
+        'content_hash': content_hash,
+        'size_bytes': len(file_bytes),
+        'uploaded_at': datetime.now().isoformat(),
+        'mime_type': file_storage.mimetype or '',
+        'extracted_text_path': '',
+        'result_path': ''
+    }
+
+@app.route('/api/health-profile', methods=['GET'])
+@require_auth
+def get_health_profile():
+    """Get the current user's health profile"""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        return jsonify({'success': True, 'profile': profile.to_dict()})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+@app.route('/api/health-profile', methods=['PUT'])
+@require_auth
+def update_health_profile():
+    """Update the current user's health profile fields"""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        data = request.get_json()
+
+        if 'name' in data:
+            profile.name = data['name']
+        if 'personal' in data:
+            profile.set_personal(**data['personal'])
+        if 'diet' in data:
+            profile.update_diet(**data['diet'])
+        if 'lifestyle' in data:
+            profile.update_lifestyle(**data['lifestyle'])
+        if 'condition' in data:
+            profile.add_condition(**data['condition'])
+        if 'symptom' in data:
+            profile.add_symptom(**data['symptom'])
+        if 'test_result' in data:
+            profile.add_test_result(**data['test_result'])
+        if 'supplement' in data:
+            profile.add_supplement(**data['supplement'])
+        if 'action_plan' in data:
+            profile.add_action_plan(**data['action_plan'])
+        if 'insight' in data:
+            profile.add_conversation_insight(**data['insight'])
+        if 'follow_ups' in data and isinstance(data['follow_ups'], list):
+            profile.data['follow_ups'] = data['follow_ups']
+        if 'questions_for_doctor' in data and isinstance(data['questions_for_doctor'], list):
+            profile.data['questions_for_doctor'] = data['questions_for_doctor']
+        if 'upload_settings' in data and isinstance(data['upload_settings'], dict):
+            current = profile.data.setdefault('upload_settings', {})
+            if 'retention_days' in data['upload_settings']:
+                raw_days = data['upload_settings'].get('retention_days')
+                try:
+                    days = int(raw_days)
+                except (TypeError, ValueError):
+                    return jsonify({'error': 'retention_days must be an integer'}), 400
+                if days < 1 or days > 3650:
+                    return jsonify({'error': 'retention_days must be between 1 and 3650'}), 400
+                current['retention_days'] = days
+
+            removed = _cleanup_expired_uploaded_documents(profile)
+            if removed:
+                profile.add_conversation_insight(
+                    f"Upload retention cleanup removed {removed} expired document(s) after settings update.",
+                    category='general'
+                )
+
+        profile.save()
+        return jsonify({'success': True, 'profile': profile.to_dict()})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+@app.route('/api/health-profile/summary', methods=['GET'])
+@require_auth
+def get_health_summary():
+    """Get a formatted health context summary (what the AI sees)"""
+    try:
+        user_id = str(request.current_user['user_id'])
+        context = HealthContextManager.get_context_for_prompt(user_id)
+        return jsonify({'success': True, 'summary': context})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+@app.route('/api/health-profile/vitals', methods=['GET'])
+@require_auth
+def get_health_vitals():
+    """Get the user's emergency / vital info"""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        return jsonify({'success': True, 'vitals': profile.data.get('vitals', {})})
+    except Exception as e:
+        return _safe_error(e, 'get_health_vitals')
+
+@app.route('/api/health-profile/vitals', methods=['PUT'])
+@require_auth
+def update_health_vitals():
+    """Save emergency / vital info (syncs from the PWA phone store)"""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        data = request.get_json()
+        if not isinstance(data, dict):
+            return jsonify({'error': 'Invalid vitals data'}), 400
+        profile.data['vitals'] = data
+        profile.save()
+        return jsonify({'success': True, 'vitals': data})
+    except Exception as e:
+        return _safe_error(e, 'update_health_vitals')
+
+@app.route('/api/health-profile/test-results-summary', methods=['GET'])
+@require_auth
+def get_test_results_summary():
+    """Get an organized summary report of stored lab/test results."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        concise = (request.args.get('view') or request.args.get('concise') or '').lower() == 'concise'
+        summary = HealthContextManager.get_test_results_summary(user_id, concise=concise)
+        output_format = (request.args.get('format') or 'json').lower()
+        if output_format == 'text':
+            return summary.get('text_report', 'No test results on file.'), 200, {
+                'Content-Type': 'text/plain; charset=utf-8'
+            }
+        return jsonify({'success': True, **summary})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+@app.route('/health-profile')
+def health_profile_page():
+    """Health Profile management page"""
+    return render_template('health_profile.html')
+
+@app.route('/dr-health')
+def dr_health_app():
+    """Standalone Dr. Health PWA — mobile-installable, personal use.
+    Reuses the existing medical_advisor chat + health-profile APIs."""
+    return render_template('dr_health_app.html')
+
+
+@app.route('/emergency')
+def emergency_display():
+    """Read-only emergency card PWA — opens straight to the vital info screen."""
+    return render_template('emergency_display.html')
+
+@app.route('/api/health-profile/analyze', methods=['POST'])
+@require_auth
+def analyze_health_info():
+    """Analyze pasted health text with AI and store structured data"""
+    try:
+        user_id = str(request.current_user['user_id'])
+        data = request.get_json()
+        raw_text = data.get('text', '').strip()
+        if not raw_text:
+            return jsonify({'error': 'No text provided'}), 400
+        if len(raw_text) > 15000:
+            return jsonify({'error': 'Text too long (max 15000 chars)'}), 400
+        result = HealthContextManager.analyze_and_store(user_id, raw_text, save=False)
+        return jsonify(result)
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+def _extract_text_from_file_bytes(file_bytes, ext):
+    """Extract plain text from uploaded PDF or image bytes. Raises ValueError/RuntimeError on failure."""
+    if ext == '.pdf':
+        import PyPDF2
+        import io
+        try:
+            pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_bytes))
+            pages_text = []
+            for page in pdf_reader.pages:
+                text = page.extract_text()
+                if text:
+                    pages_text.append(text)
+            extracted_text = '\n'.join(pages_text)
+        except Exception as e:
+            raise ValueError(f'Failed to read PDF: {str(e)}')
+        if not extracted_text or not extracted_text.strip():
+            raise ValueError('PDF contains no extractable text. Try uploading as an image/scan instead.')
+        return extracted_text
+
+    allowed_images = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'}
+    if ext not in allowed_images:
+        raise ValueError(f'Unsupported file type. Allowed: .pdf, .png, .jpg, .jpeg, .webp, .gif, .bmp')
+
+    from openai import OpenAI, APIConnectionError, APITimeoutError
+    from dotenv import load_dotenv
+    import base64, time, re
+    load_dotenv(override=True)
+    api_key = os.getenv('OPENAI_API_KEY')
+    if not api_key or not api_key.strip():
+        raise RuntimeError('OpenAI API key not configured')
+
+    client = OpenAI(api_key=api_key, timeout=120.0, max_retries=2)
+
+    # Photographed documents are often low contrast and small in the frame, which
+    # is what makes fine detail (such as a second decimal digit) unreadable.
+    # Upscale to the vision API's working size and keep the image in color: the
+    # 'Latest Results' column is shaded/highlighted and that colour cue helps the
+    # model place values in the right columns.
+    def _prepare_image(raw_bytes, extension):
+        max_side = 2048
+        fallback_mime = 'image/jpeg' if extension == '.jpg' else f"image/{extension.lstrip('.')}"
+        try:
+            from PIL import Image, ImageOps, ImageEnhance, ImageFilter
+            import io
+            img = Image.open(io.BytesIO(raw_bytes))
+            img.load()
+            img = ImageOps.exif_transpose(img)
+            if img.mode not in ('RGB', 'RGBA'):
+                img = img.convert('RGB')
+            # Make the digits stand out from shaded and unshaded backgrounds.
+            img = ImageEnhance.Contrast(img).enhance(1.5)
+            img = img.filter(ImageFilter.UnsharpMask(radius=2, percent=120, threshold=3))
+            long_side = max(img.width, img.height)
+            if long_side and long_side != max_side:
+                scale = max_side / long_side
+                img = img.resize((max(1, int(img.width * scale)),
+                                  max(1, int(img.height * scale))), Image.LANCZOS)
+            buf = io.BytesIO()
+            img.save(buf, format='PNG', optimize=True)
+            out = buf.getvalue()
+            # Keep the original if re-encoding ballooned the payload without need.
+            if len(out) > 12 * 1024 * 1024:
+                return raw_bytes, fallback_mime
+            return out, 'image/png'
+        except Exception:
+            return raw_bytes, fallback_mime
+
+    img_bytes, mime_type = _prepare_image(file_bytes, ext)
+    b64_image = base64.b64encode(img_bytes).decode('utf-8')
+    image_part = {"type": "image_url", "image_url": {"url": f"data:{mime_type};base64,{b64_image}", "detail": "high"}}
+
+    # Stage 1 reads characters only.  Asking for a finished table here would force
+    # the model to infer structure while it is still deciphering glyphs, which is
+    # where columns drift and headings get mistaken for data.  Reproducing the
+    # layout verbatim keeps the spatial information intact for stage 2.
+    transcribe_prompt = (
+        "Transcribe this document as plain text, exactly as it appears. The document is a printed medical "
+        "report, probably using a fixed-pitch (monospace) typeface.\n\n"
+        "Preserve the visual layout: keep the original line breaks, and keep the horizontal spacing between "
+        "items on a line so that values remain aligned in the same columns as the original. Use spaces for "
+        "that alignment. Each data row has the same number of value positions as the header rows. If a value "
+        "position is genuinely empty, leave the matching amount of blank space - do not shift later values left.\n\n"
+        "Copy every character exactly as printed. Reproduce numbers digit for digit - do not round, do not drop "
+        "digits after a decimal point, and keep trailing zeros. Keep letters or symbols printed next to a value "
+        "(such as H, L, F, * or a comparison sign) in place. Do not translate, correct, summarise or reorder "
+        "anything, and do not add anything that is not printed.\n\n"
+        "A floating or spanning heading such as 'Latest Results' is a heading, not a column. "
+        "The value columns are the dates printed above them. Keep the values aligned under those date columns.\n\n"
+        "If a single character is truly unreadable, write [?] in its place rather than guessing.\n\n"
+        "Output only the transcription."
+    )
+
+    # Stage 2 sees no image - it only reshapes text it has been given, so it cannot
+    # invent readings.  Column-defining rows (Date, Time, Lab Id and similar) are
+    # common in cumulative reports and must become headers, not data rows.
+    structure_prompt = (
+        "Below is a plain-text transcription of a document whose data is laid out in columns aligned by spacing. "
+        "Convert its data into a markdown table.\n\n"
+        "1. Work out the columns from the horizontal positions of the values. Count the value columns; call this N. "
+        "Use only the columns that actually exist - never invent an extra column, and never merge two.\n"
+        "2. Some rows near the top label the columns rather than carrying data (for example a row of dates, times "
+        "or identifiers). Use them to name the columns; do not emit them as data rows. Consider each column "
+        "separately and name it with the most specific identifier appearing for that column in ANY of those rows, "
+        "preferring a date. A heading may be misaligned in the transcription and push a date onto the line below, "
+        "so if one column's name would be a date and another's would not, look on the neighbouring lines for that "
+        "column's date and use it.\n"
+        "3. A word or phrase spanning or floating above the columns (such as 'Latest Results') is a heading, not a "
+        "column name and not a row label. Never use it as a column name; discard it.\n"
+        "4. Each remaining data row starts with a label in the leftmost position. Emit one markdown row per data "
+        "row: the label, then exactly N value cells, then any trailing reference-range and unit columns.\n"
+        "5. Align each value to the column it sits under in the transcription. If a row has no value in a column, "
+        "emit an empty cell - never shift later values left, and never duplicate a value to fill a gap.\n"
+        "6. Copy values exactly as given, including all decimal digits and any adjacent flag such as H or L. Do not "
+        "round or alter them, and do not invent values.\n"
+        "7. Include every data row, including rows that have no unit or no reference range.\n"
+        "8. Ignore surrounding prose, names, addresses, phone numbers, identifiers and footnotes.\n\n"
+        "Transcription:\n"
+        "{transcription}\n\n"
+        "Output only the markdown table. No commentary."
+    )
+
+    def _vision_call(temperature):
+        """Read the page verbatim, then structure it in a separate text-only step."""
+        transcription = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": [{"type": "text", "text": transcribe_prompt}, image_part]}],
+            temperature=temperature,
+            max_tokens=4000
+        ).choices[0].message.content.strip()
+        if not transcription:
+            return ''
+        if os.getenv('HEALTH_OCR_DEBUG'):
+            print('--- OCR stage 1: verbatim transcription ---')
+            print(transcription)
+            print('--- end stage 1 ---', flush=True)
+        table = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user",
+                       "content": structure_prompt.replace('{transcription}', transcription)}],
+            temperature=0.0,
+            max_tokens=4000
+        ).choices[0].message.content.strip()
+        return table or transcription
+
+    def _repair_incomplete_rows(table_md, max_repairs=12):
+        """Re-read rows that came back with holes or duplicated values, one row at a time.
+
+        A whole-page read spreads attention thinly and silently drops values,
+        which then shifts a row's remaining values into the wrong columns or copies
+        a value into the gap.  Asking about a single named row, with its expected
+        columns spelled out, is a much easier question.  A repair is accepted only
+        when it recovers more values or removes spurious duplicate pairs, so this
+        can never remove data.
+        """
+        from ai_compare.table_consensus import parse_markdown_grids, grid_to_markdown
+        grids = parse_markdown_grids(table_md)
+        if not grids:
+            return table_md
+        grid = max(grids, key=len)
+        if len(grid) < 2:
+            return table_md
+        header = grid[0]
+        width = len(header)
+        columns = header[1:]
+        if not columns:
+            return table_md
+
+        repaired_any = False
+        repairs_left = max_repairs
+        new_rows = []
+        for row in grid[1:]:
+            cells = list(row) + [''] * (width - len(row))
+            label = cells[0].strip()
+            filled = sum(1 for c in cells[1:] if c.strip())
+            # A copied value used to fill an empty space produces a duplicate pair.
+            orig_pairs = sum(1 for j in range(2, width)
+                             if cells[j].strip() and cells[j - 1].strip()
+                             and cells[j].strip() == cells[j - 1].strip())
+            if not label or (filled >= len(columns) and orig_pairs == 0) or repairs_left <= 0:
+                new_rows.append(cells)
+                continue
+
+            repairs_left -= 1
+            ask = (
+                "Look at the attached document and find the single data row whose label is "
+                f"\"{label}\".\n\n"
+                "That row has these columns, in order:\n"
+                + '\n'.join(f"{i + 1}. {c}" for i, c in enumerate(columns))
+                + "\n\nRead across that one row from left to right and report its value for each column. "
+                "Use the column headers printed above the row to know which value belongs to which column. "
+                "Copy each value exactly as printed, including every digit after a decimal point and any flag "
+                "such as H or L printed beside it.\n\n"
+                "Do not skip a column just because its value is small or not highlighted. "
+                "Do not shift later values left to fill an empty space. "
+                "Do not repeat a value in two consecutive columns unless the image genuinely shows the same "
+                "printed value in both places. If a column has no printed value in this row, use an empty string "
+                "for that exact position, not the value from the next column.\n\n"
+                f"Respond with only a JSON array of exactly {len(columns)} strings, in column order."
+            )
+            try:
+                raw = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[{"role": "user", "content": [{"type": "text", "text": ask}, image_part]}],
+                    temperature=0.0,
+                    max_tokens=600
+                ).choices[0].message.content.strip()
+                match = re.search(r'\[.*\]', raw, re.S)
+                values = json.loads(match.group(0)) if match else None
+            except Exception:
+                values = None
+
+            if (isinstance(values, list) and len(values) == len(columns)
+                    and all(isinstance(v, str) for v in values)):
+                recovered = sum(1 for v in values if v.strip())
+                new_pairs = sum(1 for j in range(1, len(values))
+                                if values[j].strip() and values[j - 1].strip()
+                                and values[j].strip() == values[j - 1].strip())
+                if recovered > filled or new_pairs < orig_pairs:
+                    cells = [cells[0]] + [v.strip() for v in values]
+                    repaired_any = True
+            new_rows.append(cells)
+
+        if not repaired_any:
+            return table_md
+        rebuilt = grid_to_markdown([header] + new_rows)
+        others = [grid_to_markdown(g) for g in grids if g is not grid]
+        return '\n\n'.join([rebuilt] + others)
+
+    # Vision OCR misreads dense text in random, uncorrelated ways, so read the
+    # document more than once and let the passes vote on each cell.  The first pass
+    # is greedy; later passes need some temperature to vary, otherwise they would
+    # simply repeat the first pass's mistakes and voting would gain nothing.
+    # Each pass costs two calls (transcribe, then structure).
+    try:
+        passes = max(1, min(5, int(os.getenv('HEALTH_OCR_PASSES', '1'))))
+    except ValueError:
+        passes = 1
+
+    last_error = None
+    for attempt in range(3):
+        try:
+            from ai_compare.table_consensus import (
+                merge_by_consensus, content_score, strip_code_fences)
+
+            readings = []
+            for idx in range(passes):
+                try:
+                    text = _vision_call(0.0 if idx == 0 else 0.3)
+                except (APIConnectionError, APITimeoutError):
+                    raise
+                except Exception:
+                    continue  # a single failed pass should not sink the upload
+                text = strip_code_fences(text or '').strip()
+                if not text or len(text) < 10:
+                    continue
+                # Repair each pass before voting: fixing dropped values realigns the
+                # columns, so the vote below compares like with like and its
+                # precision tie-break can settle digits safely.
+                try:
+                    repaired = _repair_incomplete_rows(text)
+                    if repaired and content_score(repaired) >= content_score(text):
+                        text = repaired
+                except Exception:
+                    pass  # a failed repair must never block the upload
+                readings.append(text)
+
+            if not readings:
+                raise ValueError('Could not extract meaningful text from the file')
+
+            # Fall back to whichever single reading captured the most data, so a
+            # bad merge can never lose content.
+            best = max(readings, key=content_score)
+            if len(readings) > 1:
+                try:
+                    merged = merge_by_consensus(readings)
+                except Exception:
+                    merged = ''
+                if merged and merged.strip() and content_score(merged) >= content_score(best):
+                    best = merged
+
+            return best
+        except (APIConnectionError, APITimeoutError) as e:
+            last_error = e
+            if attempt < 2:
+                time.sleep(2 ** attempt)
+                continue
+            break
+
+    raise RuntimeError(f'OpenAI vision failed after retries: {str(last_error)}')
+
+
+@app.route('/api/health-profile/upload', methods=['POST'])
+@require_auth
+def upload_health_document():
+    """Upload PDF or image file, extract health info, and analyze it"""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        profile.data.setdefault('upload_settings', {'retention_days': 365})
+        profile.data.setdefault('uploaded_documents', [])
+        _cleanup_expired_uploaded_documents(profile)
+
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file uploaded'}), 400
+
+        file = request.files['file']
+        if not file.filename:
+            return jsonify({'error': 'No file selected'}), 400
+
+        filename = file.filename.lower()
+        allowed_extensions = {'.pdf', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'}
+        ext = os.path.splitext(filename)[1]
+        if ext not in allowed_extensions:
+            return jsonify({'error': f'Unsupported file type. Allowed: {", ".join(allowed_extensions)}'}), 400
+
+        file_bytes = file.read()
+        if len(file_bytes) > 10 * 1024 * 1024:  # 10MB limit
+            return jsonify({'error': 'File too large (max 10MB)'}), 400
+
+        retain = request.form.get('retain', 'true').lower() != 'false'
+
+        # Hash the file and prepare user cache directory
+        content_hash = hashlib.sha256(file_bytes).hexdigest()[:32]
+        user_dir = HEALTH_UPLOADS_DIR / str(user_id)
+        user_dir.mkdir(parents=True, exist_ok=True)
+
+        # Clean up expired documents and check for an existing, unexpired copy of this file
+        _cleanup_expired_uploaded_documents(profile)
+        profile.data.setdefault('uploaded_documents', [])
+        retention_days = _get_retention_days(profile)
+        cutoff = datetime.now() - timedelta(days=retention_days)
+        stored_doc = None
+
+        for doc in profile.data['uploaded_documents']:
+            if doc.get('content_hash') == content_hash:
+                uploaded_at = _parse_iso_datetime(doc.get('uploaded_at'))
+                if uploaded_at and uploaded_at >= cutoff:
+                    if (doc.get('stored_path') and os.path.exists(doc['stored_path'])) or \
+                       (doc.get('extracted_text_path') and os.path.exists(doc['extracted_text_path'])) or \
+                       (doc.get('result_path') and os.path.exists(doc['result_path'])):
+                        stored_doc = doc
+                        break
+
+        if not stored_doc:
+            stored_doc = _store_uploaded_health_document(user_id, file, file_bytes, content_hash=content_hash)
+            if retain:
+                profile.data['uploaded_documents'].append(stored_doc)
+                profile.save()
+
+        # Always re-run OCR and analysis (no caching) so prompt improvements take effect
+        extracted_text_path = user_dir / f"{content_hash}.txt"
+        result_path = user_dir / f"{content_hash}_result.json"
+        try:
+            extracted_text = _extract_text_from_file_bytes(file_bytes, ext)
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
+        except RuntimeError as e:
+            return jsonify({'error': str(e)}), 500
+        except Exception as e:
+            return jsonify({'error': f'Processing failed: {str(e)}'}), 500
+        with open(extracted_text_path, 'w', encoding='utf-8') as f:
+            f.write(extracted_text)
+        stored_doc['extracted_text_path'] = str(extracted_text_path)
+        if retain:
+            profile.save()
+
+        # Run analysis (always fresh — no cached result)
+        if len(extracted_text) > 15000:
+            head = extracted_text[:7500]
+            tail = extracted_text[-7500:]
+            analyzed_text = head + "\n\n[... content truncated ...]\n\n" + tail
+        else:
+            analyzed_text = extracted_text
+
+        result = HealthContextManager.analyze_and_store(user_id, analyzed_text, save=False)
+        with open(result_path, 'w', encoding='utf-8') as f:
+            json.dump(result, f, ensure_ascii=False)
+        stored_doc['result_path'] = str(result_path)
+        if retain:
+            profile.save()
+
+        if 'pending_review' not in result and 'extracted' in result:
+            result['pending_review'] = result['extracted']
+        result['extracted_text'] = extracted_text
+        result['extracted_text_preview'] = extracted_text[:4000] + ('...' if len(extracted_text) > 4000 else '')
+        result['source_file'] = file.filename
+        in_library = stored_doc and any(d.get('content_hash') == content_hash for d in profile.data.get('uploaded_documents', []))
+        if in_library:
+            result['stored_document'] = {
+                'original_name': stored_doc.get('original_name'),
+                'stored_name': stored_doc.get('stored_name'),
+                'uploaded_at': stored_doc.get('uploaded_at'),
+                'expires_at': (datetime.fromisoformat(stored_doc['uploaded_at']) + timedelta(days=retention_days)).isoformat(),
+                'retention_days': retention_days,
+                'size_bytes': stored_doc.get('size_bytes')
+            }
+        else:
+            result['stored_document'] = None
+        return jsonify(result)
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/health-profile/reparse', methods=['POST'])
+@require_auth
+def reparse_uploaded_document():
+    """Re-extract text from a previously uploaded document and analyze it again."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        data = request.get_json() or {}
+        stored_name = data.get('stored_name')
+        index = data.get('index')
+
+        if not stored_name and not isinstance(index, int):
+            return jsonify({'error': 'Provide stored_name or index of the uploaded document'}), 400
+
+        uploaded = profile.data.get('uploaded_documents', [])
+        doc = None
+        if stored_name:
+            doc = next((d for d in uploaded if d.get('stored_name') == stored_name), None)
+        elif isinstance(index, int) and 0 <= index < len(uploaded):
+            doc = uploaded[index]
+
+        if not doc:
+            return jsonify({'error': 'Document not found'}), 404
+
+        target_path = Path(doc['stored_path'])
+        if not target_path.exists():
+            return jsonify({'error': 'Saved file not found on disk'}), 404
+
+        ext = os.path.splitext((doc.get('original_name') or '').lower())[1]
+        if ext not in {'.pdf', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'}:
+            return jsonify({'error': f'Unsupported file type: {ext}'}), 400
+
+        file_bytes = target_path.read_bytes()
+        retention_days = _get_retention_days(profile)
+
+        # Overwrite cached OCR and analysis for this document
+        content_hash = doc.get('content_hash') or hashlib.sha256(file_bytes).hexdigest()[:32]
+        user_dir = HEALTH_UPLOADS_DIR / str(user_id)
+        extracted_text_path = user_dir / f'{content_hash}.txt'
+        result_path = user_dir / f'{content_hash}_result.json'
+        if extracted_text_path.exists():
+            extracted_text_path.unlink()
+        if result_path.exists():
+            result_path.unlink()
+
+        try:
+            extracted_text = _extract_text_from_file_bytes(file_bytes, ext)
+        except ValueError as e:
+            return jsonify({'error': str(e)}), 400
+        except RuntimeError as e:
+            return jsonify({'error': str(e)}), 500
+        except Exception as e:
+            return jsonify({'error': f'Processing failed: {str(e)}'}), 500
+
+        extracted_text_path.write_text(extracted_text, encoding='utf-8')
+        doc['extracted_text_path'] = str(extracted_text_path)
+
+        if len(extracted_text) > 15000:
+            head = extracted_text[:7500]
+            tail = extracted_text[-7500:]
+            analyzed_text = head + "\n\n[... content truncated ...]\n\n" + tail
+        else:
+            analyzed_text = extracted_text
+
+        result = HealthContextManager.analyze_and_store(user_id, analyzed_text, save=False)
+        result_path.write_text(json.dumps(result, ensure_ascii=False), encoding='utf-8')
+        doc['result_path'] = str(result_path)
+        profile.save()
+
+        if 'pending_review' not in result and 'extracted' in result:
+            result['pending_review'] = result['extracted']
+        result['extracted_text'] = extracted_text
+        result['extracted_text_preview'] = extracted_text[:4000] + ('...' if len(extracted_text) > 4000 else '')
+        result['source_file'] = doc.get('original_name')
+        result['stored_document'] = {
+            'original_name': doc.get('original_name'),
+            'stored_name': doc.get('stored_name'),
+            'uploaded_at': doc.get('uploaded_at'),
+            'expires_at': (datetime.now() + timedelta(days=retention_days)).isoformat(),
+            'retention_days': retention_days,
+            'size_bytes': doc.get('size_bytes')
+        }
+        return jsonify(result)
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/health-profile/apply-review', methods=['POST'])
+@require_auth
+def apply_health_review():
+    """Apply the reviewed, user-edited extracted data to the profile."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        data = request.get_json()
+        extracted = data.get('extracted')
+        if not extracted or not isinstance(extracted, dict):
+            return jsonify({'error': 'Missing or invalid extracted data'}), 400
+        actions = profile.apply_extracted_data(extracted)
+        profile.save()
+        return jsonify({'success': True, 'actions': actions, 'extracted': extracted})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/health-profile/document', methods=['GET'])
+@require_auth
+def get_health_document():
+    """Serve a previously uploaded document for viewing or downloading."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        stored_name = request.args.get('stored_name')
+        index = request.args.get('index', type=int)
+
+        uploaded = profile.data.get('uploaded_documents', [])
+        doc = None
+        if stored_name:
+            doc = next((d for d in uploaded if d.get('stored_name') == stored_name), None)
+        elif isinstance(index, int) and 0 <= index < len(uploaded):
+            doc = uploaded[index]
+
+        if not doc:
+            return jsonify({'error': 'Document not found'}), 404
+
+        target_path = Path(doc['stored_path'])
+        if not target_path.exists():
+            return jsonify({'error': 'Saved file not found on disk'}), 404
+
+        mimetype = doc.get('mime_type') or 'application/octet-stream'
+        as_attachment = bool(request.args.get('download'))
+        download_name = doc.get('original_name') or target_path.name
+
+        return send_from_directory(
+            str(target_path.parent),
+            target_path.name,
+            mimetype=mimetype,
+            as_attachment=as_attachment,
+            download_name=download_name
+        )
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/health-profile/item', methods=['DELETE'])
+@require_auth
+def delete_health_profile_item():
+    """Delete a specific item from the health profile by category and index."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        data = request.get_json()
+        category = data.get('category')  # e.g. 'conditions', 'medications', 'supplements', 'symptoms', 'test_results', 'action_plans', 'conversation_insights'
+        index = data.get('index')
+
+        valid_categories = ['conditions', 'medications', 'supplements', 'symptoms', 'test_results', 'action_plans', 'conversation_insights']
+        if category not in valid_categories:
+            return jsonify({'error': f'Invalid category. Must be one of: {valid_categories}'}), 400
+        if not isinstance(index, int) or index < 0:
+            return jsonify({'error': 'Invalid index'}), 400
+
+        items = profile.data.get(category, [])
+        if index >= len(items):
+            return jsonify({'error': 'Index out of range'}), 400
+
+        removed = items.pop(index)
+        profile.save()
+        return jsonify({'success': True, 'item': removed, 'profile': profile.to_dict()})
+    except Exception as e:
+        return _safe_error(e, 'api')
+@app.route('/api/health-profile/item', methods=['PUT'])
+@require_auth
+def update_health_profile_item():
+    """Update a specific item in the health profile by category and index."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        data = request.get_json()
+        category = data.get('category')
+        index = data.get('index')
+        updates = data.get('updates', {})
+        valid_categories = ['conditions', 'medications', 'supplements', 'symptoms', 'test_results', 'action_plans', 'conversation_insights']
+        if category not in valid_categories:
+            return jsonify({'error': f'Invalid category. Must be one of: {valid_categories}'}), 400
+        if not isinstance(index, int) or index < 0:
+            return jsonify({'error': 'Invalid index'}), 400
+        if not isinstance(updates, dict):
+            return jsonify({'error': 'updates must be an object'}), 400
+        items = profile.data.get(category, [])
+        if index >= len(items):
+            return jsonify({'error': 'Index out of range'}), 400
+        items[index].update(updates)
+        profile.save()
+        return jsonify({'success': True, 'item': items[index], 'profile': profile.to_dict()})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/health-profile/item', methods=['POST'])
+@require_auth
+def add_health_profile_item():
+    """Add a new item to a health profile category."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        data = request.get_json()
+        category = data.get('category')
+        item = data.get('item', {})
+        valid_categories = ['conditions', 'medications', 'supplements', 'symptoms', 'test_results', 'action_plans', 'conversation_insights']
+        if category not in valid_categories:
+            return jsonify({'error': f'Invalid category. Must be one of: {valid_categories}'}), 400
+        if not isinstance(item, dict):
+            return jsonify({'error': 'item must be an object'}), 400
+        if category == 'test_results':
+            if not item.get('test_name'):
+                return jsonify({'error': 'test_name is required'}), 400
+            if not profile.add_test_result(
+                item.get('test_name', ''),
+                item.get('value', ''),
+                item.get('reference_range', ''),
+                item.get('date', ''),
+                item.get('notes', '')
+            ):
+                return jsonify({'error': 'Duplicate or invalid test result'}), 400
+        else:
+            profile.data.setdefault(category, []).append(item)
+        profile.save()
+        return jsonify({'success': True, 'item': item, 'profile': profile.to_dict()})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/health-profile/condition-status', methods=['PATCH'])
+@require_auth
+def update_condition_status():
+    """Update the status of a condition."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        data = request.get_json()
+        index = data.get('index')
+        new_status = data.get('status')
+
+        if new_status not in ['active', 'investigating', 'resolved']:
+            return jsonify({'error': 'Status must be active, investigating, or resolved'}), 400
+        if not isinstance(index, int) or index < 0:
+            return jsonify({'error': 'Invalid index'}), 400
+
+        conditions = profile.data.get('conditions', [])
+        if index >= len(conditions):
+            return jsonify({'error': 'Index out of range'}), 400
+
+        conditions[index]['status'] = new_status
+        profile.save()
+        return jsonify({'success': True, 'condition': conditions[index], 'profile': profile.to_dict()})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+@app.route('/api/health-profile/interactions', methods=['GET'])
+@require_auth
+def check_drug_interactions():
+    """Check for drug interactions between all medications and supplements."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        meds = [m['name'] for m in profile.data.get('medications', [])]
+        sups = [s['name'] for s in profile.data.get('supplements', [])]
+        all_drugs = meds + sups
+
+        if len(all_drugs) < 2:
+            return jsonify({'success': True, 'interactions': [], 'message': 'Need at least 2 items to check interactions'})
+
+        interactions = []
+        try:
+            from ai_compare.medical_knowledge_apis import MedicalKnowledgeManager
+            mgr = MedicalKnowledgeManager()
+            # Check each pair via OpenFDA
+            for i, drug_a in enumerate(all_drugs):
+                fda_results = mgr.openfda.search_drug_events(drug_a)
+                if fda_results:
+                    for result in fda_results[:3]:
+                        drugs_in_event = [d.get('medicinalproduct', '').lower() for d in result.get('patient', {}).get('drug', [])]
+                        for drug_b in all_drugs[i+1:]:
+                            if drug_b.lower() in ' '.join(drugs_in_event):
+                                reactions = [r.get('reactionmeddrapt', '') for r in result.get('patient', {}).get('reaction', [])]
+                                interactions.append({
+                                    'drug_a': drug_a,
+                                    'drug_b': drug_b,
+                                    'reactions': reactions[:5],
+                                    'source': 'FDA Adverse Events'
+                                })
+        except Exception as e:
+            print(f"Interaction check error: {e}")
+
+        return jsonify({'success': True, 'interactions': interactions, 'drugs_checked': all_drugs})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+@app.route('/api/health-profile/completeness', methods=['GET'])
+@require_auth
+def get_profile_completeness():
+    """Calculate a profile completeness score."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        d = profile.data
+
+        checks = {
+            'name': bool(d.get('name')),
+            'gender': bool(d.get('personal', {}).get('gender')),
+            'age': bool(d.get('personal', {}).get('age')),
+            'location': bool(d.get('personal', {}).get('location')),
+            'blood_type': bool(d.get('personal', {}).get('blood_type')),
+            'conditions': len(d.get('conditions', [])) > 0,
+            'symptoms': len(d.get('symptoms', [])) > 0,
+            'medications': len(d.get('medications', [])) > 0,
+            'supplements': len(d.get('supplements', [])) > 0,
+            'test_results': len(d.get('test_results', [])) > 0,
+            'diet': len(d.get('diet', {}).get('daily_foods', [])) > 0,
+            'allergies': any(r.startswith('ALLERGY:') for r in d.get('diet', {}).get('restrictions', [])),
+            'action_plans': len(d.get('action_plans', [])) > 0,
+            'lifestyle': bool(d.get('lifestyle', {}).get('exercise') or d.get('lifestyle', {}).get('sleep')),
+        }
+        filled = sum(1 for v in checks.values() if v)
+        total = len(checks)
+        return jsonify({
+            'success': True,
+            'score': round(filled / total * 100),
+            'filled': filled,
+            'total': total,
+            'details': checks
+        })
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+# Wisdom Agent Endpoints
+@app.route('/api/wisdom/nudges', methods=['GET'])
+@require_auth
+def get_wisdom_nudges():
+    """Get pending wisdom nudges for the current user."""
+    try:
+        from agents.wisdom_agent import get_wisdom_nudges_for_user
+        user_id = str(request.current_user['user_id'])
+        nudges = get_wisdom_nudges_for_user(user_id)
+        return jsonify({'success': True, 'nudges': nudges})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+@app.route('/api/wisdom/nudges/<int:nudge_id>/delivered', methods=['POST'])
+@require_auth
+def mark_wisdom_nudge_delivered(nudge_id):
+    """Mark a nudge as delivered/seen."""
+    try:
+        from agents.wisdom_agent import WisdomAgent
+        agent = WisdomAgent(verbose=False)
+        agent.mark_nudge_delivered(nudge_id)
+        return jsonify({'success': True})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+@app.route('/api/wisdom/nudges/<int:nudge_id>/dismiss', methods=['POST'])
+@require_auth
+def dismiss_wisdom_nudge(nudge_id):
+    """Dismiss a nudge without acting on it."""
+    try:
+        import sqlite3
+        db_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'integrated_users.db')
+        conn = sqlite3.connect(db_path)
+        conn.execute("UPDATE wisdom_nudges SET dismissed = 1 WHERE id = ?", (nudge_id,))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+@app.route('/api/wisdom/profile', methods=['GET'])
+@require_auth
+def get_wisdom_profile():
+    """Get the current user's wisdom profile (patterns, strengths, score)."""
+    try:
+        from agents.wisdom_agent import WisdomAgent
+        user_id = str(request.current_user['user_id'])
+        agent = WisdomAgent(verbose=False)
+        profile = agent._load_wisdom_profile(user_id)
+        return jsonify({'success': True, 'profile': profile.to_dict()})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+@app.route('/api/wisdom/analyze', methods=['POST'])
+@require_auth
+def trigger_wisdom_analysis():
+    """Trigger a fresh wisdom analysis for the current user (runs in background)."""
+    try:
+        from agents.wisdom_agent import trigger_wisdom_analysis
+        user_id = str(request.current_user['user_id'])
+        trigger_wisdom_analysis(user_id)
+        return jsonify({'success': True, 'message': 'Analysis started in background'})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
 
 # Character Trait System Endpoints (Phase 5)
 @app.route('/api/character-traits/match', methods=['POST'])
@@ -7452,7 +9001,7 @@ def save_psychological_assessment():
 # Register dynamic character routes for ALL characters with Smart Response and Database
 print("\n=== Registering Character Routes ===")
 register_character_routes(app, all_characters, process_with_smart_response, integrated_db, ai_budget=ai_budget)
-print("✓ Dynamic routes registered for all 8 characters with Smart Response + Database")
+print("✓ Dynamic routes registered for all 10 characters with Smart Response + Database")
 
 
 # ============================================
@@ -10246,12 +11795,11 @@ if __name__ == '__main__':
     # Print conversation storage info on startup
     print(f"\n=== Conversation Storage Info ===")
     print(f"Storage directory: {chatbot.conversation_manager.storage_dir.absolute()}")
-    sessions = chatbot.conversation_manager.list_sessions()
-    print(f"Found {len(sessions)} existing sessions")
-    if sessions:
-        print("Recent sessions:")
-        for session in sessions[:3]:
-            print(f"  - {session['session_id'][:8]}... ({session['message_count']} messages, {session['last_updated']})")
+    try:
+        session_files = list(chatbot.conversation_manager.storage_dir.glob('*.json'))
+        print(f"Found {len(session_files)} existing session files")
+    except Exception as e:
+        print(f"Could not count session files: {e}")
     print("=" * 35)
     
     # Print user profile storage info
@@ -10265,4 +11813,4 @@ if __name__ == '__main__':
             print(f"  - {profile['name']} ({profile['completion']}% complete, {profile['total_conversations']} conversations)")
     print("=" * 35)
     
-    app.run(debug=True, host='0.0.0.0', port=5050)
+    app.run(debug=True, host='0.0.0.0', port=5050, use_reloader=False, threaded=True)

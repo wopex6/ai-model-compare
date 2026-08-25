@@ -9,6 +9,7 @@
     <script src="/static/auth_helper.js"></script>
     <script src="/static/message_handler.js"></script>
     <script src="/static/conversation_box.js"></script>
+    <link href="/static/avatar_styles.css" rel="stylesheet">
     <style>
         body {
             background: linear-gradient(135deg, #4a5568 0%, #718096 50%, #a0aec0 100%);
@@ -465,6 +466,10 @@ What challenges do you face? What wisdom do you seek?
         </div>
     </div>
     
+    <div id="avatar-floater" style="position:fixed;bottom:90px;right:20px;z-index:1000;display:none;"></div>
+    <script src="/static/avatar_engine.js?v=20261008"></script>
+    <script src="/static/avatar_widget.js?v=20261008"></script>
+    <!-- Floating avatar panel -->
     <script>
         // Load daily reflection on page load
         window.addEventListener('DOMContentLoaded', function() {
@@ -520,9 +525,29 @@ What challenges do you face? What wisdom do you seek?
             sendButtonId: 'send-btn',
             chatMessagesId: 'chat-messages',
             onResponseReceived: (data) => {
-                loadStats(); // Update stats after each message
+                loadStats();
+                if (_avatarCtrl) AvatarWidget.onAIResponse([_avatarCtrl], data.response || '');
+            },
+            onMessageSent: () => {
+                if (_avatarCtrl) AvatarWidget.onAIThinking([_avatarCtrl]);
             }
         });
+
+        // Avatar — floating panel bottom-right
+        let _avatarCtrl = null;
+        if (window.AvatarWidget) {
+            const r = AvatarWidget.init({
+                characterId: 'stoic_philosopher',
+                floatContainerId: 'avatar-floater',
+                greeting: 'Greetings. I am Marcus. What challenge shall we face with reason today?',
+                greetingDelay: 1000,
+                showByDefault: false,
+            });
+            _avatarCtrl = r.float;
+            setTimeout(() => {
+                document.getElementById('avatar-floater').style.display = 'flex';
+            }, 800);
+        }
 
         // Quick action button handlers
         function requestExercise() {

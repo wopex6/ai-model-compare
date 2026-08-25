@@ -9,6 +9,11 @@
     <script src="/static/auth_helper.js"></script>
     <script src="/static/message_handler.js"></script>
     <script src="/static/conversation_box.js"></script>
+    <link href="/static/avatar_styles.css" rel="stylesheet">
+    <div id="avatar-floater" style="position:fixed;bottom:90px;right:20px;z-index:1000;display:none;"></div>
+    <script src="/static/avatar_engine.js?v=20261008"></script>
+    <script src="/static/avatar_widget.js?v=20261008"></script>
+
     <style>
         body {
             background: linear-gradient(135deg, #ff6b6b 0%, #4ecdc4 50%, #45b7d1 100%);
@@ -504,10 +509,18 @@
         MessageHandler.enableHighlights('super_motivational_coach');
 
         // Initialize ConversationBox for database integration
+        let _avatarCtrl = null;
+        if (window.AvatarWidget) {
+            const r = AvatarWidget.init({ characterId: 'super_motivational_coach', floatContainerId: 'avatar-floater', greeting: "Hey! I'm Coach Max. Let's make today AMAZING — what's your goal?", greetingDelay: 1000, showByDefault: false });
+            _avatarCtrl = r.float;
+            setTimeout(() => { document.getElementById('avatar-floater').style.display = 'flex'; }, 800);
+        }
+
         ConversationBox.init('super_motivational_coach', {
             inputElementId: 'messageInput',
             sendButtonId: 'sendBtn',
             onResponseReceived: (data) => {
+                if (_avatarCtrl) AvatarWidget.onAIResponse([_avatarCtrl], data.response || '');
                 // Custom motivational features
                 if (data.motivational_action) {
                     document.body.classList.add('energy-boost');
@@ -599,6 +612,7 @@
             avatar.style.transform = 'scale(1.1)';
             setTimeout(() => avatar.style.transform = 'scale(1)', 200);
         }, 5000);
+
     </script>
 </body>
 </html>

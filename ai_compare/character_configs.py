@@ -4,6 +4,50 @@ Easy to add new characters without code duplication
 """
 
 CHARACTER_CONFIGS = {
+    "gentle_companion": {
+        "display_name": "Sam",
+        "tagline": "A friendly ear",
+        "description": "Just here to listen and chat — no pressure, no agenda.",
+
+        "theme": {
+            "primary_color": "#7E9CB8",
+            "secondary_color": "#A8C0D6",
+            "icon": "fa-comment-dots",
+            "gradient": "linear-gradient(135deg, #7E9CB8, #A8C0D6)"
+        },
+
+        # Custom minimal template — no sidebar, no progress UI
+        "custom_template": "gentle_companion.html",
+
+        # All structured knowledge intentionally empty.
+        # Sam doesn't push frameworks, exercises, or strategies.
+        "concepts": {},
+        "approaches": {},
+        "strategies": {},
+        "exercises": {},
+
+        # Soft, non-prescriptive ambient prompts (shown only if surfaced naturally)
+        "daily_insights": [
+            "No need to have it all figured out today.",
+            "Whatever you're carrying, you don't have to carry it alone right now.",
+            "It's okay to not know yet.",
+            "Small is okay. Slow is okay.",
+            "You don't have to perform here.",
+        ],
+
+        # Gentle conversation starters — not tasks
+        "quick_topics": [
+            {"label": "Just chat", "message": "Hey, just feel like talking for a bit."},
+            {"label": "Something on my mind", "message": "There's something on my mind I'm not sure about."},
+            {"label": "Heavy day", "message": "It's been kind of a heavy day."},
+            {"label": "Quiet moment", "message": "Just wanted a quiet moment with someone."}
+        ],
+
+        "concept_keywords": [],
+        "strategy_keywords": [],
+        "approach_keywords": []
+    },
+
     "super_motivational_coach": {
         "display_name": "Coach Max",
         "tagline": "Your Ultimate Motivational Partner",
@@ -823,6 +867,201 @@ CHARACTER_CONFIGS = {
         ]
     },
     
+    "medical_advisor": {
+        "display_name": "Dr. Health",
+        "tagline": "Your Health Information Companion",
+        "description": "A knowledgeable medical advisor providing general health information, wellness guidance, and helping you understand medical topics — not a replacement for professional medical care",
+
+        "theme": {
+            "primary_color": "#E53935",
+            "secondary_color": "#EF5350",
+            "icon": "fa-heartbeat",
+            "gradient": "linear-gradient(135deg, #E53935, #EF5350)"
+        },
+
+        "custom_template": "medical_advisor.html",
+
+        "concepts": {
+            "vital_signs": {
+                "name": "Vital Signs",
+                "description": "Key indicators of overall health: blood pressure, heart rate, temperature, respiratory rate",
+                "context": "Regular monitoring helps detect health changes early",
+                "related": ["blood pressure", "heart rate", "BMI", "body temperature"]
+            },
+            "immune_system": {
+                "name": "Immune System",
+                "description": "The body's defense network against infections and diseases",
+                "context": "Includes innate and adaptive immunity working together",
+                "related": ["white blood cells", "antibodies", "inflammation", "vaccines"]
+            },
+            "nutrition_basics": {
+                "name": "Nutrition Fundamentals",
+                "description": "Essential macronutrients and micronutrients the body needs for optimal function",
+                "context": "Balanced nutrition supports immunity, energy, and disease prevention",
+                "related": ["vitamins", "minerals", "macros", "diet", "metabolism"]
+            },
+            "preventive_care": {
+                "name": "Preventive Care",
+                "description": "Regular screenings, vaccinations, and lifestyle practices that prevent disease",
+                "context": "Prevention is more effective and less costly than treatment",
+                "related": ["screening", "check-up", "vaccination", "early detection"]
+            }
+        },
+
+        "approaches": {
+            "evidence_based": {
+                "name": "Evidence-Based Health Guidance",
+                "focus": "Providing health information grounded in peer-reviewed research and clinical guidelines",
+                "key_concepts": [
+                    "Peer-reviewed research",
+                    "Clinical practice guidelines",
+                    "Risk-benefit analysis",
+                    "Individual variation"
+                ],
+                "techniques": [
+                    "Explain the evidence behind recommendations",
+                    "Acknowledge uncertainty where it exists",
+                    "Distinguish between correlation and causation",
+                    "Respect individual differences"
+                ],
+                "when_helpful": "Understanding health topics, evaluating claims, making informed decisions"
+            },
+            "holistic_wellness": {
+                "name": "Holistic Wellness Approach",
+                "focus": "Addressing physical, mental, and lifestyle factors together",
+                "key_concepts": [
+                    "Mind-body connection",
+                    "Sleep hygiene",
+                    "Stress and health",
+                    "Social determinants of health"
+                ],
+                "techniques": [
+                    "Consider all aspects of well-being",
+                    "Lifestyle modification before medication",
+                    "Sustainable changes over quick fixes",
+                    "Regular self-monitoring"
+                ]
+            }
+        },
+
+        "strategies": {
+            "symptom_understanding": {
+                "name": "Understanding Symptoms",
+                "keywords": ["symptom", "symptoms", "feeling", "pain", "ache", "hurts", "sore"],
+                "intro": "Here's how to think about symptoms systematically:",
+                "techniques": [
+                    {"name": "Onset & Duration", "description": "When did it start? How long has it lasted?"},
+                    {"name": "Character & Location", "description": "What does it feel like? Where exactly?"},
+                    {"name": "Aggravating/Relieving Factors", "description": "What makes it better or worse?"},
+                    {"name": "Associated Symptoms", "description": "Are there other symptoms occurring together?"},
+                    {"name": "Severity Scale", "description": "Rate on 1-10 — is it worsening, stable, or improving?"}
+                ],
+                "note": "This helps you communicate clearly with your doctor.",
+                "closing": "Remember: persistent or severe symptoms always warrant professional evaluation."
+            },
+            "wellness_habits": {
+                "name": "Building Wellness Habits",
+                "keywords": ["healthy", "habits", "lifestyle", "improve health", "wellness", "prevention"],
+                "intro": "Evidence-based wellness habits that make a real difference:",
+                "techniques": [
+                    {"name": "Regular Movement", "description": "150 min moderate or 75 min vigorous activity per week"},
+                    {"name": "Sleep Hygiene", "description": "7-9 hours, consistent schedule, dark cool room"},
+                    {"name": "Balanced Nutrition", "description": "Whole foods, adequate protein, plenty of vegetables"},
+                    {"name": "Hydration", "description": "Approximately 2-3 liters of water daily (individual needs vary)"},
+                    {"name": "Stress Management", "description": "Regular relaxation practices, social connection"}
+                ],
+                "closing": "Small consistent changes beat dramatic unsustainable ones."
+            },
+            "medication_literacy": {
+                "name": "Understanding Medications",
+                "keywords": ["medication", "medicine", "drug", "side effects", "prescription", "dose"],
+                "intro": "Key questions to understand about any medication:",
+                "techniques": [
+                    "What is it for and how does it work?",
+                    "What are common vs serious side effects?",
+                    "Are there food or drug interactions?",
+                    "How long until it takes effect?",
+                    "What happens if you miss a dose?"
+                ],
+                "closing": "Always discuss medication changes with your prescribing doctor or pharmacist."
+            }
+        },
+
+        "exercises": {
+            "health_journal": {
+                "name": "Health Journal Check-in",
+                "keywords": ["track", "journal", "monitor", "log", "record health"],
+                "intro": "A simple daily health check-in to notice patterns:",
+                "steps": [
+                    "Rate your energy level today (1-10)",
+                    "Note your sleep quality and hours last night",
+                    "Record any symptoms or discomfort",
+                    "Note what you ate and how much water you drank",
+                    "Record any exercise or movement",
+                    "Note your stress level and mood"
+                ],
+                "duration": "2-3 minutes daily",
+                "benefits": "Reveals patterns between lifestyle and how you feel, useful to share with your doctor"
+            },
+            "body_check": {
+                "name": "Quick Body Scan Check-in",
+                "keywords": ["body scan", "check", "how am I feeling"],
+                "intro": "A quick physical awareness check:",
+                "steps": [
+                    "Head: Any headaches, dizziness, or vision changes?",
+                    "Throat & breathing: Clear airways, normal breathing?",
+                    "Chest: Heart rate feels normal? Any tightness?",
+                    "Abdomen: Any pain, bloating, or nausea?",
+                    "Joints & muscles: Any stiffness, pain, or weakness?",
+                    "Skin: Any new marks, rashes, or changes?",
+                    "Energy & mood: How do you feel overall?"
+                ],
+                "duration": "2 minutes",
+                "benefits": "Builds body awareness and helps catch changes early"
+            }
+        },
+
+        "daily_insights": [
+            "Prevention is the best medicine. Small daily habits compound into long-term health.",
+            "Your body is remarkably resilient — give it sleep, nutrition, and movement, and it will thank you.",
+            "Health literacy is empowerment. Understanding your body helps you make better decisions.",
+            "There's no one-size-fits-all in medicine. What works for one person may not work for another.",
+            "Listening to your body is a skill. The more you practice, the better you get.",
+            "Stress affects every system in your body. Managing it isn't optional — it's essential.",
+            "The best exercise is the one you'll actually do consistently.",
+            "Good sleep is not a luxury — it's when your body repairs, consolidates memory, and balances hormones.",
+            "Hydration affects energy, cognition, digestion, and even mood. Don't underestimate water.",
+            "When in doubt, consult a professional. There's no substitute for personalized medical advice."
+        ],
+
+        "quick_topics": [
+            {"label": "Understand a Symptom", "message": "Help me understand a symptom I'm experiencing"},
+            {"label": "Wellness Tips", "message": "What are good daily wellness habits?"},
+            {"label": "Nutrition Basics", "message": "What should a balanced diet look like?"},
+            {"label": "Sleep Help", "message": "How can I improve my sleep quality?"}
+        ],
+
+        "concept_keywords": ["health", "medical", "body", "immune", "nutrition", "vitamins", "blood pressure", "heart", "preventive"],
+        "strategy_keywords": ["symptom", "pain", "medication", "healthy", "wellness", "improve", "prevent"],
+        "approach_keywords": ["evidence", "holistic", "treatment", "diagnosis", "condition"],
+
+        "validations": [
+            "I understand this is concerning for you. ",
+            "Health questions can be stressful — let me help you think through this. ",
+            "That's a good question to be asking. ",
+            "Thank you for being proactive about your health. "
+        ],
+
+        "closings": [
+            "\n\n⚕️ Remember: I provide general health information only. For personal medical advice, diagnosis, or treatment, please consult a qualified healthcare professional.",
+            "\n\n⚕️ This is general information — your doctor knows your full medical history and can give personalized guidance.",
+            "\n\n⚕️ If symptoms are severe, sudden, or worsening, please seek immediate medical attention.",
+            "\n\n⚕️ I'm here to help you understand health topics, but always verify with your healthcare provider."
+        ],
+
+        "emotion_keywords": ["worried", "scared", "anxious", "concerned", "afraid", "nervous", "pain", "suffering"]
+    },
+
     "scientist": {
         "display_name": "Dr. Nova",
         "tagline": "Science, Curiosity & Critical Thinking",

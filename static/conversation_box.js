@@ -32,6 +32,8 @@ const ConversationBox = {
         sessionEndpoint: null,  // NEW: e.g., '/scientist/session'
         includeContext: true,
         errorMessage: 'I apologize, but I encountered an error. Please try again.',
+        offlineMessage: 'You appear to be offline. Please connect to the internet and try again.',
+        pendingStorageKey: null,  // localStorage key for unsent messages; defaults to drHealth.pending.<characterId>.v1
         enableSearch: true,  // Enable search functionality
         
         // Optional UI callbacks
@@ -39,7 +41,9 @@ const ConversationBox = {
         onResponseReceived: null,  // Called after bot response: (data) => {}
         onError: null,  // Called on error: (error) => {}
         onSessionCreated: null,  // Called when new session created: (sessionId) => {}
-        onHistoryLoaded: null  // Called after history loaded: (messages) => {}
+        onHistoryLoaded: null,  // Called after history loaded: (messages) => {}
+        localCache: false,       // Store conversation in localStorage for offline use
+        localStorageKey: null    // localStorage key; defaults to drHealth.conversation.<characterId>.v1
     },
     
     /**
@@ -97,12 +101,29 @@ const ConversationBox = {
             this._createSearchUI();
         }
         
+        // Load local cache immediately so the app works offline
+        if (this.config.localCache) {
+            this._loadLocalHistory();
+        }
+
         // Get authenticated session from backend, then load history
         this._getAuthenticatedSession().then(() => {
-            this.loadHistory();
+            this.loadHistory().then(() => {
+                this._processPendingMessages();
+            });
             this._loadPersonalizationStatus();
         }).catch(error => {
             console.error('Failed to initialize session:', error);
+        });
+
+        // Send any queued messages when the phone comes back online
+        window.addEventListener('online', () => {
+            console.log('Back online, processing pending messages...');
+            if (!this.sessionId) {
+                this._getAuthenticatedSession().then(() => this._processPendingMessages());
+            } else {
+                this._processPendingMessages();
+            }
         });
         
         console.log(`✅ ConversationBox initialized for ${characterId}`);
@@ -162,9 +183,17 @@ const ConversationBox = {
      */
     async sendMessage(messageText = null) {
         const inputElement = document.getElementById(this.config.inputElementId);
-        const message = messageText || (inputElement ? inputElement.value.trim() : '');
+        let message = messageText || (inputElement ? inputElement.value.trim() : '');
         
         if (!message) return;
+
+        // Optional callback: caller can transform message before display/send.
+        if (this.config.beforeSend) {
+            const transformed = this.config.beforeSend(message);
+            if (transformed && typeof transformed === 'string') {
+                message = transformed;
+            }
+        }
         
         // Display user message
         MessageHandler.addMessage({
@@ -173,6 +202,10 @@ const ConversationBox = {
             timestamp: new Date().toISOString(),
             shouldScroll: true
         });
+
+        if (this.config.localCache) {
+            this._appendLocalMessage({content: message, role: 'user', timestamp: new Date().toISOString()});
+        }
         
         // Clear input after sending
         if (inputElement) {
@@ -234,6 +267,10 @@ const ConversationBox = {
                         shouldScroll: true
                     });
 
+                    if (this.config.localCache) {
+                        this._appendLocalMessage({content: data.response, role: 'bot', timestamp: new Date().toISOString(), source: data.type || 'direct_ai'});
+                    }
+
                     // Add response action buttons (only for normal AI responses)
                     this._addResponseActions();
 
@@ -253,8 +290,15 @@ const ConversationBox = {
             
         } catch (error) {
             console.error('Error sending message:', error);
-            this._displayError(this.config.errorMessage);
-            
+
+            var isOffline = !navigator.onLine;
+            if (isOffline) {
+                this._addPendingMessage({content: message, timestamp: new Date().toISOString()});
+                this._displayError(this.config.offlineMessage);
+            } else {
+                this._displayError(this.config.errorMessage);
+            }
+
             // Optional callback: error
             if (this.config.onError) {
                 this.config.onError(error);
@@ -295,7 +339,206 @@ const ConversationBox = {
             this.userId = null;
         }
     },
-    
+
+    /**
+     * Get the localStorage key for this character
+     * @private
+     */
+    _getLocalStorageKey() {
+        return this.config.localStorageKey || `drHealth.conversation.${this.characterId}.v1`;
+    },
+
+    /**
+     * Load conversation history from localStorage for offline use
+     * @private
+     */
+    _loadLocalHistory() {
+        try {
+            const raw = localStorage.getItem(this._getLocalStorageKey());
+            if (!raw) return;
+            const messages = JSON.parse(raw);
+            if (!Array.isArray(messages) || messages.length === 0) return;
+
+            // Clear existing messages and render local history
+            MessageHandler.messagesContainer.innerHTML = '';
+            messages.forEach(msg => {
+                MessageHandler.addMessage({
+                    content: msg.content,
+                    role: msg.role === 'assistant' ? 'bot' : (msg.role === 'bot' ? 'bot' : 'user'),
+                    timestamp: msg.timestamp,
+                    source: msg.source || null,
+                    shouldScroll: false
+                });
+            });
+            this.allMessages = messages;
+            MessageHandler.messagesContainer.scrollTop = MessageHandler.messagesContainer.scrollHeight;
+            console.log(`✓ Loaded ${messages.length} messages from localStorage`);
+        } catch (error) {
+            console.error('Error loading local conversation history:', error);
+        }
+    },
+
+    /**
+     * Save messages to localStorage
+     * @private
+     */
+    _saveLocalMessages(messages) {
+        try {
+            const normalized = messages.map(msg => ({
+                content: msg.content,
+                role: msg.sender_type || msg.role || 'user',
+                timestamp: msg.timestamp || new Date().toISOString(),
+                source: msg.metadata?.source || msg.source || null
+            }));
+            localStorage.setItem(this._getLocalStorageKey(), JSON.stringify(normalized));
+        } catch (error) {
+            console.error('Error saving local conversation history:', error);
+        }
+    },
+
+    /**
+     * Append a single message to localStorage
+     * @private
+     */
+    _appendLocalMessage(msg) {
+        try {
+            const key = this._getLocalStorageKey();
+            const raw = localStorage.getItem(key);
+            const messages = raw ? JSON.parse(raw) : [];
+            messages.push({
+                content: msg.content,
+                role: msg.role,
+                timestamp: msg.timestamp || new Date().toISOString(),
+                source: msg.source || null
+            });
+            localStorage.setItem(key, JSON.stringify(messages));
+        } catch (error) {
+            console.error('Error appending local message:', error);
+        }
+    },
+
+    _getPendingStorageKey() {
+        return this.config.pendingStorageKey || `drHealth.pending.${this.characterId}.v1`;
+    },
+
+    _loadPendingMessages() {
+        try {
+            const raw = localStorage.getItem(this._getPendingStorageKey());
+            return raw ? JSON.parse(raw) : [];
+        } catch (error) {
+            console.error('Error loading pending messages:', error);
+            return [];
+        }
+    },
+
+    _savePendingMessages(messages) {
+        try {
+            localStorage.setItem(this._getPendingStorageKey(), JSON.stringify(messages));
+        } catch (error) {
+            console.error('Error saving pending messages:', error);
+        }
+    },
+
+    _addPendingMessage(msg) {
+        const pending = this._loadPendingMessages();
+        pending.push(msg);
+        this._savePendingMessages(pending);
+    },
+
+    _removePendingMessage(msg) {
+        const pending = this._loadPendingMessages().filter(p => p.timestamp !== msg.timestamp || p.content !== msg.content);
+        this._savePendingMessages(pending);
+    },
+
+    async _processPendingMessages() {
+        if (this._processingPending) return;
+        this._processingPending = true;
+
+        try {
+            if (!this.sessionId) {
+                console.log('No session available, skipping pending messages');
+                return;
+            }
+
+            const pending = this._loadPendingMessages();
+            if (pending.length === 0) return;
+            if (!navigator.onLine) return;
+
+            console.log(`Processing ${pending.length} pending messages...`);
+            let sentAny = false;
+
+            for (const msg of pending) {
+                try {
+                    await this._sendOnePending(msg);
+                    this._removePendingMessage(msg);
+                    sentAny = true;
+                } catch (err) {
+                    console.error('Failed to send pending message, will retry later:', err);
+                    break;
+                }
+            }
+
+            if (sentAny && 'Notification' in window && Notification.permission === 'granted') {
+                try {
+                    new Notification('Dr. Health', { body: 'A response is ready.' });
+                } catch (_) {}
+            }
+        } finally {
+            this._processingPending = false;
+        }
+    },
+
+    async _sendOnePending(pending) {
+        const payload = {
+            message: pending.content,
+            include_context: this.config.includeContext
+        };
+
+        const response = await AuthHelper.authenticatedFetch(this.config.chatEndpoint, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (data.session_id && !this.sessionId) {
+            this.sessionId = data.session_id;
+        }
+
+        if (data.response) {
+            const isClarification = data.type === 'clarification';
+            const isCritical = isClarification && data.urgency === 'critical';
+
+            if (isClarification) {
+                this._addClarificationCard(data.response, isCritical);
+            } else {
+                MessageHandler.addMessage({
+                    content: data.response,
+                    role: 'bot',
+                    timestamp: new Date().toISOString(),
+                    source: data.type || 'direct_ai',
+                    shouldScroll: true
+                });
+
+                if (this.config.localCache) {
+                    this._appendLocalMessage({content: data.response, role: 'bot', timestamp: new Date().toISOString(), source: data.type || 'direct_ai'});
+                }
+
+                this._addResponseActions();
+
+                if (data.character_suggestion && data.character_suggestion.should_suggest !== false) {
+                    this._addCharacterSuggestion(data.character_suggestion);
+                }
+            }
+
+            if (this.config.onResponseReceived) {
+                this.config.onResponseReceived(data);
+            }
+        } else if (data.error) {
+            this._displayError(data.error);
+        }
+    },
+
     /**
      * Load conversation history from backend (database-backed)
      */
@@ -338,7 +581,11 @@ const ConversationBox = {
                 // Scroll to bottom after all messages loaded
                 MessageHandler.messagesContainer.scrollTop = MessageHandler.messagesContainer.scrollHeight;
                 console.log(`✓ Loaded ${data.messages.length} messages from database`);
-                
+
+                if (this.config.localCache) {
+                    this._saveLocalMessages(data.messages);
+                }
+
                 // Optional callback: history loaded
                 if (this.config.onHistoryLoaded) {
                     this.config.onHistoryLoaded(data.messages);

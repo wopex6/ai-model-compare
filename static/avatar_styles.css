@@ -1,0 +1,373 @@
+/* ═══════════════════════════════════════════════
+   Avatar Panel — animated character system
+   ═══════════════════════════════════════════════ */
+
+.avatar-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: linear-gradient(160deg, #f8f9ff 0%, #eef1ff 100%);
+    border: 1px solid #d4dcf4;
+    border-radius: 20px;
+    padding: 12px 10px 8px;
+    width: 190px;
+    flex-shrink: 0;
+    position: relative;
+    box-shadow: 0 4px 20px rgba(102,126,234,0.12);
+    transition: width 0.3s, opacity 0.3s;
+    user-select: none;
+}
+
+.avatar-panel.collapsed .avatar-body,
+.avatar-panel.collapsed .avatar-expression-bar {
+    display: none;
+}
+
+.avatar-panel.collapsed {
+    width: 120px;
+    padding-bottom: 10px;
+}
+
+/* Header */
+.avatar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    margin-bottom: 6px;
+}
+
+.avatar-name {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #667eea;
+    letter-spacing: 0.02em;
+}
+
+.avatar-controls {
+    display: flex;
+    gap: 4px;
+}
+
+.avatar-ctrl-btn {
+    background: none;
+    border: 1px solid #d4dcf4;
+    border-radius: 6px;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #999;
+    font-size: 0.85rem;
+    padding: 0;
+    transition: background 0.15s, color 0.15s;
+}
+
+.avatar-ctrl-btn:hover {
+    background: #667eea;
+    color: white;
+    border-color: #667eea;
+}
+
+/* Body — speech bubble above SVG */
+.avatar-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    position: relative;
+}
+
+/* Speech bubble */
+.avatar-speech-wrap {
+    width: 100%;
+    min-height: 28px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 6px;
+}
+
+.avatar-bubble {
+    display: none;
+    background: white;
+    border: 1.5px solid #d4dcf4;
+    border-radius: 14px 14px 14px 4px;
+    padding: 8px 11px;
+    font-size: 0.76rem;
+    line-height: 1.4;
+    color: #444;
+    max-width: 170px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    position: relative;
+    animation: bubblePop 0.25s cubic-bezier(0.34,1.56,0.64,1);
+    word-break: break-word;
+}
+
+.avatar-bubble.visible {
+    display: block;
+}
+
+.avatar-bubble::after {
+    content: '';
+    position: absolute;
+    bottom: -8px;
+    left: 14px;
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 0px solid transparent;
+    border-top: 8px solid white;
+    filter: drop-shadow(0 1px 0 #d4dcf4);
+}
+
+@keyframes bubblePop {
+    0%   { transform: scale(0.7) translateY(6px); opacity: 0; }
+    100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+/* SVG character */
+.avatar-svg-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: avatarEntrance 0.4s cubic-bezier(0.34,1.56,0.64,1);
+}
+
+.avatar-svg-wrap svg {
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.10));
+    transition: transform 0.15s;
+}
+
+.avatar-panel:not(.collapsed) .avatar-svg-wrap svg:hover {
+    transform: scale(1.04) translateY(-2px);
+}
+
+@keyframes avatarEntrance {
+    0%   { transform: scale(0.6) translateY(20px); opacity: 0; }
+    100% { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+/* Expression bar */
+.avatar-expression-bar {
+    display: flex;
+    gap: 5px;
+    margin-top: 8px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.expr-btn {
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    width: 28px;
+    height: 28px;
+    font-size: 0.9rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+
+.expr-btn:hover {
+    background: white;
+    border-color: #667eea;
+    transform: scale(1.15);
+}
+
+.expr-btn.active {
+    background: #667eea20;
+    border-color: #667eea;
+}
+
+/* ─── #avatar-side — grid column slot used on conversation pages ────── */
+#avatar-side {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    position: sticky;
+    top: 16px;
+    align-self: start;
+    min-width: 0;
+}
+
+/* ─── Chat view layout when avatar is shown ─────────────────────────── */
+.chat-with-avatar {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    height: 100%;
+}
+
+.chat-with-avatar .avatar-side {
+    position: sticky;
+    top: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.chat-with-avatar .chat-main-side {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+/* Toggle avatar button in chat toolbar */
+.avatar-toggle-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: white;
+    border: 1px solid #d4dcf4;
+    border-radius: 16px;
+    padding: 4px 12px;
+    font-size: 0.78rem;
+    color: #667eea;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+
+.avatar-toggle-chip:hover,
+.avatar-toggle-chip.active {
+    background: #667eea;
+    color: white;
+    border-color: #667eea;
+}
+
+/* ─── Floating avatar (dashboard greeter) ───────────────────────────── */
+.avatar-floater {
+    position: fixed;
+    bottom: 90px;
+    right: 20px;
+    z-index: 890;
+    display: none;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0;
+    animation: floaterIn 0.35s cubic-bezier(0.34,1.56,0.64,1);
+}
+
+.avatar-floater.visible {
+    display: flex;
+}
+
+@keyframes floaterIn {
+    0%   { transform: translateY(40px) scale(0.7); opacity: 0; }
+    100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.avatar-floater .avatar-panel {
+    width: 160px;
+    box-shadow: 0 8px 32px rgba(102,126,234,0.22);
+}
+
+/* ─── Character card avatar badge ───────────────────────────────────── */
+.char-avatar-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #f0f4ff, #e0e8ff);
+    border: 2px solid #d4dcf4;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.char-avatar-badge svg {
+    width: 52px;
+    height: 62px;
+    margin-top: 10px;
+}
+
+/* ─── Speaking pulse ring ────────────────────────────────────────────── */
+.avatar-svg-wrap.speaking::after {
+    content: '';
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+    border: 3px solid #667eea;
+    animation: speakPulse 0.8s ease-in-out infinite;
+    pointer-events: none;
+}
+
+@keyframes speakPulse {
+    0%, 100% { opacity: 0.6; transform: scale(1); }
+    50%       { opacity: 0.2; transform: scale(1.08); }
+}
+
+/* ─── Photo Avatar Panel ───────────────────────────────────────────── */
+.photo-avatar-panel .avatar-canvas-container {
+    flex: 1;
+    overflow: hidden;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #f0f4ff 0%, #e8eeff 100%);
+}
+
+.photo-avatar-panel canvas {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover;
+    border-radius: 12px;
+}
+
+.photo-avatar-panel {
+    background: white;
+}
+
+/* ─── LivePortrait Avatar Panel (Enhanced Animation) ────────────────── */
+.photo-avatar-panel .avatar-canvas-container {
+    position: relative;
+    overflow: hidden;
+}
+
+.photo-avatar-panel .avatar-canvas-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.2) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 1;
+}
+
+.photo-avatar-panel .avatar-canvas-container canvas {
+    transition: transform 0.1s ease-out;
+    will-change: transform;
+}
+
+/* Speaking animation indicator */
+.photo-avatar-panel.speaking .avatar-canvas-container {
+    box-shadow: inset 0 0 20px rgba(102, 126, 234, 0.3);
+}
+
+/* Blinking state */
+.photo-avatar-panel.blinking canvas {
+    filter: brightness(0.98);
+}
+
+/* ─── Responsive: hide avatar panel on very small screens ────────────── */
+@media (max-width: 520px) {
+    .avatar-side {
+        display: none !important;
+    }
+    .avatar-floater {
+        bottom: 70px;
+        right: 10px;
+    }
+    .avatar-floater .avatar-panel {
+        width: 130px;
+    }
+}

@@ -382,7 +382,7 @@ class IntegratedDatabase:
             CREATE INDEX IF NOT EXISTS idx_attachments_user_status 
             ON ai_file_attachments(user_id, status, created_at DESC)
         ''')
-        
+
         conn.commit()
         conn.close()
     
@@ -2593,7 +2593,7 @@ class IntegratedDatabase:
         """Deactivate an attachment (soft delete)"""
         conn = self.get_connection()
         cursor = conn.cursor()
-        
+
         try:
             cursor.execute('''
                 UPDATE ai_file_attachments
@@ -2607,3 +2607,4 @@ class IntegratedDatabase:
             return False
         finally:
             conn.close()
+

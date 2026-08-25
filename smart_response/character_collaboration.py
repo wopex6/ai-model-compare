@@ -75,6 +75,10 @@ class CharacterCollaborationSystem:
                 domain_name = config.get('domain', 'general')
                 if domain_name == 'all':  # Skip coordinator
                     continue
+                # Skip team-only agents (e.g. deliberation team) so their broad
+                # keywords don't pollute domain detection / trigger collaboration.
+                if config.get('auto_route', True) is False:
+                    continue
                     
                 # Extract keywords from threshold_config
                 threshold_config = config.get('threshold_config', {})
@@ -114,6 +118,7 @@ class CharacterCollaborationSystem:
         self.budget_manager = ai_budget_manager
         self._init_tables()
         self._seed_default_data()
+        self._purge_team_only_domains()
     
     def _init_tables(self):
         """Create collaboration tracking tables"""
@@ -222,6 +227,31 @@ class CharacterCollaborationSystem:
                 ))
         
         self.db.commit()
+    
+    def _purge_team_only_domains(self):
+        """
+        Remove domain_definitions rows for team-only agents (e.g. the
+        deliberation team) in case they were seeded before those agents were
+        marked team-only. Their broad keywords would otherwise over-trigger
+        collaboration. Idempotent and safe to run on every startup.
+        """
+        try:
+            from .characters.configs import get_team_only_character_ids, DOMAIN_CHARACTER_CONFIGS
+            team_domains = {
+                DOMAIN_CHARACTER_CONFIGS.get(cid, {}).get('domain')
+                for cid in get_team_only_character_ids()
+            }
+            team_domains.discard(None)
+            if not team_domains:
+                return
+            cursor = self.db.cursor()
+            cursor.executemany(
+                'DELETE FROM domain_definitions WHERE domain_name = ?',
+                [(d,) for d in team_domains]
+            )
+            self.db.commit()
+        except Exception as e:
+            print(f"[COLLAB] _purge_team_only_domains skipped: {e}")
     
     def should_collaborate(self, message: str, user_context: Dict = None) -> Tuple[bool, Optional[str], Optional[str]]:
         """
@@ -334,8 +364,13 @@ class CharacterCollaborationSystem:
         detected_domains = self._detect_domains(message)
         
         # Score all characters
+        from .characters.configs import is_auto_routable
         candidates = []
         for char_id, char in self.trait_system.characters.items():
+            # Skip team-only agents (deliberation team) — they participate only
+            # via Teams, not ad-hoc collaboration selection.
+            if not is_auto_routable(char_id):
+                continue
             # Calculate trait relevance (distance from ideal)
             trait_distance = char.traits.distance_to(ideal_traits)
             trait_relevance = 1.0 - min(trait_distance, 1.0)
