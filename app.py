@@ -38,7 +38,7 @@ os.environ.setdefault('GLOG_minloglevel', '2')
 
 # Now import everything else
 print(f"{_startup_elapsed()} Starting imports...")
-from flask import Flask, render_template, request, jsonify, session, redirect, send_from_directory
+from flask import Flask, render_template, request, jsonify, session, redirect, send_from_directory, make_response
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import asyncio
@@ -6678,7 +6678,11 @@ def health_profile_page():
 def dr_health_app():
     """Standalone Dr. Health PWA — mobile-installable, personal use.
     Reuses the existing medical_advisor chat + health-profile APIs."""
-    return render_template('dr_health_app.html')
+    resp = make_response(render_template('dr_health_app.html'))
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
 
 
 @app.route('/emergency')
