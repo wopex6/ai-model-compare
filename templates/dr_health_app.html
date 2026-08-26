@@ -337,7 +337,7 @@
             <div class="icon"><i class="fas fa-heartbeat"></i></div>
             <h1>Dr. Health</h1>
             <p class="sub">Your personal health companion</p>
-            <form id="login-form" style="width:100%;">
+            <form id="login-form" style="width:100%;" onsubmit="event.preventDefault(); doLogin();">
                 <input type="text" id="login-username" placeholder="Username" autocomplete="username">
                 <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
                 <button class="primary" id="login-btn" type="submit">Log In</button>
@@ -517,11 +517,6 @@
             return false;
         }
     }
-
-    document.getElementById('login-form').addEventListener('submit', (e) => {
-        e.preventDefault();
-        doLogin();
-    });
 
     const CREDENTIALS_KEY = 'drHealth.credentials.v1';
     function getStoredCredentials() {
