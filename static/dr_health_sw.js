@@ -12,7 +12,15 @@ const SHELL_ASSETS = [
 
 self.addEventListener('install', (event) => {
     event.waitUntil(
-        caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_ASSETS)).catch(() => {})
+        caches.open(CACHE_NAME).then((cache) =>
+            Promise.all(SHELL_ASSETS.map((url) =>
+                fetch(new Request(url, { cache: 'reload' })).then((response) => {
+                    if (response && response.status === 200) {
+                        return cache.put(url, response);
+                    }
+                })
+            ))
+        ).catch((err) => console.log('SW install cache failed:', err))
     );
     self.skipWaiting();
 });
