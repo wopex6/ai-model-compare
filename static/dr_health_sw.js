@@ -1,8 +1,7 @@
 // Service worker for the Dr. Health PWA.
-// Caches the app shell for fast/offline load; all API/data requests always go to network.
-const CACHE_NAME = 'dr-health-shell-v24';
+// Caches the app shell for fast/offline load; the main HTML and all API/data requests always go to network.
+const CACHE_NAME = 'dr-health-shell-v25';
 const SHELL_ASSETS = [
-    '/dr-health',
     '/static/dr_health_manifest.json',
     '/static/auth_helper.js',
     '/static/message_handler.js',
@@ -30,8 +29,9 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
     const url = new URL(event.request.url);
 
-    // Never cache API calls or chat/auth endpoints — always go to network.
-    if (url.pathname.startsWith('/api/') || url.pathname.includes('/chat') ||
+    // Never cache the main HTML or API/chat/auth/history endpoints.
+    if (url.pathname === '/dr-health' || url.pathname === '/dr-health/' ||
+        url.pathname.startsWith('/api/') || url.pathname.includes('/chat') ||
         url.pathname.includes('/session') || url.pathname.includes('/history') ||
         url.pathname.includes('/daily-insight')) {
         return;
