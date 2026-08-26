@@ -337,9 +337,11 @@
             <div class="icon"><i class="fas fa-heartbeat"></i></div>
             <h1>Dr. Health</h1>
             <p class="sub">Your personal health companion</p>
-            <input type="text" id="login-username" placeholder="Username" autocomplete="username">
-            <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
-            <button class="primary" id="login-btn">Log In</button>
+            <form id="login-form" style="width:100%;">
+                <input type="text" id="login-username" placeholder="Username" autocomplete="username">
+                <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
+                <button class="primary" id="login-btn" type="submit">Log In</button>
+            </form>
             <div id="login-error"></div>
             <div class="install-wrap" id="install-wrap">
                 <button class="install-btn" id="install-pwa-btn" title="How to install">
@@ -516,8 +518,10 @@
         }
     }
 
-    document.getElementById('login-btn').addEventListener('click', () => doLogin());
-    document.getElementById('login-password').addEventListener('keydown', (e) => { if (e.key === 'Enter') doLogin(); });
+    document.getElementById('login-form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        doLogin();
+    });
 
     const CREDENTIALS_KEY = 'drHealth.credentials.v1';
     function getStoredCredentials() {
@@ -532,13 +536,16 @@
         const u = (username !== undefined) ? username : document.getElementById('login-username').value.trim();
         const p = (password !== undefined) ? password : document.getElementById('login-password').value;
         const errEl = document.getElementById('login-error');
+        const btn = document.getElementById('login-btn');
         errEl.textContent = '';
+        if (btn) { btn.disabled = true; btn.textContent = 'Logging in...'; }
         if (typeof u !== 'string' || typeof p !== 'string') {
             errEl.textContent = 'Stored credentials are invalid. Please enter them again.';
             clearStoredCredentials();
+            if (btn) { btn.disabled = false; btn.textContent = 'Log In'; }
             return;
         }
-        if (!u || !p) { errEl.textContent = 'Enter username and password.'; return; }
+        if (!u || !p) { errEl.textContent = 'Enter username and password.'; if (btn) { btn.disabled = false; btn.textContent = 'Log In'; } return; }
         try {
             const resp = await fetch('/api/auth/login', {
                 method: 'POST',
@@ -549,6 +556,7 @@
             if (!resp.ok || !data.success) {
                 errEl.textContent = data.error || 'Login failed.';
                 clearStoredCredentials();
+                if (btn) { btn.disabled = false; btn.textContent = 'Log In'; }
                 return;
             }
             AuthHelper.setAuthToken(data.token);
@@ -557,6 +565,7 @@
             initApp();
         } catch (e) {
             errEl.textContent = 'Network error. Is the server reachable?';
+            if (btn) { btn.disabled = false; btn.textContent = 'Log In'; }
         }
     }
 

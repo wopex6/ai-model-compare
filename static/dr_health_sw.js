@@ -1,6 +1,6 @@
 // Service worker for the Dr. Health PWA.
 // Caches the app shell for fast/offline load; all API/data requests always go to network.
-const CACHE_NAME = 'dr-health-shell-v21';
+const CACHE_NAME = 'dr-health-shell-v22';
 const SHELL_ASSETS = [
     '/dr-health',
     '/static/dr_health_manifest.json',
