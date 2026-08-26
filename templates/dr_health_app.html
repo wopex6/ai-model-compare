@@ -343,6 +343,16 @@
                 <button class="primary" id="login-btn" type="submit">Log on</button>
             </form>
             <div id="login-error"></div>
+            <script>
+                window.doLogin = function() {
+                    const errEl = document.getElementById('login-error');
+                    if (errEl) { errEl.textContent = 'Loading login scripts, please wait...'; errEl.style.color = '#333'; }
+                };
+                window.addEventListener('error', (e) => {
+                    const errEl = document.getElementById('login-error');
+                    if (errEl) { errEl.textContent = 'JS error: ' + e.message + ' (line ' + e.lineno + ')'; errEl.style.color = '#c62828'; }
+                });
+            </script>
             <div class="install-wrap" id="install-wrap">
                 <button class="install-btn" id="install-pwa-btn" title="How to install">
                     <i class="fas fa-arrow-up-from-bracket"></i>
@@ -534,7 +544,7 @@
     const CREDENTIALS_KEY = 'drHealth.credentials.v1';
     function getStoredCredentials() {
         try { return JSON.parse(localStorage.getItem(CREDENTIALS_KEY)); }
-        catch { return null; }
+        catch (e) { return null; }
     }
     function clearStoredCredentials() {
         localStorage.removeItem(CREDENTIALS_KEY);
@@ -1674,7 +1684,7 @@
     const VITALS_KEY = 'drHealth.vitals.v1';
     function loadVitals() {
         try { return JSON.parse(localStorage.getItem(VITALS_KEY) || '{}'); }
-        catch { return {}; }
+        catch (e) { return {}; }
     }
     function saveVitalsObject(v) { localStorage.setItem(VITALS_KEY, JSON.stringify(v)); }
     function getDefaultVitals() { return { name:'', age:'', blood:'', conditions:'', medications:'', allergies:'', history:'', doctors:'', ecName:'', ecRel:'', ecPhone:'' }; }
