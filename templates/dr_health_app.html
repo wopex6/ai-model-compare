@@ -340,7 +340,7 @@
             <form id="login-form" style="width:100%;" onsubmit="event.preventDefault(); window.doLogin && window.doLogin();">
                 <input type="text" id="login-username" placeholder="Username" autocomplete="username">
                 <input type="password" id="login-password" placeholder="Password" autocomplete="current-password">
-                <button class="primary" id="login-btn" type="submit">Log In</button>
+                <button class="primary" id="login-btn" type="submit">Log on</button>
             </form>
             <div id="login-error"></div>
             <div class="install-wrap" id="install-wrap">
@@ -551,10 +551,10 @@
         if (typeof u !== 'string' || typeof p !== 'string') {
             errEl.textContent = 'Stored credentials are invalid. Please enter them again.';
             clearStoredCredentials();
-            if (btn) { btn.disabled = false; btn.textContent = 'Log In'; }
+            if (btn) { btn.disabled = false; btn.textContent = 'Log on'; }
             return;
         }
-        if (!u || !p) { errEl.textContent = 'Enter username and password.'; if (btn) { btn.disabled = false; btn.textContent = 'Log In'; } return; }
+        if (!u || !p) { errEl.textContent = 'Enter username and password.'; if (btn) { btn.disabled = false; btn.textContent = 'Log on'; } return; }
         try {
             const resp = await fetch('/api/auth/login', {
                 method: 'POST',
@@ -565,7 +565,7 @@
             if (!resp.ok || !data.success) {
                 errEl.textContent = data.error || 'Login failed.';
                 clearStoredCredentials();
-                if (btn) { btn.disabled = false; btn.textContent = 'Log In'; }
+                if (btn) { btn.disabled = false; btn.textContent = 'Log on'; }
                 return;
             }
             AuthHelper.setAuthToken(data.token);
@@ -575,7 +575,7 @@
         } catch (e) {
             errEl.textContent = 'Login error: ' + (e && e.message ? e.message : String(e));
             errEl.style.color = '#c62828';
-            if (btn) { btn.disabled = false; btn.textContent = 'Log In'; }
+            if (btn) { btn.disabled = false; btn.textContent = 'Log on'; }
         }
     }
     window.doLogin = doLogin;
