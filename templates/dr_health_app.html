@@ -500,7 +500,7 @@
 <script>
     // ---------- Register service worker ----------
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/static/dr_health_sw.js').then(reg => {
+        navigator.serviceWorker.register('/static/dr_health_sw.js', { updateViaCache: 'none' }).then(reg => {
             if (navigator.serviceWorker.controller) {
                 reg.addEventListener('updatefound', () => {
                     const newWorker = reg.installing;
@@ -1826,12 +1826,5 @@
         bootApp();
     }
 </script>
-    <script>
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/static/dr_health_sw.js')
-                .then((r) => console.log('Dr Health SW registered:', r.scope))
-                .catch((e) => console.log('Dr Health SW registration failed:', e));
-        }
-    </script>
 </body>
 </html>
