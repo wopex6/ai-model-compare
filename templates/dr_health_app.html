@@ -981,7 +981,8 @@
         if (!fileInput.files || !fileInput.files.length) { status.textContent = 'Choose one or more files first.'; return; }
         const files = Array.from(fileInput.files);
         let ok = 0, failed = 0, lastError = '', lastPending = null, lastMeta = null;
-        const retain = document.getElementById('retain-photo')?.checked ?? true;
+        const retainEl = document.getElementById('retain-photo');
+        const retain = (retainEl && retainEl.checked != null) ? retainEl.checked : true;
         for (let i = 0; i < files.length; i++) {
             status.textContent = `Uploading & analyzing file ${i + 1} of ${files.length}...`;
             const formData = new FormData();
@@ -1590,10 +1591,10 @@
         saveBtn.addEventListener('click', async () => {
             const status = document.getElementById('dm-status');
             if (cat === 'test_results') {
-                const testName = (inputs['test_name']?.value || '').trim();
-                const testValue = (inputs['value']?.value || '').trim();
+                const testName = (inputs['test_name'] && inputs['test_name'].value || '').trim();
+                const testValue = (inputs['value'] && inputs['value'].value || '').trim();
                 const refEl = inputs['reference_range'];
-                let reference_range = (refEl?.value || '').trim();
+                let reference_range = (refEl && refEl.value || '').trim();
                 if (!reference_range && currentProfile && currentProfile.test_results) {
                     const key = normalizeTestType(testName).toLowerCase();
                     const existing = currentProfile.test_results.find(t => normalizeTestType(t.test_name).toLowerCase() === key && (t.reference_range || '').trim());

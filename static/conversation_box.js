@@ -388,7 +388,7 @@ const ConversationBox = {
                 content: msg.content,
                 role: msg.sender_type || msg.role || 'user',
                 timestamp: msg.timestamp || new Date().toISOString(),
-                source: msg.metadata?.source || msg.source || null
+                source: msg.metadata && msg.metadata.source || msg.source || null
             }));
             localStorage.setItem(this._getLocalStorageKey(), JSON.stringify(normalized));
         } catch (error) {
@@ -568,7 +568,7 @@ const ConversationBox = {
                         content: msg.content,
                         role: msg.sender_type === 'assistant' ? 'bot' : msg.sender_type,  // Convert 'assistant' to 'bot'
                         timestamp: msg.timestamp,
-                        source: msg.metadata?.source,
+                        source: msg.metadata && msg.metadata.source,
                         shouldScroll: false
                     });
                 });
@@ -614,7 +614,7 @@ const ConversationBox = {
                 content: msg.content,
                 role: msg.sender_type === 'assistant' ? 'bot' : msg.sender_type,
                 timestamp: msg.timestamp,
-                source: msg.metadata?.source,
+                source: msg.metadata && msg.metadata.source,
                 shouldScroll: false
             });
         });
@@ -873,14 +873,14 @@ const ConversationBox = {
         }
         
         // Close search
-        closeBtn?.addEventListener('click', () => this.closeSearch());
+        closeBtn && closeBtn.addEventListener('click', () => this.closeSearch());
         
         // Search on input
         searchInput.addEventListener('input', (e) => this.performSearch(e.target.value));
         
         // Navigate results
-        prevBtn?.addEventListener('click', () => this.navigateSearch(-1));
-        nextBtn?.addEventListener('click', () => this.navigateSearch(1));
+        prevBtn && prevBtn.addEventListener('click', () => this.navigateSearch(-1));
+        nextBtn && nextBtn.addEventListener('click', () => this.navigateSearch(1));
         
         // Enter key navigates to next result
         searchInput.addEventListener('keydown', (e) => {
@@ -970,7 +970,7 @@ const ConversationBox = {
             return;
         }
         
-        const messages = MessageHandler.messagesContainer?.querySelectorAll('.message-bubble, .message-content');
+        const messages = MessageHandler.messagesContainer && MessageHandler.messagesContainer.querySelectorAll('.message-bubble, .message-content');
         if (!messages) return;
         
         const queryLower = query.toLowerCase();
@@ -1013,7 +1013,7 @@ const ConversationBox = {
                 let parent = node.parentElement;
                 while (parent && parent !== element) {
                     if (parent.tagName === 'BUTTON' || parent.tagName === 'MARK' ||
-                        parent.classList?.contains('pin-btn') || parent.classList?.contains('reply-btn')) {
+                        parent.classList && parent.classList.contains('pin-btn') || parent.classList && parent.classList.contains('reply-btn')) {
                         return NodeFilter.FILTER_REJECT;
                     }
                     parent = parent.parentElement;
@@ -1059,7 +1059,7 @@ const ConversationBox = {
      * Clear all search highlights
      */
     clearSearchHighlights() {
-        const messages = MessageHandler.messagesContainer?.querySelectorAll('.message-bubble, .message-content');
+        const messages = MessageHandler.messagesContainer && MessageHandler.messagesContainer.querySelectorAll('.message-bubble, .message-content');
         if (!messages) return;
         
         messages.forEach(bubble => {
@@ -1154,27 +1154,27 @@ const ConversationBox = {
         const chips = [];
 
         // Verbosity preference
-        const verbosity = profile?.verbosity?.response_length;
+        const verbosity = profile && profile.verbosity && profile.verbosity.response_length;
         if (verbosity && verbosity !== 'balanced') {
             const label = verbosity === 'brief' ? '⚡ concise' : '📄 detailed';
             chips.push(`<span class="persona-chip verbosity" title="Response length preference">${label}</span>`);
         }
 
         // Emotional state (from explicit context)
-        const emotion = profile?.emotional_state;
+        const emotion = profile && profile.emotional_state;
         if (emotion) {
             chips.push(`<span class="persona-chip emotion" title="Detected emotional state">😔 ${emotion}</span>`);
         }
 
         // Active goal
-        const goal = profile?.active_goal;
+        const goal = profile && profile.active_goal;
         if (goal) {
             const short = goal.length > 28 ? goal.slice(0, 26) + '…' : goal;
             chips.push(`<span class="persona-chip goal" title="Goal: ${goal}">🎯 ${short}</span>`);
         }
 
         // Current need mode
-        const need = profile?.current_need;
+        const need = profile && profile.current_need;
         if (need && need !== 'general') {
             chips.push(`<span class="persona-chip" title="Detected need type">✦ ${need}</span>`);
         }
