@@ -29,7 +29,7 @@
 
     /* ---------- Login ---------- */
     #login-screen {
-        position: fixed; inset: 0; z-index: 500;
+        position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 500;
         background: linear-gradient(135deg, #E53935, #EF5350);
         display: flex; align-items: center; justify-content: center;
         padding: 24px;
@@ -367,7 +367,7 @@
     </div>
 
     <!-- ============ CHAT SCREEN ============ -->
-    <div class="screen active" id="chat-screen">
+    <div class="screen" id="chat-screen">
         <div id="chat-disclaimer"><i class="fas fa-exclamation-triangle"></i> General health information only — not a substitute for professional medical care.</div>
         <div id="chatMessages"></div>
         <div id="quick-topics-bar">
@@ -629,6 +629,7 @@
         });
 
         loadHealthProfile();
+        showScreen('chat-screen');
     }
 
         function normalizeTestType(testName) {
