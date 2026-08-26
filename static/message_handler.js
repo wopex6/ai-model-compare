@@ -150,7 +150,7 @@ const MessageHandler = {
             // Show label only if different character is speaking (e.g., Work Advisor on Coordinator page)
             const isDifferentCharacter = speakingCharacter && pageCharacter && 
                 speakingCharacter !== pageCharacter && 
-                !speakingCharacter.toLowerCase().includes(pageCharacter?.toLowerCase() || '');
+                !speakingCharacter.toLowerCase().includes(pageCharacter && pageCharacter.toLowerCase() || '');
             if (isDifferentCharacter) {
                 senderLabel = `<strong>${this.getBotDisplayName()}:</strong> `;
             }
@@ -403,7 +403,7 @@ const MessageHandler = {
                         content: msg.content,
                         role: msg.role,
                         timestamp: msg.timestamp || new Date().toISOString(),
-                        source: msg.metadata?.source || null,
+                        source: msg.metadata && msg.metadata.source || null,
                         shouldScroll: false  // Don't scroll for each message
                     });
                 });
@@ -450,7 +450,7 @@ const MessageHandler = {
         
         // Find the parent message bubble
         const bubble = button.closest('.message-content, .message-bubble, [class*="bubble"]') || button.parentElement.parentElement;
-        console.log('🔍 toggleExpand: bubble found:', bubble ? 'yes' : 'no', bubble?.className);
+        console.log('🔍 toggleExpand: bubble found:', bubble ? 'yes' : 'no', bubble && bubble.className);
         if (!bubble) {
             console.error('❌ toggleExpand: Could not find parent bubble');
             return;
@@ -514,7 +514,7 @@ const MessageHandler = {
      * Get the current reply-to message ID (for sending)
      */
     getReplyToId() {
-        return this.replyingTo?.id || null;
+        return this.replyingTo && this.replyingTo.id || null;
     },
     
     /**
@@ -834,7 +834,7 @@ const MessageHandler = {
             const range = selection.getRangeAt(0);
             const messageEl = range.commonAncestorContainer.closest ? 
                 range.commonAncestorContainer.closest('.message, .message-bubble, .message-content, .message-life, .message-sci, [class*="message"]') :
-                range.commonAncestorContainer.parentElement?.closest('.message, .message-bubble, .message-content, .message-life, .message-sci, [class*="message"]');
+                range.commonAncestorContainer.parentElement && range.commonAncestorContainer.parentElement.closest('.message, .message-bubble, .message-content, .message-life, .message-sci, [class*="message"]');
             
             if (messageEl) {
                 // Store selection data including element reference for highlighting
@@ -1574,7 +1574,7 @@ const MessageHandler = {
         // Close the pinned panel first
         const panel = document.getElementById('pinned-messages-panel');
         if (panel) panel.style.display = 'none';
-        document.getElementById('pinnedBtn')?.classList.remove('active');
+        document.getElementById('pinnedBtn') && document.getElementById('pinnedBtn').classList.remove('active');
         
         // First try to find in current view
         let targetMessage = this._findMessageInView(contentSnippet);
@@ -1647,7 +1647,7 @@ const MessageHandler = {
      */
     _findMessageInView(contentSnippet) {
         // Use broader selectors to find messages
-        const messages = this.messagesContainer?.querySelectorAll('.message, .message-bubble, .message-content') || [];
+        const messages = this.messagesContainer && this.messagesContainer.querySelectorAll('.message, .message-bubble, .message-content') || [];
         
         // Normalize text for comparison (same as applyStoredHighlights)
         const normalizeText = (text) => text
@@ -1807,10 +1807,10 @@ const MessageHandler = {
         
         // Close other panels first
         if (highlightsPanel) highlightsPanel.style.display = 'none';
-        document.getElementById('highlightsBtn')?.classList.remove('active');
+        document.getElementById('highlightsBtn') && document.getElementById('highlightsBtn').classList.remove('active');
         
         panel.style.display = isVisible ? 'none' : 'block';
-        pinnedBtn?.classList.toggle('active', !isVisible);
+        pinnedBtn && pinnedBtn.classList.toggle('active', !isVisible);
         
         if (!isVisible) {
             this.loadPinnedMessages();
@@ -1831,10 +1831,10 @@ const MessageHandler = {
         
         // Close other panels first
         if (pinnedPanel) pinnedPanel.style.display = 'none';
-        document.getElementById('pinnedBtn')?.classList.remove('active');
+        document.getElementById('pinnedBtn') && document.getElementById('pinnedBtn').classList.remove('active');
         
         panel.style.display = isVisible ? 'none' : 'block';
-        highlightsBtn?.classList.toggle('active', !isVisible);
+        highlightsBtn && highlightsBtn.classList.toggle('active', !isVisible);
         
         if (!isVisible) {
             this.loadHighlightsPanel();
@@ -1906,7 +1906,7 @@ const MessageHandler = {
         // Close the highlights panel first
         const panel = document.getElementById('highlights-panel');
         if (panel) panel.style.display = 'none';
-        document.getElementById('highlightsBtn')?.classList.remove('active');
+        document.getElementById('highlightsBtn') && document.getElementById('highlightsBtn').classList.remove('active');
         
         // Reuse the same logic as goToMessage
         let targetMessage = this._findMessageInView(contentSnippet);
