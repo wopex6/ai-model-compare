@@ -39,3 +39,10 @@
 {"event_id": "evt_1786324782243", "topic": "agent.self_improvement.completed", "source": "self_improvement_agent", "data": {"characters_analyzed": 0, "suggestions": 0}, "timestamp": "2026-08-10T11:19:42.243491"}
 {"event_id": "evt_1786906314026", "topic": "agent.self_improvement.completed", "source": "self_improvement_agent", "data": {"characters_analyzed": 0, "suggestions": 0}, "timestamp": "2026-08-17T04:51:54.025451"}
 {"event_id": "evt_1786906314064", "topic": "agent.self_improvement.completed", "source": "self_improvement_agent", "data": {"characters_analyzed": 0, "suggestions": 0}, "timestamp": "2026-08-17T04:51:54.064996"}
+{"event_id": "evt_1787800409292", "topic": "user.registered", "source": "signup_endpoint", "data": {"user_id": 83, "username": "pwatest_6d1b75eb64", "role": "user"}, "timestamp": "2026-08-27T13:13:29.292125"}
+{"event_id": "evt_1787800602933", "topic": "user.registered", "source": "signup_endpoint", "data": {"user_id": 84, "username": "uitest_d54cd28c60", "role": "user"}, "timestamp": "2026-08-27T13:16:42.933785"}
+{"event_id": "evt_1787800732386", "topic": "user.registered", "source": "signup_endpoint", "data": {"user_id": 85, "username": "uitest_0cb18f3420", "role": "user"}, "timestamp": "2026-08-27T13:18:52.386298"}
+{"event_id": "evt_1787800964418", "topic": "user.registered", "source": "signup_endpoint", "data": {"user_id": 86, "username": "pwatest_461d49c830", "role": "user"}, "timestamp": "2026-08-27T13:22:44.418086"}
+{"event_id": "evt_1787801120988", "topic": "user.registered", "source": "signup_endpoint", "data": {"user_id": 87, "username": "aitest_8fd099d777", "role": "user"}, "timestamp": "2026-08-27T13:25:20.988699"}
+{"event_id": "evt_1787801928574", "topic": "user.registered", "source": "signup_endpoint", "data": {"user_id": 88, "username": "pwatest_9b3955fc04", "role": "user"}, "timestamp": "2026-08-27T13:38:48.574826"}
+{"event_id": "evt_1787801936905", "topic": "user.registered", "source": "signup_endpoint", "data": {"user_id": 89, "username": "uitest_9554172d51", "role": "user"}, "timestamp": "2026-08-27T13:38:56.905811"}
