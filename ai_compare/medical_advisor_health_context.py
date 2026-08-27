@@ -99,10 +99,38 @@ class HealthProfile:
         self.user_id = str(user_id)
         self.file_path = HEALTH_DATA_DIR / f"{self.user_id}.json"
         self.data = self._load()
+        self._file_stamp = self._current_file_stamp()
         changed = self._normalize_test_results()
         changed += self._deduplicate_test_results()
         if changed:
             self.save()
+
+    def _current_file_stamp(self):
+        """Identity of the file on disk, used to detect writes by other workers."""
+        try:
+            st = self.file_path.stat()
+        except OSError:
+            return None
+        return (st.st_mtime_ns, st.st_size)
+
+    def reload_if_stale(self) -> bool:
+        """Re-read from disk if another process has written the file.
+
+        Profiles are cached per-process, but production runs several worker
+        processes against the same file. Without this check a worker keeps
+        serving a stale copy, so indexes drift out of sync with what the client
+        just saw and a later save() would clobber the other worker's writes.
+        """
+        stamp = self._current_file_stamp()
+        if stamp == self._file_stamp:
+            return False
+        self.data = self._load()
+        self._file_stamp = stamp
+        changed = self._normalize_test_results()
+        changed += self._deduplicate_test_results()
+        if changed:
+            self.save()
+        return True
 
     def _load(self) -> Dict:
         """Load profile from disk or create default"""
@@ -162,6 +190,8 @@ class HealthProfile:
         HEALTH_DATA_DIR.mkdir(parents=True, exist_ok=True)
         with open(self.file_path, 'w', encoding='utf-8') as f:
             json.dump(self.data, f, indent=2, ensure_ascii=False)
+        # Record our own write so it is not mistaken for another worker's.
+        self._file_stamp = self._current_file_stamp()
 
     def _normalize_test_results(self) -> int:
         """Expand legacy test results whose value is a dict into one row per sub-test.
@@ -1462,6 +1492,10 @@ class HealthContextManager:
         user_id = str(user_id)
         if user_id not in cls._profiles:
             cls._profiles[user_id] = HealthProfile(user_id)
+        else:
+            # Another worker process may have written this profile since we
+            # cached it; pick up their changes before serving or mutating it.
+            cls._profiles[user_id].reload_if_stale()
         return cls._profiles[user_id]
 
     @classmethod

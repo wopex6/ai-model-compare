@@ -1,0 +1,88 @@
+{
+  "user_id": "85",
+  "name": "",
+  "created_at": "2026-08-27T13:18:56.095098",
+  "updated_at": "2026-08-27T13:19:15.253634",
+  "personal": {
+    "age": "52",
+    "gender": "",
+    "location": "",
+    "blood_type": "A-"
+  },
+  "conditions": [],
+  "symptoms": [
+    {
+      "description": "UI symptom 0",
+      "severity": "mild"
+    },
+    {
+      "description": "UI symptom 1",
+      "severity": "mild"
+    },
+    {
+      "description": "UI symptom 2",
+      "severity": "mild"
+    },
+    {
+      "description": "UI symptom 3",
+      "severity": "mild"
+    },
+    {
+      "description": "UI symptom 4",
+      "severity": "mild"
+    },
+    {
+      "description": "UI symptom 5",
+      "severity": "mild"
+    },
+    {
+      "description": "UI symptom 6",
+      "severity": "mild"
+    }
+  ],
+  "medications": [],
+  "supplements": [],
+  "diet": {
+    "preferences": [],
+    "restrictions": [
+      "dairy",
+      "shellfish"
+    ],
+    "daily_foods": [],
+    "cooking_methods": [],
+    "notes": []
+  },
+  "test_results": [
+    {
+      "test_name": "UI FERRITIN",
+      "value": "30 ug/L",
+      "reference_range": "30-300",
+      "date": "2024-01-01",
+      "notes": "",
+      "added_at": "2026-08-27T13:19:02.037481"
+    },
+    {
+      "test_name": "UI FERRITIN",
+      "value": "45 ug/L",
+      "reference_range": "30-300",
+      "date": "2024-06-01",
+      "notes": "",
+      "added_at": "2026-08-27T13:19:02.045801"
+    }
+  ],
+  "action_plans": [],
+  "follow_ups": [],
+  "questions_for_doctor": [],
+  "lifestyle": {
+    "exercise": [],
+    "sleep": {},
+    "stress_factors": [],
+    "habits": []
+  },
+  "provider_notes": [],
+  "conversation_insights": [],
+  "upload_settings": {
+    "retention_days": 120
+  },
+  "uploaded_documents": []
+}
