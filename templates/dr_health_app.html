@@ -326,6 +326,146 @@
     .pwa-test-group td { padding: 4px 0; border-bottom: 1px solid #f0f0f0; }
     .pwa-tt-editable { display: inline-block; min-width: 18px; padding: 2px 4px; border: 1px dashed transparent; border-radius: 4px; outline: none; touch-action: manipulation; -webkit-user-select: none; -webkit-touch-callout: none; user-select: none; }
     .pwa-tt-editable[contenteditable="true"] { background: #fff; border-color: #1565c0; -webkit-user-select: text; user-select: text; }
+
+    /* ============ HEALTH HUB ============ */
+    #hub-screen { background: #f4f6f8; }
+    .hub-subheader {
+        position: sticky; top: 0; z-index: 20;
+        display: flex; align-items: center; gap: 8px;
+        padding: 10px 12px; background: #fff;
+        border-bottom: 1px solid #e3e7ea;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        flex-shrink: 0;
+    }
+    .hub-sub-title {
+        flex: 1; font-size: 1rem; font-weight: 600; color: #263238;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .hub-sub-title i { color: #c62828; margin-right: 6px; }
+    .hub-icon-btn {
+        width: 36px; height: 36px; flex-shrink: 0;
+        border: none; border-radius: 10px; background: #eceff1; color: #37474f;
+        font-size: 0.95rem; cursor: pointer;
+    }
+    .hub-icon-btn.primary { background: #c62828; color: #fff; }
+    .hub-icon-btn:active { opacity: 0.7; }
+    .hub-icon-spacer { width: 36px; flex-shrink: 0; }
+    .hub-filterbar { padding: 8px 12px; background: #fff; border-bottom: 1px solid #e3e7ea; flex-shrink: 0; }
+    .hub-filterbar input {
+        width: 100%; box-sizing: border-box; padding: 8px 10px;
+        border: 1px solid #cfd8dc; border-radius: 8px; font-size: 0.9rem; font-family: inherit;
+    }
+    .hub-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: 24px; }
+
+    .hub-hero { padding: 16px 16px 4px; }
+    .hub-hero-name { font-size: 1.25rem; font-weight: 700; color: #263238; }
+    .hub-hero-sub { font-size: 0.8rem; color: #78909c; margin-top: 2px; }
+
+    .hub-group-label {
+        position: sticky; top: 0; z-index: 10;
+        padding: 10px 16px 6px; font-size: 0.72rem; font-weight: 700;
+        letter-spacing: 0.06em; text-transform: uppercase; color: #78909c;
+        background: linear-gradient(#f4f6f8 70%, rgba(244,246,248,0));
+    }
+    .hub-cards { padding: 0 12px; display: flex; flex-direction: column; gap: 8px; }
+    .hub-card {
+        display: flex; align-items: center; gap: 12px; width: 100%;
+        padding: 12px; background: #fff; border: 1px solid #e3e7ea;
+        border-radius: 12px; text-align: left; cursor: pointer; font-family: inherit;
+    }
+    .hub-card:active { background: #eceff1; }
+    .hub-card-icon {
+        width: 38px; height: 38px; flex-shrink: 0; border-radius: 10px;
+        background: #fdecea; color: #c62828;
+        display: flex; align-items: center; justify-content: center; font-size: 1rem;
+    }
+    .hub-card-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .hub-card-title { font-size: 0.95rem; font-weight: 600; color: #263238; }
+    .hub-card-desc { font-size: 0.75rem; color: #90a4ae; margin-top: 1px; }
+    .hub-badge {
+        flex-shrink: 0; min-width: 22px; padding: 2px 7px; border-radius: 11px;
+        background: #c62828; color: #fff; font-size: 0.75rem; font-weight: 600; text-align: center;
+    }
+    .hub-badge.empty { background: #eceff1; color: #b0bec5; }
+    .hub-chevron { color: #b0bec5; font-size: 0.8rem; flex-shrink: 0; }
+
+    .hub-row { margin: 0 12px 8px; background: #fff; border: 1px solid #e3e7ea; border-radius: 12px; overflow: hidden; }
+    .hub-row.open { border-color: #c62828; }
+    .hub-row-head {
+        display: flex; align-items: center; gap: 10px; width: 100%;
+        padding: 12px; background: none; border: none; text-align: left;
+        cursor: pointer; font-family: inherit;
+    }
+    .hub-row-head:active { background: #f5f5f5; }
+    .hub-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .hub-row-title { font-size: 0.92rem; font-weight: 600; color: #263238; word-break: break-word; }
+    .hub-row-sub { font-size: 0.76rem; color: #90a4ae; margin-top: 2px; word-break: break-word; }
+    .hub-pill {
+        flex-shrink: 0; padding: 2px 8px; border-radius: 10px;
+        font-size: 0.68rem; font-weight: 600; text-transform: uppercase;
+        background: #eceff1; color: #607d8b;
+    }
+    .hub-pill.active { background: #fdecea; color: #c62828; }
+    .hub-pill.investigating { background: #fff8e1; color: #f57f17; }
+    .hub-pill.resolved { background: #e8f5e9; color: #2e7d32; }
+    .hub-row-body { padding: 0 12px 12px; border-top: 1px solid #f0f2f4; }
+    .hub-field { padding: 8px 0; border-bottom: 1px solid #f4f6f8; }
+    .hub-field:last-of-type { border-bottom: none; }
+    .hub-field-label { display: block; font-size: 0.7rem; color: #90a4ae; text-transform: uppercase; letter-spacing: 0.04em; }
+    .hub-field-value { display: block; font-size: 0.9rem; color: #37474f; word-break: break-word; white-space: pre-wrap; }
+    .hub-added { font-size: 0.7rem; color: #b0bec5; margin-top: 6px; }
+    .hub-row-actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+    .hub-btn {
+        padding: 9px 14px; border: 1px solid #cfd8dc; border-radius: 9px;
+        background: #fff; color: #37474f; font-size: 0.85rem; font-family: inherit; cursor: pointer;
+    }
+    .hub-btn.primary { background: #c62828; border-color: #c62828; color: #fff; }
+    .hub-btn.danger { background: #fff; border-color: #ef9a9a; color: #c62828; }
+    .hub-btn:active { opacity: 0.75; }
+
+    .hub-tgroup { margin: 0 12px 10px; background: #fff; border: 1px solid #e3e7ea; border-radius: 12px; overflow: hidden; }
+    .hub-tgroup-head {
+        display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+        background: #eceff1; font-size: 0.85rem;
+    }
+    .hub-tgroup-name { flex: 1; font-weight: 700; color: #1565c0; word-break: break-word; }
+    .hub-tgroup-latest { color: #37474f; font-weight: 600; }
+    .hub-tgroup-count {
+        min-width: 20px; padding: 1px 6px; border-radius: 10px;
+        background: #cfd8dc; color: #455a64; font-size: 0.7rem; text-align: center;
+    }
+    .hub-tgroup .hub-row { margin: 0; border: none; border-top: 1px solid #f0f2f4; border-radius: 0; }
+
+    .hub-form { margin: 0 12px 12px; padding: 14px; background: #fff; border: 1px solid #e3e7ea; border-radius: 12px; }
+    .hub-form-title { font-size: 0.95rem; font-weight: 700; color: #263238; margin-bottom: 10px; }
+    .hub-form-hint { font-size: 0.78rem; color: #90a4ae; margin-bottom: 10px; }
+    .hub-input-label { display: block; font-size: 0.75rem; color: #607d8b; margin: 10px 0 4px; }
+    .hub-input {
+        width: 100%; box-sizing: border-box; padding: 9px 10px;
+        border: 1px solid #cfd8dc; border-radius: 8px;
+        font-size: 0.9rem; font-family: inherit; color: #263238; background: #fff;
+    }
+    .hub-input:focus { outline: none; border-color: #c62828; }
+    textarea.hub-input { resize: vertical; }
+
+    .hub-empty { padding: 48px 24px; text-align: center; color: #b0bec5; }
+    .hub-empty i { font-size: 2.2rem; margin-bottom: 10px; display: block; }
+    .hub-empty p { margin: 0 0 14px; font-size: 0.9rem; }
+
+    .hub-note { margin: 12px; padding: 12px; background: #fff; border: 1px solid #e3e7ea; border-left: 3px solid #90a4ae; border-radius: 8px; font-size: 0.85rem; color: #37474f; line-height: 1.5; }
+    .hub-note.ok { border-left-color: #2e7d32; }
+    .hub-note.warn { border-left-color: #f57f17; }
+    .hub-note.error { border-left-color: #c62828; color: #c62828; }
+    .hub-tool { padding-top: 4px; }
+    .hub-pre { margin: 12px; padding: 12px; background: #fff; border: 1px solid #e3e7ea; border-radius: 8px; font-size: 0.75rem; white-space: pre-wrap; word-break: break-word; color: #37474f; }
+
+    .hub-status {
+        flex-shrink: 0; max-height: 0; overflow: hidden;
+        padding: 0 14px; background: #263238; color: #fff;
+        font-size: 0.82rem; transition: max-height 0.2s, padding 0.2s;
+    }
+    .hub-status.show { max-height: 44px; padding: 11px 14px; }
+    .hub-status.error { background: #c62828; }
 </style>
 </head>
 <body>
@@ -395,18 +535,12 @@
         </div>
     </div>
 
-    <!-- ============ PROFILE SCREEN ============ -->
+    <!-- ============ HEALTH HUB SCREEN ============ -->
+    <div class="screen" id="hub-screen"></div>
+
+    <!-- ============ RECORDS SCREEN ============ -->
     <div class="screen" id="profile-screen">
         <div id="profile-screen-content">
-            <div class="card">
-                <h3><i class="fas fa-user"></i> Your Health Profile</h3>
-                <div id="profile-summary"><em style="color:#999;">Loading...</em></div>
-            </div>
-            <div class="card">
-                <h3><i class="fas fa-database"></i> Your Saved Data</h3>
-                <p style="font-size:0.85rem;color:#555;">View and edit test results, conditions, medications, etc.</p>
-                <button class="action" id="data-manager-btn" style="width:100%;"><i class="fas fa-edit"></i> Manage / Edit My Data</button>
-            </div>
             <div class="card">
                 <h3><i class="fas fa-pen"></i> Add Health Info</h3>
                 <textarea id="profile-text" placeholder="Paste notes, symptoms, medications, lab results..."></textarea>
@@ -421,13 +555,25 @@
                 </div>
                 <div id="profile-status"></div>
             </div>
+            <div class="card">
+                <h3><i class="fas fa-database"></i> Advanced Editor</h3>
+                <p style="font-size:0.85rem;color:#555;">Bulk view and edit every stored row, including uploaded documents.</p>
+                <button class="action" id="data-manager-btn" style="width:100%;"><i class="fas fa-edit"></i> Manage / Edit My Data</button>
+            </div>
+            <details class="card" id="overview-card">
+                <summary style="font-size:0.95rem;color:#E53935;font-weight:600;cursor:pointer;">
+                    <i class="fas fa-user"></i> Full overview
+                </summary>
+                <div id="profile-summary" style="margin-top:10px;"><em style="color:#999;">Loading...</em></div>
+            </details>
         </div>
     </div>
 
     <!-- ============ BOTTOM NAV ============ -->
     <div class="bottom-nav">
         <button class="nav-btn active" data-target="chat-screen"><i class="fas fa-comment-medical"></i>Chat</button>
-        <button class="nav-btn" data-target="profile-screen"><i class="fas fa-clipboard-list"></i>Profile</button>
+        <button class="nav-btn" data-target="hub-screen"><i class="fas fa-clipboard-list"></i>Health</button>
+        <button class="nav-btn" data-target="profile-screen"><i class="fas fa-folder-plus"></i>Records</button>
     </div>
 
 </div>
@@ -496,6 +642,7 @@
 <script src="{{ url_for('static', filename='auth_helper.js') }}" defer onerror="document.getElementById('login-error').textContent='Could not load auth_helper.js'; document.getElementById('login-error').style.color='#c62828';"></script>
 <script src="{{ url_for('static', filename='message_handler.js') }}" defer onerror="document.getElementById('login-error').textContent='Could not load message_handler.js'; document.getElementById('login-error').style.color='#c62828';"></script>
 <script src="{{ url_for('static', filename='conversation_box.js') }}" defer onerror="document.getElementById('login-error').textContent='Could not load conversation_box.js'; document.getElementById('login-error').style.color='#c62828';"></script>
+<script src="{{ url_for('static', filename='dr_health_hub.js') }}" defer onerror="document.getElementById('login-error').textContent='Could not load dr_health_hub.js'; document.getElementById('login-error').style.color='#c62828';"></script>
 
 <script>
     // ---------- Register service worker ----------
@@ -518,12 +665,29 @@
     let currentProfile = null;
 
     // ---------- Navigation ----------
+    const SCREEN_TITLES = {
+        'chat-screen': 'Dr. Health',
+        'hub-screen': 'My Health',
+        'profile-screen': 'Records'
+    };
     function showScreen(id) {
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         document.getElementById(id).classList.add('active');
         document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.target === id));
-        document.getElementById('topbar-title').textContent = id === 'chat-screen' ? 'Dr. Health' : 'Health Profile';
+        document.getElementById('topbar-title').textContent = SCREEN_TITLES[id] || 'Dr. Health';
         if (id === 'profile-screen') loadHealthProfile();
+        if (id === 'hub-screen') openHub();
+    }
+
+    function openHub() {
+        if (typeof DrHealthHub === 'undefined') return;
+        const root = document.getElementById('hub-screen');
+        if (!root) return;
+        if (DrHealthHub.root !== root) {
+            DrHealthHub.profile = currentProfile;
+            DrHealthHub.init(root);
+        }
+        if (!DrHealthHub.profile) DrHealthHub.reload();
     }
     document.querySelectorAll('.nav-btn').forEach(btn => {
         btn.addEventListener('click', () => showScreen(btn.dataset.target));
@@ -771,6 +935,7 @@
             if (!d.success || !d.profile) { el.innerHTML = '<em style="color:#999;">No profile yet.</em>'; return; }
             const p = d.profile;
             currentProfile = p;
+            if (typeof DrHealthHub !== 'undefined' && DrHealthHub.root) DrHealthHub.setProfile(p);
             let html = '';
             if (p.name) html += `<div style="margin-bottom:8px;"><strong>${p.name}</strong></div>`;
             if (p.conditions && p.conditions.length) {
@@ -1817,6 +1982,7 @@
     }
 
     // ---------- Boot ----------
+    window.openEmergency = openEmergency;
     document.getElementById('emergency-btn').addEventListener('click', openEmergency);
     document.getElementById('emergency-close').addEventListener('click', closeEmergency);
     document.getElementById('v-save').addEventListener('click', saveVitals);

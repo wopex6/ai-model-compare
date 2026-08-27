@@ -6546,6 +6546,13 @@ def _store_uploaded_health_document(user_id, file_storage, file_bytes, content_h
         'result_path': ''
     }
 
+HEALTH_ITEM_CATEGORIES = [
+    'conditions', 'medications', 'supplements', 'symptoms', 'test_results',
+    'action_plans', 'conversation_insights', 'follow_ups',
+    'questions_for_doctor', 'provider_notes'
+]
+
+
 @app.route('/api/health-profile', methods=['GET'])
 @require_auth
 def get_health_profile():
@@ -6590,6 +6597,8 @@ def update_health_profile():
             profile.data['follow_ups'] = data['follow_ups']
         if 'questions_for_doctor' in data and isinstance(data['questions_for_doctor'], list):
             profile.data['questions_for_doctor'] = data['questions_for_doctor']
+        if 'provider_notes' in data and isinstance(data['provider_notes'], list):
+            profile.data['provider_notes'] = data['provider_notes']
         if 'upload_settings' in data and isinstance(data['upload_settings'], dict):
             current = profile.data.setdefault('upload_settings', {})
             if 'retention_days' in data['upload_settings']:
@@ -7265,7 +7274,7 @@ def delete_health_profile_item():
         category = data.get('category')  # e.g. 'conditions', 'medications', 'supplements', 'symptoms', 'test_results', 'action_plans', 'conversation_insights'
         index = data.get('index')
 
-        valid_categories = ['conditions', 'medications', 'supplements', 'symptoms', 'test_results', 'action_plans', 'conversation_insights']
+        valid_categories = HEALTH_ITEM_CATEGORIES
         if category not in valid_categories:
             return jsonify({'error': f'Invalid category. Must be one of: {valid_categories}'}), 400
         if not isinstance(index, int) or index < 0:
@@ -7291,7 +7300,7 @@ def update_health_profile_item():
         category = data.get('category')
         index = data.get('index')
         updates = data.get('updates', {})
-        valid_categories = ['conditions', 'medications', 'supplements', 'symptoms', 'test_results', 'action_plans', 'conversation_insights']
+        valid_categories = HEALTH_ITEM_CATEGORIES
         if category not in valid_categories:
             return jsonify({'error': f'Invalid category. Must be one of: {valid_categories}'}), 400
         if not isinstance(index, int) or index < 0:
@@ -7318,7 +7327,7 @@ def add_health_profile_item():
         data = request.get_json()
         category = data.get('category')
         item = data.get('item', {})
-        valid_categories = ['conditions', 'medications', 'supplements', 'symptoms', 'test_results', 'action_plans', 'conversation_insights']
+        valid_categories = HEALTH_ITEM_CATEGORIES
         if category not in valid_categories:
             return jsonify({'error': f'Invalid category. Must be one of: {valid_categories}'}), 400
         if not isinstance(item, dict):

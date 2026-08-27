@@ -1,11 +1,12 @@
 // Service worker for the Dr. Health PWA.
 // Caches the app shell for fast/offline load; the main HTML and all API/data requests always go to network.
-const CACHE_NAME = 'dr-health-shell-v26';
+const CACHE_NAME = 'dr-health-shell-v27';
 const SHELL_ASSETS = [
     '/static/dr_health_manifest.json',
     '/static/auth_helper.js',
     '/static/message_handler.js',
     '/static/conversation_box.js',
+    '/static/dr_health_hub.js',
     '/static/icons/dr_health_icon_192.png',
     '/static/icons/dr_health_icon_512.png'
 ];
