@@ -33,6 +33,7 @@ ENV/
 Thumbs.db
 
 # User data
+health_profiles/
 user_profiles/
 conversation_history/
 conversations/
