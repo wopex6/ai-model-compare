@@ -641,7 +641,7 @@
                         </div>
                     </div>
                     <label style="font-size:0.85rem; color:#555; display:block; margin:6px 0;">
-                        <input type="checkbox" id="retain-photo" checked> Keep this photo/document in my upload library for re-scan later
+                        <input type="checkbox" id="retain-photo"> Keep this photo/document in my upload library for re-scan later
                     </label>
                 </div>
                 <div id="profile-status"></div>
@@ -683,35 +683,12 @@
         <div class="emergency-header">
             <h2><i class="fas fa-kit-medical"></i> Emergency Info</h2>
             <div style="display:flex; gap:8px; align-items:center;">
-                <button class="action" id="emergency-edit-btn" style="margin:0; padding:8px 14px; font-size:0.85rem;"><i class="fas fa-pen"></i> Edit</button>
+                <button class="action" id="emergency-edit-btn" style="margin:0; padding:8px 14px; font-size:0.85rem;"><i class="fas fa-pen"></i> Edit in Personal Details</button>
                 <button id="emergency-close" title="Close"><i class="fas fa-times"></i></button>
             </div>
         </div>
         <div class="emergency-content">
             <div id="emergency-view"></div>
-            <div id="emergency-edit">
-                <div class="card">
-                    <h4>Personal</h4>
-                    <input id="v-name" placeholder="Full name">
-                    <input id="v-age" placeholder="Age">
-                    <input id="v-blood" placeholder="Blood type">
-                    <h4>Medical conditions</h4>
-                    <textarea id="v-conditions" rows="3" placeholder="e.g. diabetes, hypertension, asthma"></textarea>
-                    <h4>Current medications</h4>
-                    <textarea id="v-medications" rows="3" placeholder="e.g. rosuvastatin 10mg"></textarea>
-                    <h4>Allergies</h4>
-                    <textarea id="v-allergies" rows="2" placeholder="e.g. penicillin, peanuts"></textarea>
-                    <h4>Medical history</h4>
-                    <textarea id="v-history" rows="3" placeholder="Major illnesses, surgeries, family history"></textarea>
-                    <h4>Doctors</h4>
-                    <textarea id="v-doctors" rows="3" placeholder="Name, specialty, phone; one per line"></textarea>
-                    <h4>Emergency contact</h4>
-                    <input id="v-ec-name" placeholder="Name">
-                    <input id="v-ec-rel" placeholder="Relationship">
-                    <input id="v-ec-phone" placeholder="Phone number">
-                    <button class="action" id="v-save"><i class="fas fa-save"></i> Save to this phone</button>
-                </div>
-            </div>
         </div>
     </div>
 
@@ -778,13 +755,23 @@
         'hub-screen': 'My Health',
         'profile-screen': 'Records'
     };
+    const LAST_SCREEN_KEY = 'drHealth.lastScreen';
     function showScreen(id) {
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         document.getElementById(id).classList.add('active');
         document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.target === id));
         document.getElementById('topbar-title').textContent = SCREEN_TITLES[id] || 'Dr. Health';
+        if (SCREEN_TITLES[id]) {
+            try { localStorage.setItem(LAST_SCREEN_KEY, id); } catch (e) {}
+        }
         if (id === 'profile-screen') { loadHealthProfile(); loadStoredDocuments(); }
         if (id === 'hub-screen') openHub();
+    }
+    function lastScreen() {
+        try {
+            const id = localStorage.getItem(LAST_SCREEN_KEY);
+            return (id && SCREEN_TITLES[id]) ? id : 'chat-screen';
+        } catch (e) { return 'chat-screen'; }
     }
 
     function openHub() {
@@ -940,7 +927,7 @@
 
         loadHealthProfile();
         initReviewPrompt();
-        showScreen('chat-screen');
+        showScreen(lastScreen());
     }
 
         // Lab-result helpers come from /static/lab_results.js (shared with health_profile.html).
@@ -1027,15 +1014,19 @@
             if (currentSups.length) {
                 html += `<strong style="color:#6A1B9A;">Supplements:</strong> ${currentSups.map(e => escapeHtml(e.item.name)).join(', ')}`;
             }
-            const vitals = { ...(p.vitals || {}), ...loadVitals() };
-            if (vitals.name || vitals.age || vitals.blood || vitals.conditions || vitals.medications || vitals.allergies || vitals.doctors || vitals.ecName || vitals.ecPhone) {
-                html += '<strong style="color:#c62828;"><i class="fas fa-kit-medical"></i> Emergency / Vitals:</strong><ul>';
-                if (vitals.name) html += `<li><strong>${vitals.name}</strong>${vitals.age ? ' (' + vitals.age + ')' : ''}${vitals.blood ? ' • Blood: ' + vitals.blood : ''}</li>`;
-                if (vitals.conditions) html += `<li>Conditions: ${vitals.conditions}</li>`;
-                if (vitals.medications) html += `<li>Medications: ${vitals.medications}</li>`;
-                if (vitals.allergies) html += `<li>Allergies: ${vitals.allergies}</li>`;
-                if (vitals.doctors) html += `<li>Doctors: ${vitals.doctors}</li>`;
-                if (vitals.ecName || vitals.ecPhone) html += `<li>Emergency contact: ${[vitals.ecName, vitals.ecRel, vitals.ecPhone].filter(Boolean).join(' — ')}</li>`;
+            const card = loadEmergencyCache() || {};
+            syncEmergencyFromServer();
+            const cardList = (x) => Array.isArray(x) ? x.join(', ') : (x || '');
+            if (card.name || card.age || card.blood || (card.conditions || []).length ||
+                (card.medications || []).length || (card.allergies || []).length ||
+                card.doctors || card.ec_name || card.ec_phone) {
+                html += '<strong style="color:#c62828;"><i class="fas fa-kit-medical"></i> Emergency card:</strong><ul>';
+                if (card.name) html += `<li><strong>${card.name}</strong>${card.age ? ' (' + card.age + ')' : ''}${card.blood ? ' • Blood: ' + card.blood : ''}</li>`;
+                if ((card.conditions || []).length) html += `<li>Conditions: ${cardList(card.conditions)}</li>`;
+                if ((card.medications || []).length) html += `<li>Medications: ${cardList(card.medications)}</li>`;
+                if ((card.allergies || []).length) html += `<li>Allergies: ${cardList(card.allergies)}</li>`;
+                if (card.doctors) html += `<li>Doctors: ${String(card.doctors).replace(/\n/g, ', ')}</li>`;
+                if (card.ec_name || card.ec_phone) html += `<li>Emergency contact: ${[card.ec_name, card.ec_rel, card.ec_phone].filter(Boolean).join(' — ')}</li>`;
                 html += '</ul>';
             }
             el.innerHTML = html || '<em style="color:#999;">No data yet. Chat or add info to build your profile.</em>';
@@ -1269,7 +1260,7 @@
         const files = Array.from(fileInput.files);
         let ok = 0, failed = 0, lastError = '', lastPending = null, lastMeta = null;
         const retainEl = document.getElementById('retain-photo');
-        const retain = (retainEl && retainEl.checked != null) ? retainEl.checked : true;
+        const retain = (retainEl && retainEl.checked != null) ? retainEl.checked : false;
         for (let i = 0; i < files.length; i++) {
             status.textContent = `Uploading & analyzing file ${i + 1} of ${files.length}...`;
             const formData = new FormData();
@@ -2287,93 +2278,64 @@
             : 'Tap for install instructions';
     });
 
-    // ---------- Vitals / Emergency (stored on this phone) ----------
-    const VITALS_KEY = 'drHealth.vitals.v1';
-    function loadVitals() {
-        try { return JSON.parse(localStorage.getItem(VITALS_KEY) || '{}'); }
-        catch (e) { return {}; }
+    // ---------- Emergency card ----------
+    // Read-only view derived server-side from Personal Details plus the current
+    // conditions/medications lists — there is only one copy of each fact, so it
+    // cannot contradict the record.  The derived card is cached on this phone
+    // so it still works without internet.
+    const EMERGENCY_KEY = 'drHealth.emergencyCard.v1';
+    function loadEmergencyCache() {
+        try { return JSON.parse(localStorage.getItem(EMERGENCY_KEY) || 'null'); }
+        catch (e) { return null; }
     }
-    function saveVitalsObject(v) { localStorage.setItem(VITALS_KEY, JSON.stringify(v)); }
-    function getDefaultVitals() { return { name:'', age:'', blood:'', conditions:'', medications:'', allergies:'', history:'', doctors:'', ecName:'', ecRel:'', ecPhone:'' }; }
-    function getVitals() { return { ...getDefaultVitals(), ...loadVitals() }; }
+    function saveEmergencyCache(card) {
+        try { localStorage.setItem(EMERGENCY_KEY, JSON.stringify(card)); } catch (e) {}
+    }
 
-    async function syncVitalsFromServer() {
+    async function syncEmergencyFromServer() {
         try {
-            const resp = await AuthHelper.authenticatedFetch('/api/health-profile/vitals');
+            const resp = await AuthHelper.authenticatedFetch('/api/health-profile/emergency-card');
             if (!resp.ok) throw new Error('Server not available');
             const data = await resp.json();
-            if (data.success) {
-                const local = loadVitals();
-                const merged = { ...(data.vitals || {}), ...local };
-                saveVitalsObject(merged);
-                return merged;
+            if (data.success && data.card) {
+                saveEmergencyCache(data.card);
+                return data.card;
             }
-        } catch (e) { console.error('Could not sync vitals from server', e); }
-        return getVitals();
+        } catch (e) { /* offline — the cached copy is the whole point */ }
+        return loadEmergencyCache();
     }
 
     function openEmergency() {
-        renderEmergency();
+        renderEmergency(loadEmergencyCache());
         document.getElementById('emergency-modal').classList.add('active');
-        syncVitalsFromServer().then(() => renderEmergency());
+        syncEmergencyFromServer().then(renderEmergency);
     }
     function closeEmergency() {
         document.getElementById('emergency-modal').classList.remove('active');
     }
     function editEmergency() {
-        const v = getVitals();
-        document.getElementById('emergency-view').style.display = 'none';
-        document.getElementById('emergency-edit').style.display = 'block';
-        document.getElementById('v-name').value = v.name || '';
-        document.getElementById('v-age').value = v.age || '';
-        document.getElementById('v-blood').value = v.blood || '';
-        document.getElementById('v-conditions').value = v.conditions || '';
-        document.getElementById('v-medications').value = v.medications || '';
-        document.getElementById('v-allergies').value = v.allergies || '';
-        document.getElementById('v-history').value = v.history || '';
-        document.getElementById('v-doctors').value = v.doctors || '';
-        document.getElementById('v-ec-name').value = v.ecName || '';
-        document.getElementById('v-ec-rel').value = v.ecRel || '';
-        document.getElementById('v-ec-phone').value = v.ecPhone || '';
+        closeEmergency();
+        showScreen('hub-screen');
+        if (typeof DrHealthHub !== 'undefined' && DrHealthHub.root) {
+            DrHealthHub.go('object', 'personal');
+        }
     }
-    async function saveVitals() {
-        const v = {
-            name: document.getElementById('v-name').value.trim(),
-            age: document.getElementById('v-age').value.trim(),
-            blood: document.getElementById('v-blood').value.trim(),
-            conditions: document.getElementById('v-conditions').value.trim(),
-            medications: document.getElementById('v-medications').value.trim(),
-            allergies: document.getElementById('v-allergies').value.trim(),
-            history: document.getElementById('v-history').value.trim(),
-            doctors: document.getElementById('v-doctors').value.trim(),
-            ecName: document.getElementById('v-ec-name').value.trim(),
-            ecRel: document.getElementById('v-ec-rel').value.trim(),
-            ecPhone: document.getElementById('v-ec-phone').value.trim(),
-        };
-        saveVitalsObject(v);
-        document.getElementById('emergency-edit').style.display = 'none';
-        document.getElementById('emergency-view').style.display = 'block';
-        renderEmergency();
-        try {
-            await AuthHelper.authenticatedFetch('/api/health-profile/vitals', {
-                method: 'PUT',
-                body: JSON.stringify(v)
-            });
-        } catch (e) { console.error('Could not sync vitals to server', e); }
-    }
-    function renderEmergency() {
-        const v = getVitals();
+    function renderEmergency(card) {
+        const v = card || {};
         const view = document.getElementById('emergency-view');
-        const hasData = v.name || v.age || v.blood || v.conditions || v.medications || v.allergies || v.history || v.doctors || v.ecName || v.ecPhone;
+        const listOf = (x) => Array.isArray(x) ? x : (x ? [x] : []);
+        const hasData = v.name || v.age || v.blood || listOf(v.conditions).length ||
+            listOf(v.medications).length || listOf(v.allergies).length ||
+            v.history || v.doctors || v.ec_name || v.ec_phone;
+        let html = '<div style="margin-bottom:16px;"><span class="emergency-empty">Available offline · built from Personal Details</span></div>';
         if (!hasData) {
-            editEmergency();
+            html += '<div class="emergency-section"><p>No emergency details yet. Add them under Health → Personal Details.</p></div>';
+            view.innerHTML = html;
             return;
         }
-        let html = '<div style="margin-bottom:16px;"><span class="emergency-empty">Stored only on this phone</span></div>';
-        const section = (title, text) => text ? `<div class="emergency-section"><h3>${title}</h3><p>${text.replace(/\n/g,'<br>')}</p></div>` : '';
-        const list = (title, text) => {
-            if (!text) return '';
-            const items = text.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+        const section = (title, text) => text ? `<div class="emergency-section"><h3>${title}</h3><p>${String(text).replace(/\n/g,'<br>')}</p></div>` : '';
+        const list = (title, items) => {
+            items = listOf(items).filter(Boolean);
             if (!items.length) return '';
             return `<div class="emergency-section"><h3>${title}</h3><ul>${items.map(i => `<li>${i}</li>`).join('')}</ul></div>`;
         };
@@ -2384,15 +2346,14 @@
         html += list('Allergies', v.allergies);
         html += section('Medical history', v.history);
         html += section('Doctors', v.doctors);
-        html += `<div class="emergency-section"><h3>Emergency contact</h3>`;
-        html += v.ecName ? `<p class="big">${v.ecName}</p>` : '';
-        html += v.ecRel ? `<p>${v.ecRel}</p>` : '';
-        html += v.ecPhone ? `<p class="big">${v.ecPhone}</p>` : '';
-        html += '</div>';
+        if (v.ec_name || v.ec_rel || v.ec_phone) {
+            html += `<div class="emergency-section"><h3>Emergency contact</h3>`;
+            html += v.ec_name ? `<p class="big">${v.ec_name}</p>` : '';
+            html += v.ec_rel ? `<p>${v.ec_rel}</p>` : '';
+            html += v.ec_phone ? `<p class="big">${v.ec_phone}</p>` : '';
+            html += '</div>';
+        }
         view.innerHTML = html;
-        document.getElementById('emergency-edit').style.display = 'none';
-        document.getElementById('emergency-view').style.display = 'block';
-        document.getElementById('emergency-edit-btn').addEventListener('click', editEmergency);
     }
 
     async function bootApp() {
@@ -2417,10 +2378,21 @@
 
     // ---------- Boot ----------
     window.openEmergency = openEmergency;
+    (function initRetainChoice() {
+        const RETAIN_KEY = 'drHealth.retainPhoto';
+        const el = document.getElementById('retain-photo');
+        if (!el) return;
+        try {
+            const saved = localStorage.getItem(RETAIN_KEY);
+            if (saved !== null) el.checked = (saved === 'true');
+        } catch (e) {}
+        el.addEventListener('change', () => {
+            try { localStorage.setItem(RETAIN_KEY, String(el.checked)); } catch (e) {}
+        });
+    })();
     document.getElementById('emergency-btn').addEventListener('click', openEmergency);
     document.getElementById('emergency-close').addEventListener('click', closeEmergency);
     document.getElementById('emergency-edit-btn').addEventListener('click', editEmergency);
-    document.getElementById('v-save').addEventListener('click', saveVitals);
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', bootApp);
     } else {

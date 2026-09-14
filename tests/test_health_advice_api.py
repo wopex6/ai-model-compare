@@ -295,6 +295,65 @@ class HealthAdviceApiTest(unittest.TestCase):
         body = self.client.get('/api/health-profile/review-queue').get_json()
         self.assertEqual(body['queue'], [])
 
+    # ---------- emergency card (single copy, derived) ----------
+
+    def test_vitals_migrate_into_personal_and_lists(self):
+        self.seed({'vitals': {
+            'name': 'Test Person', 'age': '45', 'blood': 'O+',
+            'conditions': 'diabetes, asthma', 'medications': 'metformin 500mg',
+            'allergies': 'penicillin', 'history': 'Appendix out 2010',
+            'doctors': 'Dr Smith, GP, 555-1234',
+            'ecName': 'Jane', 'ecRel': 'Wife', 'ecPhone': '555-9999'}})
+        body = self.client.get('/api/health-profile').get_json()
+        p = body['profile']
+        self.assertNotIn('vitals', p)
+        self.assertEqual(p['name'], 'Test Person')
+        self.assertEqual(p['personal']['blood_type'], 'O+')
+        self.assertEqual(p['personal']['allergies'], 'penicillin')
+        self.assertEqual(p['personal']['ec_phone'], '555-9999')
+        self.assertEqual([c['name'] for c in p['conditions']], ['diabetes', 'asthma'])
+        self.assertEqual([m['name'] for m in p['medications']], ['metformin 500mg'])
+
+    def test_migration_never_overwrites_stated_values(self):
+        self.seed({'name': 'Real Name',
+                   'personal': {'age': '50', 'blood_type': 'A-'},
+                   'vitals': {'name': 'Old Name', 'age': '40', 'blood': 'B+',
+                              'ecPhone': '111'}})
+        body = self.client.get('/api/health-profile').get_json()
+        p = body['profile']
+        self.assertEqual(p['name'], 'Real Name')
+        self.assertEqual(p['personal']['age'], '50')
+        self.assertEqual(p['personal']['blood_type'], 'A-')
+        self.assertEqual(p['personal']['ec_phone'], '111')
+
+    def test_emergency_card_derives_current_items_only(self):
+        self.seed({'name': 'Test Person',
+                   'personal': {'blood_type': 'O+', 'ec_phone': '555-9999'},
+                   'conditions': [{'name': 'diabetes', 'status': 'active'},
+                                  {'name': 'gout', 'status': 'resolved'}],
+                   'medications': [{'name': 'metformin', 'dose': '500mg',
+                                    'status': 'active'},
+                                   {'name': 'old drug', 'status': 'stopped'}],
+                   'diet': {'restrictions': ['ALLERGY: peanuts']}})
+        body = self.client.get('/api/health-profile/emergency-card').get_json()
+        card = body['card']
+        self.assertEqual(card['name'], 'Test Person')
+        self.assertEqual(card['blood'], 'O+')
+        self.assertEqual(card['conditions'], ['diabetes'])
+        self.assertEqual(card['medications'], ['metformin 500mg'])
+        self.assertEqual(card['allergies'], ['peanuts'])
+        self.assertEqual(card['ec_phone'], '555-9999')
+
+    def test_personal_accepts_emergency_fields(self):
+        self.seed({})
+        body = self.client.put('/api/health-profile', json={'personal': {
+            'ec_name': 'Jane', 'ec_phone': '555-9999',
+            'medical_history': 'Appendix 2010', 'made_up_key': 'nope'}}).get_json()
+        pers = body['profile']['personal']
+        self.assertEqual(pers['ec_name'], 'Jane')
+        self.assertEqual(pers['medical_history'], 'Appendix 2010')
+        self.assertNotIn('made_up_key', pers)
+
 
 if __name__ == '__main__':
     unittest.main()
