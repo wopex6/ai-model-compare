@@ -197,6 +197,52 @@
         }
         .btn-inline-summary:hover { background: #bbdefb; }
 
+        /* Quick check — one stale item at a time. Deliberately quiet: this is a
+           prompt, not an alert, so it must not compete with the profile below. */
+        .hr-card {
+            background: #fffdf5; border: 1px solid #ffe0a3; border-left: 4px solid #f5a623;
+            border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;
+        }
+        .hr-card[data-priority="high"] { border-left-color: #e53935; }
+        .hr-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+        .hr-title { font-weight: 700; color: #8a5a00; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.04em; }
+        .hr-count { color: #9e8c6a; font-size: 0.75rem; }
+        .hr-close {
+            margin-left: auto; background: none; border: none; cursor: pointer;
+            color: #b09a72; font-size: 1.3rem; line-height: 1; padding: 0 4px;
+        }
+        .hr-close:hover { color: #6b5836; }
+        .hr-q { font-size: 1rem; color: #333; font-weight: 600; }
+        .hr-detail { color: #6b5836; font-size: 0.85rem; margin-top: 2px; }
+        .hr-why { color: #a08a63; font-size: 0.75rem; margin-top: 4px; }
+        .hr-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+        .hr-btn {
+            background: white; border: 1px solid #e0cfa8; color: #6b5836;
+            padding: 6px 14px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+        }
+        .hr-btn:hover { background: #fff4dd; }
+        .hr-yes { background: #2e7d32; border-color: #2e7d32; color: white; }
+        .hr-yes:hover { background: #256628; }
+        .hr-edit { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-top: 12px; }
+        .hr-field { display: flex; flex-direction: column; font-size: 0.72rem; color: #6b5836; gap: 3px; }
+        .hr-field input {
+            border: 1px solid #e0cfa8; border-radius: 6px; padding: 6px 8px; font-size: 0.85rem;
+        }
+
+        /* Retired items: present but out of the way, so the current list stays short. */
+        .past-items { margin-top: 10px; border-top: 1px dashed #e0e0e0; padding-top: 8px; }
+        .past-items > summary {
+            cursor: pointer; color: #888; font-size: 0.78rem; font-weight: 600;
+            list-style: none; padding: 2px 0;
+        }
+        .past-items > summary:hover { color: #555; }
+        .past-items > summary::before { content: '\25b8 '; }
+        .past-items[open] > summary::before { content: '\25be '; }
+        .past-items .info-list li { opacity: 0.65; }
+        .hr-ended { color: #888; }
+        .hr-changed { color: #8a6d3b; }
+        .hr-when { color: #aaa; }
+
         /* Insight search */
         .insight-search {
             width: 100%; padding: 8px 12px; border: 1px solid #e0e0e0;
@@ -374,6 +420,9 @@ Examples:
             </div>
         </div>
 
+        <!-- QUICK CHECK (one stale item at a time; hidden unless the server says it is due) -->
+        <div id="reviewPrompt" style="display:none;"></div>
+
         <!-- CURRENT PROFILE -->
         <div id="profileDisplay">
             <div style="text-align:center;padding:40px;color:#999;">
@@ -397,6 +446,8 @@ Examples:
         </div>
     </div>
 
+    <script src="{{ url_for('static', filename='lab_results.js') }}"></script>
+    <script src="{{ url_for('static', filename='health_review.js') }}"></script>
     <script src="{{ url_for('static', filename='auth_helper.js') }}"></script>
     <script>
         let currentProfile = null;
@@ -411,6 +462,7 @@ Examples:
                 currentProfile = data.profile;
                 hydrateUploadSettings(data.profile);
                 renderProfile(data.profile);
+                loadAdviceAndReminders();
             } catch(e) {
                 display.innerHTML = '<p style="color:#c62828;">Error loading profile. Please sign in first.</p>';
             }
@@ -538,6 +590,9 @@ Examples:
             // Completeness bar (loaded async)
             html += `<div id="completenessArea" style="margin-bottom:14px;"></div>`;
 
+            // Advice, observations and reminders (loaded async, no model call)
+            html += `<div id="adviceArea" style="margin-bottom:14px;"></div>`;
+
             html += `<div class="summary-grid">`;
 
             // Medications card
@@ -625,144 +680,63 @@ Examples:
             return days + 'd ago';
         }
 
-        function parseReferenceRange(ref) {
-            const nums = String(ref || '').match(/\d+(?:\.\d+)?/g) || [];
-            if (nums.length >= 2) {
-                const [a, b] = nums.map(parseFloat);
-                return [Math.min(a, b), Math.max(a, b)];
-            }
-            return [null, null];
-        }
-        function testStatus(num, lower, upper) {
-            if (lower === null || upper === null) return 'normal';
-            if (num > upper) return 'high';
-            if (num < lower) return 'low';
-            return 'normal';
-        }
-        function statusColor(status) {
-            return { high: '#e6a000', low: '#1565c0', normal: '#43a047' }[status] || '#999';
-        }
-        function computeTestFlag(num, ref) {
-            if (isNaN(num)) return '';
-            const [lower, upper] = parseReferenceRange(ref);
-            if (lower === null || upper === null) return '';
-            const s = testStatus(num, lower, upper);
-            return s === 'high' ? 'H' : s === 'low' ? 'L' : '';
+        // Lab-result helpers come from /static/lab_results.js (shared with dr_health_app.html).
+
+        function setTestSort(mode) {
+            localStorage.setItem('testResultsSort', mode);
+            if (currentProfile) renderProfile(currentProfile);
         }
 
-        function buildSparkline(values, referenceRange = '') {
-            const nums = values.map(v => parseFloat(v)).filter(v => !isNaN(v));
-            if (nums.length < 2) return '';
-            const [lower, upper] = parseReferenceRange(referenceRange);
-            const statuses = nums.map(v => testStatus(v, lower, upper));
-            const min = Math.min(...nums), max = Math.max(...nums);
-            const range = max - min || 1;
-            const w = 60, h = 18;
-            const step = w / (nums.length - 1);
-            const points = nums.map((v, i) => [i * step, h - ((v - min) / range) * h]);
-            let svg = `<svg width="${w}" height="${h}" class="sparkline">`;
-            for (let i = 0; i < points.length - 1; i++) {
-                const [x1, y1] = points[i];
-                const [x2, y2] = points[i+1];
-                const color = statusColor(statuses[i+1]);
-                svg += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${color}" stroke-width="1.5" stroke-linecap="round"/>`;
-                if (statuses[i+1] === 'high') {
-                    const y1b = Math.min(h - 1, y1 + 1.8);
-                    const y2b = Math.min(h - 1, y2 + 1.8);
-                    svg += `<line x1="${x1.toFixed(1)}" y1="${y1b.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2b.toFixed(1)}" stroke="#fff176" stroke-width="1.5" stroke-linecap="round"/>`;
+        /* Items are retired, never deleted, so each lifecycle list is drawn in
+           two tiers: what is true now, and a collapsed "Past" block. The count
+           in the heading is the *current* count — that is the number the user
+           is actually reasoning about. */
+        function lifecycleSection(title, icon, items, renderItem) {
+            const split = HealthReview.partition(items);
+            if (!split.current.length && !split.past.length) return '';
+            let h = `<div class="section-card"><h3><i class="fas ${icon}"></i> ${title} (${split.current.length})</h3>`;
+            h += `<ul class="info-list">` +
+                 split.current.map(e => renderItem(e.item, e.idx, false)).join('') + `</ul>`;
+            if (split.past.length) {
+                h += `<details class="past-items"><summary>Past (${split.past.length})</summary>` +
+                     `<ul class="info-list">` +
+                     split.past.map(e => renderItem(e.item, e.idx, true)).join('') +
+                     `</ul></details>`;
+            }
+            return h + `</div>`;
+        }
+
+        // Ended-on + last-change note comes from static/health_review.js.
+        const historyNote = (item, isPast) => HealthReview.historyNote(item, isPast);
+
+        function takenItem(category, item, idx, isPast, liAttrs) {
+            let li = `<li${liAttrs}><span class="item-actions">`;
+            if (isPast) li += `<button class="btn-status" onclick="setItemStatus('${category}',${idx},'active')" title="Taking this again"><i class="fas fa-redo"></i></button>`;
+            else li += `<button class="btn-resolve" onclick="setItemStatus('${category}',${idx},'stopped')" title="No longer taking"><i class="fas fa-ban"></i></button>`;
+            li += `<button class="btn-delete" onclick="deleteItem('${category}',${idx},'${escapeHtml(item.name || '')}')" title="Delete"><i class="fas fa-trash"></i></button></span>`;
+            li += `<strong>${escapeHtml(item.name || '')}</strong>`;
+            if (item.dose) li += ` — ${escapeHtml(item.dose)}`;
+            if (item.frequency) li += ` <small style="color:#888;">${escapeHtml(item.frequency)}</small>`;
+            li += historyNote(item, isPast);
+            if (item.purpose) li += `<br><small>${escapeHtml(item.purpose)}</small>`;
+            return li + `</li>`;
+        }
+
+        // Retire or revive an item; the request itself is shared with the PWA.
+        async function setItemStatus(category, index, status) {
+            try {
+                const resp = await HealthReview.setStatus(
+                    (url, init) => AuthHelper.authenticatedFetch(url, init),
+                    category, index, status);
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    showStatus(err.error || 'Could not update.', 'error');
+                    return;
                 }
-            }
-            for (let i = 0; i < points.length; i++) {
-                const [x, y] = points[i];
-                if (statuses[i] === 'high') svg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="#000"/>`;
-                if (statuses[i] === 'low') svg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="#c62828"/>`;
-            }
-            svg += `</svg>`;
-            return svg;
-        }
-
-        function extractTestUnit(value) {
-            const m = String(value || '').match(/^-?\d+(?:\.\d+)?(?:\s+(?:H|L|High|Low))?\s*(.*)$/i);
-            if (!m) return '';
-            return m[1].replace(/(?:\s+|^)(H|L|High|Low)$/i, '').trim();
-        }
-        function stripTestUnit(value, unit) {
-            if (!unit) return String(value || '');
-            const esc = unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const re = new RegExp('\\s*' + esc + '(?=\\s+(?:H|L|High|Low)\\b|\\s*$)', 'i');
-            return String(value || '').replace(re, '').trim();
-        }
-        function extractTestFlag(value) {
-            const m = String(value || '').match(/\b(H|L)\b/i);
-            return m ? m[1].toUpperCase() : '';
-        }
-
-        function normalizeTestType(testName) {
-            if (!testName) return 'Unknown Test';
-            return testName
-                .replace(/\(.*?\)/g, '')
-                .replace(/historical/ig, '')
-                .replace(/\s+/g, ' ')
-                .trim() || testName.trim();
-        }
-
-        function parseMedicalDate(dateStr, addedAtStr = '') {
-            const text = (dateStr || '').trim();
-            if (text) {
-                const patterns = [
-                    /^(\d{4})-(\d{2})-(\d{2})$/,
-                    /^(\d{4})-(\d{2})$/,
-                    /^(\d{4})$/,
-                    /^(\d{2})\/(\d{2})\/(\d{4})$/,
-                    /^(\d{2})-([A-Za-z]{3})-(\d{2,4})$/,
-                    /^(\d{2})\s+([A-Za-z]{3,9})\s+(\d{4})$/
-                ];
-
-                for (let i = 0; i < patterns.length; i++) {
-                    const m = text.match(patterns[i]);
-                    if (!m) continue;
-
-                    if (i === 0) return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-                    if (i === 1) return new Date(Number(m[1]), Number(m[2]) - 1, 1);
-                    if (i === 2) return new Date(Number(m[1]), 0, 1);
-                    if (i === 3) return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
-
-                    if (i === 4 || i === 5) {
-                        const day = Number(m[1]);
-                        const monthRaw = m[2].slice(0, 3).toLowerCase();
-                        const monthMap = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11 };
-                        const month = monthMap[monthRaw];
-                        if (month === undefined) continue;
-
-                        let year = Number(m[3]);
-                        if (year < 100) year += year >= 70 ? 1900 : 2000;
-                        return new Date(year, month, day);
-                    }
-                }
-
-                const nativeDate = new Date(text);
-                if (!Number.isNaN(nativeDate.getTime())) return nativeDate;
-            }
-
-            if (addedAtStr) {
-                const addedDate = new Date(addedAtStr);
-                if (!Number.isNaN(addedDate.getTime())) return addedDate;
-            }
-
-            return new Date(0);
-        }
-
-        function normalizeDateInput(text) {
-            const t = (text || '').trim();
-            if (!t) return null;
-            let m;
-            if ((m = t.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/))) return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;
-            if ((m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/))) return `${m[3]}-${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;
-            if ((m = t.match(/^(\d{4})-(\d{1,2})$/))) return `${m[1]}-${String(m[2]).padStart(2,'0')}-01`;
-            if ((m = t.match(/^(\d{4})$/))) return `${m[1]}-01-01`;
-            const d = new Date(t);
-            if (!Number.isNaN(d.getTime())) return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-            return null;
+                showStatus(status === 'active' ? 'Moved back to current.' : 'Moved to past — the record is kept.', 'success');
+                loadProfile();
+                if (reviewPrompt) reviewPrompt.refresh();
+            } catch (e) { showStatus('Could not update: ' + e.message, 'error'); }
         }
 
         function renderProfile(p) {
@@ -786,89 +760,58 @@ Examples:
             html += '<div class="two-col">';
 
             // Conditions (with status controls + delete)
-            if (p.conditions && p.conditions.length) {
-                html += `<div class="section-card"><h3><i class="fas fa-heartbeat"></i> Conditions (${p.conditions.length})</h3><ul class="info-list">`;
-                p.conditions.forEach((c, idx) => {
+            html += lifecycleSection('Conditions', 'fa-heartbeat', p.conditions,
+                (c, idx, isPast) => {
                     const badgeClass = c.status === 'active' ? 'badge-active' : c.status === 'resolved' ? 'badge-status' : 'badge-investigating';
-                    const liClass = c.status === 'investigating' ? ' class="warning"' : c.status === 'resolved' ? ' style="opacity:0.6;"' : '';
-                    html += `<li${liClass}>`;
-                    html += `<span class="item-actions">`;
-                    if (c.status === 'active') html += `<button class="btn-resolve" onclick="changeConditionStatus(${idx},'resolved')" title="Mark resolved"><i class="fas fa-check"></i></button>`;
-                    if (c.status === 'active') html += `<button class="btn-status" onclick="changeConditionStatus(${idx},'investigating')" title="Set investigating"><i class="fas fa-search"></i></button>`;
-                    if (c.status !== 'active') html += `<button class="btn-status" onclick="changeConditionStatus(${idx},'active')" title="Set active"><i class="fas fa-redo"></i></button>`;
-                    html += `<button class="btn-delete" onclick="deleteItem('conditions',${idx},'${c.name}')" title="Delete"><i class="fas fa-trash"></i></button>`;
-                    html += `</span>`;
-                    html += `<span class="badge-status ${badgeClass}">${c.status}</span> <strong>${c.name}</strong>`;
-                    if (c.diagnosed_date) html += ` <small style="color:#888;">[${c.diagnosed_date}]</small>`;
-                    if (c.details) html += `<br><small>${c.details}</small>`;
-                    html += `</li>`;
+                    const liClass = c.status === 'investigating' ? ' class="warning"' : '';
+                    let li = `<li${liClass}>`;
+                    li += `<span class="item-actions">`;
+                    if (!isPast) li += `<button class="btn-resolve" onclick="changeConditionStatus(${idx},'resolved')" title="Mark resolved"><i class="fas fa-check"></i></button>`;
+                    if (!isPast) li += `<button class="btn-status" onclick="changeConditionStatus(${idx},'investigating')" title="Set investigating"><i class="fas fa-search"></i></button>`;
+                    if (isPast) li += `<button class="btn-status" onclick="changeConditionStatus(${idx},'active')" title="Mark active again"><i class="fas fa-redo"></i></button>`;
+                    li += `<button class="btn-delete" onclick="deleteItem('conditions',${idx},'${escapeHtml(c.name)}')" title="Delete"><i class="fas fa-trash"></i></button>`;
+                    li += `</span>`;
+                    li += `<span class="badge-status ${badgeClass}">${escapeHtml(c.status || 'active')}</span> <strong>${escapeHtml(c.name)}</strong>`;
+                    if (c.diagnosed_date) li += ` <small style="color:#888;">[${escapeHtml(c.diagnosed_date)}]</small>`;
+                    li += historyNote(c, isPast);
+                    if (c.details) li += `<br><small>${escapeHtml(c.details)}</small>`;
+                    return li + `</li>`;
                 });
-                html += `</ul></div>`;
-            }
 
             // Symptoms (with delete)
-            if (p.symptoms && p.symptoms.length) {
-                html += `<div class="section-card"><h3><i class="fas fa-exclamation-circle"></i> Symptoms (${p.symptoms.length})</h3><ul class="info-list">`;
-                p.symptoms.forEach((s, idx) => {
-                    html += `<li><span class="item-actions"><button class="btn-delete" onclick="deleteItem('symptoms',${idx},'${s.description.replace(/'/g,"\\\'")}')" title="Delete"><i class="fas fa-trash"></i></button></span>`;
-                    html += `${s.description}`;
-                    if (s.triggers && s.triggers.length) html += `<br><small style="color:#888;">Triggers: ${s.triggers.join(', ')}</small>`;
-                    html += `</li>`;
+            html += lifecycleSection('Symptoms', 'fa-exclamation-circle', p.symptoms,
+                (s, idx, isPast) => {
+                    let li = `<li><span class="item-actions">`;
+                    if (isPast) li += `<button class="btn-status" onclick="setItemStatus('symptoms',${idx},'active')" title="It has come back"><i class="fas fa-redo"></i></button>`;
+                    else li += `<button class="btn-resolve" onclick="setItemStatus('symptoms',${idx},'resolved')" title="Mark resolved"><i class="fas fa-check"></i></button>`;
+                    li += `<button class="btn-delete" onclick="deleteItem('symptoms',${idx},'${escapeHtml(s.description || '')}')" title="Delete"><i class="fas fa-trash"></i></button></span>`;
+                    li += escapeHtml(s.description || '');
+                    li += historyNote(s, isPast);
+                    if (s.triggers && s.triggers.length) li += `<br><small style="color:#888;">Triggers: ${escapeHtml(s.triggers.join(', '))}</small>`;
+                    return li + `</li>`;
                 });
-                html += `</ul></div>`;
-            }
 
             html += '</div><div class="two-col">';
 
-            // Test Results (grouped by type, sorted by date desc, with sparkline trends + delete)
+            // Test Results (grouped by type, with sparkline trends + delete)
             if (p.test_results && p.test_results.length) {
-                const testGroups = {};
-                p.test_results.forEach((t, idx) => {
-                    const groupKey = normalizeTestType(t.test_name).toLowerCase();
-                    if (!testGroups[groupKey]) {
-                        testGroups[groupKey] = {
-                            displayName: normalizeTestType(t.test_name),
-                            entries: []
-                        };
-                    }
-                    testGroups[groupKey].entries.push({ ...t, _sourceIndex: idx });
-                });
-
-                const sortedGroups = Object.values(testGroups).map(g => {
-                    g.entries.sort((a, b) => parseMedicalDate(b.date, b.added_at) - parseMedicalDate(a.date, a.added_at));
-                    return g;
-                }).sort((a, b) => {
-                    const da = a.entries.length ? parseMedicalDate(a.entries[0].date, a.entries[0].added_at) : new Date(0);
-                    const db = b.entries.length ? parseMedicalDate(b.entries[0].date, b.entries[0].added_at) : new Date(0);
-                    if (db.getTime() !== da.getTime()) return db - da;
-                    return a.displayName.localeCompare(b.displayName);
-                });
+                const sortMode = localStorage.getItem('testResultsSort') || 'abnormal';
+                const sortedGroups = LabUtils.groupTestResults(p.test_results, sortMode);
 
                 html += `<div class="section-card"><h3><i class="fas fa-flask"></i> Test Results (${p.test_results.length})`;
-                html += `<span class="section-inline-actions"><button class="btn-inline-summary" onclick="generateTestResultsSummary()"><i class="fas fa-file-medical-alt"></i> Summary Report</button><button class="btn-inline-summary" onclick="generateConciseTestSummary()"><i class="fas fa-file-alt"></i> Concise 1-page</button></span></h3>`;
+                html += `<span class="section-inline-actions"><select onchange="setTestSort(this.value)" style="font-size:0.75rem;padding:3px 6px;border:1px solid #ccc;border-radius:6px;margin-right:6px;"><option value="abnormal"${sortMode === 'abnormal' ? ' selected' : ''}>Recent abnormal first</option><option value="recent"${sortMode === 'recent' ? ' selected' : ''}>Most recent</option></select><button class="btn-inline-summary" onclick="generateTestResultsSummary()"><i class="fas fa-file-medical-alt"></i> Summary Report</button><button class="btn-inline-summary" onclick="generateConciseTestSummary()"><i class="fas fa-file-alt"></i> Concise 1-page</button></span></h3>`;
                 sortedGroups.forEach(group => {
-                    const unit = group.entries.map(e => extractTestUnit(e.value)).find(u => u) || '';
-                    const ref = group.entries.map(e => e.reference_range || '').find(r => r.trim()) || '';
-                    const escUnit = unit ? unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : '';
-                    const displayName = unit ? group.displayName.replace(new RegExp('(?:^|\\s)' + escUnit + '(?:\\s|$)', 'ig'), ' ').replace(/\s+/g, ' ').trim() : group.displayName;
-                    const metaUnit = unit && !ref.toLowerCase().includes(unit.toLowerCase()) ? unit : '';
-                    const meta = [ref, metaUnit].filter(Boolean).join(' ');
-                    const spark = buildSparkline(group.entries.slice().reverse().map(e => e.value), ref);
                     html += `<div class="test-group">`;
-                    html += `<div class="test-group-title"><i class="fas fa-vial"></i> <span class="tt-name">${displayName}</span> <span class="tt-meta">${meta}</span> ${spark}</div>`;
+                    html += `<div class="test-group-title"><i class="fas fa-vial"></i> <span class="tt-name">${escapeHtml(group.displayName)}</span> <span class="tt-meta">${escapeHtml(group.meta)}</span> ${group.spark}</div>`;
                     html += `<table class="test-table"><thead><tr><th>Date</th><th>Value</th><th></th></tr></thead><tbody>`;
 
-                    group.entries.forEach(t => {
-                        const testLabel = (t.test_name || '').replace(/'/g, "\\'");
-                        const stripped = stripTestUnit(t.value, unit);
-                        const displayVal = stripped.replace(/^(?:H|L|High|Low)\s+/i, '').replace(/\s+(?:H|L|High|Low)$/i, '').trim();
-                        const num = parseFloat(displayVal);
-                        let flag = computeTestFlag(num, ref) || extractTestFlag(stripped);
-                        const flagHtml = flag ? `<span class="flag flag-${flag.toLowerCase()}">${flag}</span>` : '<span class="flag flag-none">—</span>';
+                    group.entries.forEach(e => {
+                        const testLabel = (e.item.test_name || '').replace(/'/g, "\\'");
+                        const flagHtml = e.flag ? `<span class="flag flag-${e.flag.toLowerCase()}">${e.flag}</span>` : '<span class="flag flag-none">—</span>';
                         html += `<tr>`;
-                        html += `<td class="tt-date"><span class="tt-editable" contenteditable="true" data-idx="${t._sourceIndex}" data-field="date" onblur="saveTestResult(this)">${t.date || ''}</span></td>`;
-                        html += `<td class="tt-value"><span class="tt-editable" contenteditable="true" data-idx="${t._sourceIndex}" data-field="value" data-unit="${unit.replace(/"/g, '&quot;')}" onblur="saveTestResult(this)">${displayVal}</span> ${flagHtml}</td>`;
-                        html += `<td class="tt-delete"><button class="btn-delete" onclick="deleteItem('test_results',${t._sourceIndex},'${testLabel}')" title="Delete"><i class="fas fa-trash"></i></button></td>`;
+                        html += `<td class="tt-date"><span class="tt-editable" contenteditable="true" data-idx="${e.idx}" data-field="date" onblur="saveTestResult(this)">${escapeHtml(e.item.date || '')}</span></td>`;
+                        html += `<td class="tt-value"><span class="tt-editable" contenteditable="true" data-idx="${e.idx}" data-field="value" data-unit="${group.unit.replace(/"/g, '&quot;')}" onblur="saveTestResult(this)">${escapeHtml(e.displayVal)}</span> ${flagHtml}</td>`;
+                        html += `<td class="tt-delete"><button class="btn-delete" onclick="deleteItem('test_results',${e.idx},'${testLabel}')" title="Delete"><i class="fas fa-trash"></i></button></td>`;
                         html += `</tr>`;
                     });
 
@@ -878,30 +821,13 @@ Examples:
             }
 
             // Medications (with delete)
-            if (p.medications && p.medications.length) {
-                html += `<div class="section-card"><h3><i class="fas fa-prescription-bottle-alt"></i> Medications (${p.medications.length})</h3><ul class="info-list">`;
-                p.medications.forEach((m, idx) => {
-                    html += `<li style="border-left-color:#1565c0;"><span class="item-actions"><button class="btn-delete" onclick="deleteItem('medications',${idx},'${m.name}')" title="Delete"><i class="fas fa-trash"></i></button></span>`;
-                    html += `<strong>${m.name}</strong>`;
-                    if (m.dose) html += ` — ${m.dose}`;
-                    if (m.purpose) html += `<br><small>${m.purpose}</small>`;
-                    html += `</li>`;
-                });
-                html += `</ul></div>`;
-            }
+            html += lifecycleSection('Medications', 'fa-prescription-bottle-alt', p.medications,
+                (m, idx, isPast) => takenItem('medications', m, idx, isPast,
+                                              ' style="border-left-color:#1565c0;"'));
 
             // Supplements & Herbs (with delete)
-            if (p.supplements && p.supplements.length) {
-                html += `<div class="section-card"><h3><i class="fas fa-pills"></i> Supplements & Herbs (${p.supplements.length})</h3><ul class="info-list">`;
-                p.supplements.forEach((s, idx) => {
-                    html += `<li class="success"><span class="item-actions"><button class="btn-delete" onclick="deleteItem('supplements',${idx},'${s.name}')" title="Delete"><i class="fas fa-trash"></i></button></span>`;
-                    html += `<strong>${s.name}</strong>`;
-                    if (s.dose) html += ` — ${s.dose}`;
-                    if (s.purpose) html += `<br><small>${s.purpose}</small>`;
-                    html += `</li>`;
-                });
-                html += `</ul></div>`;
-            }
+            html += lifecycleSection('Supplements &amp; Herbs', 'fa-pills', p.supplements,
+                (s, idx, isPast) => takenItem('supplements', s, idx, isPast, ' class="success"'));
 
             html += '</div><div class="two-col">';
 
@@ -2172,9 +2098,303 @@ Examples:
             return true;
         }
 
+        // ============================================================
+        // Advice, observations and reminders (mirrors the PWA hub)
+        // /overview is deterministic and never triggers a model call.
+        // ============================================================
+        let currentOverview = null;
+
+        const PROV_STYLE = {
+            user_entered: ['You', '#e8f5e9', '#2e7d32'],
+            document_extracted: ['Report', '#e3f2fd', '#1565c0'],
+            clinician_report: ['Clinician', '#ede7f6', '#4527a0'],
+            ai_inferred: ['AI', '#fff3e0', '#e65100'],
+            unknown: ['Legacy', '#f5f5f5', '#616161'],
+            computed: ['Fact', '#eceff1', '#37474f']
+        };
+
+        function provChip(kind) {
+            const s = PROV_STYLE[kind] || PROV_STYLE.computed;
+            return `<span style="display:inline-block;padding:2px 7px;border-radius:10px;font-size:0.62rem;
+                font-weight:700;text-transform:uppercase;background:${s[1]};color:${s[2]};">${s[0]}</span>`;
+        }
+
+        function observationCardHtml(o) {
+            const color = o.severity === 'urgent' ? '#c62828'
+                : (o.severity === 'watch' ? '#f57f17' : '#546e7a');
+            let html = `<div style="padding:10px 12px;margin:6px 0;background:#fff;border-radius:6px;
+                border-left:3px solid ${color};color:#37474f;font-size:0.85rem;line-height:1.5;">`;
+            html += `${provChip('computed')} <strong>${escapeHtml(o.title)}</strong><br>${escapeHtml(o.detail)}`;
+            if (o.action) html += `<br><em style="color:#78909c;">${escapeHtml(o.action)}</em>`;
+            if (o.evidence && o.evidence.length) {
+                const bits = o.evidence.slice(0, 6).map(e =>
+                    escapeHtml(String(e.value || '')) + (e.date ? ` (${escapeHtml(e.date)})` : ''));
+                html += `<div style="margin-top:5px;font-size:0.72rem;color:#90a4ae;font-style:italic;">
+                    Evidence: ${bits.join(', ')}</div>`;
+            }
+            return html + '</div>';
+        }
+
+        function reminderCardHtml(r) {
+            const color = r.status === 'overdue' ? '#c62828'
+                : (r.status === 'due_today' ? '#f57f17' : '#546e7a');
+            let when = '';
+            if (r.due_date) {
+                when = r.due_date;
+                if (r.status === 'overdue') when += ` · ${Math.abs(r.days_until)} day(s) late`;
+                else if (r.status === 'upcoming') when += ` · in ${r.days_until} day(s)`;
+            } else if (r.recurrence) {
+                when = r.recurrence;
+            }
+            let html = `<div style="padding:10px 12px;margin:6px 0;background:#fff;border-radius:6px;
+                border-left:3px solid ${color};color:#37474f;font-size:0.85rem;line-height:1.5;">`;
+            html += `<strong>${escapeHtml(r.title)}</strong>`;
+            if (when) html += ` <span style="font-size:0.75rem;color:#78909c;">${escapeHtml(when)}</span>`;
+            if (r.detail) html += `<br>${escapeHtml(r.detail)}`;
+            if (r.source_category && r.source_index !== null && r.source_index !== undefined
+                && r.status !== 'recurring') {
+                const id = JSON.stringify(r.id);
+                html += `<div style="margin-top:6px;display:flex;gap:8px;">
+                    <button onclick='actOnReminder(${id}, "complete")' style="padding:4px 10px;font-size:0.75rem;
+                        border:1px solid #cfd8dc;border-radius:6px;background:#fff;cursor:pointer;">
+                        <i class="fas fa-check"></i> Done</button>
+                    <button onclick='actOnReminder(${id}, "snooze")' style="padding:4px 10px;font-size:0.75rem;
+                        border:1px solid #cfd8dc;border-radius:6px;background:#fff;cursor:pointer;">
+                        <i class="fas fa-clock"></i> Snooze 7d</button>
+                </div>`;
+            }
+            return html + '</div>';
+        }
+
+        async function loadAdviceAndReminders() {
+            const area = document.getElementById('adviceArea');
+            if (!area) return;
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/overview');
+                if (!resp.ok) { area.innerHTML = ''; return; }
+                const data = await resp.json();
+                if (!data.success || !data.overview) { area.innerHTML = ''; return; }
+                currentOverview = data.overview;
+                renderAdviceArea(data.overview);
+            } catch (e) {
+                area.innerHTML = '';
+            }
+        }
+
+        function renderAdviceArea(ov) {
+            const area = document.getElementById('adviceArea');
+            if (!area) return;
+
+            const observations = ov.observations || [];
+            const reminders = ov.reminders || [];
+            const advice = ov.advice || {};
+            const suggestions = advice.suggestions || [];
+            const questions = advice.questions_for_doctor || [];
+            const counts = ov.reminder_counts || {};
+
+            let html = `<div style="background:#fafafa;border:1px solid #e3e7ea;border-radius:8px;padding:14px;">`;
+            html += `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+                <strong style="color:#263238;"><i class="fas fa-lightbulb"></i> Advice &amp; Reminders</strong>`;
+            if (counts.overdue) {
+                html += `<span style="background:#ffebee;color:#c62828;padding:2px 8px;border-radius:10px;
+                    font-size:0.72rem;font-weight:700;">${counts.overdue} overdue</span>`;
+            }
+            html += `<span style="margin-left:auto;display:flex;gap:8px;">
+                <button onclick="refreshAdvice()" style="padding:5px 11px;font-size:0.78rem;border:1px solid #cfd8dc;
+                    border-radius:6px;background:#fff;cursor:pointer;"><i class="fas fa-rotate"></i> Refresh AI advice</button>
+                <button onclick="downloadReminderCalendar()" style="padding:5px 11px;font-size:0.78rem;
+                    border:1px solid #cfd8dc;border-radius:6px;background:#fff;cursor:pointer;">
+                    <i class="fas fa-calendar-plus"></i> Add to calendar</button>
+            </span></div>`;
+
+            (ov.red_flags || []).forEach(f => { html += observationCardHtml(f); });
+
+            if (reminders.length) {
+                html += `<div style="font-size:0.75rem;color:#78909c;text-transform:uppercase;
+                    font-weight:700;margin:12px 0 4px;">Reminders (${reminders.length})</div>`;
+                reminders.slice(0, 8).forEach(r => { html += reminderCardHtml(r); });
+            }
+
+            const nonUrgent = observations.filter(o => o.severity !== 'urgent');
+            if (nonUrgent.length) {
+                html += `<div style="font-size:0.75rem;color:#78909c;text-transform:uppercase;
+                    font-weight:700;margin:12px 0 4px;">From your records</div>`;
+                nonUrgent.forEach(o => { html += observationCardHtml(o); });
+            }
+
+            if (suggestions.length) {
+                html += `<div style="font-size:0.75rem;color:#78909c;text-transform:uppercase;
+                    font-weight:700;margin:12px 0 4px;">AI suggestions to discuss</div>`;
+                suggestions.forEach(s => {
+                    html += `<div style="padding:10px 12px;margin:6px 0;background:#f7f5fc;border-radius:6px;
+                        border-left:3px solid #5e35b1;color:#37474f;font-size:0.85rem;line-height:1.5;">
+                        ${provChip('ai_inferred')} <strong>${escapeHtml(s.title)}</strong><br>${escapeHtml(s.detail)}`;
+                    if (s.cites && s.cites.length) {
+                        html += `<div style="margin-top:5px;font-size:0.72rem;color:#90a4ae;font-style:italic;">
+                            Based on: ${escapeHtml(s.cites.join(', '))}</div>`;
+                    }
+                    html += '</div>';
+                });
+            }
+
+            if (questions.length) {
+                html += `<div style="font-size:0.75rem;color:#78909c;text-transform:uppercase;
+                    font-weight:700;margin:12px 0 4px;">Questions for your doctor</div>`;
+                questions.forEach((q, i) => {
+                    html += `<div style="padding:10px 12px;margin:6px 0;background:#fff;border-radius:6px;
+                        border-left:3px solid #90a4ae;color:#37474f;font-size:0.85rem;line-height:1.5;">
+                        <strong>${escapeHtml(q.question)}</strong>`;
+                    if (q.context) html += `<br>${escapeHtml(q.context)}`;
+                    html += `<div style="margin-top:6px;"><button onclick="saveAdviceQuestion(${i})"
+                        style="padding:4px 10px;font-size:0.75rem;border:1px solid #cfd8dc;border-radius:6px;
+                        background:#fff;cursor:pointer;"><i class="fas fa-plus"></i> Save to my list</button></div></div>`;
+                });
+            }
+
+            if (!observations.length && !reminders.length && !suggestions.length && !questions.length) {
+                html += `<p style="color:#90a4ae;font-size:0.85rem;margin:6px 0;">
+                    ${escapeHtml(advice.reason || 'Nothing to show yet. Add test results, conditions or follow-up dates first.')}</p>`;
+            }
+
+            if (advice.generated_at) {
+                html += `<div style="margin-top:10px;font-size:0.72rem;color:#b0bec5;">
+                    AI wording generated ${escapeHtml(String(advice.generated_at).slice(0, 16).replace('T', ' '))}`;
+                if (typeof ov.remaining_generations === 'number') {
+                    html += ` · ${ov.remaining_generations} refresh(es) left today`;
+                }
+                html += '</div>';
+            }
+
+            if (ov.disclaimer) {
+                html += `<div style="margin-top:10px;padding:9px 11px;background:#eceff1;border-radius:6px;
+                    font-size:0.74rem;color:#546e7a;line-height:1.5;">
+                    <i class="fas fa-circle-info"></i> ${escapeHtml(ov.disclaimer)}</div>`;
+            }
+
+            area.innerHTML = html + '</div>';
+        }
+
+        async function refreshAdvice() {
+            showStatus('Asking the AI to review your records...', 'info');
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/advice?refresh=1');
+                const data = await resp.json();
+                if (!resp.ok || !data.success) {
+                    showStatus((data && data.error) || 'Could not generate advice.', 'error');
+                    return;
+                }
+                await loadAdviceAndReminders();
+                const advice = data.advice || {};
+                showStatus(advice.reason || 'Advice updated.', advice.reason ? 'error' : 'success');
+            } catch (e) {
+                showStatus('Network error while generating advice.', 'error');
+            }
+        }
+
+        async function actOnReminder(reminderId, action) {
+            const list = (currentOverview && currentOverview.reminders) || [];
+            const reminder = list.find(r => r.id === reminderId);
+            if (!reminder) return;
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/reminder', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: action,
+                        source_category: reminder.source_category,
+                        source_index: reminder.source_index,
+                        days: 7
+                    })
+                });
+                const data = await resp.json();
+                if (!resp.ok || !data.success) {
+                    showStatus((data && data.error) || 'Could not update reminder.', 'error');
+                    return;
+                }
+                showStatus(action === 'complete' ? 'Marked done.' : 'Snoozed 7 days.', 'success');
+                loadProfile();
+            } catch (e) {
+                showStatus('Network error while updating reminder.', 'error');
+            }
+        }
+
+        async function saveAdviceQuestion(index) {
+            const advice = (currentOverview && currentOverview.advice) || {};
+            const q = (advice.questions_for_doctor || [])[index];
+            if (!q) return;
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/item', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        category: 'questions_for_doctor',
+                        item: { question: q.question, context: q.context, priority: q.priority }
+                    })
+                });
+                if (!resp.ok) {
+                    showStatus('Could not save the question.', 'error');
+                    return;
+                }
+                showStatus('Added to Questions for Doctor.', 'success');
+                loadProfile();
+            } catch (e) {
+                showStatus('Network error while saving.', 'error');
+            }
+        }
+
+        async function downloadReminderCalendar() {
+            const token = localStorage.getItem('authToken');
+            if (!token) { showStatus('Not authenticated.', 'error'); return; }
+            try {
+                const resp = await fetch('/api/health-profile/reminders.ics', {
+                    headers: { 'Authorization': 'Bearer ' + token }
+                });
+                if (!resp.ok) { showStatus('Could not build the calendar file.', 'error'); return; }
+                const blob = await resp.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'dr-health-reminders.ics';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                showStatus('Calendar file downloaded. Open it to add the dates.', 'success');
+            } catch (e) {
+                showStatus('Could not download the calendar file.', 'error');
+            }
+        }
+
+        // --- Quick check (shared with the PWA; see static/health_review.js) ---
+        let reviewPrompt = null;
+
+        function initReviewPrompt() {
+            const host = document.getElementById('reviewPrompt');
+            if (!host || typeof HealthReview === 'undefined') return;
+            reviewPrompt = HealthReview.mount(host, {
+                fetcher: (url, init) => AuthHelper.authenticatedFetch(url, init),
+                prefix: 'hr',
+                // Answering can retire or edit an item, so the profile below
+                // must be redrawn to stay in step with the card.
+                onUpdated: (action) => {
+                    if (action !== 'snooze' && action !== 'dismiss') loadProfile();
+                },
+                onCount: (state) => {
+                    const badge = document.getElementById('reviewBadge');
+                    if (!badge) return;
+                    badge.textContent = state.due ? state.due + ' to confirm' : '';
+                    badge.style.display = state.due ? '' : 'none';
+                },
+            });
+            reviewPrompt.refresh();
+        }
+
         // Load on page ready
         window.addEventListener('load', () => {
-            if (checkAuth()) loadProfile();
+            if (checkAuth()) {
+                loadProfile();
+                initReviewPrompt();
+            }
         });
     </script>
 </body>

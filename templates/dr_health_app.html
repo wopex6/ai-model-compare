@@ -6,7 +6,7 @@
 <title>Dr. Health</title>
 
 <!-- PWA -->
-<link rel="manifest" href="{{ url_for('static', filename='dr_health_manifest.json') }}">
+<link rel="manifest" href="{{ url_for('static', filename='dr_health_manifest.json') }}?v=2">
 <meta name="theme-color" content="#E53935">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -102,7 +102,7 @@
 
     /* ---------- Screens ---------- */
     .screen { flex: 1; overflow: hidden; display: none; flex-direction: column; }
-    .screen.active { display: flex; }
+    .screen.active { display: flex; padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 58px); }
 
     /* Chat screen */
     #chat-disclaimer {
@@ -161,7 +161,8 @@
 
     /* Bottom nav */
     .bottom-nav {
-        flex: 0 0 auto; display: flex; background: white; border-top: 1px solid #eee;
+        position: fixed; left: 0; right: 0; bottom: 0; z-index: 100;
+        display: flex; background: white; border-top: 1px solid #eee;
         padding-bottom: env(safe-area-inset-bottom, 0px);
     }
     .bottom-nav button {
@@ -196,7 +197,7 @@
 
     /* Emergency modal */
     #emergency-modal {
-        position: fixed; inset: 0; z-index: 600;
+        position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 600;
         background: #fff; color: #333;
         display: none; flex-direction: column;
         padding: calc(env(safe-area-inset-top, 0px) + 12px) 0 0;
@@ -234,7 +235,7 @@
 
     /* Review & Data Manager modals */
     .modal {
-        position: fixed; inset: 0; z-index: 1000;
+        position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 1000;
         background: #fff; color: #333;
         display: none; flex-direction: column;
         padding: calc(env(safe-area-inset-top, 0px) + 12px) 0 0;
@@ -292,7 +293,14 @@
     .dm-edit-form input, .dm-edit-form textarea {
         width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 8px; font-family: inherit; font-size: 0.9rem;
     }
-    .dm-actions { display: flex; gap: 8px; margin-top: 8px; }
+    .dm-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+    /* Retired items: kept and reachable, but out of the current list. */
+    .dm-past-box { margin-top: 8px; border-top: 1px dashed #e0e0e0; padding-top: 6px; }
+    .dm-past-box > summary { cursor: pointer; color: #888; font-size: 0.8rem; font-weight: 600; padding: 4px 0; }
+    .dm-past { opacity: 0.7; }
+    .hr-ended { color: #888; }
+    .hr-changed { color: #8a6d3b; }
+    .hr-when { color: #aaa; }
     .btn-primary { background: #2a7de1; color: #fff; }
     .btn-danger { background: #c62828; color: #fff; }
     .btn-secondary { background: #e0e0e0; color: #333; }
@@ -320,12 +328,48 @@
     }
     .dm-index a:active { background: #bbdefb; }
     .sparkline { display: inline-block; vertical-align: middle; margin-left: 6px; }
+
+    /* Quick check — one stale item at a time. Touch targets are sized for
+       thumbs; the card is a prompt, not an alert, so it stays understated. */
+    .hr-card {
+        background: #fffdf5; border: 1px solid #ffe0a3; border-left: 4px solid #f5a623;
+        border-radius: 12px; padding: 14px 16px; margin-bottom: 14px;
+    }
+    .hr-card[data-priority="high"] { border-left-color: #e53935; }
+    .hr-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .hr-title { font-weight: 700; color: #8a5a00; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .hr-count { color: #9e8c6a; font-size: 0.7rem; }
+    .hr-close {
+        margin-left: auto; background: none; border: none; color: #b09a72;
+        font-size: 1.4rem; line-height: 1; padding: 0 6px; cursor: pointer;
+    }
+    .hr-q { font-size: 0.95rem; color: #333; font-weight: 600; }
+    .hr-detail { color: #6b5836; font-size: 0.8rem; margin-top: 2px; }
+    .hr-why { color: #a08a63; font-size: 0.7rem; margin-top: 4px; }
+    .hr-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .hr-btn {
+        background: #fff; border: 1px solid #e0cfa8; color: #6b5836;
+        padding: 9px 14px; border-radius: 10px; font-size: 0.82rem; font-weight: 600;
+        cursor: pointer; touch-action: manipulation;
+    }
+    .hr-yes { background: #2e7d32; border-color: #2e7d32; color: #fff; }
+    .hr-edit { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-top: 10px; }
+    .hr-field { display: flex; flex-direction: column; font-size: 0.7rem; color: #6b5836; gap: 3px; }
+    .hr-field input { border: 1px solid #e0cfa8; border-radius: 8px; padding: 8px; font-size: 0.9rem; }
+
     .pwa-test-group { margin: 6px 0; padding: 8px; background: #f5f5f5; border-radius: 8px; font-size: 0.85rem; }
     .pwa-test-group table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
     .pwa-test-group th { text-align: left; padding: 3px 0; border-bottom: 1px solid #ddd; color: #666; font-weight: 500; }
     .pwa-test-group td { padding: 4px 0; border-bottom: 1px solid #f0f0f0; }
     .pwa-tt-editable { display: inline-block; min-width: 18px; padding: 2px 4px; border: 1px dashed transparent; border-radius: 4px; outline: none; touch-action: manipulation; -webkit-user-select: none; -webkit-touch-callout: none; user-select: none; }
     .pwa-tt-editable[contenteditable="true"] { background: #fff; border-color: #1565c0; -webkit-user-select: text; user-select: text; }
+    .dm-test-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    .dm-test-table th { text-align: left; padding: 4px; border-bottom: 1px solid #ddd; color: #666; font-weight: 500; }
+    .dm-test-table td { padding: 5px 4px; border-bottom: 1px solid #f0f0f0; vertical-align: top; }
+    .dm-test-table .dm-actions { margin-top: 0; gap: 4px; flex-wrap: nowrap; }
+    .dm-test-table .dm-actions button { padding: 4px 8px; font-size: 0.72rem; }
+    tr.dm-item { padding: 0; margin: 0; background: transparent; border-radius: 0; }
+    .dm-test-sort { margin: 0 0 8px 0; padding: 5px 8px; font-size: 0.8rem; border: 1px solid #ccc; border-radius: 8px; color: #333; }
 
     /* ============ HEALTH HUB ============ */
     #hub-screen { background: #f4f6f8; }
@@ -456,16 +500,50 @@
     .hub-note.ok { border-left-color: #2e7d32; }
     .hub-note.warn { border-left-color: #f57f17; }
     .hub-note.error { border-left-color: #c62828; color: #c62828; }
+    .hub-note.ai { border-left-color: #5e35b1; background: #f7f5fc; }
     .hub-tool { padding-top: 4px; }
+
+    /* Provenance: lets the user tell a recorded fact from an AI interpretation. */
+    .hub-prov {
+        flex-shrink: 0; display: inline-block; padding: 2px 7px; border-radius: 10px;
+        font-size: 0.64rem; font-weight: 700; letter-spacing: 0.02em;
+        text-transform: uppercase; white-space: nowrap; vertical-align: middle;
+    }
+    .hub-prov.user_entered { background: #e8f5e9; color: #2e7d32; }
+    .hub-prov.document_extracted { background: #e3f2fd; color: #1565c0; }
+    .hub-prov.clinician_report { background: #ede7f6; color: #4527a0; }
+    .hub-prov.ai_inferred { background: #fff3e0; color: #e65100; }
+    .hub-prov.ai_inferred.confirmed { background: #e8f5e9; color: #2e7d32; }
+    .hub-prov.unknown { background: #f5f5f5; color: #616161; }
+    .hub-prov.unknown.confirmed { background: #e8f5e9; color: #2e7d32; }
+    .hub-prov.computed { background: #eceff1; color: #37474f; }
+
+    .hub-cites { margin-top: 6px; font-size: 0.72rem; color: #78909c; font-style: italic; }
+    .hub-when { font-size: 0.75rem; color: #78909c; font-weight: 600; white-space: nowrap; }
+    .hub-check { display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: #37474f; margin: 10px 0; }
+    .hub-check input { width: 18px; height: 18px; flex-shrink: 0; }
+    .hub-disclaimer {
+        margin: 12px; padding: 10px 12px; background: #eceff1; border-radius: 8px;
+        font-size: 0.75rem; color: #546e7a; line-height: 1.5;
+    }
     .hub-pre { margin: 12px; padding: 12px; background: #fff; border: 1px solid #e3e7ea; border-radius: 8px; font-size: 0.75rem; white-space: pre-wrap; word-break: break-word; color: #37474f; }
 
     .hub-status {
         flex-shrink: 0; max-height: 0; overflow: hidden;
         padding: 0 14px; background: #263238; color: #fff;
-        font-size: 0.82rem; transition: max-height 0.2s, padding 0.2s;
+        font-size: 0.85rem; transition: max-height 0.2s, padding 0.2s;
+        text-align: center; font-weight: 600;
     }
-    .hub-status.show { max-height: 44px; padding: 11px 14px; }
+    .hub-status.show { max-height: 180px; padding: 11px 14px; }
     .hub-status.error { background: #c62828; }
+    .hub-status.show:not(.error) { background: #2e7d32; }
+
+    .btn-secondary {
+        background: #eceff1; color: #37474f; border: 1px solid #cfd8dc;
+        padding: 8px 14px; border-radius: 6px; font-size: 0.85rem;
+        cursor: pointer; font-weight: 600;
+    }
+    .btn-secondary:active { background: #b0bec5; }
 </style>
 </head>
 <body>
@@ -541,19 +619,41 @@
     <!-- ============ RECORDS SCREEN ============ -->
     <div class="screen" id="profile-screen">
         <div id="profile-screen-content">
+            <!-- Quick check: one stale item at a time, hidden unless the server says it is due -->
+            <div id="review-prompt" style="display:none;"></div>
             <div class="card">
                 <h3><i class="fas fa-pen"></i> Add Health Info</h3>
                 <textarea id="profile-text" placeholder="Paste notes, symptoms, medications, lab results..."></textarea>
                 <button class="action" id="analyze-btn"><i class="fas fa-magic"></i> Analyze &amp; Review</button>
                 <div style="margin-top:12px; border-top:1px solid #eee; padding-top:10px;">
-                    <label style="font-size:0.85rem; color:#555;">Or upload a document (PDF / image):</label><br>
-                    <input type='file' id='profile-file' accept='.pdf,image/*' multiple>
+                    <input type='file' id='profile-file' style="opacity:0; position:absolute; left:-9999px; top:0; width:1px; height:1px;" aria-hidden="true">
+                    <div id="upload-trigger-btns" style="margin-top:6px; display:block;">
+                        <button class="action" id="take-photo-btn" style="margin:0 0 6px 0; width:100%; box-sizing:border-box;" type="button"><i class="fas fa-camera"></i> Take Photo</button>
+                        <label style="font-size:0.85rem; color:#555; display:block; margin:0 0 6px 0;">Or upload a document (PDF / image):</label>
+                        <button class="btn-secondary" id="choose-file-btn" style="margin:0 0 6px 0; width:100%; box-sizing:border-box;" type="button">Choose File (PDF / image)</button>
+                    </div>
+                    <div id="photo-preview" style="display:none; margin-top:10px; border:1px solid #ddd; padding:10px; border-radius:8px; background:#fafafa; text-align:center;">
+                        <img id="photo-preview-img" style="max-width:100%; max-height:200px; border-radius:6px; display:none;">
+                        <div id="photo-preview-name" style="font-size:0.85rem; color:#555; word-break:break-word;"></div>
+                        <div style="margin-top:10px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
+                            <button class="action" id="accept-photo-btn" style="margin:0;" type="button">Use this photo</button>
+                            <button class="btn-secondary" id="retake-photo-btn" style="margin:0;" type="button">Retake</button>
+                        </div>
+                    </div>
                     <label style="font-size:0.85rem; color:#555; display:block; margin:6px 0;">
                         <input type="checkbox" id="retain-photo" checked> Keep this photo/document in my upload library for re-scan later
                     </label>
-                    <button class="action" id="upload-btn" style="margin-left:0;">Upload &amp; Analyze</button>
                 </div>
                 <div id="profile-status"></div>
+                <div id="review-action" style="display:none; margin-top:8px;">
+                    <button class="btn-secondary" id="review-latest-btn" type="button" style="padding:6px 12px; font-size:0.85rem;">Review</button>
+                    <button class="btn-secondary" id="hard-refresh-btn" type="button" style="padding:6px 12px; font-size:0.85rem; margin-left:6px;">Refresh</button>
+                </div>
+            </div>
+            <div class="card">
+                <h3><i class="fas fa-archive"></i> Stored Documents</h3>
+                <p style="font-size:0.85rem;color:#555;">Previously uploaded files you can reuse or delete.</p>
+                <div id="stored-documents-list" style="margin-top:10px;"><em style="color:#999;">Loading...</em></div>
             </div>
             <div class="card">
                 <h3><i class="fas fa-database"></i> Advanced Editor</h3>
@@ -582,7 +682,10 @@
     <div id="emergency-modal">
         <div class="emergency-header">
             <h2><i class="fas fa-kit-medical"></i> Emergency Info</h2>
-            <button id="emergency-close" title="Close"><i class="fas fa-times"></i></button>
+            <div style="display:flex; gap:8px; align-items:center;">
+                <button class="action" id="emergency-edit-btn" style="margin:0; padding:8px 14px; font-size:0.85rem;"><i class="fas fa-pen"></i> Edit</button>
+                <button id="emergency-close" title="Close"><i class="fas fa-times"></i></button>
+            </div>
         </div>
         <div class="emergency-content">
             <div id="emergency-view"></div>
@@ -639,6 +742,8 @@
         </div>
     </div>
 
+<script src="{{ url_for('static', filename='lab_results.js') }}" defer onerror="document.getElementById('login-error').textContent='Could not load lab_results.js'; document.getElementById('login-error').style.color='#c62828';"></script>
+<script src="{{ url_for('static', filename='health_review.js') }}" defer></script>
 <script src="{{ url_for('static', filename='auth_helper.js') }}" defer onerror="document.getElementById('login-error').textContent='Could not load auth_helper.js'; document.getElementById('login-error').style.color='#c62828';"></script>
 <script src="{{ url_for('static', filename='message_handler.js') }}" defer onerror="document.getElementById('login-error').textContent='Could not load message_handler.js'; document.getElementById('login-error').style.color='#c62828';"></script>
 <script src="{{ url_for('static', filename='conversation_box.js') }}" defer onerror="document.getElementById('login-error').textContent='Could not load conversation_box.js'; document.getElementById('login-error').style.color='#c62828';"></script>
@@ -647,7 +752,8 @@
 <script>
     // ---------- Register service worker ----------
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('/static/dr_health_sw.js', { updateViaCache: 'none' }).then(reg => {
+        const swUrl = '/static/dr_health_sw.js?v=44';
+        navigator.serviceWorker.register(swUrl, { updateViaCache: 'none' }).then(reg => {
             if (navigator.serviceWorker.controller) {
                 reg.addEventListener('updatefound', () => {
                     const newWorker = reg.installing;
@@ -660,6 +766,8 @@
                     }
                 });
             }
+            // Check for update every 30 seconds while the app is open
+            setInterval(() => { try { reg.update(); } catch (e) {} }, 30000);
         }).catch(() => {});
     }
     let currentProfile = null;
@@ -675,7 +783,7 @@
         document.getElementById(id).classList.add('active');
         document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.target === id));
         document.getElementById('topbar-title').textContent = SCREEN_TITLES[id] || 'Dr. Health';
-        if (id === 'profile-screen') loadHealthProfile();
+        if (id === 'profile-screen') { loadHealthProfile(); loadStoredDocuments(); }
         if (id === 'hub-screen') openHub();
     }
 
@@ -831,98 +939,29 @@
         });
 
         loadHealthProfile();
+        initReviewPrompt();
         showScreen('chat-screen');
     }
 
-        function normalizeTestType(testName) {
-            if (!testName) return 'Unknown Test';
-            return testName
-                .replace(/\(.*?\)/g, '')
-                .replace(/historical/ig, '')
-                .replace(/\s+/g, ' ')
-                .trim() || testName.trim();
-        }
-        function parseReferenceRange(ref) {
-            const nums = String(ref || '').match(/\d+(?:\.\d+)?/g) || [];
-            if (nums.length >= 2) {
-                const [a, b] = nums.map(parseFloat);
-                return [Math.min(a, b), Math.max(a, b)];
-            }
-            return [null, null];
-        }
-        function testStatus(num, lower, upper) {
-            if (lower === null || upper === null) return 'normal';
-            if (num > upper) return 'high';
-            if (num < lower) return 'low';
-            return 'normal';
-        }
-        function statusColor(status) {
-            return { high: '#e6a000', low: '#1565c0', normal: '#43a047' }[status] || '#999';
-        }
-        function computeTestFlag(num, ref) {
-            if (isNaN(num)) return '';
-            const [lower, upper] = parseReferenceRange(ref);
-            if (lower === null || upper === null) return '';
-            const s = testStatus(num, lower, upper);
-            return s === 'high' ? 'H' : s === 'low' ? 'L' : '';
-        }
-        function buildSparkline(values, referenceRange = '') {
-            const nums = values.map(v => parseFloat(v)).filter(v => !isNaN(v));
-            if (nums.length < 2) return '';
-            const [lower, upper] = parseReferenceRange(referenceRange);
-            const statuses = nums.map(v => testStatus(v, lower, upper));
-            const min = Math.min(...nums), max = Math.max(...nums);
-            const range = max - min || 1;
-            const w = 60, h = 18;
-            const step = w / (nums.length - 1);
-            const points = nums.map((v, i) => [i * step, h - ((v - min) / range) * h]);
-            let svg = `<svg width="${w}" height="${h}" class="sparkline">`;
-            for (let i = 0; i < points.length - 1; i++) {
-                const color = statusColor(statuses[i + 1]);
-                const [x1, y1] = points[i];
-                const [x2, y2] = points[i + 1];
-                svg += `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${color}" stroke-width="1.5" stroke-linecap="round"/>`;
-                if (statuses[i + 1] === 'high') {
-                    const y1b = Math.min(h - 1, y1 + 1.8);
-                    const y2b = Math.min(h - 1, y2 + 1.8);
-                    svg += `<line x1="${x1.toFixed(1)}" y1="${y1b.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2b.toFixed(1)}" stroke="#fff176" stroke-width="1.5" stroke-linecap="round"/>`;
-                }
-            }
-            for (let i = 0; i < points.length; i++) {
-                const [x, y] = points[i];
-                if (statuses[i] === 'high') svg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="#000"/>`;
-                if (statuses[i] === 'low') svg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="#c62828"/>`;
-            }
-            svg += `</svg>`;
-            return svg;
-        }
-        function extractTestUnit(value) {
-            const m = String(value || '').match(/^-?\d+(?:\.\d+)?(?:\s+(?:H|L|High|Low))?\s*(.*)$/i);
-            if (!m) return '';
-            return m[1].replace(/(?:\s+|^)(H|L|High|Low)$/i, '').trim();
-        }
-        function stripTestUnit(value, unit) {
-            if (!unit) return String(value || '');
-            const esc = unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const re = new RegExp('\\s*' + esc + '(?=\\s+(?:H|L|High|Low)\\b|\\s*$)', 'i');
-            return String(value || '').replace(re, '').trim();
-        }
-        function extractTestFlag(value) {
-            const m = String(value || '').match(/\b(H|L)\b/i);
-            return m ? m[1].toUpperCase() : '';
-        }
-        function normalizeDateInput(text) {
-            const t = (text || '').trim();
-            if (!t) return null;
-            let m;
-            if ((m = t.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/))) return `${m[1]}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`;
-            if ((m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/))) return `${m[3]}-${String(m[2]).padStart(2,'0')}-${String(m[1]).padStart(2,'0')}`;
-            if ((m = t.match(/^(\d{4})-(\d{1,2})$/))) return `${m[1]}-${String(m[2]).padStart(2,'0')}-01`;
-            if ((m = t.match(/^(\d{4})$/))) return `${m[1]}-01-01`;
-            const d = new Date(t);
-            if (!Number.isNaN(d.getTime())) return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-            return null;
-        }
+        // Lab-result helpers come from /static/lab_results.js (shared with health_profile.html).
+
+    // ---------- Quick check (shared with health_profile.html; see static/health_review.js) ----------
+    let reviewPrompt = null;
+
+    function initReviewPrompt() {
+        const host = document.getElementById('review-prompt');
+        if (!host || typeof HealthReview === 'undefined') return;
+        reviewPrompt = HealthReview.mount(host, {
+            fetcher: (url, init) => AuthHelper.authenticatedFetch(url, init),
+            prefix: 'hr',
+            // Answering can retire or edit an item, so the summary below has to
+            // be redrawn to stay in step with the card.
+            onUpdated: (action) => {
+                if (action !== 'snooze' && action !== 'dismiss') loadHealthProfile();
+            },
+        });
+        reviewPrompt.refresh();
+    }
 
     // ---------- Health profile ----------
     async function loadHealthProfile() {
@@ -944,43 +983,16 @@
                 html += '</ul>';
             }
             if (p.test_results && p.test_results.length) {
-                const testGroups = {};
-                p.test_results.forEach((t, idx) => {
-                    t._sourceIndex = idx;
-                    const key = normalizeTestType(t.test_name).toLowerCase();
-                    if (!testGroups[key]) testGroups[key] = { displayName: normalizeTestType(t.test_name), entries: [] };
-                    testGroups[key].entries.push(t);
-                });
-                const sortedGroups = Object.values(testGroups).map(g => {
-                    g.entries.sort((a, b) => (new Date(b.date || '1970-01-01') - new Date(a.date || '1970-01-01')));
-                    return g;
-                }).sort((a, b) => {
-                    const da = a.entries.length ? new Date(a.entries[0].date || '1970-01-01') : new Date(0);
-                    const db = b.entries.length ? new Date(b.entries[0].date || '1970-01-01') : new Date(0);
-                    if (db.getTime() !== da.getTime()) return db - da;
-                    return a.displayName.localeCompare(b.displayName);
-                });
-
+                const sortedGroups = LabUtils.groupTestResults(p.test_results, 'recent');
                 html += '<strong style="color:#1565C0;">Test Results:</strong>';
                 sortedGroups.forEach(group => {
-                    const unit = group.entries.map(e => extractTestUnit(e.value)).find(u => u) || '';
-                    const ref = group.entries.map(e => e.reference_range || '').find(r => r.trim()) || '';
-                    const escUnit = unit ? unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : '';
-                    const displayName = unit ? group.displayName.replace(new RegExp('(?:^|\\s)' + escUnit + '(?:\\s|$)', 'ig'), ' ').replace(/\s+/g, ' ').trim() : group.displayName;
-                    const metaUnit = unit && !ref.toLowerCase().includes(unit.toLowerCase()) ? unit : '';
-                    const meta = [ref, metaUnit].filter(Boolean).join(' ');
-                    const spark = buildSparkline(group.entries.slice().reverse().map(e => e.value), ref);
                     html += `<div class="pwa-test-group">`;
-                    html += `<div style="font-weight:600; color:#1565C0; display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:4px;"><i class="fas fa-vial"></i> <span>${displayName}</span> <span style="color:#666; font-weight:400;">${meta}</span> ${spark}</div>`;
+                    html += `<div style="font-weight:600; color:#1565C0; display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:4px;"><i class="fas fa-vial"></i> <span>${escapeHtml(group.displayName)}</span> <span style="color:#666; font-weight:400;">${escapeHtml(group.meta)}</span> ${group.spark}</div>`;
                     html += `<table><thead><tr><th>Date</th><th>Value</th></tr></thead><tbody>`;
-                    group.entries.forEach(t => {
-                        const stripped = stripTestUnit(t.value, unit);
-                        const displayVal = stripped.replace(/^(?:H|L|High|Low)\s+/i, '').replace(/\s+(?:H|L|High|Low)$/i, '').trim();
-                        const num = parseFloat(displayVal);
-                        let flag = computeTestFlag(num, ref) || extractTestFlag(stripped);
-                        const flagHtml = flag ? `<span style="font-size:0.7rem; color:${flag === 'H' ? '#c62828' : '#1565c0'}; font-weight:600; margin-left:4px;">${flag}</span>` : '<span style="font-size:0.7rem; color:#999; margin-left:4px;">—</span>';
-                        html += `<tr><td style="white-space:nowrap; color:#555;"><span class="pwa-tt-editable" contenteditable="false" data-idx="${t._sourceIndex}" data-field="date" ontouchstart="startEditHold(this, event)" ontouchend="cancelEditHold()" ontouchmove="cancelEditHold()" oncontextmenu="return false" onblur="saveTestResult(this)">${t.date || ''}</span></td>`;
-                        html += `<td style="font-weight:500;"><span class="pwa-tt-editable" contenteditable="false" data-idx="${t._sourceIndex}" data-field="value" data-unit="${unit.replace(/"/g, '&quot;')}" ontouchstart="startEditHold(this, event)" ontouchend="cancelEditHold()" ontouchmove="cancelEditHold()" oncontextmenu="return false" onblur="saveTestResult(this)">${displayVal}</span> ${flagHtml}</td></tr>`;
+                    group.entries.forEach(e => {
+                        const flagHtml = e.flag ? `<span style="font-size:0.7rem; color:${e.flag === 'H' ? '#c62828' : '#1565c0'}; font-weight:600; margin-left:4px;">${e.flag}</span>` : '<span style="font-size:0.7rem; color:#999; margin-left:4px;">—</span>';
+                        html += `<tr><td style="white-space:nowrap; color:#555;"><span class="pwa-tt-editable" contenteditable="false" data-idx="${e.idx}" data-field="date" ontouchstart="startEditHold(this, event)" ontouchend="cancelEditHold()" ontouchmove="cancelEditHold()" oncontextmenu="return false" onblur="saveTestResult(this)">${escapeHtml(e.item.date || '')}</span></td>`;
+                        html += `<td style="font-weight:500;"><span class="pwa-tt-editable" contenteditable="false" data-idx="${e.idx}" data-field="value" data-unit="${group.unit.replace(/"/g, '&quot;')}" ontouchstart="startEditHold(this, event)" ontouchend="cancelEditHold()" ontouchmove="cancelEditHold()" oncontextmenu="return false" onblur="saveTestResult(this)">${escapeHtml(e.displayVal)}</span> ${flagHtml}</td></tr>`;
                     });
                     html += `</tbody></table></div>`;
                 });
@@ -1009,8 +1021,11 @@
                     html += '</ul>';
                 }
             }
-            if (p.supplements && p.supplements.length) {
-                html += `<strong style="color:#6A1B9A;">Supplements:</strong> ${p.supplements.map(s => s.name).join(', ')}`;
+            // Only what is still being taken — a stopped supplement listed
+            // here would read as current.
+            const currentSups = HealthReview.partition(p.supplements).current;
+            if (currentSups.length) {
+                html += `<strong style="color:#6A1B9A;">Supplements:</strong> ${currentSups.map(e => escapeHtml(e.item.name)).join(', ')}`;
             }
             const vitals = { ...(p.vitals || {}), ...loadVitals() };
             if (vitals.name || vitals.age || vitals.blood || vitals.conditions || vitals.medications || vitals.allergies || vitals.doctors || vitals.ecName || vitals.ecPhone) {
@@ -1028,6 +1043,108 @@
             el.innerHTML = '<em style="color:#999;">Sign in to see your health profile.</em>';
         }
     }
+
+    async function loadStoredDocuments() {
+        const el = document.getElementById('stored-documents-list');
+        if (!el) return;
+        el.innerHTML = '<em style="color:#999;"><i class="fas fa-spinner fa-spin"></i> Loading...</em>';
+        try {
+            const resp = await AuthHelper.authenticatedFetch('/api/health-profile/documents');
+            if (!resp.ok) { el.innerHTML = '<em style="color:#999;">Could not load stored documents.</em>'; return; }
+            const data = await resp.json();
+            const docs = data.documents || [];
+            if (!docs.length) { el.innerHTML = '<em style="color:#999;">No stored documents yet.</em>'; return; }
+            let html = '';
+            docs.forEach((doc, idx) => {
+                const name = escapeHtml(doc.original_name || doc.stored_name || 'Unnamed file');
+                const uploaded = doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleDateString() : '';
+                const size = doc.size_bytes ? (doc.size_bytes / 1024).toFixed(1) + ' KB' : '';
+                html += `<div class="dm-item" style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;">`;
+                html += `<div style="font-size:0.85rem;word-break:break-word;"><strong>${name}</strong><br><span style="color:#999;font-size:0.75rem;">${uploaded} ${size}</span></div>`;
+                html += `<div style="display:flex;gap:6px;">`;
+                html += `<button class="btn-secondary" type="button" onclick="reuseStoredDocument('${escapeHtml(doc.stored_name)}')" style="font-size:0.75rem;">Use</button>`;
+                html += `<button class="btn-secondary" type="button" onclick="deleteStoredDocument('${escapeHtml(doc.stored_name)}', ${idx})" style="font-size:0.75rem;">Delete</button>`;
+                html += `</div></div>`;
+            });
+            el.innerHTML = html;
+        } catch (e) {
+            el.innerHTML = '<em style="color:#999;">Could not load stored documents.</em>';
+        }
+    }
+
+    async function reuseStoredDocument(storedName) {
+        const el = document.getElementById('stored-documents-list');
+        const status = document.getElementById('profile-status');
+        if (el) el.innerHTML = '<em style="color:#999;"><i class="fas fa-spinner fa-spin"></i> Re-analyzing...</em>';
+        try {
+            const resp = await AuthHelper.authenticatedFetch('/api/health-profile/reparse', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ stored_name: storedName })
+            });
+            const data = await resp.json();
+            if (!resp.ok || data.error) {
+                if (status) status.textContent = data.error || 'Re-analysis failed.';
+                if (el) loadStoredDocuments();
+                return;
+            }
+            if (data.pending_review) {
+                const reviewAction = document.getElementById('review-action');
+                if (reviewAction) reviewAction.style.display = 'block';
+                setReviewState(data.pending_review, {
+                    source_file: data.source_file,
+                    extracted_text: data.extracted_text,
+                    extracted_text_preview: data.extracted_text_preview,
+                    stored_document: data.stored_document
+                });
+                window.__pendingReview = data.pending_review;
+                window.__pendingMeta = { source_file: data.source_file, extracted_text: data.extracted_text, extracted_text_preview: data.extracted_text_preview, stored_document: data.stored_document };
+                const reviewLatestBtn = document.getElementById('review-latest-btn');
+                if (reviewLatestBtn) {
+                    reviewLatestBtn.onclick = () => {
+                        try { openReviewModal(data.pending_review, { source_file: data.source_file, extracted_text: data.extracted_text, extracted_text_preview: data.extracted_text_preview, stored_document: data.stored_document }); }
+                        catch (e) { if (status) status.textContent = 'Review error: ' + (e && e.message || e); }
+                    };
+                }
+                openReviewModal(data.pending_review, {
+                    source_file: data.source_file,
+                    extracted_text: data.extracted_text,
+                    extracted_text_preview: data.extracted_text_preview,
+                    stored_document: data.stored_document
+                });
+                if (status) status.textContent = '✓ Re-analysed. Review the data.';
+            } else {
+                if (status) status.textContent = 'No new data found.';
+            }
+            loadStoredDocuments();
+        } catch (e) {
+            if (status) status.textContent = 'Re-analysis error: ' + (e && e.message || e);
+            if (el) loadStoredDocuments();
+        }
+    }
+
+    async function deleteStoredDocument(storedName, index) {
+        if (!confirm('Delete this stored document?')) return;
+        const status = document.getElementById('profile-status');
+        try {
+            const resp = await AuthHelper.authenticatedFetch('/api/health-profile/documents', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ stored_name: storedName, index: index })
+            });
+            const data = await resp.json();
+            if (!resp.ok || data.error) {
+                if (status) status.textContent = data.error || 'Delete failed.';
+            } else {
+                if (status) status.textContent = 'Deleted.';
+            }
+            loadStoredDocuments();
+        } catch (e) {
+            if (status) status.textContent = 'Delete error: ' + (e && e.message || e);
+        }
+    }
+    window.reuseStoredDocument = reuseStoredDocument;
+    window.deleteStoredDocument = deleteStoredDocument;
 
         let editHoldTimer = null;
         let lastTouchX = 0, lastTouchY = 0;
@@ -1134,6 +1251,8 @@
             const data = await resp.json();
             if (resp.ok && data.success !== false && data.pending_review) {
                 status.textContent = 'Review the extracted data before saving.';
+                const reviewAction = document.getElementById('review-action');
+                if (reviewAction) reviewAction.style.display = 'block';
                 openReviewModal(data.pending_review);
             } else {
                 status.textContent = data.error || 'Nothing to review or analysis failed.';
@@ -1143,7 +1262,7 @@
         }
     });
 
-    document.getElementById('upload-btn').addEventListener('click', async () => {
+    document.getElementById('accept-photo-btn').addEventListener('click', async () => {
         const fileInput = document.getElementById('profile-file');
         const status = document.getElementById('profile-status');
         if (!fileInput.files || !fileInput.files.length) { status.textContent = 'Choose one or more files first.'; return; }
@@ -1180,19 +1299,129 @@
                 lastError = 'Network error.';
             }
         }
+        const reviewAction = document.getElementById('review-action');
         if (lastPending) {
             status.textContent = `✓ ${ok} file(s) ready for review.`;
-            openReviewModal(lastPending, lastMeta);
+            if (reviewAction) reviewAction.style.display = 'block';
+            setReviewState(lastPending, lastMeta);
+            window.__pendingReview = lastPending;
+            window.__pendingMeta = lastMeta;
+            loadStoredDocuments();
             playNotificationSound();
         } else {
             status.textContent = (failed === 0 ? 'No structured data found.' : `Failed: ${lastError}`);
+            if (reviewAction) reviewAction.style.display = 'none';
         }
         fileInput.value = '';
+        updatePhotoPreview();
     });
+
+    // Photo preview / accept / retake helpers
+    let lastPhotoCapture = false;
+    let previewShownAt = 0;
+    let chooserOpenedAt = 0;
+
+    function updatePhotoPreview() {
+        const fileInput = document.getElementById('profile-file');
+        const preview = document.getElementById('photo-preview');
+        const img = document.getElementById('photo-preview-img');
+        const name = document.getElementById('photo-preview-name');
+        const triggers = document.getElementById('upload-trigger-btns');
+        const acceptBtn = document.getElementById('accept-photo-btn');
+        const retakeBtn = document.getElementById('retake-photo-btn');
+        if (!preview || !fileInput) return;
+        if (fileInput.files && fileInput.files.length) {
+            const files = Array.from(fileInput.files);
+            const file = files[0];
+            previewShownAt = Date.now();
+            preview.style.display = 'block';
+            if (triggers) triggers.style.display = 'none';
+            preview.scrollIntoView({behavior:'smooth', block:'center'});
+            name.textContent = (file.type === 'application/pdf' ? 'PDF document: ' : '') + file.name + (files.length > 1 ? ' and ' + (files.length - 1) + ' more' : '');
+            const isImage = file.type.indexOf('image/') === 0;
+            if (acceptBtn) acceptBtn.textContent = isImage ? 'Use this photo' : 'Use this document';
+            if (retakeBtn) retakeBtn.textContent = lastPhotoCapture ? 'Retake' : 'Choose different file';
+            if (isImage) {
+                if (img._revoke) URL.revokeObjectURL(img._revoke);
+                img.style.display = 'block';
+                img.src = URL.createObjectURL(file);
+                img._revoke = img.src;
+            } else {
+                img.style.display = 'none';
+                img.src = '';
+            }
+        } else {
+            preview.style.display = 'none';
+            if (triggers) triggers.style.display = 'block';
+            if (img._revoke) { URL.revokeObjectURL(img._revoke); img._revoke = null; }
+            img.style.display = 'none';
+            img.src = '';
+            if (acceptBtn) acceptBtn.textContent = 'Use this photo';
+            if (retakeBtn) retakeBtn.textContent = 'Retake';
+        }
+    }
+
+    document.getElementById('take-photo-btn').addEventListener('click', () => {
+        const now = Date.now();
+        if (now - chooserOpenedAt < 500) return;  // a chooser is already queued/open
+        chooserOpenedAt = now;
+        const fileInput = document.getElementById('profile-file');
+        fileInput.value = '';
+        fileInput.accept = 'image/*';
+        fileInput.setAttribute('capture', 'environment');
+        lastPhotoCapture = true;
+        sessionStorage.setItem('dh_awaiting_photo', '1');
+        fileInput.click();
+    });
+
+    document.getElementById('choose-file-btn').addEventListener('click', () => {
+        const now = Date.now();
+        if (now - chooserOpenedAt < 500) return;
+        chooserOpenedAt = now;
+        const fileInput = document.getElementById('profile-file');
+        fileInput.value = '';
+        fileInput.accept = '.pdf,image/*';
+        fileInput.removeAttribute('capture');
+        lastPhotoCapture = false;
+        fileInput.click();
+    });
+
+    document.getElementById('retake-photo-btn').addEventListener('click', () => {
+        // The touch released on the camera's confirm button can leak into the
+        // page as a ghost click on this button when the preview appears under
+        // it, instantly reopening the camera. Ignore impossible-fast clicks.
+        if (Date.now() - previewShownAt < 800) return;
+        const fileInput = document.getElementById('profile-file');
+        fileInput.value = '';
+        updatePhotoPreview();
+        if (lastPhotoCapture) {
+            fileInput.accept = 'image/*';
+            fileInput.setAttribute('capture', 'environment');
+        } else {
+            fileInput.accept = '.pdf,image/*';
+            fileInput.removeAttribute('capture');
+        }
+        fileInput.click();
+    });
+
+    document.getElementById('profile-file').addEventListener('change', () => {
+        sessionStorage.removeItem('dh_awaiting_photo');
+        updatePhotoPreview();
+    });
+
+    // If Android killed the page while the camera app was open, the capture
+    // result is lost and the user returns to a fresh page with no preview.
+    if (sessionStorage.getItem('dh_awaiting_photo')) {
+        sessionStorage.removeItem('dh_awaiting_photo');
+        const status = document.getElementById('profile-status');
+        if (status) status.textContent = 'The photo did not come back from the camera — please take it again.';
+    }
 
     // ---------- Review & Data Manager ----------
     let currentPending = null;
     let currentMeta = {};
+    let currentReviewPending = null;
+    let currentReviewMeta = {};
     let dmCurrentProfile = null;
 
     function playNotificationSound() {
@@ -1223,32 +1452,42 @@
         currentMeta = {};
     }
 
-    function openReviewModal(extracted, meta = {}) {
+    function setReviewState(extracted, meta = {}) {
         currentPending = extracted;
         currentMeta = meta || {};
+        currentReviewPending = extracted;
+        currentReviewMeta = meta || {};
+    }
+
+    function openReviewModal(extracted, meta = {}) {
+        try {
+        setReviewState(extracted, meta);
         const container = document.getElementById('review-content');
+        if (!container) throw new Error('review-content not found');
         container.innerHTML = '';
 
         // Show upload/source meta for verification before any extracted data
-        if (currentMeta && (currentMeta.source_file || currentMeta.extracted_text)) {
+        const hasSource = !!(currentMeta && (currentMeta.source_file || currentMeta.extracted_text || currentMeta.extracted_text_preview));
+        if (hasSource) {
             const metaSection = document.createElement('div');
             metaSection.className = 'review-section';
             const metaTitle = document.createElement('h4');
             metaTitle.textContent = 'Uploaded source';
             metaSection.appendChild(metaTitle);
-            if (meta.source_file) {
+            if (currentMeta.source_file) {
                 const fileP = document.createElement('p');
                 fileP.style.fontSize = '0.85rem';
-                fileP.textContent = 'File: ' + meta.source_file;
+                fileP.textContent = 'File: ' + currentMeta.source_file;
                 metaSection.appendChild(fileP);
             }
-            if (currentMeta.extracted_text) {
+            const rawText = currentMeta.extracted_text || currentMeta.extracted_text_preview || '';
+            if (rawText) {
                 const preview = document.createElement('div');
                 preview.className = 'review-item-json';
                 const ta = document.createElement('textarea');
                 ta.id = 'review-raw-text';
                 ta.rows = 6;
-                ta.value = currentMeta.extracted_text;
+                ta.value = rawText;
                 preview.appendChild(ta);
                 metaSection.appendChild(preview);
 
@@ -1262,9 +1501,10 @@
             container.appendChild(metaSection);
         }
 
-        let hasData = !!(currentMeta && (currentMeta.source_file || currentMeta.extracted_text));
+        let hasData = hasSource;
 
-        for (const [key, val] of Object.entries(currentPending || {})) {
+        const pendingObj = (currentPending && typeof currentPending === 'object' && !Array.isArray(currentPending)) ? currentPending : {};
+        for (const [key, val] of Object.entries(pendingObj)) {
             if (val === null || val === undefined) continue;
             if (Array.isArray(val) && val.length === 0) continue;
             if (typeof val === 'object' && !Array.isArray(val) && Object.keys(val).length === 0) continue;
@@ -1300,7 +1540,15 @@
                             const label = document.createElement('label');
                             label.textContent = field;
                             const input = document.createElement(field === 'notes' ? 'textarea' : 'input');
-                            input.value = (item && item[field] !== undefined ? item[field] : '');
+                            const rawVal = (item && item[field] !== undefined && item[field] !== null ? String(item[field]) : '');
+                            if (input.tagName === 'INPUT' && field === 'date') {
+                                // type=date only accepts ISO; keep text so report dates like 09/09/2026 are not blanked
+                                const iso = normalizeDateInput(rawVal);
+                                if (iso) { input.type = 'date'; input.value = iso; }
+                                else { input.type = 'text'; input.value = rawVal; }
+                            } else {
+                                input.value = rawVal;
+                            }
                             input.dataset.field = field;
                             fields.appendChild(label);
                             fields.appendChild(input);
@@ -1314,8 +1562,15 @@
                             label.textContent = field;
                             const isLong = typeof v === 'string' && (v.length > 60 || /note|comment|text/i.test(field));
                             const input = document.createElement(isLong ? 'textarea' : 'input');
-                            if (!isLong) input.type = 'text';
-                            input.value = v !== undefined && v !== null ? String(v) : '';
+                            const rawVal = v !== undefined && v !== null ? String(v) : '';
+                            if (!isLong && field === 'date') {
+                                const iso = normalizeDateInput(rawVal);
+                                if (iso) { input.type = 'date'; input.value = iso; }
+                                else { input.type = 'text'; input.value = rawVal; }
+                            } else {
+                                if (!isLong) input.type = 'text';
+                                input.value = rawVal;
+                            }
                             input.dataset.field = field;
                             if (isLong) input.rows = 3;
                             fields.appendChild(label);
@@ -1378,9 +1633,48 @@
             container.appendChild(section);
         }
 
-        if (!hasData) container.innerHTML = '<p>No structured data was found.</p>';
-        document.getElementById('review-modal').classList.add('active');
+        if (!hasData) {
+            const p = document.createElement('p');
+            p.textContent = 'No structured data fields were found in this upload.';
+            p.style.marginTop = '12px';
+            p.style.color = '#666';
+            container.appendChild(p);
+            try {
+                const raw = document.createElement('pre');
+                raw.style.fontSize = '0.75rem';
+                raw.style.whiteSpace = 'pre-wrap';
+                raw.textContent = 'Raw response:\n' + JSON.stringify(currentPending, null, 2) + '\n\nMeta:\n' + JSON.stringify(currentMeta, null, 2);
+                container.appendChild(raw);
+            } catch (e) {}
+        }
+        } catch (e) {
+            console.error('openReviewModal error', e);
+            container.innerHTML = '<p style="color:#c62828">Could not build review view: ' + escapeHtml(String(e && e.message || e)) + '</p>';
+        } finally {
+            const modal = document.getElementById('review-modal');
+            if (modal) modal.classList.add('active');
+        }
     }
+
+    function openLatestReview() {
+        const status = document.getElementById('profile-status');
+        if (status) status.textContent = 'Opening review…';
+        const pending = currentReviewPending || window.__pendingReview;
+        const meta = currentReviewMeta || window.__pendingMeta || {};
+        if (!pending) {
+            if (status) status.textContent = 'No pending review data.';
+            return;
+        }
+        try {
+            openReviewModal(pending, meta);
+        } catch (e) {
+            console.error('openLatestReview error', e);
+            if (status) status.textContent = 'Review error: ' + (e && e.message || e);
+            const modal = document.getElementById('review-modal');
+            if (modal) modal.classList.add('active');
+        }
+    }
+    window.openLatestReview = openLatestReview;
 
     function addReviewRow(list, key) {
         const newRow = document.createElement('div');
@@ -1508,6 +1802,17 @@
             if (span) extracted[cat] = span.textContent;
         });
 
+        if (!Object.keys(extracted).length) {
+            // Everything was rejected: nothing to save, just drop the review.
+            status.textContent = 'Nothing selected — review discarded.';
+            currentReviewPending = null;
+            currentReviewMeta = {};
+            const reviewAction = document.getElementById('review-action');
+            if (reviewAction) reviewAction.style.display = 'none';
+            setTimeout(() => closeReviewModal(), 600);
+            return;
+        }
+
         status.textContent = 'Saving accepted items...';
         try {
             const resp = await AuthHelper.authenticatedFetch('/api/health-profile/apply-review', {
@@ -1519,6 +1824,10 @@
             if (resp.ok && data.success !== false) {
                 status.textContent = 'Saved.';
                 setTimeout(() => { closeReviewModal(); loadHealthProfile(); }, 600);
+                const reviewAction = document.getElementById('review-action');
+                if (reviewAction) reviewAction.style.display = 'none';
+                currentReviewPending = null;
+                currentReviewMeta = {};
             } else {
                 status.textContent = data.error || 'Save failed.';
             }
@@ -1559,6 +1868,18 @@
     document.getElementById('review-accept-all').addEventListener('click', () => setReviewAll(true));
     document.getElementById('review-reject-all').addEventListener('click', () => setReviewAll(false));
     document.getElementById('review-save').addEventListener('click', saveReview);
+    const reviewLatestBtn = document.getElementById('review-latest-btn');
+    if (reviewLatestBtn) {
+        reviewLatestBtn.addEventListener('click', () => {
+            const status = document.getElementById('profile-status');
+            if (status) status.textContent = 'Review clicked…';
+            try { openLatestReview(); } catch (e) {
+                if (status) status.textContent = 'Review click error: ' + (e && e.message || e);
+            }
+        });
+    }
+    const hardRefreshBtn = document.getElementById('hard-refresh-btn');
+    if (hardRefreshBtn) hardRefreshBtn.onclick = () => { window.location.reload(true); };
 
     // Data Manager
     function closeDataManager() {
@@ -1636,7 +1957,10 @@
             const section = document.createElement('div');
             section.className = 'dm-category';
             section.id = 'dm-cat-' + cat;
-            section.innerHTML = `<h4>${cat.replace(/_/g,' ')} (${items.length})</h4>`;
+            // Count what is current: that is the number the user reasons about.
+            const liveCount = HealthReview.hasLifecycle(cat)
+                ? HealthReview.partition(items).current.length : items.length;
+            section.innerHTML = `<h4>${cat.replace(/_/g,' ')} (${liveCount})</h4>`;
 
             const addBtn = document.createElement('button');
             addBtn.className = 'btn-secondary';
@@ -1645,19 +1969,82 @@
             addBtn.addEventListener('click', () => addDataItem(cat, section));
             section.appendChild(addBtn);
 
-            items.forEach((item, idx) => {
-                if (filter && !JSON.stringify(item).toLowerCase().includes(filter.toLowerCase())) return;
-                const div = document.createElement('div');
-                div.className = 'dm-item';
-                div.dataset.category = cat;
-                div.dataset.index = idx;
-                div.innerHTML = `${renderItemCard(item, cat)}
-                    <div class="dm-actions">
-                        <button class="btn-secondary dm-edit">Edit</button>
-                        <button class="btn-danger dm-delete">Delete</button>
-                    </div>`;
-                section.appendChild(div);
-            });
+            if (cat === 'test_results') {
+                const sortSel = document.createElement('select');
+                sortSel.className = 'dm-test-sort';
+                sortSel.innerHTML = '<option value="abnormal">Recent abnormal first</option><option value="recent">Most recent</option>';
+                sortSel.value = localStorage.getItem('testResultsSort') || 'abnormal';
+                sortSel.addEventListener('change', () => {
+                    localStorage.setItem('testResultsSort', sortSel.value);
+                    const dmSearch = document.getElementById('dm-search');
+                    renderDataManager(dmCurrentProfile, dmSearch ? dmSearch.value : '');
+                });
+                section.appendChild(sortSel);
+
+                const sortedGroups = LabUtils.groupTestResults(items, sortSel.value,
+                    item => !filter || JSON.stringify(item).toLowerCase().includes(filter.toLowerCase()));
+                sortedGroups.forEach(group => {
+                    const wrap = document.createElement('div');
+                    wrap.className = 'pwa-test-group';
+                    wrap.innerHTML = `<div style="font-weight:600; color:#1565C0; margin-bottom:4px;"><i class="fas fa-vial"></i> ${escapeHtml(group.displayName)} <span style="color:#666; font-weight:400;">${escapeHtml(group.meta)}</span> ${group.spark}</div>`;
+                    const table = document.createElement('table');
+                    table.className = 'dm-test-table';
+                    table.innerHTML = '<thead><tr><th>Date</th><th>Value</th><th></th></tr></thead>';
+                    const tbody = document.createElement('tbody');
+                    group.entries.forEach(({ item, idx, displayVal, flag }) => {
+                        const flagHtml = flag ? ` <span style="font-size:0.7rem; color:${flag === 'H' ? '#c62828' : '#1565c0'}; font-weight:600;">${flag}</span>` : '';
+                        const tr = document.createElement('tr');
+                        tr.className = 'dm-item';
+                        tr.dataset.category = cat;
+                        tr.dataset.index = idx;
+                        tr.innerHTML = `<td style="white-space:nowrap">${escapeHtml(item.date || '')}</td>
+                            <td style="white-space:nowrap">${escapeHtml(displayVal)}${flagHtml}</td>
+                            <td><div class="dm-actions"><button class="btn-secondary dm-edit">Edit</button><button class="btn-danger dm-delete">Delete</button></div></td>`;
+                        tbody.appendChild(tr);
+                    });
+                    table.appendChild(tbody);
+                    wrap.appendChild(table);
+                    section.appendChild(wrap);
+                });
+            } else {
+                const matches = (item) => !filter ||
+                    JSON.stringify(item).toLowerCase().includes(filter.toLowerCase());
+
+                const card = (item, idx, isPast) => {
+                    const div = document.createElement('div');
+                    div.className = 'dm-item' + (isPast ? ' dm-past' : '');
+                    div.dataset.category = cat;
+                    div.dataset.index = idx;
+                    let actions = '<button class="btn-secondary dm-edit">Edit</button>';
+                    if (HealthReview.hasLifecycle(cat)) {
+                        actions += isPast
+                            ? '<button class="btn-secondary dm-restart">Restart</button>'
+                            : '<button class="btn-secondary dm-stop">' +
+                              (cat === 'conditions' || cat === 'symptoms' ? 'Resolved' : 'Stopped') +
+                              '</button>';
+                    }
+                    actions += '<button class="btn-danger dm-delete">Delete</button>';
+                    div.innerHTML = `${renderItemCard(item, cat)}
+                        ${HealthReview.historyNote(item, isPast)}
+                        <div class="dm-actions">${actions}</div>`;
+                    return div;
+                };
+
+                // Retired items are kept, so they get their own collapsed
+                // block instead of padding out the current list.
+                const split = HealthReview.partition(items);
+                split.current.forEach(e => {
+                    if (matches(e.item)) section.appendChild(card(e.item, e.idx, false));
+                });
+                const past = split.past.filter(e => matches(e.item));
+                if (past.length) {
+                    const box = document.createElement('details');
+                    box.className = 'dm-past-box';
+                    box.innerHTML = `<summary>Past (${past.length})</summary>`;
+                    past.forEach(e => box.appendChild(card(e.item, e.idx, true)));
+                    section.appendChild(box);
+                }
+            }
 
             content.appendChild(section);
         });
@@ -1676,7 +2063,7 @@
                     if (target && container) {
                         const offset = index.offsetHeight + 16;
                         const targetPos = target.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
-                        container.scrollTo({ top: targetPos - offset, behavior: 'smooth' });
+                        container.scrollTo({ top: targetPos - offset, behavior: 'auto' });
                     }
                 });
             });
@@ -1697,6 +2084,40 @@
         content.querySelectorAll('.dm-delete').forEach(btn => {
             btn.addEventListener('click', () => deleteDataItem(btn.closest('.dm-item')));
         });
+        content.querySelectorAll('.dm-stop, .dm-restart').forEach(btn => {
+            const div = btn.closest('.dm-item');
+            const cat = div.dataset.category;
+            const idx = parseInt(div.dataset.index, 10);
+            const status = btn.classList.contains('dm-restart')
+                ? 'active' : HealthReview.endStatusFor(cat);
+            btn.addEventListener('click', () => setDataItemStatus(cat, idx, status));
+        });
+    }
+
+    /* Retire or revive an item. Not a delete: keeping the row is what makes
+       "I stopped that in March" answerable later. */
+    async function setDataItemStatus(cat, idx, status) {
+        const statusEl = document.getElementById('dm-status');
+        try {
+            const resp = await HealthReview.setStatus(
+                (url, init) => AuthHelper.authenticatedFetch(url, init), cat, idx, status);
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok) {
+                if (statusEl) statusEl.textContent = data.error || 'Could not update.';
+                return;
+            }
+            if (statusEl) statusEl.textContent = status === 'active'
+                ? 'Moved back to current.' : 'Moved to past — the record is kept.';
+            if (data.profile) {
+                dmCurrentProfile = data.profile;
+                const dmSearch = document.getElementById('dm-search');
+                renderDataManager(dmCurrentProfile, dmSearch ? dmSearch.value : '');
+            }
+            loadHealthProfile();
+            if (reviewPrompt) reviewPrompt.refresh();
+        } catch (e) {
+            if (statusEl) statusEl.textContent = 'Update error: ' + (e && e.message || e);
+        }
     }
 
     function addDataItem(cat, container) {
@@ -1713,12 +2134,14 @@
         div.className = 'dm-item';
         container.appendChild(div);
         editDataItem(div, defaults[cat] || { name: '', value: '', date: '' }, cat, -1);
-        div.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        div.scrollIntoView({ behavior: 'auto', block: 'start' });
         const firstInput = div.querySelector('input, textarea');
         if (firstInput) firstInput.focus();
     }
 
     function editDataItem(div, item, cat, idx) {
+        const isRow = div.tagName === 'TR';
+        const colSpan = isRow ? Math.max(div.cells.length, 1) : 0;
         div.innerHTML = '';
         const form = document.createElement('div');
         form.className = 'dm-edit-form';
@@ -1733,8 +2156,16 @@
             const isLong = (k === 'details' || k === 'notes' || k === 'insight' || k === 'description') || String(item[k] || '').length > 60;
             const el = document.createElement(isLong ? 'textarea' : 'input');
             if (isLong) el.rows = 3;
-            el.value = item[k] === null || item[k] === undefined ? '' : String(item[k]);
-            if (el.tagName === 'INPUT' && (k === 'date' || k.endsWith('_date'))) el.type = 'date';
+            const rawVal = item[k] === null || item[k] === undefined ? '' : String(item[k]);
+            if (el.tagName === 'INPUT' && (k === 'date' || k.endsWith('_date'))) {
+                // type=date only accepts ISO; fall back to text so values like
+                // 09/09/2026 are shown instead of silently blanked
+                const iso = normalizeDateInput(rawVal);
+                if (iso) { el.type = 'date'; el.value = iso; }
+                else { el.type = 'text'; el.value = rawVal; }
+            } else {
+                el.value = rawVal;
+            }
             el.dataset.key = k;
             if (cat === 'test_results' && k === 'reference_range') el.placeholder = 'Use Default';
             form.appendChild(label);
@@ -1754,7 +2185,14 @@
         actions.appendChild(cancelBtn);
         form.appendChild(actions);
 
-        div.appendChild(form);
+        if (isRow) {
+            const td = document.createElement('td');
+            td.colSpan = colSpan;
+            td.appendChild(form);
+            div.appendChild(td);
+        } else {
+            div.appendChild(form);
+        }
 
         saveBtn.addEventListener('click', async () => {
             const status = document.getElementById('dm-status');
@@ -1928,14 +2366,10 @@
         const view = document.getElementById('emergency-view');
         const hasData = v.name || v.age || v.blood || v.conditions || v.medications || v.allergies || v.history || v.doctors || v.ecName || v.ecPhone;
         if (!hasData) {
-            view.innerHTML = '<p class="emergency-empty">No emergency info saved yet. Add it below — it is stored only on this phone.</p>';
-            document.getElementById('emergency-edit').style.display = 'block';
-            document.getElementById('emergency-view').style.display = 'block';
+            editEmergency();
             return;
         }
-        let html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
-            '<span class="emergency-empty">Stored only on this phone</span>' +
-            '<button class="action" id="emergency-edit-btn" style="margin-top:0;padding:8px 14px;font-size:0.85rem;">Edit</button></div>';
+        let html = '<div style="margin-bottom:16px;"><span class="emergency-empty">Stored only on this phone</span></div>';
         const section = (title, text) => text ? `<div class="emergency-section"><h3>${title}</h3><p>${text.replace(/\n/g,'<br>')}</p></div>` : '';
         const list = (title, text) => {
             if (!text) return '';
@@ -1985,6 +2419,7 @@
     window.openEmergency = openEmergency;
     document.getElementById('emergency-btn').addEventListener('click', openEmergency);
     document.getElementById('emergency-close').addEventListener('click', closeEmergency);
+    document.getElementById('emergency-edit-btn').addEventListener('click', editEmergency);
     document.getElementById('v-save').addEventListener('click', saveVitals);
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', bootApp);
