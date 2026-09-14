@@ -442,6 +442,10 @@ def _register_chat_endpoint(app, character_id, characters_dict, smart_response_p
                         try:
                             update_data = _json.loads(profile_json_str)
                             profile = HealthContextManager.get_profile(str(user_id))
+                            # Pulled out of a chat by the model, so it is an
+                            # interpretation until the user confirms it.
+                            from ai_compare.health_insights import SOURCE_AI
+                            profile.ingest_source = SOURCE_AI
                             _stored = profile.apply_extracted_data(update_data)
                             if _stored:
                                 response['profile_updated'] = True

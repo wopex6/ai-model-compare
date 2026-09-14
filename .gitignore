@@ -51,6 +51,10 @@ nul
 # Logs
 *.log
 
+# Runtime append-only event stream (written by agents/event_bus.py). Tracking
+# it means every run shows up as a diff and masks real changes.
+agents/event_log.jsonl
+
 # Test files
 test_screenshots/
 screenshots_viewable/
