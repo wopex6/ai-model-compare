@@ -711,6 +711,13 @@ class IntegratedAIChatbot {
         document.getElementById('verification-form').addEventListener('submit', (e) => this.handleVerificationSubmit(e));
         document.getElementById('close-verification-modal').addEventListener('click', () => this.hideVerificationModal());
         document.getElementById('cancel-verification').addEventListener('click', () => this.hideVerificationModal());
+        const closeBanner = document.getElementById('close-email-verification-banner');
+        if (closeBanner) {
+            closeBanner.addEventListener('click', () => {
+                const banner = document.getElementById('email-verification-banner');
+                if (banner) banner.style.display = 'none';
+            });
+        }
 
         // Modal backdrop clicks
         document.querySelectorAll('.modal').forEach(modal => {

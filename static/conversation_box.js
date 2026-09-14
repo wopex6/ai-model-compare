@@ -109,9 +109,9 @@ const ConversationBox = {
         // Get authenticated session from backend, then load history
         this._getAuthenticatedSession().then(() => {
             this.loadHistory().then(() => {
+                this._loadPersonalizationStatus();
                 this._processPendingMessages();
             });
-            this._loadPersonalizationStatus();
         }).catch(error => {
             console.error('Failed to initialize session:', error);
         });
