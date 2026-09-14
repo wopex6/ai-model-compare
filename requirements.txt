@@ -19,5 +19,9 @@ lxml>=4.9.0
 spacy>=3.7.0
 schedule>=1.2.0
 
+# PDF text extraction for health-document uploads
+# (vendored wheel under vendor/ covers hosts where pip installs are unavailable)
+pypdf>=4.0.0
+
 # Optional - Uncomment if needed
 #llama-cpp-python>=0.2.0  # Commented out - too large for PythonAnywhere free tier

@@ -40,6 +40,14 @@ conversations/
 personality_profiles/
 companion_notes/
 
+# Patient-uploaded documents: real medical reports (PDFs, OCR text, extraction
+# JSON). These must never enter git history — once committed they cannot be
+# removed without rewriting history.
+health_uploaded_documents/
+
+# Stray artefact from a Windows `> nul` redirect (nul is a reserved device name)
+nul
+
 # Logs
 *.log
 
