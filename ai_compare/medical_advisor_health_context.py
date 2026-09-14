@@ -11,8 +11,469 @@ from datetime import datetime
 from typing import Dict, List, Optional
 from pathlib import Path
 
+from ai_compare.health_insights import (
+    SOURCE_USER,
+    apply_provenance_defaults,
+    backfill_legacy_provenance,
+    DEFAULT_ADVICE_SETTINGS,
+)
+from ai_compare.health_freshness import (
+    STATUS_ACTIVE,
+    backfill_lifecycle,
+    is_active,
+    merge_incoming,
+    record_change,
+)
+
 
 HEALTH_DATA_DIR = Path(__file__).parent.parent / "health_profiles"
+
+
+_DATE_RE = re.compile(
+    r'\b(\d{1,2}[-/\s][A-Za-z]{3,9}[-/\s]\d{2,4}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\d{4}[-/]\d{1,2}[-/]\d{1,2})\b'
+)
+_META_LABEL_RE = re.compile(
+    r'^(Date|Time|Lab|Reference|Unit|Units|Name of|Patient|Request|Collection|Received|Barcode|Page|Report)',
+    re.I,
+)
+
+
+def _canonicalize_lab_tables(text):
+    """Pre-process OCR markdown lab tables so test names are rows and dates are columns.
+
+    Some vision models return tables transposed: dates as row labels and test names
+    as column headers, with separate 'Reference' and 'Units' rows. The downstream
+    parser expects the normal layout (test rows, date columns, optional Reference
+    and Units columns on the right), so this function detects the transposed form
+    and flips it before parsing.
+    """
+    def _split(line):
+        return [c.strip() for c in line.strip().split('|')[1:-1] if True]
+
+    def _is_separator(row):
+        return all(re.match(r'^:?-+:?$', cell) or cell == '' for cell in row)
+
+    lines = text.splitlines()
+    out = []
+    i = 0
+    while i < len(lines):
+        if not lines[i].strip().startswith('|'):
+            out.append(lines[i])
+            i += 1
+            continue
+        block = []
+        while i < len(lines) and lines[i].strip().startswith('|'):
+            block.append(lines[i])
+            i += 1
+        rows = [_split(ln) for ln in block]
+        if len(rows) < 2:
+            out.extend(block)
+            continue
+
+        sep_idx = next((idx for idx, r in enumerate(rows) if _is_separator(r)), None)
+        if sep_idx is not None and 0 < sep_idx < len(rows):
+            headers = rows[sep_idx - 1]
+            data_rows = rows[sep_idx + 1:]
+        else:
+            headers = rows[0]
+            data_rows = rows[1:]
+        if not headers or not data_rows:
+            out.extend(block)
+            continue
+
+        ref_row_idx = unit_row_idx = None
+        for idx, row in enumerate(data_rows):
+            if not row or not row[0].strip():
+                continue
+            label = row[0].strip().lower()
+            if label.startswith('ref') or 'reference' in label:
+                ref_row_idx = idx
+            if 'unit' in label:
+                unit_row_idx = idx
+
+        first_col = [row[0] for row in data_rows if row and row[0].strip()]
+        date_count = sum(1 for c in first_col if _DATE_RE.search(c))
+        header_date_count = sum(1 for h in headers[1:] if _DATE_RE.search(h))
+        is_transposed = (
+            ref_row_idx is not None or unit_row_idx is not None
+            or (date_count >= 2 and date_count >= len(first_col) / 2 and header_date_count == 0)
+        )
+        if not is_transposed:
+            out.extend(block)
+            continue
+
+        date_rows = []
+        for idx, row in enumerate(data_rows):
+            if idx in (ref_row_idx, unit_row_idx) or not row or not row[0].strip():
+                continue
+            label = row[0].strip()
+            if _META_LABEL_RE.search(label):
+                continue
+            date_rows.append((label, row))
+        if not date_rows:
+            out.extend(block)
+            continue
+
+        test_names = [h.strip() for h in headers[1:]]
+        new_header = ['Test'] + [d for d, _ in date_rows] + ['Reference', 'Units']
+        new_rows = []
+        for c_idx, test_name in enumerate(test_names):
+            if not test_name:
+                continue
+            cells = [test_name]
+            for _, row in date_rows:
+                cell = row[c_idx + 1].strip() if c_idx + 1 < len(row) else ''
+                cells.append(cell)
+            ref = (
+                data_rows[ref_row_idx][c_idx + 1].strip()
+                if ref_row_idx is not None and c_idx + 1 < len(data_rows[ref_row_idx])
+                else ''
+            )
+            unit = (
+                data_rows[unit_row_idx][c_idx + 1].strip()
+                if unit_row_idx is not None and c_idx + 1 < len(data_rows[unit_row_idx])
+                else ''
+            )
+            cells.extend([ref, unit])
+            new_rows.append(cells)
+
+        width = len(new_header)
+        def _md_row(cells):
+            padded = cells + [''] * (width - len(cells))
+            return '| ' + ' | '.join(padded[:width]) + ' |'
+
+        out.append(_md_row(new_header))
+        out.append(_md_row(['---'] * width))
+        out.extend(_md_row(r) for r in new_rows)
+
+    return '\n'.join(out)
+
+
+_SPECIMEN_PREFIXES = {
+    's': 'S', 'se': 'S', 'ser': 'S', 'serum': 'Serum',
+    'p': 'P', 'pl': 'P', 'plasma': 'Plasma',
+    'b': 'B', 'bl': 'B', 'blood': 'Blood',
+    'u': 'U', 'ur': 'U', 'urine': 'Urine',
+    'csf': 'CSF',
+}
+
+# Compact alias key -> canonical long-form display name.
+# Keys are lower-case with all punctuation/spaces removed, so 'M.C.H.' and 'MCH'
+# both reduce to 'mch'.
+_TEST_NAME_CANONICAL = {
+    # Electrolytes / renal
+    'bicarb': 'Bicarbonate', 'bicarbonate': 'Bicarbonate', 'hco3': 'Bicarbonate',
+    'na': 'Sodium', 'sodium': 'Sodium',
+    'k': 'Potassium', 'potassium': 'Potassium',
+    'cl': 'Chloride', 'chloride': 'Chloride',
+    'ca': 'Calcium', 'calcium': 'Calcium', 'corrca': 'Corrected Calcium',
+    'correctedcalcium': 'Corrected Calcium', 'cacorr': 'Corrected Calcium',
+    'mg': 'Magnesium', 'magnesium': 'Magnesium',
+    'phos': 'Phosphate', 'phosph': 'Phosphate', 'phosphate': 'Phosphate', 'po4': 'Phosphate',
+    'urea': 'Urea',
+    'creat': 'Creatinine', 'creatinine': 'Creatinine', 'creatin': 'Creatinine',
+    'egfr': 'eGFR', 'gfr': 'eGFR', 'estimatedgfr': 'eGFR',
+    'ua': 'Urate', 'urate': 'Urate', 'uricacid': 'Urate',
+    'aniongap': 'Anion Gap',
+    'osmol': 'Osmolality', 'osmolality': 'Osmolality',
+
+    # Lipids
+    'chol': 'Cholesterol', 'cholesterol': 'Cholesterol', 'totalchol': 'Cholesterol',
+    'totalcholesterol': 'Cholesterol',
+    'trig': 'Triglycerides', 'trigs': 'Triglycerides', 'triglyceride': 'Triglycerides',
+    'triglycerides': 'Triglycerides',
+    'hdl': 'HDL Cholesterol', 'hdlchol': 'HDL Cholesterol', 'hdlc': 'HDL Cholesterol',
+    'hdlcholesterol': 'HDL Cholesterol',
+    'ldl': 'LDL Cholesterol', 'ldlchol': 'LDL Cholesterol', 'ldlc': 'LDL Cholesterol',
+    'ldlcholesterol': 'LDL Cholesterol',
+    'nonhdlc': 'Non-HDL Cholesterol', 'nonhdl': 'Non-HDL Cholesterol',
+    'nonhdlchol': 'Non-HDL Cholesterol', 'nonhdlcholesterol': 'Non-HDL Cholesterol',
+    'cholhdlc': 'Cholesterol/HDL Ratio', 'cholhdl': 'Cholesterol/HDL Ratio',
+    'cholhdlratio': 'Cholesterol/HDL Ratio', 'cholhdlcratio': 'Cholesterol/HDL Ratio',
+    'cholesterolhdlratio': 'Cholesterol/HDL Ratio',
+
+    # Liver
+    'alkphos': 'Alkaline Phosphatase', 'alp': 'Alkaline Phosphatase',
+    'alkalinephosphatase': 'Alkaline Phosphatase',
+    'alt': 'ALT', 'sgpt': 'ALT', 'alanineaminotransferase': 'ALT',
+    'ast': 'AST', 'sgot': 'AST', 'aspartateaminotransferase': 'AST',
+    'ggt': 'GGT', 'gammagt': 'GGT', 'gammaglutamyltransferase': 'GGT',
+    'bili': 'Bilirubin', 'bilirubin': 'Bilirubin', 'totalbili': 'Bilirubin',
+    'totalbilirubin': 'Bilirubin', 'tbil': 'Bilirubin',
+    'alb': 'Albumin', 'albumin': 'Albumin',
+    'tp': 'Total Protein', 'totprot': 'Total Protein', 'totalprotein': 'Total Protein',
+    'globulin': 'Globulin', 'glob': 'Globulin',
+    'ldh': 'LDH', 'lactatedehydrogenase': 'LDH',
+
+    # Haematology
+    'hb': 'Haemoglobin', 'hgb': 'Haemoglobin', 'haemoglobin': 'Haemoglobin',
+    'hemoglobin': 'Haemoglobin',
+    'hct': 'Haematocrit', 'pcv': 'Haematocrit', 'haematocrit': 'Haematocrit',
+    'hematocrit': 'Haematocrit',
+    'mcv': 'MCV', 'meancellvolume': 'MCV', 'meancorpuscularvolume': 'MCV',
+    'mch': 'MCH', 'meancellhaemoglobin': 'MCH', 'meancorpuscularhaemoglobin': 'MCH',
+    'meancorpuscularhemoglobin': 'MCH',
+    'mchc': 'MCHC', 'meancellhaemoglobinconcentration': 'MCHC',
+    'meancorpuscularhaemoglobinconcentration': 'MCHC',
+    'rdw': 'RDW',
+    'wcc': 'White Cell Count', 'wbc': 'White Cell Count', 'wbcc': 'White Cell Count',
+    'whitecellcount': 'White Cell Count', 'whitecellcounts': 'White Cell Count',
+    'whitecells': 'White Cell Count', 'whitecell': 'White Cell Count',
+    'whitebloodcells': 'White Cell Count', 'whitebloodcellcount': 'White Cell Count',
+    'rcc': 'Red Cell Count', 'rbc': 'Red Cell Count', 'rbcc': 'Red Cell Count',
+    'redcellcount': 'Red Cell Count', 'redcellcounts': 'Red Cell Count',
+    'redcells': 'Red Cell Count', 'redcell': 'Red Cell Count',
+    'redbloodcells': 'Red Cell Count', 'redbloodcellcount': 'Red Cell Count',
+    'plt': 'Platelets', 'platelet': 'Platelets', 'platelets': 'Platelets',
+    'neut': 'Neutrophils', 'neuts': 'Neutrophils', 'neutrophil': 'Neutrophils',
+    'neutrophils': 'Neutrophils',
+    'lymph': 'Lymphocytes', 'lymphs': 'Lymphocytes', 'lymphocyte': 'Lymphocytes',
+    'lymphocytes': 'Lymphocytes',
+    'mono': 'Monocytes', 'monos': 'Monocytes', 'monocytes': 'Monocytes',
+    'eos': 'Eosinophils', 'eosinophil': 'Eosinophils', 'eosinophils': 'Eosinophils',
+    'baso': 'Basophils', 'basophils': 'Basophils',
+    'esr': 'ESR', 'crp': 'CRP',
+
+    # Iron studies
+    'iron': 'Iron', 'fe': 'Iron',
+    'trf': 'Transferrin', 'transferrin': 'Transferrin',
+    'trfsat': 'Transferrin Saturation', 'trfsaturation': 'Transferrin Saturation',
+    'transferrinsat': 'Transferrin Saturation',
+    'transferrinsaturation': 'Transferrin Saturation',
+    'ferritin': 'Ferritin', 'ferr': 'Ferritin',
+    'tibc': 'TIBC', 'totalironbindingcapacity': 'TIBC',
+
+    # Endocrine / metabolic
+    'tsh': 'TSH', 'thyroidstimulatinghormone': 'TSH',
+    'ft4': 'Free T4', 'freet4': 'Free T4', 't4free': 'Free T4', 'freethyroxine': 'Free T4',
+    'ft3': 'Free T3', 'freet3': 'Free T3', 't3free': 'Free T3',
+    'glu': 'Glucose', 'gluc': 'Glucose', 'glucose': 'Glucose', 'bsl': 'Glucose',
+    'hba1c': 'HbA1c', 'glycatedhaemoglobin': 'HbA1c',
+    'insulin': 'Insulin',
+    'psa': 'PSA', 'prostatespecificantigen': 'PSA',
+    'cortisol': 'Cortisol',
+    'pth': 'PTH', 'parathyroidhormone': 'PTH',
+
+    # Vitamins
+    'vitd': 'Vitamin D', 'vitamind': 'Vitamin D', 'vitd3': 'Vitamin D',
+    '25ohvitamind': 'Vitamin D', '25ohd': 'Vitamin D', 'd25oh': 'Vitamin D',
+    'vitb12': 'Vitamin B12', 'vitaminb12': 'Vitamin B12', 'b12': 'Vitamin B12',
+    'folate': 'Folate', 'fol': 'Folate',
+}
+
+_UNIT_ALIASES = {
+    'umol/l': 'umol/L', 'mmol/l': 'mmol/L', 'nmol/l': 'nmol/L', 'pmol/l': 'pmol/L',
+    'mol/l': 'mol/L',
+    'g/l': 'g/L', 'mg/l': 'mg/L', 'ug/l': 'ug/L', 'ng/l': 'ng/L',
+    'ng/ml': 'ug/L', 'ug/ml': 'mg/L', 'mg/ml': 'g/L',
+    'g/dl': 'g/dL', 'mg/dl': 'mg/dL',
+    'iu/l': 'IU/L', 'u/l': 'U/L', 'miu/l': 'mIU/L', 'mu/l': 'mIU/L',
+    '10^9/l': '10^9/L', '10*9/l': '10^9/L', '109/l': '10^9/L',
+    '10^12/l': '10^12/L', '10*12/l': '10^12/L', '1012/l': '10^12/L',
+    'fl': 'fL', 'pg': 'pg', '%': '%',
+    'ml/min/1.73m2': 'mL/min/1.73m2', 'ml/min': 'mL/min',
+    'mmhg': 'mmHg', 'mmol/mol': 'mmol/mol',
+}
+
+
+def _compact_key(text):
+    """Reduce a label to lower-case letters/digits only ('M.C.H.' -> 'mch')."""
+    return re.sub(r'[^a-z0-9]', '', str(text or '').lower())
+
+
+def _split_specimen_prefix(name):
+    """Split a leading specimen marker off a test name ('S Bicarb' -> ('S', 'Bicarb'))."""
+    text = re.sub(r'\s+', ' ', str(name or '')).strip()
+    if not text:
+        return '', ''
+    tokens = text.split(' ')
+    if len(tokens) > 1:
+        head = _compact_key(tokens[0])
+        if head in _SPECIMEN_PREFIXES:
+            return _SPECIMEN_PREFIXES[head], ' '.join(tokens[1:])
+    return '', text
+
+
+def _canonical_test_name(name):
+    """Return the preferred long-form display name for a test label.
+
+    'S BICARB' and 'S Bicarbonate' both become 'S Bicarbonate'; 'M.C.H.' and
+    'MCH' both become 'MCH'.  Unknown names are returned unchanged (whitespace
+    tidied) so nothing is lost.
+    """
+    raw = re.sub(r'\s+', ' ', str(name or '')).strip()
+    if not raw:
+        return ''
+    prefix, base = _split_specimen_prefix(raw)
+    canonical = _TEST_NAME_CANONICAL.get(_compact_key(base))
+    if not canonical:
+        # Retry without parenthetical noise so 'S Chol (fasting)' still resolves,
+        # keeping the qualifier on the end of the canonical name.
+        core = re.sub(r'\(.*?\)', ' ', base)
+        core = re.sub(r'historical', ' ', core, flags=re.IGNORECASE)
+        canonical = _TEST_NAME_CANONICAL.get(_compact_key(core))
+        if not canonical:
+            return raw
+        qualifier = ' '.join(re.findall(r'\(.*?\)', base)).strip()
+        if qualifier:
+            canonical = f"{canonical} {qualifier}"
+    return f"{prefix} {canonical}".strip()
+
+
+def _canonical_test_key(name):
+    """Grouping key that is identical for every abbreviation of the same test."""
+    raw = re.sub(r'\(.*?\)', '', str(name or ''))
+    raw = re.sub(r'historical', '', raw, flags=re.IGNORECASE)
+    prefix, base = _split_specimen_prefix(raw)
+    base_key = _compact_key(base)
+    canonical = _TEST_NAME_CANONICAL.get(base_key)
+    if canonical:
+        base_key = _compact_key(canonical)
+    prefix_key = _compact_key(prefix)
+    return f"{prefix_key}:{base_key}" if prefix_key else base_key
+
+
+def _normalize_unit(text):
+    """Normalize a unit string so equivalent representations compare equal."""
+    unit = str(text or '').strip()
+    if not unit:
+        return ''
+    unit = unit.replace('\u00b5', 'u').replace('\u03bc', 'u')
+    unit = unit.replace('\u00d7', 'x').replace('\u00b7', '.')
+    unit = re.sub(r'\s+', '', unit).lower()
+    unit = unit.replace('litre', 'l').replace('liter', 'l')
+    unit = re.sub(r'^mc(g|mol)', r'u\1', unit)
+    unit = unit.replace('/mcl', '/ul')
+    unit = re.sub(r'^x(?=10)', '', unit)
+    unit = unit.replace('e9/l', '10^9/l').replace('e12/l', '10^12/l')
+    return _UNIT_ALIASES.get(unit, unit)
+
+
+def _extract_unit_text(text):
+    """Pull a unit out of a value or reference string ('(20 - 32 mmol/L)' -> 'mmol/L')."""
+    raw = str(text or '').strip().strip('()')
+    if not raw:
+        return ''
+    match = re.search(
+        r'(x?10[\^*]?\d+/[a-zA-Z]+|[a-zA-Zµμ]+\s*/\s*[a-zA-Z0-9./]+|%|fL|pg|mmHg)',
+        raw,
+    )
+    if not match:
+        return ''
+    candidate = match.group(1)
+    if _compact_key(candidate) in ('h', 'l', 'high', 'low'):
+        return ''
+    return _normalize_unit(candidate)
+
+
+def _reference_bounds(text):
+    """Return the numeric bounds described by a reference range, or None."""
+    raw = str(text or '').strip().strip('()')
+    if not raw:
+        return None
+    # Drop unit text first: '10^9/L' and 'mL/min/1.73m2' carry digits that
+    # would otherwise be mistaken for range bounds.
+    cleaned = re.sub(r'x?10[\^*]?\d+\s*/\s*[a-zA-Z]+', ' ', raw)
+    cleaned = re.sub(r'[a-zA-Z\u00b5\u03bc]+\s*/\s*[a-zA-Z0-9./]+', ' ', cleaned)
+    # A '-' only counts as a sign when it does not sit between two numbers,
+    # so '20-32' reads as 20 to 32 rather than 20 and -32.
+    numbers = [float(n) for n in re.findall(r'(?<![\d.])-?\d+(?:\.\d+)?', cleaned)]
+    if not numbers:
+        return None
+    if re.search(r'^\s*[<≤]', raw):
+        return ('<', numbers[0])
+    if re.search(r'^\s*[>≥]', raw):
+        return ('>', numbers[0])
+    if len(numbers) >= 2:
+        return ('range', min(numbers[0], numbers[1]), max(numbers[0], numbers[1]))
+    return ('single', numbers[0])
+
+
+def _units_compatible(a, b):
+    """True when two unit strings agree, or when either side is unknown."""
+    ua, ub = _normalize_unit(a), _normalize_unit(b)
+    if not ua or not ub:
+        return True
+    return ua == ub
+
+
+def _references_compatible(a, b):
+    """True when two reference ranges describe the same limits, or either is unknown."""
+    ba, bb = _reference_bounds(a), _reference_bounds(b)
+    if ba is None or bb is None:
+        return True
+    if ba[0] != bb[0] or len(ba) != len(bb):
+        return False
+    return all(abs(x - y) < 1e-9 for x, y in zip(ba[1:], bb[1:]))
+
+
+def _strip_redundant_unit(value, reference_range):
+    """Remove a unit from a value when the reference range already states it.
+
+    Lab values arrive inconsistently ('220 x10^9/L', '189', '260 ng/mL'), which
+    makes a results table look ragged.  The unit belongs to the series rather
+    than the individual reading, so it is dropped whenever the reference range
+    carries the same unit.  Values whose unit has no counterpart in the
+    reference are left untouched so no information is lost.
+    """
+    text = re.sub(r'\s+', ' ', str(value or '')).strip()
+    if not text:
+        return text
+    ref_unit = _normalize_unit(_extract_unit_text(reference_range))
+    if not ref_unit:
+        return text
+
+    def _drop_match(match):
+        return ' ' if _normalize_unit(match.group(0)) == ref_unit else match.group(0)
+
+    pattern = (
+        r'x?\s*10\s*[\^*]?\s*\d+\s*/\s*[a-zA-Z]+'
+        r'|[a-zA-Z\u00b5\u03bc]+\s*/\s*[a-zA-Z0-9./]+'
+        r'|%'
+        r'|\b(?:fL|pg|mmHg)\b'
+    )
+    stripped = re.sub(pattern, _drop_match, text)
+    return re.sub(r'\s+', ' ', stripped).strip() or text
+
+
+def _same_test_base(key_a, key_b):
+    """True when two keys name the same measurement but only one states a specimen.
+
+    'Transferrin Saturation' and 'S Transferrin Saturation' are the same test;
+    'S Iron' and 'U Iron' are not, because each names a different specimen.
+    """
+    if not key_a or not key_b or key_a == key_b:
+        return False
+    prefix_a, _, base_a = key_a.rpartition(':')
+    prefix_b, _, base_b = key_b.rpartition(':')
+    if base_a != base_b:
+        return False
+    return not prefix_a or not prefix_b
+
+
+def _looks_like_abbreviation(short_key, long_key):
+    """True when short_key plausibly abbreviates long_key (same specimen prefix)."""
+    if not short_key or not long_key or short_key == long_key:
+        return False
+    short_prefix, _, short_base = short_key.rpartition(':')
+    long_prefix, _, long_base = long_key.rpartition(':')
+    if short_prefix != long_prefix:
+        return False
+    if len(short_base) < 2 or len(short_base) >= len(long_base):
+        return False
+    if long_base.startswith(short_base):
+        return True
+    # Subsequence match with a shared first letter covers initialisms
+    # ('mch' inside 'meancellhaemoglobin').
+    if short_base[0] != long_base[0]:
+        return False
+    pos = 0
+    for ch in short_base:
+        pos = long_base.find(ch, pos)
+        if pos < 0:
+            return False
+        pos += 1
+    return True
 
 
 def _ollama_health_chat(messages, max_tokens=2000, temperature=0.1):
@@ -98,6 +559,11 @@ class HealthProfile:
     def __init__(self, user_id: str):
         self.user_id = str(user_id)
         self.file_path = HEALTH_DATA_DIR / f"{self.user_id}.json"
+        # Provenance context for anything written during the current request.
+        # Callers set this before ingesting (e.g. SOURCE_DOCUMENT for an upload)
+        # so every new item is labelled without threading a source argument
+        # through every add_* method.
+        self.ingest_source = SOURCE_USER
         self.data = self._load()
         self._file_stamp = self._current_file_stamp()
         changed = self._normalize_test_results()
@@ -133,15 +599,25 @@ class HealthProfile:
         return True
 
     def _load(self) -> Dict:
-        """Load profile from disk or create default"""
+        """Load profile from disk or create default.
+
+        The provenance backfill runs here, before anything can call save(), so
+        pre-existing items are marked 'unknown' rather than inheriting the
+        'user_entered' ingest default and being treated as confirmed fact.
+        """
         HEALTH_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        data = None
         if self.file_path.exists():
             try:
                 with open(self.file_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    data = json.load(f)
             except (json.JSONDecodeError, IOError):
-                pass
-        return self._default_profile()
+                data = None
+        if data is None:
+            data = self._default_profile()
+        backfill_legacy_provenance(data)
+        backfill_lifecycle(data)
+        return data
 
     def _default_profile(self) -> Dict:
         return {
@@ -178,15 +654,26 @@ class HealthProfile:
             },
             "provider_notes": [],
             "conversation_insights": [],
+            "diary": [],
             "upload_settings": {
                 "retention_days": 365
             },
-            "uploaded_documents": []
+            "uploaded_documents": [],
+            "pending_changes": [],
+            "freshness": {},
+            "advice_settings": dict(DEFAULT_ADVICE_SETTINGS),
+            "ai_advice": None,
+            "ai_advice_usage": {},
+            "digest": {}
         }
 
     def save(self):
         """Persist to disk"""
         self.data["updated_at"] = datetime.now().isoformat()
+        # Stamp provenance in one place rather than in every add_* method. Items
+        # already carrying a canonical source are left untouched, so this is
+        # idempotent and cannot relabel history.
+        apply_provenance_defaults(self.data, self.ingest_source)
         HEALTH_DATA_DIR.mkdir(parents=True, exist_ok=True)
         with open(self.file_path, 'w', encoding='utf-8') as f:
             json.dump(self.data, f, indent=2, ensure_ascii=False)
@@ -235,6 +722,9 @@ class HealthProfile:
                 t["value"] = cleaned
                 changed += 1
 
+        # Collapse abbreviation variants onto their long form on load
+        changed += self.canonicalize_test_names()
+
         return changed
 
     @staticmethod
@@ -264,83 +754,120 @@ class HealthProfile:
                 self.data["personal"][k] = v
         self.save()
 
+    def _queue_proposals(self, proposals: List[Dict]):
+        """Park AI-suggested field changes for the user to review.
+
+        An inference drawn from conversation must not overwrite something the
+        user or a lab report actually stated, so it waits here instead.
+        """
+        if not proposals:
+            return
+        pending = self.data.setdefault("pending_changes", [])
+        for p in proposals:
+            if not any(q.get("category") == p.get("category")
+                       and q.get("label") == p.get("label")
+                       and q.get("field") == p.get("field")
+                       and q.get("to") == p.get("to") for q in pending):
+                pending.append(p)
+        del pending[:-50]
+
+    def _upsert_named(self, category: str, name_key: str, name: str,
+                      updates: Dict, start_key: str = "") -> bool:
+        """Add a named item, or reconcile it against the one already stored.
+
+        The old behaviour filled blank fields only, so a changed dose was
+        silently discarded and the profile quietly went stale. Now a differing
+        value from a trusted source is applied and logged to the item's
+        history, while an AI-inferred difference becomes a proposal.
+        """
+        items = self.data.setdefault(category, [])
+        key = str(name or "").lower().strip()
+        for item in items:
+            if str(item.get(name_key) or "").lower().strip() != key:
+                continue
+            result = merge_incoming(item, updates, self.ingest_source, category)
+            self._queue_proposals(result["proposals"])
+            if not is_active(item):
+                # Re-adding something that was stopped means it has resumed.
+                record_change(item, "status", STATUS_ACTIVE, self.ingest_source)
+                item["ended_on"] = ""
+                item["started_on"] = (str(updates.get(start_key) or "").strip()
+                                      or datetime.now().strftime("%Y-%m-%d"))
+                return True
+            return result["updated"]
+
+        entry = {name_key: name}
+        entry.update(updates)
+        entry.update({
+            "status": STATUS_ACTIVE,
+            "started_on": (str(updates.get(start_key) or "").strip()
+                           or datetime.now().strftime("%Y-%m-%d")),
+            "ended_on": "",
+            "history": [],
+            "added_at": datetime.now().isoformat(),
+        })
+        items.append(entry)
+        return True
+
     def add_medication(self, name: str, dose: str = "", purpose: str = "", frequency: str = "", prescribed_date: str = "") -> bool:
         """Add a prescribed medication. Returns True if actually added/updated."""
-        self.data.setdefault("medications", [])
-        existing = self.data["medications"]
-        name_lower = name.lower().strip()
-        for m in existing:
-            if m.get("name", "").lower().strip() == name_lower:
-                updated = False
-                if dose and not m.get("dose"):
-                    m["dose"] = dose
-                    updated = True
-                if purpose and not m.get("purpose"):
-                    m["purpose"] = purpose
-                    updated = True
-                if frequency and not m.get("frequency"):
-                    m["frequency"] = frequency
-                    updated = True
-                if prescribed_date and not m.get("prescribed_date"):
-                    m["prescribed_date"] = prescribed_date
-                    updated = True
-                return updated  # Duplicate — skip (may have updated fields)
-        entry = {
-            "name": name,
+        return self._upsert_named("medications", "name", name, {
             "dose": dose,
             "purpose": purpose,
             "frequency": frequency,
             "prescribed_date": prescribed_date,
-            "added_at": datetime.now().isoformat()
-        }
-        self.data["medications"].append(entry)
-        return True
+        }, start_key="prescribed_date")
 
     def add_condition(self, name: str, details: str = "", status: str = "active",
                      diagnosed_date: str = "") -> bool:
         """Add a health condition. Returns True if actually added/updated."""
         existing = self.data.get("conditions", [])
         for c in existing:
-            if c.get("name", "").lower().strip() == name.lower().strip():
-                updated = False
-                if details and not c.get("details"):
-                    c["details"] = details
-                    updated = True
-                if diagnosed_date and not c.get("diagnosed_date"):
-                    c["diagnosed_date"] = diagnosed_date
-                    updated = True
+            if str(c.get("name") or "").lower().strip() == str(name or "").lower().strip():
+                result = merge_incoming(c, {"details": details,
+                                            "diagnosed_date": diagnosed_date},
+                                        self.ingest_source, "conditions")
+                self._queue_proposals(result["proposals"])
+                updated = result["updated"]
+                # 'active' is the caller's default, so it must never demote a
+                # condition the user has already resolved.
                 if status and status != "active" and c.get("status") != status:
-                    c["status"] = status
-                    updated = True
-                return updated  # Duplicate — skip (may have updated fields)
-        entry = {
-            "name": name,
+                    updated = record_change(c, "status", status, self.ingest_source) or updated
+                    if status in ("resolved",):
+                        c["ended_on"] = datetime.now().strftime("%Y-%m-%d")
+                return updated
+        return self._upsert_named("conditions", "name", name, {
             "details": details,
             "status": status,
             "diagnosed_date": diagnosed_date,
-            "added_at": datetime.now().isoformat()
-        }
-        self.data["conditions"].append(entry)
-        return True
+        }, start_key="diagnosed_date")
 
     def add_symptom(self, description: str, triggers: List[str] = None,
                     severity: str = "moderate", onset: str = "", frequency: str = "") -> bool:
-        """Add a symptom. Returns True if actually added."""
+        """Add a symptom. Returns True if actually added or it has recurred."""
         existing = self.data.get("symptoms", [])
-        desc_lower = description.lower().strip()
+        desc_lower = str(description or "").lower().strip()
         for s in existing:
-            if s.get("description", "").lower().strip() == desc_lower:
-                return False  # Duplicate — skip
-        entry = {
-            "description": description,
+            if str(s.get("description") or "").lower().strip() != desc_lower:
+                continue
+            if not is_active(s):
+                # A resolved symptom reported again has come back; reopen it
+                # rather than dropping the report as a duplicate.
+                record_change(s, "status", STATUS_ACTIVE, self.ingest_source)
+                s["ended_on"] = ""
+                s["started_on"] = str(onset or "").strip() or datetime.now().strftime("%Y-%m-%d")
+                return True
+            result = merge_incoming(s, {"severity": severity, "onset": onset,
+                                        "frequency": frequency},
+                                    self.ingest_source, "symptoms")
+            self._queue_proposals(result["proposals"])
+            return result["updated"]
+        return self._upsert_named("symptoms", "description", description, {
             "triggers": triggers or [],
             "severity": severity,
             "onset": onset,
             "frequency": frequency,
-            "added_at": datetime.now().isoformat()
-        }
-        self.data["symptoms"].append(entry)
-        return True
+        }, start_key="onset")
 
     def add_test_result(self, test_name: str, value: str, reference_range: str = "",
                        date: str = "", notes: str = "") -> bool:
@@ -367,6 +894,9 @@ class HealthProfile:
         value = self._reorder_test_value(value)
         existing = self.data.get("test_results", [])
         date_val = self._normalize_test_date(date or datetime.now().strftime("%Y-%m-%d"))
+        # Detect abbreviation variants every time a test name arrives so
+        # 'S BICARB' and 'S Bicarbonate' land in the same table.
+        test_name = self._resolve_test_name(test_name, reference_range, value, date_val)
         for t in existing:
             if self._is_duplicate_test_result(t, test_name, value, date_val):
                 # Same mineral on the same date: overwrite with the latest value
@@ -430,7 +960,12 @@ class HealthProfile:
         return True
 
     def _deduplicate_test_results(self) -> int:
-        """Collapse duplicate test rows in-place and return number removed."""
+        """Collapse duplicate test rows in-place and return number removed.
+
+        Names are canonicalized first so abbreviation variants of the same test
+        (e.g. 'S BICARB' and 'S Bicarbonate') collapse into one series.
+        """
+        self.canonicalize_test_names()
         results = self.data.get("test_results", [])
         deduped = []
         removed = 0
@@ -552,34 +1087,12 @@ class HealthProfile:
 
     def add_supplement(self, name: str, dose: str = "", purpose: str = "", frequency: str = "", prescribed_date: str = "") -> bool:
         """Add a supplement or herb. Returns True if actually added/updated."""
-        existing = self.data.get("supplements", [])
-        name_lower = name.lower().strip()
-        for s in existing:
-            if s.get("name", "").lower().strip() == name_lower:
-                updated = False
-                if dose and not s.get("dose"):
-                    s["dose"] = dose
-                    updated = True
-                if purpose and not s.get("purpose"):
-                    s["purpose"] = purpose
-                    updated = True
-                if frequency and not s.get("frequency"):
-                    s["frequency"] = frequency
-                    updated = True
-                if prescribed_date and not s.get("prescribed_date"):
-                    s["prescribed_date"] = prescribed_date
-                    updated = True
-                return updated  # Duplicate — skip (may have updated fields)
-        entry = {
-            "name": name,
+        return self._upsert_named("supplements", "name", name, {
             "dose": dose,
             "purpose": purpose,
             "frequency": frequency,
             "prescribed_date": prescribed_date,
-            "added_at": datetime.now().isoformat()
-        }
-        self.data["supplements"].append(entry)
-        return True
+        }, start_key="prescribed_date")
 
     def apply_extracted_data(self, extracted: dict) -> list:
         """
@@ -810,18 +1323,160 @@ class HealthProfile:
         return True
 
     def _normalize_test_key(self, test_name: str) -> str:
-        """Normalize test name for grouping trend updates (e.g., 'TSH (Roche)' -> 'tsh')."""
+        """Normalize test name for grouping trend updates.
+
+        Abbreviations collapse onto their long form, so 'S BICARB' and
+        'S Bicarbonate' (or 'M.C.H.' and 'MCH') share a single key.
+        """
         if not test_name:
             return ""
-        key = test_name.lower().strip()
-        key = re.sub(r'\(.*?\)', '', key).strip()
-        key = key.replace("historical", "").strip()
-        key = re.sub(r'\s+', ' ', key)
-        return key
+        return _canonical_test_key(test_name)
+
+    def _test_unit_hint(self, value: str = "", reference_range: str = "") -> str:
+        """Best-effort unit for a test row, taken from the reference then the value."""
+        return _extract_unit_text(reference_range) or _extract_unit_text(value)
+
+    def _series_accepts(self, series_name: str, reference_range: str = "", unit: str = "") -> bool:
+        """True when an incoming row does not contradict an existing series.
+
+        A learned alias is a shortcut, not a licence: if the row's reference
+        range or unit clashes with what the target series already holds, it is
+        not the same measurement after all.
+        """
+        target_key = _canonical_test_key(series_name)
+        for row in self.data.get("test_results", []):
+            if _canonical_test_key(row.get("test_name", "")) != target_key:
+                continue
+            other_ref = row.get("reference_range", "")
+            if not _references_compatible(reference_range, other_ref):
+                return False
+            other_unit = self._test_unit_hint(row.get("value", ""), other_ref)
+            if not _units_compatible(unit, other_unit):
+                return False
+        return True
+
+    def _merge_loses_data(self, key: str, other_key: str, date: str = "", value: str = "") -> bool:
+        """True when renaming one series onto another would overwrite a reading.
+
+        Two series that each hold a different value on the same date cannot be
+        merged without one silently replacing the other, so the merge is
+        abandoned and both names are kept.
+        """
+        values_by_date = {}
+        for row in self.data.get("test_results", []):
+            row_key = _canonical_test_key(row.get("test_name", ""))
+            if row_key not in (key, other_key):
+                continue
+            row_date = self._normalize_test_date(row.get("date", ""), row.get("added_at", ""))
+            if not row_date:
+                continue
+            values_by_date.setdefault(row_date, {})[row_key] = str(row.get("value", "")).strip()
+
+        for per_key in values_by_date.values():
+            if len(per_key) > 1 and len(set(per_key.values())) > 1:
+                return True
+
+        incoming_date = self._normalize_test_date(date) if date else ""
+        if incoming_date:
+            existing = values_by_date.get(incoming_date, {}).get(other_key)
+            if existing is not None and existing != str(value).strip():
+                return True
+        return False
+
+    def _resolve_test_name(self, test_name: str, reference_range: str = "", value: str = "",
+                           date: str = "") -> str:
+        """Return the preferred long-form name for a test, learning new abbreviations.
+
+        Runs on every incoming test name.  Known abbreviations map through
+        ``_TEST_NAME_CANONICAL``; unknown ones are compared against names already
+        in the profile and merged when the abbreviation pattern matches *and* the
+        reference range and units confirm they are the same measurement.
+        """
+        canonical = _canonical_test_name(test_name)
+        if not canonical:
+            return test_name
+        key = _canonical_test_key(canonical)
+        aliases = self.data.setdefault("test_name_aliases", {})
+        incoming_unit = self._test_unit_hint(value, reference_range)
+        learned = aliases.get(key)
+        if learned:
+            if self._series_accepts(learned, reference_range, incoming_unit):
+                return learned
+            return canonical
+
+        matches = {}
+        for row in self.data.get("test_results", []):
+            other_name = _canonical_test_name(row.get("test_name", ""))
+            if not other_name:
+                continue
+            other_key = _canonical_test_key(other_name)
+            if other_key == key:
+                continue
+            related = (_same_test_base(key, other_key)
+                       or _looks_like_abbreviation(key, other_key)
+                       or _looks_like_abbreviation(other_key, key))
+            if not related:
+                continue
+
+            other_ref = row.get("reference_range", "")
+            other_unit = self._test_unit_hint(row.get("value", ""), other_ref)
+            if not _references_compatible(reference_range, other_ref):
+                continue
+            if not _units_compatible(incoming_unit, other_unit):
+                continue
+            # Require positive confirmation from either the reference or the unit;
+            # an abbreviation pattern alone is not enough to merge two tests.
+            refs_confirm = (
+                _reference_bounds(reference_range) is not None
+                and _reference_bounds(other_ref) is not None
+            )
+            units_confirm = bool(incoming_unit) and bool(other_unit)
+            if not (refs_confirm or units_confirm):
+                continue
+
+            matches[other_key] = other_name
+
+        # Exactly one candidate is required. Several means the name is ambiguous
+        # ('Iron' while both 'S Iron' and 'U Iron' exist), and guessing a
+        # specimen would silently file a reading under the wrong test.
+        if len(matches) != 1:
+            return canonical
+        other_key, other_name = next(iter(matches.items()))
+
+        if self._merge_loses_data(key, other_key, date, value):
+            return canonical
+
+        # Prefer the more specific label: the one that names the specimen,
+        # otherwise the longer (less abbreviated) form.
+        preferred = other_name if len(other_key) > len(key) else canonical
+        aliases[key] = preferred
+        aliases[other_key] = preferred
+        for row in self.data.get("test_results", []):
+            row_key = _canonical_test_key(row.get("test_name", ""))
+            if row_key in (key, other_key):
+                row["test_name"] = preferred
+        return preferred
+
+    def canonicalize_test_names(self) -> int:
+        """Apply name canonicalization to every stored result. Returns rows renamed."""
+        renamed = 0
+        for row in self.data.get("test_results", []):
+            current = row.get("test_name", "")
+            resolved = self._resolve_test_name(
+                current, row.get("reference_range", ""), row.get("value", ""),
+                self._normalize_test_date(row.get("date", ""), row.get("added_at", ""))
+            )
+            if resolved and resolved != current:
+                row["test_name"] = resolved
+                renamed += 1
+        return renamed
 
     def _clean_test_value(self, value: str, reference_range: str) -> str:
         """Strip H/L/High/Low markers from a value when the numeric value is within the reference range.
-        This fixes AI/OCR cases where a flag is incorrectly attached to a normal value."""
+        This fixes AI/OCR cases where a flag is incorrectly attached to a normal value.
+        Also drops a unit that merely repeats the reference range's unit, so a
+        series renders consistently instead of mixing '220 x10^9/L' with '189'."""
+        value = _strip_redundant_unit(value, reference_range)
         if not value or not reference_range:
             return value
         numeric = self._extract_numeric_value(value)
@@ -882,7 +1537,8 @@ class HealthProfile:
         """Best-effort parse of medical test date for chronological sorting."""
         date_text = (test_entry.get("date") or "").strip()
         fmts = [
-            "%Y-%m-%d", "%Y-%m", "%Y", "%d/%m/%Y", "%d-%b-%y", "%d-%b-%Y", "%d %b %Y"
+            "%Y-%m-%d", "%Y-%m", "%Y", "%d/%m/%Y", "%d-%b-%y", "%d-%b-%Y",
+            "%d %b %Y", "%d/%b/%y", "%d/%b/%Y", "%d %b %y"
         ]
         for fmt in fmts:
             try:
@@ -984,6 +1640,7 @@ class HealthProfile:
         cleaned = re.sub(r'\(.*?\)', '', test_name)
         cleaned = re.sub(r'historical', '', cleaned, flags=re.IGNORECASE)
         cleaned = re.sub(r'\s+', ' ', cleaned).strip()
+        cleaned = _canonical_test_name(cleaned)
         return cleaned or test_name.strip()
 
     def _format_for_display(self, value, max_len: int = 80) -> str:
@@ -1368,8 +2025,11 @@ class HealthProfile:
             )
             sections.append(cond_text)
 
-        # Current symptoms
-        symptoms = self.data.get("symptoms", [])
+        # Current symptoms. Resolved ones are kept but labelled: a symptom that
+        # has gone is still history worth knowing, and must never be presented
+        # as something the patient has right now.
+        symptoms = [s for s in self.data.get("symptoms", []) if is_active(s)]
+        past_symptoms = [s for s in self.data.get("symptoms", []) if not is_active(s)]
         if symptoms:
             sym_text = "Current Symptoms: " + "; ".join(
                 f"{s['description']}" +
@@ -1380,6 +2040,11 @@ class HealthProfile:
                 for s in symptoms[-5:]  # Last 5 symptoms
             )
             sections.append(sym_text)
+        if past_symptoms:
+            sections.append("Resolved Symptoms (no longer present): " + "; ".join(
+                f"{s['description']}" + (f" [until {s['ended_on']}]" if s.get('ended_on') else "")
+                for s in past_symptoms[-5:]
+            ))
 
         # Recent test results
         tests = self.data.get("test_results", [])
@@ -1403,28 +2068,45 @@ class HealthProfile:
         if diet.get("notes"):
             sections.append("Diet Notes: " + "; ".join(diet["notes"][-3:]))
 
-        # Medications (prescribed drugs)
+        # Medications (prescribed drugs). Stopped drugs stay in the context —
+        # what someone came off, and when, changes the advice — but under a
+        # separate heading, because listing them as current is dangerous.
         medications = self.data.get("medications", [])
-        if medications:
-            med_text = "Medications: " + ", ".join(
+        current_meds = [m for m in medications if is_active(m)]
+        stopped_meds = [m for m in medications if not is_active(m)]
+        if current_meds:
+            med_text = "Medications (currently taking): " + ", ".join(
                 m['name'] +
                 (f" {m['dose']}" if m.get('dose') else "") +
                 (f" ({m['purpose']})" if m.get('purpose') else "") +
                 (f" [recorded {m['added_at'][:10]}]" if m.get('added_at') else "")
-                for m in medications
+                for m in current_meds
             )
             sections.append(med_text)
+        if stopped_meds:
+            sections.append("Medications (STOPPED - do not treat as current): " + ", ".join(
+                m['name'] + (f" {m['dose']}" if m.get('dose') else "") +
+                (f" [stopped {m['ended_on']}]" if m.get('ended_on') else "")
+                for m in stopped_meds[-8:]
+            ))
 
         # Supplements/herbs
         supplements = self.data.get("supplements", [])
-        if supplements:
-            sup_text = "Supplements/Herbs: " + ", ".join(
+        current_sups = [s for s in supplements if is_active(s)]
+        stopped_sups = [s for s in supplements if not is_active(s)]
+        if current_sups:
+            sup_text = "Supplements/Herbs (currently taking): " + ", ".join(
                 s['name'] +
                 (f" ({s['purpose']})" if s.get('purpose') else "") +
                 (f" [recorded {s['added_at'][:10]}]" if s.get('added_at') else "")
-                for s in supplements
+                for s in current_sups
             )
             sections.append(sup_text)
+        if stopped_sups:
+            sections.append("Supplements/Herbs (STOPPED - do not treat as current): " + ", ".join(
+                s['name'] + (f" [stopped {s['ended_on']}]" if s.get('ended_on') else "")
+                for s in stopped_sups[-8:]
+            ))
 
         # Lifestyle
         lifestyle = self.data.get("lifestyle", {})
@@ -1496,6 +2178,10 @@ class HealthContextManager:
             # Another worker process may have written this profile since we
             # cached it; pick up their changes before serving or mutating it.
             cls._profiles[user_id].reload_if_stale()
+        # Profiles are cached across requests, so reset the provenance context.
+        # Otherwise an upload could leave 'document_extracted' set and mislabel
+        # whatever the next request writes.
+        cls._profiles[user_id].ingest_source = SOURCE_USER
         return cls._profiles[user_id]
 
     @classmethod
@@ -1505,7 +2191,30 @@ class HealthContextManager:
         context = profile.format_for_prompt()
         if not context:
             return ""
-        return f"\n\n--- PATIENT HEALTH CONTEXT (use this to personalize responses) ---\n{context}\n--- END HEALTH CONTEXT ---\n"
+        return (
+            "\n\n--- PATIENT HEALTH CONTEXT (use this to personalize responses) ---\n"
+            f"{context}\n{cls.provenance_note(user_id)}"
+            "--- END HEALTH CONTEXT ---\n"
+        )
+
+    @classmethod
+    def provenance_note(cls, user_id: str) -> str:
+        """Warn the model when part of the context is unconfirmed AI inference.
+
+        Without this the model treats its own earlier guesses as established
+        facts and compounds them on the next turn.
+        """
+        from ai_compare.health_insights import provenance_counts
+
+        counts = provenance_counts(cls.get_profile(user_id).data)
+        unverified = counts.get('unverified_ai', 0)
+        if not unverified:
+            return ""
+        return (
+            f"\nDATA PROVENANCE: {unverified} item(s) above were inferred by AI and "
+            "have not been confirmed by the patient. Treat those as uncertain, ask the "
+            "patient to confirm them, and never present them as established fact.\n"
+        )
 
     @classmethod
     def get_test_results_summary(cls, user_id: str, concise: bool = False) -> Dict:
@@ -1523,6 +2232,7 @@ class HealthContextManager:
     def analyze_and_store(cls, user_id: str, raw_text: str, save: bool = True) -> Dict:
         """Use AI to analyze raw health text and return structured data.
         If save=True, stores into the profile. Otherwise returns a pending-review object."""
+        raw_text = _canonicalize_lab_tables(raw_text)
         profile = cls.get_profile(user_id)
 
         # Build the analysis prompt (use only recent entries to keep prompt short and fast)
@@ -1733,8 +2443,10 @@ NEW TEXT TO ANALYZE:
             parsed_from_table = _parse_markdown_tables(raw_text)
             if parsed_from_table:
                 def _key(t):
-                    return (str(t.get('test_name', '')).strip().lower(),
+                    return (_canonical_test_key(t.get('test_name', '')),
                             str(t.get('date', '')).strip().lower())
+                for t in parsed_from_table:
+                    t['test_name'] = _canonical_test_name(t.get('test_name', ''))
                 merged = list(parsed_from_table)
                 seen = {_key(t) for t in merged}
                 for t in extracted.get('test_results', []) or []:
@@ -1746,6 +2458,11 @@ NEW TEXT TO ANALYZE:
             # Remove H/L/High/Low flags from values that are actually within reference range
             for t in extracted.get('test_results', []):
                 t['value'] = profile._clean_test_value(t.get('value', ''), t.get('reference_range', ''))
+                # Show the long form of every test name in the review step
+                t['test_name'] = _canonical_test_name(t.get('test_name', '')) or t.get('test_name', '')
+                # Normalize report dates (e.g. 09/09/2026, 05-Apr-25) to ISO so
+                # review date pickers accept them and storage stays consistent.
+                t['date'] = profile._normalize_test_date(str(t.get('date') or ''))
 
             if not save:
                 return {"success": True, "extracted": extracted, "pending_review": extracted, "actions": []}
@@ -1786,7 +2503,10 @@ Text to analyze:
         if not save:
             return {"success": True, "pending_review": extracted}
 
-        # Apply extracted data using the shared method
+        # Apply extracted data using the shared method. This path stores without a
+        # review step, so everything it writes is an AI interpretation.
+        from ai_compare.health_insights import SOURCE_AI
+        profile.ingest_source = SOURCE_AI
         actions = profile.apply_extracted_data(extracted)
 
         if not actions:

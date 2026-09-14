@@ -1541,6 +1541,10 @@ def login():
         if not user:
             _log.warning("Failed login attempt for user '%s' from %s", username, request.remote_addr)
             return jsonify({'error': 'Invalid credentials'}), 401
+
+        if user['username'] == 'pwa_guest':
+            _log.warning("Blocked pwa_guest login from %s", request.remote_addr)
+            return jsonify({'error': 'The shared PWA guest account is disabled. Please sign up or log in with your own account.'}), 403
         
         # Get user role
         user_role = integrated_db.get_user_role(user['id'])
@@ -1578,8 +1582,7 @@ def pwa_guest_login():
     Enable with PWA_GUEST_ENABLED=1 in the environment.
     """
     try:
-        if os.environ.get('PWA_GUEST_ENABLED', '').lower() not in ('1', 'true', 'yes'):
-            return jsonify({'error': 'PWA guest login is not enabled'}), 403
+        return jsonify({'error': 'PWA guest login is disabled. Please sign up or log in with your own account.'}), 403
 
         username = 'pwa_guest'
         email = 'pwa@local'
@@ -6451,6 +6454,8 @@ def update_ai_limits():
 # HEALTH PROFILE API (Medical Advisor)
 # ============================================
 from ai_compare.medical_advisor_health_context import HealthContextManager
+from ai_compare import health_insights
+from ai_compare import health_freshness
 
 HEALTH_UPLOADS_DIR = Path(__file__).parent / "health_uploaded_documents"
 
@@ -6549,7 +6554,7 @@ def _store_uploaded_health_document(user_id, file_storage, file_bytes, content_h
 HEALTH_ITEM_CATEGORIES = [
     'conditions', 'medications', 'supplements', 'symptoms', 'test_results',
     'action_plans', 'conversation_insights', 'follow_ups',
-    'questions_for_doctor', 'provider_notes'
+    'questions_for_doctor', 'provider_notes', 'diary'
 ]
 
 
@@ -6716,13 +6721,35 @@ def analyze_health_info():
     except Exception as e:
         return _safe_error(e, 'api')
 
+def _get_pdf_reader():
+    """Return a PdfReader class. Prefers pypdf (maintained), falls back to
+    PyPDF2, then to pure-Python wheels vendored under vendor/ so PDF support
+    works where pip installs are unavailable (e.g. PythonAnywhere)."""
+    for module_name in ('pypdf', 'PyPDF2'):
+        try:
+            module = __import__(module_name)
+            return module.PdfReader
+        except ImportError:
+            pass
+    vendor = Path(__file__).resolve().parent / 'vendor'
+    if vendor.is_dir():
+        for wheel in sorted(vendor.glob('*.whl')):
+            if str(wheel) not in sys.path:
+                sys.path.insert(0, str(wheel))
+        try:
+            import pypdf
+            return pypdf.PdfReader
+        except ImportError:
+            pass
+    raise RuntimeError('No PDF library available (need pypdf or PyPDF2)')
+
+
 def _extract_text_from_file_bytes(file_bytes, ext):
     """Extract plain text from uploaded PDF or image bytes. Raises ValueError/RuntimeError on failure."""
     if ext == '.pdf':
-        import PyPDF2
         import io
         try:
-            pdf_reader = PyPDF2.PdfReader(io.BytesIO(file_bytes))
+            pdf_reader = _get_pdf_reader()(io.BytesIO(file_bytes))
             pages_text = []
             for page in pdf_reader.pages:
                 text = page.extract_text()
@@ -7217,7 +7244,11 @@ def apply_health_review():
         extracted = data.get('extracted')
         if not extracted or not isinstance(extracted, dict):
             return jsonify({'error': 'Missing or invalid extracted data'}), 400
+        # The user reviewed and edited this on screen before applying it, so it
+        # counts as report-derived data they have already confirmed.
+        profile.ingest_source = health_insights.SOURCE_DOCUMENT
         actions = profile.apply_extracted_data(extracted)
+        health_insights.apply_provenance_defaults(profile.data, health_insights.SOURCE_DOCUMENT)
         profile.save()
         return jsonify({'success': True, 'actions': actions, 'extracted': extracted})
     except Exception as e:
@@ -7259,6 +7290,72 @@ def get_health_document():
             as_attachment=as_attachment,
             download_name=download_name
         )
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/health-profile/documents', methods=['GET'])
+@require_auth
+def list_health_documents():
+    """List stored uploaded documents for the current user."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        _cleanup_expired_uploaded_documents(profile)
+        uploaded = profile.data.get('uploaded_documents', [])
+        documents = []
+        for d in uploaded:
+            documents.append({
+                'original_name': d.get('original_name'),
+                'stored_name': d.get('stored_name'),
+                'uploaded_at': d.get('uploaded_at'),
+                'expires_at': d.get('expires_at'),
+                'retention_days': d.get('retention_days'),
+                'size_bytes': d.get('size_bytes'),
+                'content_hash': d.get('content_hash')
+            })
+        return jsonify({'documents': documents})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/health-profile/documents', methods=['DELETE'])
+@require_auth
+def delete_health_document():
+    """Delete a stored uploaded document by stored_name or index."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        data = request.get_json() or {}
+        stored_name = data.get('stored_name')
+        index = data.get('index')
+
+        uploaded = profile.data.get('uploaded_documents', [])
+        doc = None
+        if stored_name:
+            doc = next((d for d in uploaded if d.get('stored_name') == stored_name), None)
+        elif isinstance(index, int) and 0 <= index < len(uploaded):
+            doc = uploaded[index]
+
+        if not doc:
+            return jsonify({'error': 'Document not found'}), 404
+
+        try:
+            target_path = Path(doc.get('stored_path') or '')
+            if target_path.exists():
+                target_path.unlink()
+            extracted_text_path = Path(str(doc.get('extracted_text_path') or ''))
+            if extracted_text_path.exists():
+                extracted_text_path.unlink()
+            result_path = Path(str(doc.get('result_path') or ''))
+            if result_path.exists():
+                result_path.unlink()
+        except Exception:
+            pass
+
+        uploaded.remove(doc)
+        profile.save()
+        return jsonify({'success': True})
     except Exception as e:
         return _safe_error(e, 'api')
 
@@ -7311,6 +7408,9 @@ def update_health_profile_item():
         if index >= len(items):
             return jsonify({'error': 'Index out of range'}), 400
         items[index].update(updates)
+        # Editing an item by hand confirms it, even if AI originally suggested
+        # it — which also resets its place in the confirmation queue.
+        health_freshness.confirm_item(items[index])
         profile.save()
         return jsonify({'success': True, 'item': items[index], 'profile': profile.to_dict()})
     except Exception as e:
@@ -7332,6 +7432,8 @@ def add_health_profile_item():
             return jsonify({'error': f'Invalid category. Must be one of: {valid_categories}'}), 400
         if not isinstance(item, dict):
             return jsonify({'error': 'item must be an object'}), 400
+        item.setdefault('source', health_insights.SOURCE_USER)
+        item['verified_by_user'] = True
         if category == 'test_results':
             if not item.get('test_name'):
                 return jsonify({'error': 'test_name is required'}), 400
@@ -7384,8 +7486,12 @@ def check_drug_interactions():
     try:
         user_id = str(request.current_user['user_id'])
         profile = HealthContextManager.get_profile(user_id)
-        meds = [m['name'] for m in profile.data.get('medications', [])]
-        sups = [s['name'] for s in profile.data.get('supplements', [])]
+        # Only what is actually being taken: flagging an interaction between
+        # two drugs the user stopped years ago is a false alarm.
+        meds = [m['name'] for m in profile.data.get('medications', [])
+                if health_freshness.is_active(m)]
+        sups = [s['name'] for s in profile.data.get('supplements', [])
+                if health_freshness.is_active(s)]
         all_drugs = meds + sups
 
         if len(all_drugs) < 2:
@@ -7453,6 +7559,305 @@ def get_profile_completeness():
         })
     except Exception as e:
         return _safe_error(e, 'api')
+
+
+# ============================================
+# HEALTH ADVICE, OBSERVATIONS & REMINDERS
+# Tier 1 (observations, reminders) is deterministic and free.
+# Tier 2 (AI advice) is hash-gated, capped per day and cached.
+# ============================================
+
+@app.route('/api/health-profile/overview', methods=['GET'])
+@require_auth
+def get_health_overview():
+    """Everything the Advice and Reminders screens need. Never calls a model."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        overview = health_insights.build_overview(profile.data)
+        return jsonify({'success': True, 'overview': overview})
+    except Exception as e:
+        return _safe_error(e, 'get_health_overview')
+
+
+@app.route('/api/health-profile/observations', methods=['GET'])
+@require_auth
+def get_health_observations():
+    """Tier 1 observations computed in pure Python: trends, out-of-range, gaps."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        observations = health_insights.build_observations(profile.data)
+        return jsonify({
+            'success': True,
+            'observations': observations,
+            'red_flags': health_insights.red_flags(observations),
+            'disclaimer': health_insights.DISCLAIMER,
+        })
+    except Exception as e:
+        return _safe_error(e, 'get_health_observations')
+
+
+@app.route('/api/health-profile/reminders', methods=['GET'])
+@require_auth
+def get_health_reminders():
+    """Reminders derived from follow-ups, retest notes and ongoing medications."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        reminders = health_insights.build_reminders(profile.data)
+        return jsonify({
+            'success': True,
+            'reminders': reminders,
+            'counts': {
+                'overdue': len([r for r in reminders if r['status'] == 'overdue']),
+                'due_today': len([r for r in reminders if r['status'] == 'due_today']),
+                'total': len(reminders),
+            },
+        })
+    except Exception as e:
+        return _safe_error(e, 'get_health_reminders')
+
+
+@app.route('/api/health-profile/reminders.ics', methods=['GET'])
+@require_auth
+def export_health_reminders_ics():
+    """Calendar export. Works on every platform, unlike iOS PWA web push."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        reminders = health_insights.build_reminders(profile.data)
+        body = health_insights.reminders_to_ics(reminders)
+        resp = make_response(body)
+        resp.headers['Content-Type'] = 'text/calendar; charset=utf-8'
+        resp.headers['Content-Disposition'] = 'attachment; filename="dr-health-reminders.ics"'
+        return resp
+    except Exception as e:
+        return _safe_error(e, 'export_health_reminders_ics')
+
+
+@app.route('/api/health-profile/reminder', methods=['POST'])
+@require_auth
+def act_on_health_reminder():
+    """Complete or snooze a reminder by writing back to its source item."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        data = request.get_json() or {}
+        action = str(data.get('action') or '').strip().lower()
+        category = data.get('source_category')
+        index = data.get('source_index')
+
+        if action not in ('complete', 'snooze'):
+            return jsonify({'error': 'action must be complete or snooze'}), 400
+        if category not in HEALTH_ITEM_CATEGORIES:
+            return jsonify({'error': 'Unknown reminder source'}), 400
+        items = profile.data.get(category) or []
+        if not isinstance(index, int) or index < 0 or index >= len(items):
+            return jsonify({'error': 'Reminder no longer exists'}), 400
+
+        item = items[index]
+        if action == 'complete':
+            item['status'] = 'completed'
+            item['completed_at'] = datetime.now().isoformat()
+        else:
+            try:
+                days = max(1, min(365, int(data.get('days', 7))))
+            except (TypeError, ValueError):
+                days = 7
+            base = health_insights.parse_date(item.get('due_date')) or datetime.now().date()
+            start = max(base, datetime.now().date())
+            item['due_date'] = (start + timedelta(days=days)).isoformat()
+        # A user acting on an item is confirming it.
+        item['verified_by_user'] = True
+        profile.save()
+
+        return jsonify({
+            'success': True,
+            'item': item,
+            'reminders': health_insights.build_reminders(profile.data),
+        })
+    except Exception as e:
+        return _safe_error(e, 'act_on_health_reminder')
+
+
+@app.route('/api/health-profile/review-queue', methods=['GET'])
+@require_auth
+def get_health_review_queue():
+    """The next few stored items worth confirming.
+
+    Deliberately small and rate limited: `nudge_due` says whether it is polite
+    to interrupt, while `due` reports the real backlog for a passive badge, so
+    the UI can stay quiet without pretending the backlog is empty.
+    """
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        summary = health_freshness.freshness_summary(profile.data)
+        queue = health_freshness.build_review_queue(profile.data)
+        return jsonify({
+            'success': True,
+            'queue': queue,
+            'due': summary['due'],
+            'high': summary['high'],
+            'nudge_due': summary['nudge_due'],
+            'pending_changes': profile.data.get('pending_changes') or [],
+        })
+    except Exception as e:
+        return _safe_error(e, 'get_health_review_queue')
+
+
+@app.route('/api/health-profile/review-queue', methods=['POST'])
+@require_auth
+def act_on_health_review():
+    """Answer one confirmation question, or quieten the prompt entirely."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        body = request.get_json() or {}
+
+        changes = body.get('changes')
+        if changes is not None and not isinstance(changes, dict):
+            return jsonify({'error': 'changes must be an object'}), 400
+        try:
+            days = int(body.get('days') or 0)
+        except (TypeError, ValueError):
+            days = 0
+
+        result = health_freshness.apply_review_action(
+            profile.data,
+            action=body.get('action'),
+            category=str(body.get('category') or ''),
+            index=body.get('index'),
+            group_key=str(body.get('group_key') or ''),
+            changes=changes,
+            days=days,
+        )
+        if not result['ok']:
+            return jsonify({'error': result['error']}), 400
+
+        profile.save()
+        summary = health_freshness.freshness_summary(profile.data)
+        return jsonify({
+            'success': True,
+            'item': result['item'],
+            'queue': health_freshness.build_review_queue(profile.data),
+            'due': summary['due'],
+            'nudge_due': summary['nudge_due'],
+        })
+    except Exception as e:
+        return _safe_error(e, 'act_on_health_review')
+
+
+@app.route('/api/health-profile/advice', methods=['GET'])
+@require_auth
+def get_health_advice():
+    """Tier 2 AI advice.
+
+    Returns the cached copy unless ?refresh=1 is passed, so simply opening the
+    screen never costs a model call.
+    """
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        force = str(request.args.get('refresh', '')).lower() in ('1', 'true', 'yes')
+
+        if not force:
+            cached = health_insights.cached_advice(profile.data)
+            if cached:
+                result = dict(cached)
+                result['cached'] = True
+                return jsonify({'success': True, 'advice': result})
+
+        advice = health_insights.generate_advice(profile.data, force=force)
+        profile.save()
+        return jsonify({
+            'success': True,
+            'advice': advice,
+            'remaining_generations': health_insights.remaining_generations(profile.data),
+        })
+    except Exception as e:
+        return _safe_error(e, 'get_health_advice')
+
+
+@app.route('/api/health-profile/digest', methods=['GET'])
+@require_auth
+def get_health_digest():
+    """Periodic review. Deterministic, so it never costs a model call."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        digest = health_insights.build_digest(profile.data)
+        if str(request.args.get('mark_seen', '')).lower() in ('1', 'true', 'yes'):
+            profile.data['digest'] = {'generated_at': digest['generated_at']}
+            profile.save()
+        return jsonify({'success': True, 'digest': digest})
+    except Exception as e:
+        return _safe_error(e, 'get_health_digest')
+
+
+@app.route('/api/health-profile/advice-settings', methods=['PUT'])
+@require_auth
+def update_health_advice_settings():
+    """Let the user opt out of AI advice, reminders, or the digest."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        data = request.get_json() or {}
+        settings = health_insights.advice_settings(profile.data)
+
+        if 'ai_enabled' in data:
+            settings['ai_enabled'] = bool(data['ai_enabled'])
+        if 'reminders_enabled' in data:
+            settings['reminders_enabled'] = bool(data['reminders_enabled'])
+        if 'digest_frequency' in data:
+            frequency = str(data['digest_frequency'] or '').lower()
+            if frequency not in ('weekly', 'monthly', 'off'):
+                return jsonify({'error': 'digest_frequency must be weekly, monthly or off'}), 400
+            settings['digest_frequency'] = frequency
+        if 'locale' in data:
+            locale = str(data['locale'] or '').strip()
+            if locale not in ('en', 'zh-HK'):
+                return jsonify({'error': 'locale must be en or zh-HK'}), 400
+            settings['locale'] = locale
+
+        profile.data['advice_settings'] = settings
+        profile.save()
+        return jsonify({'success': True, 'settings': settings})
+    except Exception as e:
+        return _safe_error(e, 'update_health_advice_settings')
+
+
+@app.route('/api/health-profile/item/verify', methods=['POST'])
+@require_auth
+def verify_health_profile_item():
+    """Mark an AI-inferred item as confirmed (or unconfirmed) by the user.
+
+    This is what stops AI interpretations being silently promoted to facts.
+    """
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        data = request.get_json() or {}
+        category = data.get('category')
+        index = data.get('index')
+        verified = data.get('verified', True)
+
+        if category not in HEALTH_ITEM_CATEGORIES:
+            return jsonify({'error': f'Invalid category. Must be one of: {HEALTH_ITEM_CATEGORIES}'}), 400
+        items = profile.data.get(category) or []
+        if not isinstance(index, int) or index < 0 or index >= len(items):
+            return jsonify({'error': 'Index out of range'}), 400
+
+        items[index]['verified_by_user'] = bool(verified)
+        profile.save()
+        return jsonify({
+            'success': True,
+            'item': items[index],
+            'provenance': health_insights.provenance_counts(profile.data),
+        })
+    except Exception as e:
+        return _safe_error(e, 'verify_health_profile_item')
 
 
 # Wisdom Agent Endpoints
