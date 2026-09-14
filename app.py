@@ -6565,6 +6565,7 @@ def get_health_profile():
     try:
         user_id = str(request.current_user['user_id'])
         profile = HealthContextManager.get_profile(user_id)
+        profile.migrate_vitals()
         return jsonify({'success': True, 'profile': profile.to_dict()})
     except Exception as e:
         return _safe_error(e, 'api')
@@ -6624,6 +6625,7 @@ def update_health_profile():
                 )
 
         profile.save()
+        profile.migrate_vitals()
         return jsonify({'success': True, 'profile': profile.to_dict()})
     except Exception as e:
         return _safe_error(e, 'api')
@@ -6642,18 +6644,32 @@ def get_health_summary():
 @app.route('/api/health-profile/vitals', methods=['GET'])
 @require_auth
 def get_health_vitals():
-    """Get the user's emergency / vital info"""
+    """Get the user's emergency / vital info (legacy shape for older clients)"""
     try:
         user_id = str(request.current_user['user_id'])
         profile = HealthContextManager.get_profile(user_id)
-        return jsonify({'success': True, 'vitals': profile.data.get('vitals', {})})
+        profile.migrate_vitals()
+        card = profile.emergency_card()
+        vitals = {
+            'name': card['name'], 'age': card['age'], 'blood': card['blood'],
+            'conditions': ', '.join(card['conditions']),
+            'medications': ', '.join(card['medications']),
+            'allergies': ', '.join(card['allergies']),
+            'history': card['history'], 'doctors': card['doctors'],
+            'ecName': card['ec_name'], 'ecRel': card['ec_rel'], 'ecPhone': card['ec_phone'],
+        }
+        return jsonify({'success': True, 'vitals': vitals})
     except Exception as e:
         return _safe_error(e, 'get_health_vitals')
 
 @app.route('/api/health-profile/vitals', methods=['PUT'])
 @require_auth
 def update_health_vitals():
-    """Save emergency / vital info (syncs from the PWA phone store)"""
+    """Save emergency / vital info from an old PWA build.
+
+    New clients edit Personal Details instead; anything posted here is folded
+    into `personal` + item lists so there is still only one copy of each fact.
+    """
     try:
         user_id = str(request.current_user['user_id'])
         profile = HealthContextManager.get_profile(user_id)
@@ -6661,10 +6677,22 @@ def update_health_vitals():
         if not isinstance(data, dict):
             return jsonify({'error': 'Invalid vitals data'}), 400
         profile.data['vitals'] = data
-        profile.save()
+        profile.migrate_vitals()
         return jsonify({'success': True, 'vitals': data})
     except Exception as e:
         return _safe_error(e, 'update_health_vitals')
+
+@app.route('/api/health-profile/emergency-card', methods=['GET'])
+@require_auth
+def get_emergency_card():
+    """Read-only emergency card derived from personal + current conditions/meds"""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        profile.migrate_vitals()
+        return jsonify({'success': True, 'card': profile.emergency_card()})
+    except Exception as e:
+        return _safe_error(e, 'get_emergency_card')
 
 @app.route('/api/health-profile/test-results-summary', methods=['GET'])
 @require_auth

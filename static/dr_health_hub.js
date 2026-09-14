@@ -154,11 +154,19 @@
             title: 'Personal Details',
             icon: 'fa-id-card',
             desc: 'Age, gender, blood type',
+            hint: 'Single source for your details. The emergency card is built from this - nothing is entered twice.',
             fields: [
+                { key: 'name', label: 'Full name', type: 'text' },
                 { key: 'age', label: 'Age', type: 'text' },
                 { key: 'gender', label: 'Gender', type: 'text' },
                 { key: 'location', label: 'Location', type: 'text' },
-                { key: 'blood_type', label: 'Blood type', type: 'text' }
+                { key: 'blood_type', label: 'Blood type', type: 'text' },
+                { key: 'allergies', label: 'Allergies - one per line', type: 'list' },
+                { key: 'medical_history', label: 'Medical history - major illnesses, surgeries, family history', type: 'textarea' },
+                { key: 'doctors', label: 'Doctors - name, specialty, phone; one per line', type: 'textarea' },
+                { key: 'ec_name', label: 'Emergency contact name', type: 'text' },
+                { key: 'ec_rel', label: 'Emergency contact relationship', type: 'text' },
+                { key: 'ec_phone', label: 'Emergency contact phone', type: 'text' }
             ]
         },
         diet: {
@@ -197,7 +205,7 @@
         {
             group: 'Emergency & Identity',
             items: [
-                { id: 'vitals', kind: 'vitals', title: 'Emergency Card', icon: 'fa-kit-medical', desc: 'Shown to paramedics offline' },
+                { id: 'vitals', kind: 'vitals', title: 'Emergency Card', icon: 'fa-kit-medical', desc: 'Read-only card from Personal Details, works offline' },
                 { id: 'personal', kind: 'object', title: 'Personal Details', icon: 'fa-id-card' }
             ]
         },
@@ -827,9 +835,12 @@
             const schema = OBJECT_SECTIONS[id];
             const obj = (this.profile && this.profile[id]) ? this.profile[id] : {};
             let html = '<div class="hub-form" data-object="' + esc(id) + '">';
-            html += '<div class="hub-form-hint">Changes save straight to your record.</div>';
+            html += '<div class="hub-form-hint">' + esc(schema.hint || 'Changes save straight to your record.') + '</div>';
             for (let i = 0; i < schema.fields.length; i++) {
-                html += this.inputHtml(schema.fields[i], obj[schema.fields[i].key]);
+                const value = (id === 'personal' && schema.fields[i].key === 'name')
+                    ? (this.profile && this.profile.name)
+                    : obj[schema.fields[i].key];
+                html += this.inputHtml(schema.fields[i], value);
             }
             html += '<div class="hub-row-actions">';
             html += '<button class="hub-btn primary" id="hub-obj-save"><i class="fas fa-check"></i> Save</button>';
@@ -1012,7 +1023,8 @@
         // ---------- Vitals ----------
         vitalsBody() {
             let html = '<div class="hub-note">';
-            html += 'Your emergency card is stored on this phone so it works without internet.';
+            html += 'A read-only card for paramedics, built from Personal Details and your current ' +
+                'conditions and medications. A copy is kept on this phone so it works without internet.';
             html += '</div>';
             html += '<div class="hub-row-actions" style="padding:0 14px;">';
             html += '<button class="hub-btn primary" id="hub-open-vitals"><i class="fas fa-kit-medical"></i> Open emergency card</button>';
@@ -1651,6 +1663,10 @@
             if (!form) return;
             const values = this.readForm(form);
             const payload = {};
+            if (id === 'personal' && 'name' in values) {
+                payload.name = values.name;
+                delete values.name;
+            }
             payload[id] = values;
 
             this.busy = true;

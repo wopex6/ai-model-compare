@@ -629,7 +629,13 @@ class HealthProfile:
                 "age": None,
                 "gender": None,
                 "location": "",
-                "blood_type": ""
+                "blood_type": "",
+                "allergies": [],
+                "medical_history": "",
+                "doctors": "",
+                "ec_name": "",
+                "ec_rel": "",
+                "ec_phone": ""
             },
             "conditions": [],
             "symptoms": [],
@@ -747,12 +753,113 @@ class HealthProfile:
     def name(self, value: str):
         self.data["name"] = value
 
+    PERSONAL_KEYS = {
+        "age", "gender", "location", "blood_type", "weight", "height",
+        "allergies", "medical_history", "doctors",
+        "ec_name", "ec_rel", "ec_phone",
+    }
+
     def set_personal(self, **kwargs):
-        """Update personal info (age, gender, location, blood_type)"""
+        """Update personal info (age, gender, location, blood_type, emergency fields)"""
         for k, v in kwargs.items():
-            if k in self.data["personal"]:
+            if k in self.data["personal"] or k in self.PERSONAL_KEYS:
                 self.data["personal"][k] = v
         self.save()
+
+    def migrate_vitals(self):
+        """Fold the legacy `vitals` emergency card into `personal` + item lists.
+
+        The emergency card used to keep its own copy of name/age/blood type/
+        conditions/medications, which could drift from the real record.  Those
+        fields now live in `personal` (edited in Personal Details) or are
+        derived from the active conditions/medications lists, so there is a
+        single copy of each fact.  Idempotent: runs once, then `vitals` is gone.
+        Returns True if anything changed.
+        """
+        vitals = self.data.pop("vitals", None)
+        if not isinstance(vitals, dict) or not vitals:
+            return False
+
+        personal = self.data.setdefault("personal", {})
+        def _fill(key, value):
+            if value and not personal.get(key):
+                personal[key] = value
+        _fill("age", vitals.get("age"))
+        _fill("blood_type", vitals.get("blood"))
+        _fill("allergies", vitals.get("allergies"))
+        _fill("medical_history", vitals.get("history"))
+        _fill("doctors", vitals.get("doctors"))
+        _fill("ec_name", vitals.get("ecName"))
+        _fill("ec_rel", vitals.get("ecRel"))
+        _fill("ec_phone", vitals.get("ecPhone"))
+        if vitals.get("name") and not self.data.get("name"):
+            self.data["name"] = vitals["name"]
+
+        def _names(text):
+            return [s.strip() for s in re.split(r"[\n,;]+", str(text or "")) if s.strip()]
+
+        existing_conditions = {str(c.get("name", "")).strip().lower()
+                               for c in self.data.get("conditions", [])}
+        for name in _names(vitals.get("conditions")):
+            if name.lower() not in existing_conditions:
+                self.add_condition(name=name)
+                existing_conditions.add(name.lower())
+
+        existing_meds = {str(m.get("name", "")).strip().lower()
+                         for m in self.data.get("medications", [])}
+        for name in _names(vitals.get("medications")):
+            if name.lower() not in existing_meds:
+                self.add_medication(name=name)
+                existing_meds.add(name.lower())
+
+        self.save()
+        return True
+
+    def emergency_card(self) -> Dict:
+        """Read-only emergency card derived from the single source of truth.
+
+        Conditions and medications come from the live lists (current items
+        only, so a stopped drug never appears), and identity/contact fields
+        come from `personal`.  The PWA caches this locally for offline use.
+        """
+        personal = self.data.get("personal", {}) or {}
+
+        def _current(items):
+            out = []
+            for it in items or []:
+                status = it.get("status") or "active"
+                if status in ("active", "paused", "investigating"):
+                    out.append(it)
+            return out
+
+        allergies = personal.get("allergies") or []
+        if isinstance(allergies, str):
+            allergies = [a.strip() for a in re.split(r"[\n,]+", allergies) if a.strip()]
+        for r in (self.data.get("diet", {}) or {}).get("restrictions", []) or []:
+            if isinstance(r, str) and r.lower().startswith("allergy:"):
+                name = r.split(":", 1)[1].strip()
+                if name and name.lower() not in {a.lower() for a in allergies}:
+                    allergies.append(name)
+
+        return {
+            "name": self.data.get("name", ""),
+            "age": personal.get("age") or "",
+            "blood": personal.get("blood_type") or "",
+            "conditions": [
+                (c.get("name", "") + (" (suspected)" if c.get("status") == "investigating" else ""))
+                for c in _current(self.data.get("conditions")) if c.get("name")
+            ],
+            "medications": [
+                " ".join(filter(None, [m.get("name", ""), m.get("dose", "")])).strip()
+                for m in _current(self.data.get("medications")) if m.get("name")
+            ],
+            "allergies": allergies,
+            "history": personal.get("medical_history") or "",
+            "doctors": personal.get("doctors") or "",
+            "ec_name": personal.get("ec_name") or "",
+            "ec_rel": personal.get("ec_rel") or "",
+            "ec_phone": personal.get("ec_phone") or "",
+        }
 
     def _queue_proposals(self, proposals: List[Dict]):
         """Park AI-suggested field changes for the user to review.
