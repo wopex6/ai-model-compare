@@ -314,3 +314,8 @@ python deploy_anywhere.py
 *Status: Production Ready*
 
 Last updated: 2026-09-14 11:12:30
+# Contributing / AI agents
+
+If you are working on this repository (human or AI agent), read **[AGENTS.md](AGENTS.md)** first.
+It covers the deployment path, known-failing tests, shared-module conventions and
+the session handoff protocol. Run `python handoff.py -m "..."` before switching tools.
