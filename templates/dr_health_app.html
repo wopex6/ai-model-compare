@@ -492,6 +492,38 @@
     .hub-input:focus { outline: none; border-color: #c62828; }
     textarea.hub-input { resize: vertical; }
 
+    /* Diary dictation pill — floats on the Entry field's top-right corner. */
+    .hf-diary-wrap { position: relative; }
+    .hf-mic-pill {
+        position: absolute; top: 30px; right: 6px; z-index: 5;
+        display: flex; align-items: center;
+        background: #fff; border: 1px solid #cfd8dc; border-radius: 20px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+    }
+    .hf-mic-pill > button {
+        border: none; background: transparent; padding: 6px 10px;
+        font-size: 0.85rem; color: #37474f; cursor: pointer; font-family: inherit;
+    }
+    .hf-mic-lang { font-weight: 700; border-right: 1px solid #eceff1 !important; border-radius: 20px 0 0 20px; }
+    .hf-diary-mic { border-radius: 0 20px 20px 0; font-size: 1rem; }
+    .hf-diary-mic.recording {
+        background: #c62828; color: #fff; border-radius: 0 20px 20px 0;
+        animation: hf-mic-pulse 1s ease-in-out infinite;
+    }
+    @keyframes hf-mic-pulse { 50% { opacity: 0.5; } }
+    .hf-lang-menu {
+        position: absolute; top: 100%; right: 0; margin-top: 5px; min-width: 160px;
+        background: #fff; border: 1px solid #cfd8dc; border-radius: 10px;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.18); overflow: hidden; z-index: 20;
+    }
+    .hf-lang-menu button {
+        display: block; width: 100%; text-align: left; padding: 10px 14px;
+        border: none; background: #fff; font-size: 0.85rem; color: #263238;
+        font-family: inherit; cursor: pointer;
+    }
+    .hf-lang-menu button:active { background: #f0f4ff; }
+    .hf-lang-menu button.sel { font-weight: 700; color: #c62828; }
+
     .hub-empty { padding: 48px 24px; text-align: center; color: #b0bec5; }
     .hub-empty i { font-size: 2.2rem; margin-bottom: 10px; display: block; }
     .hub-empty p { margin: 0 0 14px; font-size: 0.9rem; }
