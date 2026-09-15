@@ -26,6 +26,7 @@ FILES = [
     'ai_compare/health_insights.py',
     'ai_compare/health_freshness.py',
     'ai_compare/character_routes.py',
+    'ai_compare/base_enhanced_chatbot.py',
     'templates/dr_health_app.html',
     'templates/health_profile.html',
     'templates/chatchat.html',
