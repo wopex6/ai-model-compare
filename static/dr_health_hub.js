@@ -1391,11 +1391,6 @@
                 this.status(micHelpText(), true);
                 return;
             }
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (!SpeechRecognition) {
-                this.status('Voice input is not supported in this browser.', true);
-                return;
-            }
             // Scope to the form that owns the mic button — several diary forms
             // can be open at once (add + edit), all sharing #hf-content ids, so
             // a root-wide query can write the transcript into the wrong form.
@@ -1403,36 +1398,150 @@
             const target = scope.querySelector('#hf-content');
             if (!target) return;
             const micBtn = scope.querySelector('.hf-diary-mic');
-            const stopMark = () => { if (micBtn) micBtn.classList.remove('recording'); };
 
-            // No getUserMedia pre-check: it is a second permission prompt on top
-            // of SpeechRecognition's own, and on Android the extra activity can
-            // bounce the user out of the app.  A denial surfaces via onerror.
-            const rec = new SpeechRecognition();
-            rec.lang = diaryLang().value;
-            rec.continuous = false;
-            rec.interimResults = false;
-            rec.onstart = () => {
-                this.status('Listening…');
-                if (micBtn) micBtn.classList.add('recording');
+            // Second tap while recording = stop.
+            const active = micBtn && micBtn._session;
+            if (active) {
+                active.wantStop = true;
+                try { if (active.rec) active.rec.stop(); } catch (e) {}
+                try { if (active.mr && active.mr.state !== 'inactive') active.mr.stop(); } catch (e) {}
+                return;
+            }
+
+            const ua = navigator.userAgent || '';
+            const isHuawei = /huawei|honor/i.test(ua);
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            // Huawei/EMUI kills the PWA when SpeechRecognition opens its
+            // external activity — record in-app and transcribe server-side
+            // instead.  Same fallback when SpeechRecognition is missing.
+            const useUpload = isHuawei || !SpeechRecognition;
+
+            if (useUpload) {
+                this._recordViaUpload(target, micBtn);
+            } else {
+                this._recordViaSpeech(target, micBtn, SpeechRecognition);
+            }
+        },
+
+        _recordViaSpeech(target, micBtn, SpeechRecognition) {
+            const self = this;
+            const session = { wantStop: false, rec: null, committed: target.value, restarts: 0 };
+            if (micBtn) micBtn._session = session;
+            const finish = (msg, isErr) => {
+                if (micBtn) { micBtn.classList.remove('recording'); micBtn._session = null; }
+                if (msg) self.status(msg, !!isErr);
             };
-            rec.onend = stopMark;
-            rec.onerror = (e) => {
-                stopMark();
-                const msg = e.error === 'service-not-allowed' || e.error === 'not-allowed'
-                    ? micHelpText()
-                    : (e.error === 'language-not-supported'
-                        ? 'This language is not supported by your browser. Try English.'
-                        : 'Voice input error: ' + e.error);
-                this.status(msg, true);
-            };
-            rec.onresult = (e) => {
-                if (e.results && e.results[0] && e.results[0][0]) {
-                    target.value = (target.value ? target.value + ' ' : '') + e.results[0][0].transcript;
-                    this.status('Voice recorded.');
+            const start = () => {
+                // Chrome on Android ends the session on a pause even with
+                // continuous=true, so restart transparently until the user
+                // taps the mic again.  Results reset per instance, so fold
+                // the current field text into the base before each start.
+                session.committed = target.value;
+                const rec = new SpeechRecognition();
+                session.rec = rec;
+                rec.lang = diaryLang().value;
+                rec.continuous = true;
+                rec.interimResults = true;
+                rec.onstart = () => {
+                    self.status('Listening… tap the mic again to stop.');
+                    if (micBtn) micBtn.classList.add('recording');
+                };
+                rec.onresult = (e) => {
+                    session.restarts = 0;
+                    let text = '';
+                    for (let i = 0; i < e.results.length; i++) {
+                        text += e.results[i][0].transcript;
+                    }
+                    target.value = session.committed + (session.committed && text ? ' ' : '') + text;
+                };
+                rec.onerror = (e) => {
+                    if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+                        session.wantStop = true;
+                        finish(micHelpText(), true);
+                    } else if (e.error === 'language-not-supported') {
+                        session.wantStop = true;
+                        finish('This language is not supported by your browser. Try English.', true);
+                    }
+                    // 'no-speech', 'aborted', 'network' — onend handles restart.
+                };
+                rec.onend = () => {
+                    session.rec = null;
+                    if (session.wantStop) { finish('Voice recorded.'); return; }
+                    if (session.restarts >= 10) {
+                        finish('Voice input stopped (too many silences). Tap the mic to start again.', true);
+                        return;
+                    }
+                    session.restarts++;
+                    start();
+                };
+                try { rec.start(); } catch (e) {
+                    session.wantStop = true;
+                    finish('Could not start voice input: ' + e.message, true);
                 }
             };
-            try { rec.start(); } catch (e) { stopMark(); this.status('Could not start voice input: ' + e.message, true); }
+            start();
+        },
+
+        async _recordViaUpload(target, micBtn) {
+            const self = this;
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
+                this.status('Voice recording is not supported in this browser.', true);
+                return;
+            }
+            let stream;
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            } catch (e) {
+                this.status('Microphone access was denied. Allow it for this site in the browser settings.', true);
+                return;
+            }
+            const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
+                : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '');
+            let mr;
+            try {
+                mr = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+            } catch (e) {
+                stream.getTracks().forEach(t => t.stop());
+                this.status('Could not start recording: ' + e.message, true);
+                return;
+            }
+            const chunks = [];
+            const session = { wantStop: false, mr: mr };
+            if (micBtn) micBtn._session = session;
+            mr.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+            mr.onstop = async () => {
+                if (micBtn) { micBtn.classList.remove('recording'); micBtn._session = null; }
+                stream.getTracks().forEach(t => t.stop());
+                const blob = new Blob(chunks, { type: mr.mimeType || 'audio/webm' });
+                if (!blob.size) { self.status('Nothing was recorded.', true); return; }
+                self.status('Transcribing…');
+                try {
+                    const fd = new FormData();
+                    const ext = (mr.mimeType || '').includes('mp4') ? 'm4a' : 'webm';
+                    fd.append('audio', blob, 'diary.' + ext);
+                    const res = await AuthHelper.authenticatedFetch('/api/health-profile/transcribe', {
+                        method: 'POST', body: fd
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (res.ok && data.success && data.text) {
+                        target.value = (target.value ? target.value + ' ' : '') + data.text;
+                        self.status('Voice recorded.');
+                    } else {
+                        self.status('Transcription failed' + (data.error ? ': ' + data.error : '.'), true);
+                    }
+                } catch (e) {
+                    self.status('Transcription failed: ' + e.message, true);
+                }
+            };
+            try {
+                mr.start();
+                if (micBtn) micBtn.classList.add('recording');
+                this.status('Recording… tap the mic again to stop.');
+            } catch (e) {
+                if (micBtn) micBtn._session = null;
+                stream.getTracks().forEach(t => t.stop());
+                this.status('Could not start recording: ' + e.message, true);
+            }
         },
 
         // ---------- Wiring ----------

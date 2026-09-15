@@ -6694,6 +6694,46 @@ def get_emergency_card():
     except Exception as e:
         return _safe_error(e, 'get_emergency_card')
 
+@app.route('/api/health-profile/transcribe', methods=['POST'])
+@require_auth
+def transcribe_diary_audio():
+    """Transcribe a short diary voice note.
+
+    Used on devices where the browser SpeechRecognition flow is unreliable
+    (e.g. Huawei/EMUI kills the PWA when the speech activity opens).  The
+    client records with MediaRecorder and posts the audio blob here; we
+    forward it to the configured OpenAI-compatible transcription endpoint.
+    """
+    try:
+        f = request.files.get('audio')
+        if not f or not f.filename:
+            return jsonify({'error': 'No audio file uploaded'}), 400
+        audio = f.read()
+        if not audio:
+            return jsonify({'error': 'Empty audio file'}), 400
+        if len(audio) > 10 * 1024 * 1024:
+            return jsonify({'error': 'Audio too large (max 10 MB)'}), 413
+
+        api_key = (os.getenv('OPENAI_API_KEY') or '').strip()
+        if not api_key:
+            return jsonify({'error': 'Server transcription is not configured'}), 503
+
+        from openai import OpenAI
+        client = OpenAI(
+            api_key=api_key,
+            base_url=os.getenv('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
+            timeout=90.0,
+            max_retries=2,
+        )
+        resp = client.audio.transcriptions.create(
+            model=os.getenv('OPENAI_TRANSCRIBE_MODEL', 'whisper-1'),
+            file=(secure_filename(f.filename) or 'audio.webm', audio, f.mimetype or 'audio/webm'),
+        )
+        text = (getattr(resp, 'text', '') or '').strip()
+        return jsonify({'success': True, 'text': text})
+    except Exception as e:
+        return _safe_error(e, 'transcribe_diary_audio')
+
 @app.route('/api/health-profile/test-results-summary', methods=['GET'])
 @require_auth
 def get_test_results_summary():
