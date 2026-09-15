@@ -334,10 +334,18 @@
             if (ed) { _dictateTarget = ed; updateDictatePill(); }
         }, true);
         document.addEventListener('focusout', () => {
-            // Recompute from activeElement after the focus settles — covers
-            // blur-to-nothing as well as focus moving between fields.
+            // Recompute from activeElement after the focus settles.  Focus
+            // landing INSIDE the dictation pill keeps the previous target —
+            // that is the mic/lang tap itself.  Focus landing anywhere else
+            // non-editable deactivates the pill.
             setTimeout(() => {
-                _dictateTarget = editableEl(document.activeElement);
+                const ae = document.activeElement;
+                const ed = editableEl(ae);
+                if (ed) {
+                    _dictateTarget = ed;
+                } else if (!ae || !ae.closest || !ae.closest('.hf-dictate-pill')) {
+                    _dictateTarget = null;
+                }
                 updateDictatePill();
             }, 0);
         }, true);
@@ -1431,19 +1439,14 @@
 
         // Wire the single global dictation pill: the mic dictates into
         // whichever editable field last had focus; the language chip opens a
-        // menu.  pointerdown is prevented so tapping the pill never blurs the
-        // target field.  Idempotent via _wired flags.
+        // menu.  Do NOT preventDefault on pointerdown/touchstart here — on
+        // mobile that suppresses the click event and the tap does nothing.
+        // Focus tracking in installDictationTracker already keeps the target
+        // when focus moves into the pill.  Idempotent via _wired flags.
         wireMicPills(rootEl) {
             const self = this;
             if (!rootEl) return;
             installDictationTracker();
-            rootEl.querySelectorAll('.hf-dictate-pill').forEach(function (pill) {
-                if (!pill._noFocusSteal) {
-                    pill._noFocusSteal = true;
-                    ['pointerdown', 'mousedown', 'touchstart'].forEach(ev =>
-                        pill.addEventListener(ev, (e) => e.preventDefault()));
-                }
-            });
             rootEl.querySelectorAll('.hf-diary-mic').forEach(function (btn) {
                 if (btn._wired) return;
                 btn._wired = true;
