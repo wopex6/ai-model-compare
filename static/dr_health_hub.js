@@ -1359,17 +1359,17 @@
         },
 
         async recordDiary() {
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (!SpeechRecognition) {
-                this.status('Voice input is not supported in this browser.', true);
-                return;
-            }
             const ua = navigator.userAgent || '';
             const platform = navigator.platform || '';
             const maxTouch = navigator.maxTouchPoints || 0;
             const isIOS = /iPad|iPhone|iPod/i.test(ua) || (platform === 'MacIntel' && maxTouch > 1);
             if (isIOS) {
                 this.status(micHelpText(), true);
+                return;
+            }
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                this.status('Voice input is not supported in this browser.', true);
                 return;
             }
             const lang = this.root.querySelector('#hf-diary-lang');

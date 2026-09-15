@@ -2097,7 +2097,9 @@ class HealthProfile:
 
     def format_for_prompt(self, max_chars: int = 2000) -> str:
         """Format health profile as context for the AI prompt"""
-        if (not self.data.get("name") and not self.data.get("conditions") and
+        _personal_vals = self.data.get("personal", {}) or {}
+        _has_personal = any(v for v in _personal_vals.values())
+        if (not _has_personal and not self.data.get("name") and not self.data.get("conditions") and
             not self.data.get("symptoms") and not self.data.get("medications") and
             not self.data.get("supplements") and not self.data.get("test_results") and
             not self.data.get("action_plans") and not self.data.get("conversation_insights")):
@@ -2105,7 +2107,7 @@ class HealthProfile:
 
         sections = []
 
-        # Personal (name omitted for anonymity)
+        # Personal (name, contact details and doctors omitted for anonymity)
         personal = self.data.get("personal", {})
         if personal:
             parts = []
@@ -2120,17 +2122,43 @@ class HealthProfile:
             if parts:
                 sections.append("Patient: " + ", ".join(parts))
 
-        # Active conditions
-        conditions = [c for c in self.data.get("conditions", []) if c.get("status") == "active"]
-        if conditions:
+        # Allergies — safety-critical, so they lead the clinical picture.
+        # Sources: Personal Details field plus diet restrictions tagged ALLERGY:.
+        allergies = []
+        pa = personal.get("allergies")
+        if isinstance(pa, str):
+            allergies.extend(a.strip() for a in re.split(r"[\n,]+", pa) if a.strip())
+        elif isinstance(pa, list):
+            allergies.extend(str(a).strip() for a in pa if str(a).strip())
+        for r in (self.data.get("diet", {}) or {}).get("restrictions", []) or []:
+            if isinstance(r, str) and r.lower().startswith("allergy:"):
+                name = r.split(":", 1)[1].strip()
+                if name and name.lower() not in {a.lower() for a in allergies}:
+                    allergies.append(name)
+        if allergies:
+            sections.append("ALLERGIES (must not be contradicted by advice): " + ", ".join(allergies))
+
+        if personal.get("medical_history"):
+            sections.append(f"Medical history: {personal['medical_history']}")
+
+        # Conditions — active ones first; resolved ones stay labelled as past
+        # because history (e.g. a resolved condition) still informs advice.
+        active_conditions = [c for c in self.data.get("conditions", []) if is_active(c) or c.get("status") == "investigating"]
+        past_conditions = [c for c in self.data.get("conditions", []) if not is_active(c) and c.get("status") != "investigating"]
+        if active_conditions:
             cond_text = "Active Conditions: " + "; ".join(
                 f"{c['name']}" +
                 (f" ({c['details']})" if c.get('details') else "") +
                 (f" [diagnosed {c['diagnosed_date']}]" if c.get('diagnosed_date') else "") +
                 (f" [recorded {c['added_at'][:10]}]" if c.get('added_at') else "")
-                for c in conditions
+                for c in active_conditions
             )
             sections.append(cond_text)
+        if past_conditions:
+            sections.append("Past Conditions (resolved - do not treat as current): " + "; ".join(
+                f"{c['name']}" + (f" [until {c['ended_on']}]" if c.get('ended_on') else "")
+                for c in past_conditions[-8:]
+            ))
 
         # Current symptoms. Resolved ones are kept but labelled: a symptom that
         # has gone is still history worth knowing, and must never be presented
@@ -2217,10 +2245,24 @@ class HealthProfile:
 
         # Lifestyle
         lifestyle = self.data.get("lifestyle", {})
+        if lifestyle.get("exercise"):
+            sections.append("Exercise: " + "; ".join(
+                str(e) if not isinstance(e, dict)
+                else "; ".join(f"{k}: {v}" for k, v in e.items())
+                for e in lifestyle["exercise"][:5]
+            ))
         if lifestyle.get("sleep"):
             sleep = lifestyle["sleep"]
             sleep_text = "Sleep: " + "; ".join(f"{k}: {v}" for k, v in sleep.items())
             sections.append(sleep_text)
+        if lifestyle.get("stress_factors"):
+            sections.append("Stress factors: " + ", ".join(
+                str(s) for s in lifestyle["stress_factors"][:5]
+            ))
+        if lifestyle.get("habits"):
+            sections.append("Habits: " + ", ".join(
+                str(h) for h in lifestyle["habits"][:5]
+            ))
 
         # Active action plans
         plans = [p for p in self.data.get("action_plans", []) if p.get("status") == "active"]

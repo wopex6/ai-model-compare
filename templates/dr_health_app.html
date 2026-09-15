@@ -683,7 +683,7 @@
         <div class="emergency-header">
             <h2><i class="fas fa-kit-medical"></i> Emergency Info</h2>
             <div style="display:flex; gap:8px; align-items:center;">
-                <button class="action" id="emergency-edit-btn" style="margin:0; padding:8px 14px; font-size:0.85rem;"><i class="fas fa-pen"></i> Edit in Personal Details</button>
+                <button class="action" id="emergency-edit-btn" style="margin:0; padding:8px 14px; font-size:0.85rem;"><i class="fas fa-pen"></i> Edit</button>
                 <button id="emergency-close" title="Close"><i class="fas fa-times"></i></button>
             </div>
         </div>
@@ -1014,21 +1014,11 @@
             if (currentSups.length) {
                 html += `<strong style="color:#6A1B9A;">Supplements:</strong> ${currentSups.map(e => escapeHtml(e.item.name)).join(', ')}`;
             }
-            const card = loadEmergencyCache() || {};
-            syncEmergencyFromServer();
-            const cardList = (x) => Array.isArray(x) ? x.join(', ') : (x || '');
-            if (card.name || card.age || card.blood || (card.conditions || []).length ||
-                (card.medications || []).length || (card.allergies || []).length ||
-                card.doctors || card.ec_name || card.ec_phone) {
-                html += '<strong style="color:#c62828;"><i class="fas fa-kit-medical"></i> Emergency card:</strong><ul>';
-                if (card.name) html += `<li><strong>${card.name}</strong>${card.age ? ' (' + card.age + ')' : ''}${card.blood ? ' • Blood: ' + card.blood : ''}</li>`;
-                if ((card.conditions || []).length) html += `<li>Conditions: ${cardList(card.conditions)}</li>`;
-                if ((card.medications || []).length) html += `<li>Medications: ${cardList(card.medications)}</li>`;
-                if ((card.allergies || []).length) html += `<li>Allergies: ${cardList(card.allergies)}</li>`;
-                if (card.doctors) html += `<li>Doctors: ${String(card.doctors).replace(/\n/g, ', ')}</li>`;
-                if (card.ec_name || card.ec_phone) html += `<li>Emergency contact: ${[card.ec_name, card.ec_rel, card.ec_phone].filter(Boolean).join(' — ')}</li>`;
-                html += '</ul>';
-            }
+            html += '<div id="emergency-summary-slot">' + emergencySummaryHtml(loadEmergencyCache()) + '</div>';
+            syncEmergencyFromServer().then(() => {
+                const slot = document.getElementById('emergency-summary-slot');
+                if (slot) slot.innerHTML = emergencySummaryHtml(loadEmergencyCache());
+            });
             el.innerHTML = html || '<em style="color:#999;">No data yet. Chat or add info to build your profile.</em>';
         } catch (e) {
             el.innerHTML = '<em style="color:#999;">Sign in to see your health profile.</em>';
@@ -2291,9 +2281,37 @@
     function saveEmergencyCache(card) {
         try { localStorage.setItem(EMERGENCY_KEY, JSON.stringify(card)); } catch (e) {}
     }
+    function emergencySummaryHtml(card) {
+        const v = card || {};
+        const listOf = (x) => Array.isArray(x) ? x.join(', ') : (x || '');
+        if (!(v.name || v.age || v.blood || (v.conditions || []).length ||
+              (v.medications || []).length || (v.allergies || []).length ||
+              v.doctors || v.ec_name || v.ec_phone)) return '';
+        let html = '<strong style="color:#c62828;"><i class="fas fa-kit-medical"></i> Emergency card:</strong><ul>';
+        if (v.name) html += `<li><strong>${v.name}</strong>${v.age ? ' (' + v.age + ')' : ''}${v.blood ? ' • Blood: ' + v.blood : ''}</li>`;
+        if ((v.conditions || []).length) html += `<li>Conditions: ${listOf(v.conditions)}</li>`;
+        if ((v.medications || []).length) html += `<li>Medications: ${listOf(v.medications)}</li>`;
+        if ((v.allergies || []).length) html += `<li>Allergies: ${listOf(v.allergies)}</li>`;
+        if (v.doctors) html += `<li>Doctors: ${String(v.doctors).replace(/\n/g, ', ')}</li>`;
+        if (v.ec_name || v.ec_phone) html += `<li>Emergency contact: ${[v.ec_name, v.ec_rel, v.ec_phone].filter(Boolean).join(' — ')}</li>`;
+        html += '</ul>';
+        return html;
+    }
 
     async function syncEmergencyFromServer() {
         try {
+            // Rescue emergency details an older build saved only on this phone —
+            // the server folds them into Personal Details on the way in.
+            const legacyKey = 'drHealth.vitals.v1';
+            let legacy = null;
+            try { legacy = JSON.parse(localStorage.getItem(legacyKey) || 'null'); } catch (e) {}
+            if (legacy && Object.keys(legacy).some(k => legacy[k])) {
+                await AuthHelper.authenticatedFetch('/api/health-profile/vitals', {
+                    method: 'PUT',
+                    body: JSON.stringify(legacy)
+                });
+                try { localStorage.removeItem(legacyKey); } catch (e) {}
+            }
             const resp = await AuthHelper.authenticatedFetch('/api/health-profile/emergency-card');
             if (!resp.ok) throw new Error('Server not available');
             const data = await resp.json();
