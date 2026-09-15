@@ -492,12 +492,8 @@
     .hub-input:focus { outline: none; border-color: #c62828; }
     textarea.hub-input { resize: vertical; }
 
-    /* Dictation pill — sits on a field's top-right corner. */
-    .hf-diary-wrap { position: relative; }
-    .hf-diary-wrap.chat-wrap { flex: 1; min-width: 0; }
-    .hf-diary-wrap.chat-wrap textarea { width: 100%; }
+    /* Global dictation pill — floats just above the bottom nav. */
     .hf-mic-pill {
-        position: absolute; top: 6px; right: 6px; z-index: 5;
         display: flex; align-items: center;
         background: #fff; border: 1px solid #cfd8dc; border-radius: 20px;
         box-shadow: 0 1px 4px rgba(0,0,0,0.15);
@@ -525,9 +521,22 @@
     }
     .hf-lang-menu button:active { background: #f0f4ff; }
     .hf-lang-menu button.sel { font-weight: 700; color: #c62828; }
-    /* 1-row fields (chat input): float the pill above the box like the iOS
-       dictation bubble instead of inside it. */
-    .hf-mic-pill.hf-mic-float { top: -34px; right: 0; }
+    .hf-dictate-pill {
+        position: fixed; right: 14px; z-index: 150;
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 60px);
+    }
+    .hf-dictate-pill.inactive { opacity: 0.4; }
+    .hf-dictate-pill .hf-lang-menu { top: auto; bottom: calc(100% + 6px); }
+    .hf-dictate-toast {
+        position: fixed; right: 14px; z-index: 160;
+        bottom: calc(env(safe-area-inset-bottom, 0px) + 106px);
+        max-width: 260px; padding: 8px 12px; border-radius: 10px;
+        background: #37474f; color: #fff; font-size: 0.8rem;
+        opacity: 0; pointer-events: none; transition: opacity .2s;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+    }
+    .hf-dictate-toast.show { opacity: 1; }
+    .hf-dictate-toast.error { background: #c62828; }
 
     .hub-empty { padding: 48px 24px; text-align: center; color: #b0bec5; }
     .hub-empty i { font-size: 2.2rem; margin-bottom: 10px; display: block; }
@@ -645,14 +654,7 @@
             <div class="qt" data-msg="What preventive health screenings should I consider?">📋 Preventive Care</div>
         </div>
         <div class="chat-input-area">
-            <div class="hf-diary-wrap chat-wrap">
-                <textarea id="userInput" rows="1" placeholder="Ask a health question..."></textarea>
-                <div class="hf-mic-pill hf-mic-float">
-                    <button type="button" class="hf-mic-lang" title="Dictation language">廣</button>
-                    <button type="button" class="hf-diary-mic" title="Dictate"><i class="fas fa-microphone"></i></button>
-                    <div class="hf-lang-menu" style="display:none;"></div>
-                </div>
-            </div>
+            <textarea id="userInput" rows="1" placeholder="Ask a health question..."></textarea>
             <button id="sendBtn"><i class="fas fa-paper-plane"></i></button>
         </div>
     </div>
@@ -667,14 +669,7 @@
             <div id="review-prompt" style="display:none;"></div>
             <div class="card">
                 <h3><i class="fas fa-pen"></i> Add Health Info</h3>
-                <div class="hf-diary-wrap">
-                    <textarea id="profile-text" placeholder="Paste notes, symptoms, medications, lab results..."></textarea>
-                    <div class="hf-mic-pill">
-                        <button type="button" class="hf-mic-lang" title="Dictation language">廣</button>
-                        <button type="button" class="hf-diary-mic" title="Dictate"><i class="fas fa-microphone"></i></button>
-                        <div class="hf-lang-menu" style="display:none;"></div>
-                    </div>
-                </div>
+                <textarea id="profile-text" placeholder="Paste notes, symptoms, medications, lab results..."></textarea>
                 <button class="action" id="analyze-btn"><i class="fas fa-magic"></i> Analyze &amp; Review</button>
                 <div style="margin-top:12px; border-top:1px solid #eee; padding-top:10px;">
                     <input type='file' id='profile-file' style="opacity:0; position:absolute; left:-9999px; top:0; width:1px; height:1px;" aria-hidden="true">
@@ -725,6 +720,14 @@
         <button class="nav-btn active" data-target="chat-screen"><i class="fas fa-comment-medical"></i>Chat</button>
         <button class="nav-btn" data-target="hub-screen"><i class="fas fa-clipboard-list"></i>Health</button>
         <button class="nav-btn" data-target="profile-screen"><i class="fas fa-folder-plus"></i>Records</button>
+    </div>
+
+    <!-- Single dictation pill — dictates into whichever text box has focus;
+         greys out when no editable field is focused. -->
+    <div class="hf-mic-pill hf-dictate-pill inactive">
+        <button type="button" class="hf-mic-lang" title="Dictation language">廣</button>
+        <button type="button" class="hf-diary-mic" title="Dictate into the focused text box"><i class="fas fa-microphone"></i></button>
+        <div class="hf-lang-menu" style="display:none;"></div>
     </div>
 
 </div>
@@ -839,8 +842,8 @@
         btn.addEventListener('click', () => showScreen(btn.dataset.target));
     });
 
-    // Dictation pills on the static textareas (chat input, paste-notes box).
-    // Hidden on iOS — the keyboard mic dictates there instead.
+    // Global dictation pill — hidden on iOS (keyboard mic dictates there).
+    // hub.js loads deferred, so wait for DOMContentLoaded before wiring.
     (function wireStaticMicPills() {
         const ua = navigator.userAgent || '';
         const isIOS = /iPad|iPhone|iPod/i.test(ua) ||
@@ -849,7 +852,14 @@
             document.querySelectorAll('.hf-mic-pill').forEach(p => { p.style.display = 'none'; });
             return;
         }
-        if (typeof DrHealthHub !== 'undefined') DrHealthHub.wireMicPills(document);
+        const wire = () => {
+            if (typeof DrHealthHub !== 'undefined') DrHealthHub.wireMicPills(document);
+        };
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', wire);
+        } else {
+            wire();
+        }
     })();
 
     // ---------- Auth gating ----------
