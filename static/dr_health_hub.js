@@ -1376,15 +1376,9 @@
             const target = this.root.querySelector('#hf-content');
             if (!target) return;
 
-            try {
-                if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-                    await navigator.mediaDevices.getUserMedia({ audio: true });
-                }
-            } catch (e) {
-                this.status(micHelpText(), true);
-                return;
-            }
-
+            // No getUserMedia pre-check: it is a second permission prompt on top
+            // of SpeechRecognition's own, and on Android the extra activity can
+            // bounce the user out of the app.  A denial surfaces via onerror.
             const rec = new SpeechRecognition();
             rec.lang = lang ? lang.value : 'yue-Hant-HK';
             rec.continuous = false;

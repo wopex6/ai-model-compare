@@ -683,7 +683,7 @@
         <div class="emergency-header">
             <h2><i class="fas fa-kit-medical"></i> Emergency Info</h2>
             <div style="display:flex; gap:8px; align-items:center;">
-                <button class="action" id="emergency-edit-btn" style="margin:0; padding:8px 14px; font-size:0.85rem;"><i class="fas fa-pen"></i> Edit</button>
+                <button class="action" id="emergency-edit-btn" title="Edit in Personal Details"><i class="fas fa-pen"></i></button>
                 <button id="emergency-close" title="Close"><i class="fas fa-times"></i></button>
             </div>
         </div>
@@ -2313,7 +2313,27 @@
                 try { localStorage.removeItem(legacyKey); } catch (e) {}
             }
             const resp = await AuthHelper.authenticatedFetch('/api/health-profile/emergency-card');
-            if (!resp.ok) throw new Error('Server not available');
+            if (!resp.ok) {
+                // Older server without the derived endpoint — translate the
+                // legacy vitals blob into the card shape so it still displays.
+                const vresp = await AuthHelper.authenticatedFetch('/api/health-profile/vitals');
+                if (vresp.ok) {
+                    const vd = await vresp.json();
+                    if (vd.success && vd.vitals) {
+                        const split = (s) => String(s || '').split(/[\n,;]+/).map(x => x.trim()).filter(Boolean);
+                        const card = {
+                            name: vd.vitals.name || '', age: vd.vitals.age || '', blood: vd.vitals.blood || '',
+                            conditions: split(vd.vitals.conditions), medications: split(vd.vitals.medications),
+                            allergies: split(vd.vitals.allergies), history: vd.vitals.history || '',
+                            doctors: vd.vitals.doctors || '', ec_name: vd.vitals.ecName || '',
+                            ec_rel: vd.vitals.ecRel || '', ec_phone: vd.vitals.ecPhone || ''
+                        };
+                        saveEmergencyCache(card);
+                        return card;
+                    }
+                }
+                throw new Error('Server not available');
+            }
             const data = await resp.json();
             if (data.success && data.card) {
                 saveEmergencyCache(data.card);
