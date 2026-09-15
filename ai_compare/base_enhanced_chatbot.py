@@ -106,7 +106,13 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
 
         # Detect what type of inquiry this is
         topic_area = self._detect_topic_area(user_message)
-        
+
+        # A canned concept/strategy answer can never account for this patient's
+        # record, so the medical advisor always goes through the AI path —
+        # _build_enhanced_prompt injects the health profile context there.
+        if self.character_id == "medical_advisor":
+            topic_area = "general"
+
         # Route to appropriate handler
         if topic_area == "concept_inquiry" and self.concepts:
             return await self._explain_concept(user_message, user_id=user_id)

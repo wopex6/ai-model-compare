@@ -354,6 +354,24 @@ class HealthAdviceApiTest(unittest.TestCase):
         self.assertEqual(pers['medical_history'], 'Appendix 2010')
         self.assertNotIn('made_up_key', pers)
 
+    def test_prompt_context_has_medical_info_but_no_identifiers(self):
+        self.seed({'name': 'Secret Name',
+                   'personal': {'blood_type': 'O+', 'allergies': ['penicillin'],
+                                'medical_history': 'Appendix 2010',
+                                'doctors': 'Dr Smith', 'ec_phone': '555-9999'},
+                   'conditions': [{'name': 'gout', 'status': 'resolved'}],
+                   'lifestyle': {'exercise': ['walking daily'],
+                                 'habits': ['smoking']}})
+        ctx = HealthContextManager.get_context_for_prompt(TEST_USER)
+        self.assertIn('penicillin', ctx)
+        self.assertIn('Appendix 2010', ctx)
+        self.assertIn('gout', ctx)
+        self.assertIn('Past Conditions', ctx)
+        self.assertIn('walking daily', ctx)
+        self.assertNotIn('Secret Name', ctx)
+        self.assertNotIn('555-9999', ctx)
+        self.assertNotIn('Dr Smith', ctx)
+
 
 if __name__ == '__main__':
     unittest.main()
