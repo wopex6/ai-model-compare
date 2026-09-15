@@ -309,6 +309,59 @@
         return DIARY_LANGS[1];
     }
 
+    // ---------- Global dictation pill ----------
+    // One floating pill dictates into whichever text box last had focus.  The
+    // pill greys out when nothing editable is focused.
+    let _dictateTarget = null;
+
+    function editableEl(el) {
+        if (!el || el.readOnly || el.disabled) return null;
+        if (el.tagName === 'TEXTAREA') return el;
+        if (el.tagName === 'INPUT' && /^(text|search|url|tel|email|password|number)?$/i.test(el.type || 'text')) return el;
+        return null;
+    }
+
+    function updateDictatePill() {
+        const pill = document.querySelector('.hf-dictate-pill');
+        if (pill) pill.classList.toggle('inactive', !editableEl(_dictateTarget));
+    }
+
+    function installDictationTracker() {
+        if (installDictationTracker._done) return;
+        installDictationTracker._done = true;
+        document.addEventListener('focusin', (e) => {
+            const ed = editableEl(e.target);
+            if (ed) { _dictateTarget = ed; updateDictatePill(); }
+        }, true);
+        document.addEventListener('focusout', () => {
+            // Recompute from activeElement after the focus settles — covers
+            // blur-to-nothing as well as focus moving between fields.
+            setTimeout(() => {
+                _dictateTarget = editableEl(document.activeElement);
+                updateDictatePill();
+            }, 0);
+        }, true);
+    }
+
+    // Dictation feedback must work on every screen — the hub's status banner
+    // is invisible outside the Health tab, so use a floating toast instead.
+    let _dictateToastTimer = null;
+    function dictateToast(text, isError) {
+        if (!text) return;
+        let t = document.getElementById('hf-dictate-toast');
+        if (!t) {
+            t = document.createElement('div');
+            t.id = 'hf-dictate-toast';
+            t.className = 'hf-dictate-toast';
+            document.body.appendChild(t);
+        }
+        t.textContent = text;
+        t.classList.toggle('error', !!isError);
+        t.classList.add('show');
+        clearTimeout(_dictateToastTimer);
+        _dictateToastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+    }
+
     function micHelpText() {
         const isIOS = isIOSDevice();
         const isAndroid = /Android/i.test(navigator.userAgent || '');
@@ -797,28 +850,17 @@
             return html;
         },
 
-        micPillHtml() {
-            return '<div class="hf-mic-pill">' +
-                '<button type="button" class="hf-mic-lang" title="Dictation language">' + esc(diaryLang().short) + '</button>' +
-                '<button type="button" class="hf-diary-mic" title="Dictate"><i class="fas fa-microphone"></i></button>' +
-                '<div class="hf-lang-menu" style="display:none;"></div>' +
-                '</div>';
-        },
-
         inputHtml(field, value) {
             const id = 'hf-' + field.key;
             let html = '<label class="hub-input-label" for="' + id + '">' + esc(field.label) +
                 (field.required ? ' *' : '') + '</label>';
-            if (field.type === 'textarea' || field.type === 'list') {
-                const isList = field.type === 'list';
-                const text = isList
-                    ? (Array.isArray(value) ? value.map(toText).join('\n') : toText(value))
-                    : toText(value);
-                const ta = '<textarea class="hub-input" id="' + id + '" data-key="' + esc(field.key) +
-                    '" data-type="' + field.type + '" rows="' + (isList ? 4 : 3) + '">' + esc(text) + '</textarea>';
-                // Dictation pill on every multi-line box (not iOS — keyboard mic covers it).
-                html += isIOSDevice() ? ta
-                    : '<div class="hf-diary-wrap">' + ta + this.micPillHtml() + '</div>';
+            if (field.type === 'textarea') {
+                html += '<textarea class="hub-input" id="' + id + '" data-key="' + esc(field.key) +
+                    '" data-type="textarea" rows="3">' + esc(toText(value)) + '</textarea>';
+            } else if (field.type === 'list') {
+                const lines = Array.isArray(value) ? value.map(toText).join('\n') : toText(value);
+                html += '<textarea class="hub-input" id="' + id + '" data-key="' + esc(field.key) +
+                    '" data-type="list" rows="4">' + esc(lines) + '</textarea>';
             } else if (field.type === 'select') {
                 html += '<select class="hub-input" id="' + id + '" data-key="' + esc(field.key) + '" data-type="text">';
                 html += '<option value=""></option>';
@@ -1387,18 +1429,26 @@
             }
         },
 
-        // Wire every dictation pill under rootEl — mic buttons dictate into the
-        // field inside their own .hf-diary-wrap; language pills open the
-        // per-pill language menu.  Idempotent via the _wired flag so it is safe
-        // to call on each render and on static template fields.
+        // Wire the single global dictation pill: the mic dictates into
+        // whichever editable field last had focus; the language chip opens a
+        // menu.  pointerdown is prevented so tapping the pill never blurs the
+        // target field.  Idempotent via _wired flags.
         wireMicPills(rootEl) {
             const self = this;
             if (!rootEl) return;
+            installDictationTracker();
+            rootEl.querySelectorAll('.hf-dictate-pill').forEach(function (pill) {
+                if (!pill._noFocusSteal) {
+                    pill._noFocusSteal = true;
+                    ['pointerdown', 'mousedown', 'touchstart'].forEach(ev =>
+                        pill.addEventListener(ev, (e) => e.preventDefault()));
+                }
+            });
             rootEl.querySelectorAll('.hf-diary-mic').forEach(function (btn) {
                 if (btn._wired) return;
                 btn._wired = true;
                 btn.addEventListener('click', function () {
-                    self.recordInto(this.closest('.hf-diary-wrap'));
+                    self.recordInto(editableEl(_dictateTarget), this);
                 });
             });
             rootEl.querySelectorAll('.hf-mic-lang').forEach(function (pill) {
@@ -1422,7 +1472,7 @@
                             ev.stopPropagation();
                             const v = this.getAttribute('data-dlang');
                             try { localStorage.setItem(DIARY_LANG_KEY, v); } catch (e2) {}
-                            // Language is a global preference — refresh every pill.
+                            // Language is a global preference — refresh every chip.
                             rootEl.querySelectorAll('.hf-mic-lang').forEach(function (p) {
                                 p.textContent = opt.getAttribute('data-dshort');
                             });
@@ -1431,20 +1481,19 @@
                     });
                 });
             });
+            updateDictatePill();
         },
 
-        async recordInto(scopeEl) {
+        async recordInto(target, micBtn) {
             if (isIOSDevice()) {
-                this.status(micHelpText(), true);
+                dictateToast(micHelpText(), true);
                 return;
             }
-            // Dictate into the field the mic button belongs to.  Every
-            // textarea/list box gets its own pill inside a .hf-diary-wrap, so
-            // the target is simply the input inside that wrap.
-            const scope = scopeEl || this.root;
-            const target = scope.querySelector('textarea, input');
-            if (!target) return;
-            const micBtn = scope.querySelector('.hf-diary-mic');
+            // Dictate into whichever text box last had focus.
+            if (!target || !document.contains(target)) {
+                dictateToast('Tap a text box first, then the mic.', true);
+                return;
+            }
 
             // Second tap while recording = stop.
             const active = micBtn && micBtn._session;
@@ -1476,7 +1525,7 @@
             if (micBtn) micBtn._session = session;
             const finish = (msg, isErr) => {
                 if (micBtn) { micBtn.classList.remove('recording'); micBtn._session = null; }
-                if (msg) self.status(msg, !!isErr);
+                if (msg) dictateToast(msg, !!isErr);
             };
             const start = () => {
                 // Chrome on Android ends the session on a pause even with
@@ -1490,7 +1539,7 @@
                 rec.continuous = true;
                 rec.interimResults = true;
                 rec.onstart = () => {
-                    self.status('Listening… tap the mic again to stop.');
+                    dictateToast('Listening… tap the mic again to stop.');
                     if (micBtn) micBtn.classList.add('recording');
                 };
                 rec.onresult = (e) => {
@@ -1532,14 +1581,14 @@
         async _recordViaUpload(target, micBtn) {
             const self = this;
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
-                this.status('Voice recording is not supported in this browser.', true);
+                dictateToast('Voice recording is not supported in this browser.', true);
                 return;
             }
             let stream;
             try {
                 stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             } catch (e) {
-                this.status('Microphone access was denied. Allow it for this site in the browser settings.', true);
+                dictateToast('Microphone access was denied. Allow it for this site in the browser settings.', true);
                 return;
             }
             const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
@@ -1549,7 +1598,7 @@
                 mr = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
             } catch (e) {
                 stream.getTracks().forEach(t => t.stop());
-                this.status('Could not start recording: ' + e.message, true);
+                dictateToast('Could not start recording: ' + e.message, true);
                 return;
             }
             const chunks = [];
@@ -1560,8 +1609,8 @@
                 if (micBtn) { micBtn.classList.remove('recording'); micBtn._session = null; }
                 stream.getTracks().forEach(t => t.stop());
                 const blob = new Blob(chunks, { type: mr.mimeType || 'audio/webm' });
-                if (!blob.size) { self.status('Nothing was recorded.', true); return; }
-                self.status('Transcribing…');
+                if (!blob.size) { dictateToast('Nothing was recorded.', true); return; }
+                dictateToast('Transcribing…');
                 try {
                     const fd = new FormData();
                     const ext = (mr.mimeType || '').includes('mp4') ? 'm4a' : 'webm';
@@ -1572,22 +1621,22 @@
                     const data = await res.json().catch(() => ({}));
                     if (res.ok && data.success && data.text) {
                         target.value = (target.value ? target.value + ' ' : '') + data.text;
-                        self.status('Voice recorded.');
+                        dictateToast('Voice recorded.');
                     } else {
-                        self.status('Transcription failed' + (data.error ? ': ' + data.error : '.'), true);
+                        dictateToast('Transcription failed' + (data.error ? ': ' + data.error : '.'), true);
                     }
                 } catch (e) {
-                    self.status('Transcription failed: ' + e.message, true);
+                    dictateToast('Transcription failed: ' + e.message, true);
                 }
             };
             try {
                 mr.start();
                 if (micBtn) micBtn.classList.add('recording');
-                this.status('Recording… tap the mic again to stop.');
+                dictateToast('Recording… tap the mic again to stop.');
             } catch (e) {
                 if (micBtn) micBtn._session = null;
                 stream.getTracks().forEach(t => t.stop());
-                this.status('Could not start recording: ' + e.message, true);
+                dictateToast('Could not start recording: ' + e.message, true);
             }
         },
 
