@@ -763,14 +763,24 @@
                 html += this.inputHtml(schema.fields[i], item[schema.fields[i].key]);
             }
             if (id === 'diary') {
-                html += '<div class="hub-mic-bar" style="margin:8px 0 12px; padding:10px; background:#f0f4ff; border-radius:8px;">';
-                html += '<label class="hub-input-label" for="hf-diary-lang" style="display:inline-block; margin-right:8px;">Voice language</label>';
-                html += '<select class="hub-input" id="hf-diary-lang" style="width:auto; display:inline-block; min-width:120px; margin-right:8px;">';
-                html += '<option value="yue-Hant-HK">Cantonese (HK)</option>';
-                html += '<option value="en-GB">English</option>';
-                html += '</select>';
-                html += '<button class="hub-btn" id="hf-diary-mic" type="button"><i class="fas fa-microphone"></i> Record</button>';
-                html += '</div>';
+                const _ua = navigator.userAgent || '';
+                const _isIOS = /iPad|iPhone|iPod/i.test(_ua) ||
+                    (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
+                if (_isIOS) {
+                    // No web speech API on iOS — the keyboard mic icon dictates
+                    // straight into the Entry field instead.
+                    html += '<div class="hub-mic-bar" style="margin:8px 0 12px; padding:10px; background:#f0f4ff; border-radius:8px; font-size:0.85rem; color:#555;">' +
+                        '<i class="fas fa-microphone"></i> Tip: tap into the Entry field, then use the microphone key on the keyboard to dictate.</div>';
+                } else {
+                    html += '<div class="hub-mic-bar" style="margin:8px 0 12px; padding:10px; background:#f0f4ff; border-radius:8px;">';
+                    html += '<label class="hub-input-label" for="hf-diary-lang" style="display:inline-block; margin-right:8px;">Voice language</label>';
+                    html += '<select class="hub-input" id="hf-diary-lang" style="width:auto; display:inline-block; min-width:120px; margin-right:8px;">';
+                    html += '<option value="yue-Hant-HK">Cantonese (HK)</option>';
+                    html += '<option value="en-GB">English</option>';
+                    html += '</select>';
+                    html += '<button class="hub-btn" id="hf-diary-mic" type="button"><i class="fas fa-microphone"></i> Record</button>';
+                    html += '</div>';
+                }
             }
             html += '<div class="hub-row-actions">';
             html += '<button class="hub-btn primary" data-save="' + index + '"><i class="fas fa-check"></i> Save</button>';
@@ -1358,7 +1368,7 @@
             }
         },
 
-        async recordDiary() {
+        async recordDiary(formEl) {
             const ua = navigator.userAgent || '';
             const platform = navigator.platform || '';
             const maxTouch = navigator.maxTouchPoints || 0;
@@ -1372,8 +1382,12 @@
                 this.status('Voice input is not supported in this browser.', true);
                 return;
             }
-            const lang = this.root.querySelector('#hf-diary-lang');
-            const target = this.root.querySelector('#hf-content');
+            // Scope to the form that owns the mic button — several diary forms
+            // can be open at once (add + edit), all sharing #hf-content ids, so
+            // a root-wide query can write the transcript into the wrong form.
+            const scope = formEl || this.root;
+            const lang = scope.querySelector('#hf-diary-lang');
+            const target = scope.querySelector('#hf-content');
             if (!target) return;
 
             // No getUserMedia pre-check: it is a second permission prompt on top
@@ -1551,8 +1565,12 @@
             }
 
             if (id === 'diary') {
-                const mic = this.root.querySelector('#hf-diary-mic');
-                if (mic) mic.addEventListener('click', () => self.recordDiary());
+                const mics = this.root.querySelectorAll('#hf-diary-mic');
+                for (let i = 0; i < mics.length; i++) {
+                    mics[i].addEventListener('click', function () {
+                        self.recordDiary(this.closest('.hub-form'));
+                    });
+                }
             }
         },
 
