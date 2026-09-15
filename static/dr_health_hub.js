@@ -285,12 +285,33 @@
         return key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
     }
 
-    function micHelpText() {
+    function isIOSDevice() {
         const ua = navigator.userAgent || '';
         const platform = navigator.platform || '';
         const maxTouch = navigator.maxTouchPoints || 0;
-        const isIOS = /iPad|iPhone|iPod/i.test(ua) || (platform === 'MacIntel' && maxTouch > 1);
-        const isAndroid = /Android/i.test(ua);
+        return /iPad|iPhone|iPod/i.test(ua) || (platform === 'MacIntel' && maxTouch > 1);
+    }
+
+    // Dictation languages for the diary mic.  `short` is the pill label —
+    // shown the way iOS shows it on the keyboard bubble.
+    const DIARY_LANG_KEY = 'drHealth.diaryLang';
+    const DIARY_LANGS = [
+        { value: 'en-GB', short: 'EN', label: 'English' },
+        { value: 'yue-Hant-HK', short: '廣', label: 'Cantonese' },
+        { value: 'cmn-Hans-CN', short: '普', label: 'Mandarin' },
+    ];
+    function diaryLang() {
+        try {
+            const v = localStorage.getItem(DIARY_LANG_KEY);
+            const found = DIARY_LANGS.find(l => l.value === v);
+            if (found) return found;
+        } catch (e) {}
+        return DIARY_LANGS[1];
+    }
+
+    function micHelpText() {
+        const isIOS = isIOSDevice();
+        const isAndroid = /Android/i.test(navigator.userAgent || '');
         const isStandalone = 'standalone' in navigator && navigator.standalone;
         if (isIOS) {
             if (isStandalone) return 'iPhone: a home-screen PWA cannot use the microphone. Use the iOS keyboard microphone icon to dictate into the Entry field, or open Dr. Health in Safari.';
@@ -759,28 +780,25 @@
             }
             let html = '<div class="hub-form" data-index="' + index + '">';
             html += '<div class="hub-form-title">' + (isNew ? 'Add ' : 'Edit ') + esc(this.singular(schema.title)) + '</div>';
+            const _diaryIOS = isIOSDevice();
             for (let i = 0; i < schema.fields.length; i++) {
-                html += this.inputHtml(schema.fields[i], item[schema.fields[i].key]);
-            }
-            if (id === 'diary') {
-                const _ua = navigator.userAgent || '';
-                const _isIOS = /iPad|iPhone|iPod/i.test(_ua) ||
-                    (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
-                if (_isIOS) {
-                    // No web speech API on iOS — the keyboard mic icon dictates
-                    // straight into the Entry field instead.
-                    html += '<div class="hub-mic-bar" style="margin:8px 0 12px; padding:10px; background:#f0f4ff; border-radius:8px; font-size:0.85rem; color:#555;">' +
-                        '<i class="fas fa-microphone"></i> Tip: tap into the Entry field, then use the microphone key on the keyboard to dictate.</div>';
+                const fieldHtml = this.inputHtml(schema.fields[i], item[schema.fields[i].key]);
+                if (id === 'diary' && schema.fields[i].key === 'content' && !_diaryIOS) {
+                    html += '<div class="hf-diary-wrap">' + fieldHtml +
+                        '<div class="hf-mic-pill">' +
+                        '<button type="button" class="hf-mic-lang" title="Dictation language">' + esc(diaryLang().short) + '</button>' +
+                        '<button type="button" class="hf-diary-mic" title="Dictate entry"><i class="fas fa-microphone"></i></button>' +
+                        '<div class="hf-lang-menu" style="display:none;"></div>' +
+                        '</div></div>';
                 } else {
-                    html += '<div class="hub-mic-bar" style="margin:8px 0 12px; padding:10px; background:#f0f4ff; border-radius:8px;">';
-                    html += '<label class="hub-input-label" for="hf-diary-lang" style="display:inline-block; margin-right:8px;">Voice language</label>';
-                    html += '<select class="hub-input" id="hf-diary-lang" style="width:auto; display:inline-block; min-width:120px; margin-right:8px;">';
-                    html += '<option value="yue-Hant-HK">Cantonese (HK)</option>';
-                    html += '<option value="en-GB">English</option>';
-                    html += '</select>';
-                    html += '<button class="hub-btn" id="hf-diary-mic" type="button"><i class="fas fa-microphone"></i> Record</button>';
-                    html += '</div>';
+                    html += fieldHtml;
                 }
+            }
+            if (id === 'diary' && _diaryIOS) {
+                // No web speech API on iOS — the keyboard mic icon dictates
+                // straight into the Entry field instead.
+                html += '<div class="hub-mic-bar" style="margin:8px 0 12px; padding:10px; background:#f0f4ff; border-radius:8px; font-size:0.85rem; color:#555;">' +
+                    '<i class="fas fa-microphone"></i> Tip: tap into the Entry field, then use the microphone key on the keyboard to dictate.</div>';
             }
             html += '<div class="hub-row-actions">';
             html += '<button class="hub-btn primary" data-save="' + index + '"><i class="fas fa-check"></i> Save</button>';
@@ -1369,11 +1387,7 @@
         },
 
         async recordDiary(formEl) {
-            const ua = navigator.userAgent || '';
-            const platform = navigator.platform || '';
-            const maxTouch = navigator.maxTouchPoints || 0;
-            const isIOS = /iPad|iPhone|iPod/i.test(ua) || (platform === 'MacIntel' && maxTouch > 1);
-            if (isIOS) {
+            if (isIOSDevice()) {
                 this.status(micHelpText(), true);
                 return;
             }
@@ -1386,19 +1400,25 @@
             // can be open at once (add + edit), all sharing #hf-content ids, so
             // a root-wide query can write the transcript into the wrong form.
             const scope = formEl || this.root;
-            const lang = scope.querySelector('#hf-diary-lang');
             const target = scope.querySelector('#hf-content');
             if (!target) return;
+            const micBtn = scope.querySelector('.hf-diary-mic');
+            const stopMark = () => { if (micBtn) micBtn.classList.remove('recording'); };
 
             // No getUserMedia pre-check: it is a second permission prompt on top
             // of SpeechRecognition's own, and on Android the extra activity can
             // bounce the user out of the app.  A denial surfaces via onerror.
             const rec = new SpeechRecognition();
-            rec.lang = lang ? lang.value : 'yue-Hant-HK';
+            rec.lang = diaryLang().value;
             rec.continuous = false;
             rec.interimResults = false;
-            rec.onstart = () => { this.status('Listening…'); };
+            rec.onstart = () => {
+                this.status('Listening…');
+                if (micBtn) micBtn.classList.add('recording');
+            };
+            rec.onend = stopMark;
             rec.onerror = (e) => {
+                stopMark();
                 const msg = e.error === 'service-not-allowed' || e.error === 'not-allowed'
                     ? micHelpText()
                     : (e.error === 'language-not-supported'
@@ -1412,7 +1432,7 @@
                     this.status('Voice recorded.');
                 }
             };
-            try { rec.start(); } catch (e) { this.status('Could not start voice input: ' + e.message, true); }
+            try { rec.start(); } catch (e) { stopMark(); this.status('Could not start voice input: ' + e.message, true); }
         },
 
         // ---------- Wiring ----------
@@ -1565,10 +1585,34 @@
             }
 
             if (id === 'diary') {
-                const mics = this.root.querySelectorAll('#hf-diary-mic');
+                const mics = this.root.querySelectorAll('.hf-diary-mic');
                 for (let i = 0; i < mics.length; i++) {
                     mics[i].addEventListener('click', function () {
                         self.recordDiary(this.closest('.hub-form'));
+                    });
+                }
+                const pills = this.root.querySelectorAll('.hf-mic-lang');
+                for (let i = 0; i < pills.length; i++) {
+                    pills[i].addEventListener('click', function (e) {
+                        e.stopPropagation();
+                        const pill = this;
+                        const menu = pill.parentElement.querySelector('.hf-lang-menu');
+                        if (!menu) return;
+                        if (menu.style.display === 'block') { menu.style.display = 'none'; return; }
+                        const cur = diaryLang().value;
+                        menu.innerHTML = DIARY_LANGS.map(l =>
+                            '<button type="button" class="' + (l.value === cur ? 'sel' : '') +
+                            '" data-dlang="' + esc(l.value) + '" data-dshort="' + esc(l.short) + '">' +
+                            esc(l.short + '  ' + l.label) + '</button>').join('');
+                        menu.style.display = 'block';
+                        menu.querySelectorAll('[data-dlang]').forEach(function (opt) {
+                            opt.addEventListener('click', function (ev) {
+                                ev.stopPropagation();
+                                try { localStorage.setItem(DIARY_LANG_KEY, this.getAttribute('data-dlang')); } catch (e2) {}
+                                pill.textContent = this.getAttribute('data-dshort');
+                                menu.style.display = 'none';
+                            });
+                        });
                     });
                 }
             }
