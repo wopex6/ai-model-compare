@@ -782,17 +782,7 @@
             html += '<div class="hub-form-title">' + (isNew ? 'Add ' : 'Edit ') + esc(this.singular(schema.title)) + '</div>';
             const _diaryIOS = isIOSDevice();
             for (let i = 0; i < schema.fields.length; i++) {
-                const fieldHtml = this.inputHtml(schema.fields[i], item[schema.fields[i].key]);
-                if (id === 'diary' && schema.fields[i].key === 'content' && !_diaryIOS) {
-                    html += '<div class="hf-diary-wrap">' + fieldHtml +
-                        '<div class="hf-mic-pill">' +
-                        '<button type="button" class="hf-mic-lang" title="Dictation language">' + esc(diaryLang().short) + '</button>' +
-                        '<button type="button" class="hf-diary-mic" title="Dictate entry"><i class="fas fa-microphone"></i></button>' +
-                        '<div class="hf-lang-menu" style="display:none;"></div>' +
-                        '</div></div>';
-                } else {
-                    html += fieldHtml;
-                }
+                html += this.inputHtml(schema.fields[i], item[schema.fields[i].key]);
             }
             if (id === 'diary' && _diaryIOS) {
                 // No web speech API on iOS — the keyboard mic icon dictates
@@ -807,17 +797,28 @@
             return html;
         },
 
+        micPillHtml() {
+            return '<div class="hf-mic-pill">' +
+                '<button type="button" class="hf-mic-lang" title="Dictation language">' + esc(diaryLang().short) + '</button>' +
+                '<button type="button" class="hf-diary-mic" title="Dictate"><i class="fas fa-microphone"></i></button>' +
+                '<div class="hf-lang-menu" style="display:none;"></div>' +
+                '</div>';
+        },
+
         inputHtml(field, value) {
             const id = 'hf-' + field.key;
             let html = '<label class="hub-input-label" for="' + id + '">' + esc(field.label) +
                 (field.required ? ' *' : '') + '</label>';
-            if (field.type === 'textarea') {
-                html += '<textarea class="hub-input" id="' + id + '" data-key="' + esc(field.key) +
-                    '" data-type="textarea" rows="3">' + esc(toText(value)) + '</textarea>';
-            } else if (field.type === 'list') {
-                const lines = Array.isArray(value) ? value.map(toText).join('\n') : toText(value);
-                html += '<textarea class="hub-input" id="' + id + '" data-key="' + esc(field.key) +
-                    '" data-type="list" rows="4">' + esc(lines) + '</textarea>';
+            if (field.type === 'textarea' || field.type === 'list') {
+                const isList = field.type === 'list';
+                const text = isList
+                    ? (Array.isArray(value) ? value.map(toText).join('\n') : toText(value))
+                    : toText(value);
+                const ta = '<textarea class="hub-input" id="' + id + '" data-key="' + esc(field.key) +
+                    '" data-type="' + field.type + '" rows="' + (isList ? 4 : 3) + '">' + esc(text) + '</textarea>';
+                // Dictation pill on every multi-line box (not iOS — keyboard mic covers it).
+                html += isIOSDevice() ? ta
+                    : '<div class="hf-diary-wrap">' + ta + this.micPillHtml() + '</div>';
             } else if (field.type === 'select') {
                 html += '<select class="hub-input" id="' + id + '" data-key="' + esc(field.key) + '" data-type="text">';
                 html += '<option value=""></option>';
@@ -1386,16 +1387,62 @@
             }
         },
 
-        async recordDiary(formEl) {
+        // Wire every dictation pill under rootEl — mic buttons dictate into the
+        // field inside their own .hf-diary-wrap; language pills open the
+        // per-pill language menu.  Idempotent via the _wired flag so it is safe
+        // to call on each render and on static template fields.
+        wireMicPills(rootEl) {
+            const self = this;
+            if (!rootEl) return;
+            rootEl.querySelectorAll('.hf-diary-mic').forEach(function (btn) {
+                if (btn._wired) return;
+                btn._wired = true;
+                btn.addEventListener('click', function () {
+                    self.recordInto(this.closest('.hf-diary-wrap'));
+                });
+            });
+            rootEl.querySelectorAll('.hf-mic-lang').forEach(function (pill) {
+                if (!pill._wired) pill.textContent = diaryLang().short;
+                if (pill._wired) return;
+                pill._wired = true;
+                pill.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    const menu = pill.parentElement.querySelector('.hf-lang-menu');
+                    if (!menu) return;
+                    if (menu.style.display === 'block') { menu.style.display = 'none'; return; }
+                    const cur = diaryLang().value;
+                    menu.innerHTML = DIARY_LANGS.map(l =>
+                        '<button type="button" class="' + (l.value === cur ? 'sel' : '') +
+                        '" data-dlang="' + esc(l.value) + '" data-dshort="' + esc(l.short) + '">' +
+                        esc(l.short + '  ' + l.label) + '</button>').join('');
+                    menu.style.display = 'block';
+                    menu.querySelectorAll('[data-dlang]').forEach(function (opt) {
+                        opt.addEventListener('click', function (ev) {
+                            ev.stopPropagation();
+                            const v = this.getAttribute('data-dlang');
+                            try { localStorage.setItem(DIARY_LANG_KEY, v); } catch (e2) {}
+                            // Language is a global preference — refresh every pill.
+                            rootEl.querySelectorAll('.hf-mic-lang').forEach(function (p) {
+                                p.textContent = opt.getAttribute('data-dshort');
+                            });
+                            menu.style.display = 'none';
+                        });
+                    });
+                });
+            });
+        },
+
+        async recordInto(scopeEl) {
             if (isIOSDevice()) {
                 this.status(micHelpText(), true);
                 return;
             }
-            // Scope to the form that owns the mic button — several diary forms
-            // can be open at once (add + edit), all sharing #hf-content ids, so
-            // a root-wide query can write the transcript into the wrong form.
-            const scope = formEl || this.root;
-            const target = scope.querySelector('#hf-content');
+            // Dictate into the field the mic button belongs to.  Every
+            // textarea/list box gets its own pill inside a .hf-diary-wrap, so
+            // the target is simply the input inside that wrap.
+            const scope = scopeEl || this.root;
+            const target = scope.querySelector('textarea, input');
             if (!target) return;
             const micBtn = scope.querySelector('.hf-diary-mic');
 
@@ -1693,38 +1740,7 @@
                 });
             }
 
-            if (id === 'diary') {
-                const mics = this.root.querySelectorAll('.hf-diary-mic');
-                for (let i = 0; i < mics.length; i++) {
-                    mics[i].addEventListener('click', function () {
-                        self.recordDiary(this.closest('.hub-form'));
-                    });
-                }
-                const pills = this.root.querySelectorAll('.hf-mic-lang');
-                for (let i = 0; i < pills.length; i++) {
-                    pills[i].addEventListener('click', function (e) {
-                        e.stopPropagation();
-                        const pill = this;
-                        const menu = pill.parentElement.querySelector('.hf-lang-menu');
-                        if (!menu) return;
-                        if (menu.style.display === 'block') { menu.style.display = 'none'; return; }
-                        const cur = diaryLang().value;
-                        menu.innerHTML = DIARY_LANGS.map(l =>
-                            '<button type="button" class="' + (l.value === cur ? 'sel' : '') +
-                            '" data-dlang="' + esc(l.value) + '" data-dshort="' + esc(l.short) + '">' +
-                            esc(l.short + '  ' + l.label) + '</button>').join('');
-                        menu.style.display = 'block';
-                        menu.querySelectorAll('[data-dlang]').forEach(function (opt) {
-                            opt.addEventListener('click', function (ev) {
-                                ev.stopPropagation();
-                                try { localStorage.setItem(DIARY_LANG_KEY, this.getAttribute('data-dlang')); } catch (e2) {}
-                                pill.textContent = this.getAttribute('data-dshort');
-                                menu.style.display = 'none';
-                            });
-                        });
-                    });
-                }
-            }
+            this.wireMicPills(this.root);
         },
 
         status(text, isError) {
