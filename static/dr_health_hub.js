@@ -1749,19 +1749,25 @@
                 return;
             }
             const chunks = [];
-            const session = { wantStop: false, mr: mr };
+            const session = { wantStop: false, mr: mr, startedAt: 0 };
             if (micBtn) micBtn._session = session;
             mr.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
             mr.onstop = async () => {
                 if (micBtn) { micBtn.classList.remove('recording'); micBtn._session = null; }
                 stream.getTracks().forEach(t => t.stop());
                 const blob = new Blob(chunks, { type: mr.mimeType || 'audio/webm' });
-                if (!blob.size) { dictateToast('Nothing was recorded.', true); return; }
+                // Near-empty uploads make the transcriber hallucinate stock
+                // phrases — don't send a sub-second blip.
+                if (!blob.size || Date.now() - session.startedAt < 600) {
+                    dictateToast('Nothing was recorded.', true);
+                    return;
+                }
                 dictateToast('Transcribing…');
                 try {
                     const fd = new FormData();
                     const ext = (mr.mimeType || '').includes('mp4') ? 'm4a' : 'webm';
                     fd.append('audio', blob, 'diary.' + ext);
+                    fd.append('lang', diaryLang().value);
                     const res = await AuthHelper.authenticatedFetch('/api/health-profile/transcribe', {
                         method: 'POST', body: fd
                     });
@@ -1781,6 +1787,7 @@
             };
             try {
                 mr.start();
+                session.startedAt = Date.now();
                 if (micBtn) micBtn.classList.add('recording');
                 dictateToast('Recording… tap the mic again to stop.');
             } catch (e) {
