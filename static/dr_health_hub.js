@@ -442,6 +442,41 @@
         return out;
     }
 
+    // Render the AI-context text block as readable cards: "Label: a; b" lines
+    // become titled sections with one item per line; [bracketed] metadata
+    // shows as small chips.
+    function aiCtxItem(s) {
+        return esc(s).replace(/\[([^\]]+)\]/g, '<span class="ai-ctx-tag">$1</span>');
+    }
+    function aiContextHtml(text) {
+        let html = '<div class="ai-ctx">';
+        for (const raw of text.split('\n')) {
+            const line = raw.trim();
+            if (!line) continue;
+            const banner = line.match(/^-+\s*(.*?)\s*-+$/);
+            if (banner) {
+                html += '<div class="ai-ctx-banner">' + esc(banner[1]) + '</div>';
+                continue;
+            }
+            const m = line.match(/^([A-Z][A-Za-z ()/—-]{1,60}?):\s*(.*)$/);
+            if (!m) {
+                html += '<div class="ai-ctx-text">' + aiCtxItem(line) + '</div>';
+                continue;
+            }
+            html += '<div class="ai-ctx-sec"><div class="ai-ctx-head">' + esc(m[1]) + '</div>';
+            const items = m[2].split(';').map(x => x.trim()).filter(Boolean);
+            if (items.length > 1) {
+                html += '<ul>';
+                for (const it of items) html += '<li>' + aiCtxItem(it) + '</li>';
+                html += '</ul>';
+            } else {
+                html += '<div class="ai-ctx-text">' + aiCtxItem(m[2]) + '</div>';
+            }
+            html += '</div>';
+        }
+        return html + '</div>';
+    }
+
     function micHelpText() {
         const isIOS = isIOSDevice();
         const isAndroid = /Android/i.test(navigator.userAgent || '');
@@ -567,6 +602,12 @@
         },
 
         go(view, section) {
+            // Leaving the index: remember the scroll position so Back lands
+            // where the user was instead of jumping to the top.
+            const before = this.root ? this.root.querySelector('.hub-scroll') : null;
+            if (before && this.route && this.route.view === 'index') {
+                this._indexScroll = before.scrollTop;
+            }
             this.route = { view: view, section: section || null };
             this.openIndex = null;
             this.editIndex = null;
@@ -574,7 +615,7 @@
             this.filter = '';
             this.render();
             const scroller = this.root ? this.root.querySelector('.hub-scroll') : null;
-            if (scroller) scroller.scrollTop = 0;
+            if (scroller) scroller.scrollTop = (view === 'index' && this._indexScroll) ? this._indexScroll : 0;
         },
 
         count(id) {
@@ -1733,7 +1774,9 @@
             }
             let stream;
             try {
-                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                stream = await navigator.mediaDevices.getUserMedia({
+                    audio: { echoCancellation: true, noiseSuppression: true }
+                });
             } catch (e) {
                 dictateToast('Microphone access was denied. Allow it for this site in the browser settings.', true);
                 return;
@@ -1757,9 +1800,9 @@
                 stream.getTracks().forEach(t => t.stop());
                 const blob = new Blob(chunks, { type: mr.mimeType || 'audio/webm' });
                 // Near-empty uploads make the transcriber hallucinate stock
-                // phrases — don't send a sub-second blip.
-                if (!blob.size || Date.now() - session.startedAt < 600) {
-                    dictateToast('Nothing was recorded.', true);
+                // phrases — don't send a sub-second or effectively empty clip.
+                if (blob.size < 2000 || Date.now() - session.startedAt < 600) {
+                    dictateToast('Nothing was recorded — try holding the mic a little longer.', true);
                     return;
                 }
                 dictateToast('Transcribing…');
@@ -1786,7 +1829,9 @@
                 }
             };
             try {
-                mr.start();
+                // A timeslice is required on iOS Safari — without it
+                // ondataavailable may never fire and the clip comes out empty.
+                mr.start(1000);
                 session.startedAt = Date.now();
                 if (micBtn) micBtn.classList.add('recording');
                 dictateToast('Recording… tap the mic again to stop.');
@@ -2137,7 +2182,7 @@
                 const data = await resp.json();
                 const text = (data && data.summary) ? data.summary : '';
                 el.innerHTML = text
-                    ? '<pre class="hub-pre">' + esc(text) + '</pre>'
+                    ? aiContextHtml(text)
                     : '<div class="hub-note">No health context stored yet. Add some information first.</div>';
             } catch (e) {
                 el.innerHTML = '<div class="hub-note error">Could not load summary.</div>';
