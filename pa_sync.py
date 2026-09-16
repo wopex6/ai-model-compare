@@ -29,6 +29,7 @@ FILES = [
     'ai_compare/base_enhanced_chatbot.py',
     'templates/dr_health_app.html',
     'templates/health_profile.html',
+    'templates/medical_advisor.html',
     'templates/chatchat.html',
     'static/dr_health_hub.js',
     'static/lab_results.js',
