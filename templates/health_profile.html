@@ -303,6 +303,23 @@
         .status-msg.info { display: block; background: #e3f2fd; color: #1565c0; }
 
         /* Quick add form */
+        /* Dictation pill — shared behaviour lives in static/health_dictation.js */
+        .hf-mic-pill { display: flex; align-items: center; background: #fff; border: 1px solid #cfd8dc; border-radius: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.15); }
+        .hf-mic-pill > button { border: none; background: transparent; padding: 6px 10px; font-size: 0.85rem; color: #37474f; cursor: pointer; font-family: inherit; }
+        .hf-mic-lang { font-weight: 700; border-right: 1px solid #eceff1 !important; border-radius: 20px 0 0 20px; }
+        .hf-diary-mic { border-radius: 0 20px 20px 0; font-size: 1rem; }
+        .hf-diary-mic.recording { background: #c62828; color: #fff; border-radius: 0 20px 20px 0; animation: hf-mic-pulse 1s ease-in-out infinite; }
+        @keyframes hf-mic-pulse { 50% { opacity: 0.5; } }
+        .hf-lang-menu { position: absolute; top: 100%; right: 0; margin-top: 5px; min-width: 160px; background: #fff; border: 1px solid #cfd8dc; border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,0.18); overflow: hidden; z-index: 20; }
+        .hf-lang-menu button { display: block; width: 100%; text-align: left; padding: 10px 14px; border: none; background: #fff; font-size: 0.85rem; color: #263238; font-family: inherit; cursor: pointer; }
+        .hf-lang-menu button:active { background: #f0f4ff; }
+        .hf-lang-menu button.sel { font-weight: 700; color: #c62828; }
+        .hf-dictate-pill { position: fixed; right: 14px; bottom: 20px; z-index: 150; }
+        .hf-dictate-pill.inactive { opacity: 0.4; }
+        .hf-dictate-pill .hf-lang-menu { top: auto; bottom: calc(100% + 6px); }
+        .hf-dictate-toast { position: fixed; right: 14px; bottom: 66px; z-index: 160; max-width: 260px; padding: 8px 12px; border-radius: 10px; background: #37474f; color: #fff; font-size: 0.8rem; opacity: 0; pointer-events: none; transition: opacity .2s; box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
+        .hf-dictate-toast.show { opacity: 1; }
+        .hf-dictate-toast.error { background: #c62828; }
         .quick-add { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-top: 12px; }
         .quick-add input { padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.88rem; }
         .quick-add button { padding: 8px 16px; background: #43a047; color: white; border: none; border-radius: 6px; cursor: pointer; }
@@ -446,7 +463,15 @@ Examples:
         </div>
     </div>
 
+    <!-- Dictation pill — dictates into whichever text box has focus -->
+    <div class="hf-mic-pill hf-dictate-pill inactive">
+        <button type="button" class="hf-mic-lang" title="Dictation language">廣</button>
+        <button type="button" class="hf-diary-mic" title="Dictate into the focused text box"><i class="fas fa-microphone"></i></button>
+        <div class="hf-lang-menu" style="display:none;"></div>
+    </div>
+
     <script src="{{ url_for('static', filename='lab_results.js') }}"></script>
+    <script src="{{ url_for('static', filename='health_dictation.js') }}"></script>
     <script src="{{ url_for('static', filename='health_review.js') }}"></script>
     <script src="{{ url_for('static', filename='auth_helper.js') }}"></script>
     <script>
@@ -709,8 +734,38 @@ Examples:
         // Ended-on + last-change note comes from static/health_review.js.
         const historyNote = (item, isPast) => HealthReview.historyNote(item, isPast);
 
+        // AI-inferred or unsourced items stay unverified until the user
+        // confirms them — same rule as the PWA hub.
+        function needsReview(item) {
+            const src = String((item && item.source) || '');
+            return (src === 'ai_inferred' || src === 'unknown') &&
+                   !(item && item.verified_by_user);
+        }
+        function verifyBtn(category, idx, isPast, item) {
+            if (isPast || !needsReview(item)) return '';
+            return `<button class="btn-status" onclick="verifyItem('${category}',${idx})" ` +
+                   `title="Confirm this — it was inferred by the AI"><i class="fas fa-check-double"></i></button>`;
+        }
+        async function verifyItem(category, index) {
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/item/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ category, index, verified: true })
+                });
+                const data = await resp.json();
+                if (!resp.ok || !data.success) {
+                    showStatus((data && data.error) || 'Could not confirm.', 'error');
+                    return;
+                }
+                showStatus('Confirmed. Future advice will treat this as a fact.', 'success');
+                loadProfile();
+            } catch (e) { showStatus('Network error while confirming.', 'error'); }
+        }
+
         function takenItem(category, item, idx, isPast, liAttrs) {
             let li = `<li${liAttrs}><span class="item-actions">`;
+            li += verifyBtn(category, idx, isPast, item);
             if (isPast) li += `<button class="btn-status" onclick="setItemStatus('${category}',${idx},'active')" title="Taking this again"><i class="fas fa-redo"></i></button>`;
             else li += `<button class="btn-resolve" onclick="setItemStatus('${category}',${idx},'stopped')" title="No longer taking"><i class="fas fa-ban"></i></button>`;
             li += `<button class="btn-delete" onclick="deleteItem('${category}',${idx},'${escapeHtml(item.name || '')}')" title="Delete"><i class="fas fa-trash"></i></button></span>`;
@@ -766,6 +821,7 @@ Examples:
                     const liClass = c.status === 'investigating' ? ' class="warning"' : '';
                     let li = `<li${liClass}>`;
                     li += `<span class="item-actions">`;
+                    li += verifyBtn('conditions', idx, isPast, c);
                     if (!isPast) li += `<button class="btn-resolve" onclick="changeConditionStatus(${idx},'resolved')" title="Mark resolved"><i class="fas fa-check"></i></button>`;
                     if (!isPast) li += `<button class="btn-status" onclick="changeConditionStatus(${idx},'investigating')" title="Set investigating"><i class="fas fa-search"></i></button>`;
                     if (isPast) li += `<button class="btn-status" onclick="changeConditionStatus(${idx},'active')" title="Mark active again"><i class="fas fa-redo"></i></button>`;
@@ -782,6 +838,7 @@ Examples:
             html += lifecycleSection('Symptoms', 'fa-exclamation-circle', p.symptoms,
                 (s, idx, isPast) => {
                     let li = `<li><span class="item-actions">`;
+                    li += verifyBtn('symptoms', idx, isPast, s);
                     if (isPast) li += `<button class="btn-status" onclick="setItemStatus('symptoms',${idx},'active')" title="It has come back"><i class="fas fa-redo"></i></button>`;
                     else li += `<button class="btn-resolve" onclick="setItemStatus('symptoms',${idx},'resolved')" title="Mark resolved"><i class="fas fa-check"></i></button>`;
                     li += `<button class="btn-delete" onclick="deleteItem('symptoms',${idx},'${escapeHtml(s.description || '')}')" title="Delete"><i class="fas fa-trash"></i></button></span>`;
@@ -2272,7 +2329,78 @@ Examples:
                     <i class="fas fa-circle-info"></i> ${escapeHtml(ov.disclaimer)}</div>`;
             }
 
+            // Same preferences the PWA hub edits — one store, two doors.
+            const st = ov.settings || {};
+            html += `<div style="margin-top:14px;padding-top:12px;border-top:1px solid #e3e7ea;">
+                <div style="font-size:0.75rem;color:#78909c;text-transform:uppercase;font-weight:700;margin-bottom:8px;">Settings</div>
+                <label style="display:block;font-size:0.85rem;margin:5px 0;color:#37474f;">
+                    <input type="checkbox" id="ws-ai-enabled"${st.ai_enabled === false ? '' : ' checked'}>
+                    Let AI write suggestions from my records</label>
+                <label style="display:block;font-size:0.85rem;margin:5px 0;color:#37474f;">
+                    <input type="checkbox" id="ws-reminders-enabled"${st.reminders_enabled === false ? '' : ' checked'}>
+                    Show reminders</label>
+                <label style="display:block;font-size:0.85rem;margin:5px 0;color:#37474f;">
+                    <input type="checkbox" id="ws-notifications-enabled"${st.notifications_enabled === true ? ' checked' : ''}>
+                    Notify me when a reminder is due</label>
+                <label style="display:block;font-size:0.85rem;margin:5px 0;color:#37474f;">Periodic review
+                    <select id="ws-digest-frequency" style="margin-left:6px;padding:3px 6px;border:1px solid #ccc;border-radius:6px;">
+                        <option value="weekly"${String(st.digest_frequency || 'weekly') === 'weekly' ? ' selected' : ''}>Weekly</option>
+                        <option value="monthly"${String(st.digest_frequency) === 'monthly' ? ' selected' : ''}>Monthly</option>
+                        <option value="off"${String(st.digest_frequency) === 'off' ? ' selected' : ''}>Off</option>
+                    </select></label>
+                <label style="display:block;font-size:0.85rem;margin:5px 0;color:#37474f;">Advice language
+                    <select id="ws-advice-locale" style="margin-left:6px;padding:3px 6px;border:1px solid #ccc;border-radius:6px;">
+                        <option value="en"${String(st.locale || 'en') === 'en' ? ' selected' : ''}>English</option>
+                        <option value="zh-HK"${String(st.locale) === 'zh-HK' ? ' selected' : ''}>繁體中文 (香港)</option>
+                    </select></label>
+                <button onclick="saveAdviceSettings()" style="margin-top:8px;padding:6px 14px;font-size:0.8rem;
+                    border:1px solid #cfd8dc;border-radius:6px;background:#fff;cursor:pointer;">
+                    <i class="fas fa-check"></i> Save preferences</button>
+            </div>`;
+
             area.innerHTML = html + '</div>';
+        }
+
+        async function saveAdviceSettings() {
+            const ai = document.getElementById('ws-ai-enabled');
+            const rem = document.getElementById('ws-reminders-enabled');
+            const nfy = document.getElementById('ws-notifications-enabled');
+            const freq = document.getElementById('ws-digest-frequency');
+            const loc = document.getElementById('ws-advice-locale');
+            if (!ai || !rem || !nfy || !freq || !loc) return;
+            // Enabling alerts needs the browser/OS permission first; without it
+            // the toggle would silently do nothing.
+            if (nfy.checked && typeof Notification !== 'undefined' &&
+                    Notification.permission === 'default') {
+                try { await Notification.requestPermission(); } catch (e) {}
+            }
+            if (nfy.checked && (typeof Notification === 'undefined' ||
+                    Notification.permission !== 'granted')) {
+                showStatus('Notifications are blocked by the browser — enable them in the browser/OS settings first.', 'error');
+                return;
+            }
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/advice-settings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ai_enabled: ai.checked,
+                        reminders_enabled: rem.checked,
+                        notifications_enabled: nfy.checked,
+                        digest_frequency: freq.value,
+                        locale: loc.value
+                    })
+                });
+                const data = await resp.json();
+                if (!resp.ok || !data.success) {
+                    showStatus((data && data.error) || 'Could not save preferences.', 'error');
+                    return;
+                }
+                showStatus('Preferences saved.', 'success');
+                loadAdviceAndReminders();
+            } catch (e) {
+                showStatus('Network error while saving.', 'error');
+            }
         }
 
         async function refreshAdvice() {
@@ -2386,6 +2514,14 @@ Examples:
             if (checkAuth()) {
                 loadProfile();
                 initReviewPrompt();
+            }
+            // Dictation pill: device gating lives in static/health_dictation.js.
+            if (typeof HealthDictation !== 'undefined') {
+                if (!HealthDictation.pillAvailable()) {
+                    document.querySelectorAll('.hf-mic-pill').forEach(p => { p.style.display = 'none'; });
+                } else {
+                    HealthDictation.wire(document);
+                }
             }
         });
     </script>
