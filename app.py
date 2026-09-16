@@ -6746,9 +6746,35 @@ def transcribe_diary_audio():
         resp = client.audio.transcriptions.create(
             model=os.getenv('OPENAI_TRANSCRIBE_MODEL', 'whisper-1'),
             file=(secure_filename(f.filename) or 'audio.webm', audio, f.mimetype or 'audio/webm'),
+            response_format='verbose_json',
             **kwargs,
         )
-        text = (getattr(resp, 'text', '') or '').strip()
+        # verbose_json gives per-segment no_speech_prob / avg_logprob — the
+        # same signals Whisper's reference implementation uses to drop
+        # hallucinated segments produced during silence.
+        segs = getattr(resp, 'segments', None)
+        if segs:
+            parts = []
+            for s in segs:
+                nsp = getattr(s, 'no_speech_prob', None)
+                alp = getattr(s, 'avg_logprob', None)
+                if nsp is not None and nsp >= 0.6:
+                    continue
+                if alp is not None and alp <= -1.0:
+                    continue
+                parts.append(getattr(s, 'text', '') or '')
+            text = ' '.join(p.strip() for p in parts if p.strip())
+        else:
+            text = getattr(resp, 'text', '') or ''
+        # Backstop for endpoints without segment metadata: strip the famous
+        # stock phrases Whisper invents on silence.
+        import re as _re
+        text = _re.sub(
+            r'(多謝您?收看?[^，。！？,.!?]*[，。！？,.!?]?\s*(再會|拜拜)?|'
+            r'謝謝(您?的?)?(收看|觀看|收聽)|感謝您?的?收看|'
+            r'ご視聴ありがとうございました|thank you for watching|please subscribe|請訂閱[^，。！？,.!?]*)',
+            ' ', text, flags=_re.I)
+        text = ' '.join(text.split())
         return jsonify({'success': True, 'text': text})
     except Exception as e:
         return _safe_error(e, 'transcribe_diary_audio')
