@@ -393,6 +393,13 @@
         '問號': '？', '问号': '？', '感嘆號': '！', '感叹号': '！'
     };
     const NL_WORDS = new Set(['new line', 'newline', '換行', '换行']);
+    const PARA_WORDS = new Set(['new paragraph', '新段落', '換段落', '分段落']);
+    // Whole-utterance commands (matched against the full trimmed segment, so
+    // a word like "取消" inside a real sentence can't trigger them).
+    const CMD_UNDO = new Set(['scratch that', 'undo', 'undo that', 'delete that',
+        '刪除', '删掉', '刪掉', '撤回']);
+    const CMD_STOP = new Set(['stop recording', 'stop dictation', 'stop listening',
+        '停止錄音', '停止录音']);
 
     function isCJKLang(lang) {
         return /^(zh|yue|cmn)/i.test(lang || '');
@@ -406,6 +413,7 @@
         if (isCJK) {
             s = s.replace(/\s+/g, '');
             for (const w of Object.keys(PUNCT_ZH)) s = s.split(w).join(PUNCT_ZH[w]);
+            for (const w of PARA_WORDS) s = s.split(w).join('\n\n');
             for (const w of NL_WORDS) s = s.split(w).join('\n');
             return s;
         }
@@ -415,8 +423,9 @@
             let key = parts[i].toLowerCase();
             const next = parts[i + 1];
             const two = next ? key + ' ' + next.toLowerCase() : '';
-            if (two && (PUNCT_EN[two] !== undefined || NL_WORDS.has(two))) { key = two; i++; }
+            if (two && (PUNCT_EN[two] !== undefined || NL_WORDS.has(two) || PARA_WORDS.has(two))) { key = two; i++; }
             if (NL_WORDS.has(key)) { out = out.replace(/\s+$/, '') + '\n'; continue; }
+            if (PARA_WORDS.has(key)) { out = out.replace(/\s+$/, '') + '\n\n'; continue; }
             const p = PUNCT_EN[key];
             if (p !== undefined) { out = out.replace(/\s+$/, '') + p; continue; }
             if (out && !/\s$/.test(out)) out += ' ';
@@ -1580,7 +1589,7 @@
 
         _recordViaSpeech(target, micBtn, SpeechRecognition) {
             const session = { wantStop: false, rec: null, restarts: 0,
-                cur: null, pre: '', post: '', written: '', next: 0,
+                cur: null, pre: '', post: '', written: '', lastShown: '', next: 0,
                 isCJK: isCJKLang(diaryLang().value) };
             if (micBtn) micBtn._session = session;
             const gap = () => (session.pre && !/\s$/.test(session.pre) && !session.isCJK) ? ' ' : '';
@@ -1624,12 +1633,33 @@
                         session.pre = t.value.slice(0, pos);
                         session.post = t.value.slice(pos);
                         session.written = '';
+                        session.lastShown = '';
+                    } else if (t.value !== session.pre + session.lastShown + session.post) {
+                        // The user edited the field (e.g. backspaced dictated
+                        // words) — resync the insertion point to the caret so
+                        // deleted text does not come back.
+                        const pos = (typeof t.selectionStart === 'number') ? t.selectionStart : t.value.length;
+                        session.pre = t.value.slice(0, pos);
+                        session.post = t.value.slice(pos);
+                        session.written = '';
+                        session.lastShown = '';
                     }
                     let interim = '';
                     for (let i = session.next; i < e.results.length; i++) {
                         const r = e.results[i];
                         if (!r.isFinal) { interim += r[0].transcript; continue; }
                         session.next = i + 1;
+                        const cmd = (r[0].transcript || '').trim().toLowerCase();
+                        if (CMD_UNDO.has(cmd)) {
+                            // Remove the last dictated sentence, punctuation included.
+                            session.written = session.written.replace(/\s*[^.!?。！？\n]*[.!?。！？]?\s*$/, '');
+                            continue;
+                        }
+                        if (CMD_STOP.has(cmd)) {
+                            session.wantStop = true;
+                            try { rec.stop(); } catch (e2) {}
+                            continue;
+                        }
                         let seg = transformDictation(r[0].transcript, session.isCJK);
                         if (!seg) continue;
                         if (/^[,;:.!?，。！？；：]/.test(seg)) {
@@ -1655,6 +1685,7 @@
                         (session.written && interimTxt ? (session.isCJK ? '' : ' ') : '') + interimTxt;
                     const shownTxt = (shown ? gap() : '') + shown;
                     t.value = session.pre + shownTxt + session.post;
+                    session.lastShown = shownTxt;
                     const caret = (session.pre + shownTxt).length;
                     try { t.selectionStart = t.selectionEnd = caret; } catch (err) {}
                 };
