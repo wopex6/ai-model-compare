@@ -842,13 +842,13 @@
         btn.addEventListener('click', () => showScreen(btn.dataset.target));
     });
 
-    // Global dictation pill — hidden on iOS (keyboard mic dictates there).
-    // hub.js loads deferred, so wait for DOMContentLoaded before wiring.
+    // Global dictation pill — hidden only when neither SpeechRecognition nor
+    // in-app recording is available.  hub.js loads deferred, so wait for
+    // DOMContentLoaded before wiring.
     (function wireStaticMicPills() {
-        const ua = navigator.userAgent || '';
-        const isIOS = /iPad|iPhone|iPod/i.test(ua) ||
-            (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
-        if (isIOS) {
+        const hasSpeech = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+        const hasRecorder = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+        if (!hasSpeech && !hasRecorder) {
             document.querySelectorAll('.hf-mic-pill').forEach(p => { p.style.display = 'none'; });
             return;
         }
