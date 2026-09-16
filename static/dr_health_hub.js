@@ -310,7 +310,7 @@
     const DIARY_LANGS = [
         { value: 'en-GB', short: 'EN', label: 'English' },
         { value: 'yue-Hant-HK', short: '廣', label: 'Cantonese' },
-        { value: 'cmn-Hans-CN', short: '普', label: 'Mandarin' },
+        { value: 'cmn-Hans-CN', short: '普', label: 'Mandarin', alt: 'zh-CN' },
     ];
     function diaryLang() {
         try {
@@ -598,6 +598,9 @@
                 const data = await resp.json();
                 if (data && data.overview) {
                     this.overview = data.overview;
+                    if (typeof HealthReview !== 'undefined' && HealthReview.maybeNotify) {
+                        HealthReview.maybeNotify(this.overview);
+                    }
                     if (this.route.view === 'index') this.render();
                 }
             } catch (e) {
@@ -1258,6 +1261,8 @@
                 (s.ai_enabled === false ? '' : ' checked') + '> Let AI write suggestions from my records</label>';
             html += '<label class="hub-check"><input type="checkbox" id="hub-reminders-enabled"' +
                 (s.reminders_enabled === false ? '' : ' checked') + '> Show reminders</label>';
+            html += '<label class="hub-check"><input type="checkbox" id="hub-notifications-enabled"' +
+                (s.notifications_enabled === true ? ' checked' : '') + '> Notify me when a reminder is due</label>';
             html += '<label class="hub-input-label" for="hub-digest-frequency">Periodic review</label>';
             html += '<select class="hub-input" id="hub-digest-frequency">';
             const freqs = [['weekly', 'Weekly'], ['monthly', 'Monthly'], ['off', 'Off']];
@@ -1286,9 +1291,21 @@
             if (this.busy) return;
             const ai = this.root.querySelector('#hub-ai-enabled');
             const rem = this.root.querySelector('#hub-reminders-enabled');
+            const nfy = this.root.querySelector('#hub-notifications-enabled');
             const freq = this.root.querySelector('#hub-digest-frequency');
             const loc = this.root.querySelector('#hub-advice-locale');
-            if (!ai || !rem || !freq || !loc) return;
+            if (!ai || !rem || !nfy || !freq || !loc) return;
+            // Enabling alerts needs the OS/browser permission first; without it
+            // the toggle would silently do nothing.
+            if (nfy.checked && typeof Notification !== 'undefined' &&
+                    Notification.permission === 'default') {
+                try { await Notification.requestPermission(); } catch (e) {}
+            }
+            if (nfy.checked && (typeof Notification === 'undefined' ||
+                    Notification.permission !== 'granted')) {
+                this.status('Notifications are blocked by the browser — enable them in the browser/OS settings first.', true);
+                return;
+            }
             this.busy = true;
             this.status('Saving…');
             try {
@@ -1298,6 +1315,7 @@
                     body: JSON.stringify({
                         ai_enabled: ai.checked,
                         reminders_enabled: rem.checked,
+                        notifications_enabled: nfy.checked,
                         digest_frequency: freq.value,
                         locale: loc.value
                     })
@@ -1652,6 +1670,7 @@
         _recordViaSpeech(target, micBtn, SpeechRecognition) {
             const session = { wantStop: false, rec: null, restarts: 0,
                 cur: null, pre: '', post: '', written: '', lastShown: '', next: 0,
+                langTag: diaryLang().value, triedAlt: false,
                 isCJK: isCJKLang(diaryLang().value) };
             if (micBtn) micBtn._session = session;
             const gap = () => (session.pre && !/\s$/.test(session.pre) && !session.isCJK) ? ' ' : '';
@@ -1676,7 +1695,7 @@
                 session.next = 0;
                 const rec = new SpeechRecognition();
                 session.rec = rec;
-                rec.lang = diaryLang().value;
+                rec.lang = session.langTag;
                 rec.continuous = true;
                 rec.interimResults = true;
                 rec.onstart = () => {
@@ -1756,6 +1775,14 @@
                         session.wantStop = true;
                         finish(micHelpText(), true);
                     } else if (e.error === 'language-not-supported') {
+                        const alt = diaryLang().alt;
+                        if (alt && !session.triedAlt) {
+                            // e.g. Mandarin: cmn-Hans-CN is the spec tag but
+                            // some Chrome builds only accept zh-CN.
+                            session.triedAlt = true;
+                            session.langTag = alt;
+                            return; // onend restarts with the fallback tag
+                        }
                         session.wantStop = true;
                         finish('This language is not supported by your browser. Try English.', true);
                     }
