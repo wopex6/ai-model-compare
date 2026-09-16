@@ -2175,6 +2175,7 @@ Examples:
                 const data = await resp.json();
                 if (!data.success || !data.overview) { area.innerHTML = ''; return; }
                 currentOverview = data.overview;
+                if (window.HealthReview && HealthReview.maybeNotify) HealthReview.maybeNotify(data.overview);
                 renderAdviceArea(data.overview);
             } catch (e) {
                 area.innerHTML = '';

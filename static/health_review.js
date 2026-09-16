@@ -261,11 +261,40 @@
         conditions: 'resolved', symptoms: 'resolved',
     };
 
+    // One quiet system notification when reminders need attention — at most
+    // once every 20 hours unless the count changes. The user opts in from
+    // Settings; nothing here asks for permission on its own.
+    function maybeNotify(overview) {
+        try {
+            const s = (overview && overview.settings) || {};
+            if (!s.notifications_enabled) return;
+            if (typeof Notification === 'undefined' ||
+                Notification.permission !== 'granted') return;
+            const c = (overview && overview.reminder_counts) || {};
+            const n = (c.overdue || 0) + (c.due_today || 0);
+            if (!n) return;
+            const last = parseInt(localStorage.getItem('drHealth.lastNotify') || '0', 10);
+            const lastN = parseInt(localStorage.getItem('drHealth.lastNotifyCount') || '0', 10);
+            if (n === lastN && Date.now() - last < 20 * 3600 * 1000) return;
+            const list = (overview && overview.reminders) || [];
+            const top = list.find(function (r) { return r.status === 'overdue'; }) ||
+                        list.find(function (r) { return r.status === 'due_today'; });
+            const note = new Notification('Dr. Health', {
+                body: n + ' reminder' + (n === 1 ? ' needs' : 's need') +
+                      ' attention' + (top ? ' — ' + top.title : ''),
+            });
+            note.onclick = function () { try { window.focus(); } catch (e) {} };
+            localStorage.setItem('drHealth.lastNotify', String(Date.now()));
+            localStorage.setItem('drHealth.lastNotifyCount', String(n));
+        } catch (e) { /* notifications are best-effort */ }
+    }
+
     window.HealthReview = {
         mount: create,
         partition: partition,
         historyNote: historyNote,
         setStatus: setStatus,
+        maybeNotify: maybeNotify,
         endStatusFor: function (category) { return END_STATUS[category] || ''; },
         hasLifecycle: function (category) { return !!END_STATUS[category]; },
     };

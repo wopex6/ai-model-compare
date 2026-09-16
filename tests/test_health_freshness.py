@@ -2,6 +2,7 @@
 
 Pure Python: no network, no model calls, no disk.
 """
+import json
 import unittest
 from datetime import date, datetime, timedelta
 
@@ -405,6 +406,51 @@ class TestProposals(unittest.TestCase):
         self.assertTrue(result['ok'])
         self.assertEqual(data['pending_changes'], [])
         self.assertEqual(data['medications'][0]['dose'], '5mg')
+
+
+class TestConversationAdvice(unittest.TestCase):
+    """Advice draws on recent chat as well as stored facts, so the cache key
+    covers the conversation, not just the profile."""
+
+    def _facts(self):
+        return {'conditions': [{'name': 'Gout', 'status': 'active',
+                                'last_confirmed_at': '2026-06-01T00:00:00'}]}
+
+    def _chat(self, calls):
+        def fake(messages, **kw):
+            calls.append(messages)
+            return json.dumps({'suggestions': [], 'questions_for_doctor': []})
+        return fake
+
+    def test_marker_changes_with_new_messages(self):
+        msgs = [{'sender_type': 'user', 'content': 'I feel dizzy', 'id': 1}]
+        text1, m1 = hi.conversation_context(msgs)
+        self.assertIn('I feel dizzy', text1)
+        msgs.append({'sender_type': 'user', 'content': 'Still dizzy', 'id': 2})
+        _, m2 = hi.conversation_context(msgs)
+        self.assertNotEqual(m1, m2)
+
+    def test_advice_regenerates_when_conversation_moves_on(self):
+        data = self._facts()
+        calls = []
+        hi.generate_advice(data, force=True, chat=self._chat(calls),
+                           conversation='Patient: x', conversation_marker='m1',
+                           today=TODAY)
+        cached = hi.generate_advice(data, chat=self._chat(calls),
+                                    conversation_marker='m1', today=TODAY)
+        self.assertTrue(cached['cached'])
+        hi.generate_advice(data, chat=self._chat(calls),
+                           conversation='Patient: y', conversation_marker='m2',
+                           today=TODAY)
+        self.assertEqual(len(calls), 2)
+
+    def test_conversation_reaches_the_prompt(self):
+        data = self._facts()
+        calls = []
+        hi.generate_advice(data, force=True, chat=self._chat(calls),
+                           conversation='Patient: I stopped the tablets',
+                           conversation_marker='m1', today=TODAY)
+        self.assertIn('I stopped the tablets', calls[0][-1]['content'])
 
 
 if __name__ == '__main__':

@@ -7877,14 +7877,26 @@ def get_health_advice():
         profile = HealthContextManager.get_profile(user_id)
         force = str(request.args.get('refresh', '')).lower() in ('1', 'true', 'yes')
 
+        # Advice draws on the recent Dr. Health conversation as well as the
+        # stored facts, so a chat about new symptoms should freshen it even
+        # when nothing in the profile changed.
+        convo_text, convo_marker = '', ''
+        try:
+            msgs = integrated_db.get_character_messages(int(user_id), 'medical_advisor')
+            convo_text, convo_marker = health_insights.conversation_context(msgs)
+        except Exception:
+            pass
+
         if not force:
             cached = health_insights.cached_advice(profile.data)
-            if cached:
+            if cached and str(cached.get('conversation_marker') or '') == convo_marker:
                 result = dict(cached)
                 result['cached'] = True
                 return jsonify({'success': True, 'advice': result})
 
-        advice = health_insights.generate_advice(profile.data, force=force)
+        advice = health_insights.generate_advice(
+            profile.data, force=force,
+            conversation=convo_text, conversation_marker=convo_marker)
         profile.save()
         return jsonify({
             'success': True,
@@ -7925,6 +7937,8 @@ def update_health_advice_settings():
             settings['ai_enabled'] = bool(data['ai_enabled'])
         if 'reminders_enabled' in data:
             settings['reminders_enabled'] = bool(data['reminders_enabled'])
+        if 'notifications_enabled' in data:
+            settings['notifications_enabled'] = bool(data['notifications_enabled'])
         if 'digest_frequency' in data:
             frequency = str(data['digest_frequency'] or '').lower()
             if frequency not in ('weekly', 'monthly', 'off'):

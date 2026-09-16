@@ -827,6 +827,7 @@ def red_flags(observations: List[Dict]) -> List[Dict]:
 DEFAULT_ADVICE_SETTINGS = {
     'ai_enabled': True,
     'reminders_enabled': True,
+    'notifications_enabled': False,
     'digest_frequency': 'weekly',   # weekly | monthly | off
     'locale': 'en',                 # en | zh-HK
 }
@@ -1072,8 +1073,36 @@ def empty_advice(reason: str = '') -> Dict:
     }
 
 
+def conversation_context(messages: List[Dict], limit: int = 40,
+                         max_chars: int = 4000) -> Tuple[str, str]:
+    """Render the recent chat for the advice prompt, plus a change marker.
+
+    The marker lets callers tell when the conversation has moved on even
+    though the profile facts have not — that is what makes the cached advice
+    stale when new personal information was only ever discussed in chat.
+    """
+    msgs = [m for m in (messages or [])
+            if isinstance(m, dict)
+            and str(m.get('sender_type') or '') in ('user', 'assistant')
+            and str(m.get('content') or '').strip()]
+    tail = msgs[-limit:]
+    last = tail[-1] if tail else {}
+    marker = hashlib.sha256(
+        (str(len(msgs)) + '|' + str(last.get('id') or last.get('timestamp') or ''))
+        .encode('utf-8')).hexdigest()[:16]
+    lines = []
+    for m in tail:
+        who = 'Patient' if m.get('sender_type') == 'user' else 'Dr. Health'
+        text = ' '.join(str(m.get('content') or '').split())[:240]
+        lines.append(who + ': ' + text)
+    while lines and len('\n'.join(lines)) > max_chars:
+        lines.pop(0)
+    return '\n'.join(lines), marker
+
+
 def generate_advice(data: Dict, force: bool = False, today: Optional[date] = None,
-                    chat=None) -> Dict:
+                    chat=None, conversation: str = '',
+                    conversation_marker: str = '') -> Dict:
     """Return Tier 2 advice, generating it only when it is actually needed.
 
     Gating order: opt-out, then cache hash, then daily cap. `chat` is injectable
@@ -1087,7 +1116,11 @@ def generate_advice(data: Dict, force: bool = False, today: Optional[date] = Non
 
     if not force:
         cached = cached_advice(data)
-        if cached:
+        # Advice also depends on what was discussed in chat, so a marker
+        # mismatch means the conversation moved on even though the stored
+        # facts did not.
+        if cached and str(cached.get('conversation_marker') or '') == \
+                str(conversation_marker or ''):
             result = dict(cached)
             result['cached'] = True
             return result
@@ -1115,6 +1148,9 @@ def generate_advice(data: Dict, force: bool = False, today: Optional[date] = Non
         'VERIFIED FACTS:\n' + verified +
         ('\n\nUNVERIFIED AI GUESSES (confirm before relying on these):\n' + unverified
          if unverified.strip() else '') +
+        ('\n\nRECENT CONVERSATION (things the patient mentioned in chat — '
+         'reconcile these with the facts above):\n' + conversation
+         if str(conversation or '').strip() else '') +
         '\n\n' + locale_note
     )
 
@@ -1142,6 +1178,7 @@ def generate_advice(data: Dict, force: bool = False, today: Optional[date] = Non
         'generated_at': datetime.now().isoformat(),
         'model': model or os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),
         'prompt_version': PROMPT_VERSION,
+        'conversation_marker': str(conversation_marker or ''),
         'locale': settings.get('locale', 'en'),
         'suggestions': validated['suggestions'],
         'questions_for_doctor': validated['questions_for_doctor'],
