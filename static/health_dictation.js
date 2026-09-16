@@ -37,7 +37,9 @@
     const DIARY_LANG_KEY = 'drHealth.diaryLang';
     const DIARY_LANGS = [
         { value: 'en-GB', short: 'EN', label: 'English' },
-        { value: 'yue-Hant-HK', short: '廣', label: 'Cantonese' },
+        // Chrome accepts yue-Hant-HK on most builds but not all; zh-HK is
+        // the widely-supported fallback tag.
+        { value: 'yue-Hant-HK', short: '廣', label: 'Cantonese', alt: 'zh-HK' },
         { value: 'cmn-Hans-CN', short: '普', label: 'Mandarin', alt: 'zh-CN' },
     ];
     function diaryLang() {
@@ -405,7 +407,8 @@
                 session.wantStop = true;
                 _dropInterim(session);
                 if (micBtn) { micBtn.classList.remove('recording'); micBtn._session = null; }
-                dictateToast(msg || 'Browser speech unavailable — using the recorder instead.');
+                dictateToast(msg || ('Browser speech unavailable (' +
+                    (session.lastError || 'no result') + ') — using the recorder instead.'));
                 _recordViaUpload(target, micBtn);
             };
             const start = () => {
@@ -441,6 +444,7 @@
                     _render(session, interim);
                 };
                 rec.onerror = (e) => {
+                    session.lastError = e.error || 'error';
                     if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
                         session.wantStop = true;
                         finish(micHelpText(), true);
@@ -532,9 +536,20 @@
                     const buf = new Uint8Array(an.fftSize);
                     session.levelTimer = setInterval(() => {
                         an.getByteTimeDomainData(buf);
+                        let now = 0;
                         for (let i = 0; i < buf.length; i++) {
                             const v = Math.abs(buf[i] - 128) / 128;
-                            if (v > session.segPeak) session.segPeak = v;
+                            if (v > now) now = v;
+                        }
+                        if (now > session.segPeak) session.segPeak = now;
+                        // Live level on the mic button: the user can see
+                        // whether the microphone is actually delivering audio
+                        // instead of guessing after a failed transcription.
+                        if (micBtn) {
+                            const bars = now < 0.02 ? 0 : Math.min(4, 1 + Math.floor(now * 8));
+                            micBtn.style.boxShadow = bars
+                                ? 'inset 0 0 0 ' + bars + 'px rgba(255,255,255,0.55)' : '';
+                            micBtn.title = 'Mic level: ' + Math.round(now * 100) + '%';
                         }
                     }, 100);
                 }
@@ -544,6 +559,7 @@
                 if (session.levelTimer) { clearInterval(session.levelTimer); session.levelTimer = null; }
                 try { if (session.audioCtx) session.audioCtx.close(); } catch (e) {}
                 session.audioCtx = null;
+                if (micBtn) { micBtn.style.boxShadow = ''; micBtn.title = 'Dictate into the focused text box'; }
             };
 
             const newRecorder = () => {
@@ -562,7 +578,8 @@
                         session.queue = session.queue.then(() => _uploadChunk(blob, dur, session));
                     } else if (!session.silentWarned) {
                         session.silentWarned = true;
-                        dictateToast('The microphone is not picking up sound — check it is not muted and the right input is selected.', true);
+                        dictateToast('No sound reached the page (peak ' + Math.round(peak * 100) +
+                            '%). Another app or extension may be holding the microphone — close it, or pick the right input in Windows sound settings.', true);
                     }
                     if (!session.wantStop) {
                         session.segStart = Date.now();
