@@ -2297,19 +2297,10 @@ Examples:
             const reminder = list.find(r => r.id === reminderId);
             if (!reminder) return;
             try {
-                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/reminder', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        action: action,
-                        source_category: reminder.source_category,
-                        source_index: reminder.source_index,
-                        days: 7
-                    })
-                });
-                const data = await resp.json();
-                if (!resp.ok || !data.success) {
-                    showStatus((data && data.error) || 'Could not update reminder.', 'error');
+                const r = await HealthReview.actOnReminder(
+                    (u, i) => AuthHelper.authenticatedFetch(u, i), reminder, action, 7);
+                if (!r.ok) {
+                    showStatus((r.data && r.data.error) || 'Could not update reminder.', 'error');
                     return;
                 }
                 showStatus(action === 'complete' ? 'Marked done.' : 'Snoozed 7 days.', 'success');

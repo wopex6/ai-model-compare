@@ -1364,20 +1364,11 @@
             this.busy = true;
             this.status(action === 'complete' ? 'Marking done…' : 'Snoozing…');
             try {
-                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/reminder', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        action: action,
-                        source_category: reminder.source_category,
-                        source_index: reminder.source_index,
-                        days: 7
-                    })
-                });
-                const data = await resp.json();
+                const r = await HealthReview.actOnReminder(
+                    (u, i) => AuthHelper.authenticatedFetch(u, i), reminder, action, 7);
                 this.busy = false;
-                if (!resp.ok || !data.success) {
-                    this.status((data && data.error) ? data.error : 'Could not update reminder.', true);
+                if (!r.ok) {
+                    this.status((r.data && r.data.error) ? r.data.error : 'Could not update reminder.', true);
                     return;
                 }
                 await this.reload();
