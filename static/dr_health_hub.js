@@ -1766,6 +1766,10 @@
             start();
         },
 
+        // Rolling-segment recorder: restarts MediaRecorder every SEG_MS so
+        // each upload is a complete file — transcribed text appears while the
+        // user is still speaking.  Each recorder produces its own header, so
+        // segments are independently valid.
         async _recordViaUpload(target, micBtn) {
             const self = this;
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.MediaRecorder) {
@@ -1783,62 +1787,82 @@
             }
             const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
                 : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '');
-            let mr;
+            const SEG_MS = 4000;
+            const session = { wantStop: false, mr: null, segStart: 0,
+                timer: null, queue: Promise.resolve() };
+            if (micBtn) micBtn._session = session;
+
+            const newRecorder = () => {
+                const chunks = [];
+                let r;
+                try {
+                    r = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+                } catch (e) { return null; }
+                r.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+                r.onstop = () => {
+                    clearTimeout(session.timer);
+                    const blob = new Blob(chunks, { type: r.mimeType || 'audio/webm' });
+                    const dur = Date.now() - session.segStart;
+                    session.queue = session.queue.then(() => self._uploadChunk(blob, dur, target));
+                    if (!session.wantStop) {
+                        session.segStart = Date.now();
+                        session.mr = newRecorder();
+                        if (session.mr) {
+                            try { session.mr.start(1000); } catch (e) {}
+                            session.timer = setTimeout(() => {
+                                if (session.mr && session.mr.state === 'recording') session.mr.stop();
+                            }, SEG_MS);
+                        }
+                    } else {
+                        stream.getTracks().forEach(t => t.stop());
+                        if (micBtn) { micBtn.classList.remove('recording'); micBtn._session = null; }
+                    }
+                };
+                return r;
+            };
+
+            session.segStart = Date.now();
+            session.mr = newRecorder();
+            if (!session.mr) {
+                stream.getTracks().forEach(t => t.stop());
+                dictateToast('Could not start recording.', true);
+                return;
+            }
             try {
-                mr = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+                session.mr.start(1000);
             } catch (e) {
                 stream.getTracks().forEach(t => t.stop());
                 dictateToast('Could not start recording: ' + e.message, true);
                 return;
             }
-            const chunks = [];
-            const session = { wantStop: false, mr: mr, startedAt: 0 };
-            if (micBtn) micBtn._session = session;
-            mr.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
-            mr.onstop = async () => {
-                if (micBtn) { micBtn.classList.remove('recording'); micBtn._session = null; }
-                stream.getTracks().forEach(t => t.stop());
-                const blob = new Blob(chunks, { type: mr.mimeType || 'audio/webm' });
-                // Near-empty uploads make the transcriber hallucinate stock
-                // phrases — don't send a sub-second or effectively empty clip.
-                if (blob.size < 2000 || Date.now() - session.startedAt < 600) {
-                    dictateToast('Nothing was recorded — try holding the mic a little longer.', true);
-                    return;
-                }
-                dictateToast('Transcribing…');
-                try {
-                    const fd = new FormData();
-                    const ext = (mr.mimeType || '').includes('mp4') ? 'm4a' : 'webm';
-                    fd.append('audio', blob, 'diary.' + ext);
-                    fd.append('lang', diaryLang().value);
-                    const res = await AuthHelper.authenticatedFetch('/api/health-profile/transcribe', {
-                        method: 'POST', body: fd
-                    });
-                    const data = await res.json().catch(() => ({}));
-                    if (res.ok && data.success && data.text) {
-                        // Follow the cursor: transcribed text goes to whatever
-                        // box is focused now, not the one recording started in.
-                        const t = editableEl(_dictateTarget) || target;
-                        insertDictated(t, data.text);
-                        dictateToast('Voice recorded.');
-                    } else {
-                        dictateToast('Transcription failed' + (data.error ? ': ' + data.error : '.'), true);
-                    }
-                } catch (e) {
-                    dictateToast('Transcription failed: ' + e.message, true);
-                }
-            };
+            session.timer = setTimeout(() => {
+                if (session.mr && session.mr.state === 'recording') session.mr.stop();
+            }, SEG_MS);
+            if (micBtn) micBtn.classList.add('recording');
+            dictateToast('Recording… tap the mic again to stop.');
+        },
+
+        async _uploadChunk(blob, durMs, target) {
+            // Near-empty clips make the transcriber hallucinate stock phrases.
+            if (!blob || blob.size < 2000 || durMs < 600) return;
             try {
-                // A timeslice is required on iOS Safari — without it
-                // ondataavailable may never fire and the clip comes out empty.
-                mr.start(1000);
-                session.startedAt = Date.now();
-                if (micBtn) micBtn.classList.add('recording');
-                dictateToast('Recording… tap the mic again to stop.');
+                const fd = new FormData();
+                const ext = (blob.type || '').includes('mp4') ? 'm4a' : 'webm';
+                fd.append('audio', blob, 'diary.' + ext);
+                fd.append('lang', diaryLang().value);
+                const res = await AuthHelper.authenticatedFetch('/api/health-profile/transcribe', {
+                    method: 'POST', body: fd
+                });
+                const data = await res.json().catch(() => ({}));
+                if (res.ok && data.success && data.text) {
+                    // Follow the cursor: text goes to whatever box is focused
+                    // when the segment returns.
+                    insertDictated(editableEl(_dictateTarget) || target, data.text);
+                } else if (!res.ok || !data.success) {
+                    dictateToast('Transcription failed' + (data.error ? ': ' + data.error : '.'), true);
+                }
             } catch (e) {
-                if (micBtn) micBtn._session = null;
-                stream.getTracks().forEach(t => t.stop());
-                dictateToast('Could not start recording: ' + e.message, true);
+                dictateToast('Transcription failed: ' + e.message, true);
             }
         },
 
