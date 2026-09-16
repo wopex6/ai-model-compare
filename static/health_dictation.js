@@ -514,7 +514,37 @@
             const session = _newWriteSession();
             session.mr = null; session.segStart = 0;
             session.timer = null; session.queue = Promise.resolve();
+            session.segPeak = 0; session.levelTimer = null;
+            session.audioCtx = null; session.silentWarned = false;
             if (micBtn) micBtn._session = session;
+
+            // Live amplitude monitor: a segment that captured only silence
+            // must not be uploaded — the transcriber hallucinates stock
+            // phrases on dead air.  If monitoring is unavailable, segments
+            // are uploaded as before.
+            try {
+                const AC = window.AudioContext || window.webkitAudioContext;
+                if (AC) {
+                    session.audioCtx = new AC();
+                    const an = session.audioCtx.createAnalyser();
+                    an.fftSize = 512;
+                    session.audioCtx.createMediaStreamSource(stream).connect(an);
+                    const buf = new Uint8Array(an.fftSize);
+                    session.levelTimer = setInterval(() => {
+                        an.getByteTimeDomainData(buf);
+                        for (let i = 0; i < buf.length; i++) {
+                            const v = Math.abs(buf[i] - 128) / 128;
+                            if (v > session.segPeak) session.segPeak = v;
+                        }
+                    }, 100);
+                }
+            } catch (e) {}
+
+            const cleanupAudio = () => {
+                if (session.levelTimer) { clearInterval(session.levelTimer); session.levelTimer = null; }
+                try { if (session.audioCtx) session.audioCtx.close(); } catch (e) {}
+                session.audioCtx = null;
+            };
 
             const newRecorder = () => {
                 const chunks = [];
@@ -527,7 +557,13 @@
                     clearTimeout(session.timer);
                     const blob = new Blob(chunks, { type: r.mimeType || 'audio/webm' });
                     const dur = Date.now() - session.segStart;
-                    session.queue = session.queue.then(() => _uploadChunk(blob, dur, session));
+                    const peak = session.segPeak; session.segPeak = 0;
+                    if (!session.levelTimer || peak >= 0.02) {
+                        session.queue = session.queue.then(() => _uploadChunk(blob, dur, session));
+                    } else if (!session.silentWarned) {
+                        session.silentWarned = true;
+                        dictateToast('The microphone is not picking up sound — check it is not muted and the right input is selected.', true);
+                    }
                     if (!session.wantStop) {
                         session.segStart = Date.now();
                         session.mr = newRecorder();
@@ -538,6 +574,7 @@
                             }, SEG_MS);
                         }
                     } else {
+                        cleanupAudio();
                         stream.getTracks().forEach(t => t.stop());
                         if (micBtn) { micBtn.classList.remove('recording'); micBtn._session = null; }
                     }
@@ -548,6 +585,7 @@
             session.segStart = Date.now();
             session.mr = newRecorder();
             if (!session.mr) {
+                cleanupAudio();
                 stream.getTracks().forEach(t => t.stop());
                 dictateToast('Could not start recording.', true);
                 return;
@@ -555,6 +593,7 @@
             try {
                 session.mr.start(1000);
             } catch (e) {
+                cleanupAudio();
                 stream.getTracks().forEach(t => t.stop());
                 dictateToast('Could not start recording: ' + e.message, true);
                 return;
