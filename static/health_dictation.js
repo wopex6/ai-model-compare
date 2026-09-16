@@ -116,18 +116,6 @@
         _dictateToastTimer = setTimeout(() => t.classList.remove('show'), 2800);
     }
 
-    // Insert dictated text at the caret (or the end if there is none).
-    function insertDictated(el, text) {
-        if (!el || !text) return;
-        const pos = (typeof el.selectionStart === 'number') ? el.selectionStart : el.value.length;
-        const pre = el.value.slice(0, pos);
-        const post = el.value.slice(pos);
-        const sep = (pre && !/\s$/.test(pre)) ? ' ' : '';
-        el.value = pre + sep + text + post;
-        const caret = (pre + sep + text).length;
-        try { el.selectionStart = el.selectionEnd = caret; } catch (e) {}
-    }
-
     // Spoken punctuation commands.  Saying "comma" (or 逗號) turns the
     // auto-inserted sentence end into a comma; other marks work the same way.
     const PUNCT_EN = {
@@ -284,22 +272,103 @@
             }
     }
 
+    // ---------- Shared write-session (speech + upload paths) ----------
+    // Both dictation engines feed final transcript segments through the same
+    // pipeline: voice commands, punctuation transforms, auto sentence end,
+    // cursor-follow and edit resync.
+    function _newWriteSession() {
+        return { wantStop: false, cur: null, pre: '', post: '', written: '',
+            lastShown: '', isCJK: isCJKLang(diaryLang().value) };
+    }
+    function _writeGap(session) {
+        return (session.pre && !/\s$/.test(session.pre) && !session.isCJK) ? ' ' : '';
+    }
+    function _dropInterim(session) {
+        // Strip any not-yet-final text we displayed — keep only finals.
+        if (session.cur && document.contains(session.cur)) {
+            const w = session.written ? _writeGap(session) + session.written : '';
+            session.cur.value = session.pre + w + session.post;
+        }
+    }
+    function _syncTarget(session) {
+        // Text follows the cursor: each segment goes to whichever editable
+        // box is focused right now.
+        const t = editableEl(_dictateTarget) || session.cur;
+        if (!t) return null;
+        if (t !== session.cur) {
+            _dropInterim(session);
+            session.cur = t;
+            const pos = (typeof t.selectionStart === 'number') ? t.selectionStart : t.value.length;
+            session.pre = t.value.slice(0, pos);
+            session.post = t.value.slice(pos);
+            session.written = '';
+            session.lastShown = '';
+        } else if (t.value !== session.pre + session.lastShown + session.post) {
+            // The user edited the field (e.g. backspaced dictated words) —
+            // resync the insertion point to the caret so deleted text does
+            // not come back.
+            const pos = (typeof t.selectionStart === 'number') ? t.selectionStart : t.value.length;
+            session.pre = t.value.slice(0, pos);
+            session.post = t.value.slice(pos);
+            session.written = '';
+            session.lastShown = '';
+        }
+        return t;
+    }
+    // Apply one final transcript segment to session.written.
+    // Returns 'undo' | 'stop' | 'text' | 'skip'.
+    function _applyFinal(session, raw) {
+        // Recognisers add their own capitalisation/punctuation ("Scratch
+        // that.") — normalise before matching whole-utterance commands.
+        const cmd = (raw || '').trim().toLowerCase()
+            .replace(/[.!?。，！？,;:；：\s]+$/, '').replace(/\s+/g, ' ');
+        if (CMD_UNDO.has(cmd)) {
+            // Remove the last dictated sentence, punctuation included.
+            session.written = session.written.replace(/\s*[^.!?。！？\n]*[.!?。！？]?\s*$/, '');
+            return 'undo';
+        }
+        if (CMD_STOP.has(cmd)) { session.wantStop = true; return 'stop'; }
+        let seg = transformDictation(raw, session.isCJK);
+        if (!seg) return 'skip';
+        if (/^[,;:.!?，。！？；：]/.test(seg)) {
+            // A leading spoken mark replaces the auto period.
+            session.written = session.written.replace(/[,;:.!?，。！？；：\s]+$/, '');
+            if (session.written) session.written += seg;
+            else session.written = seg.replace(/^[,;:.!?，。！？；：]+\s*/, '');
+        } else {
+            if (session.written && !session.isCJK && !/\s$/.test(session.written)) session.written += ' ';
+            if (!session.isCJK && /[.!?]\s*$/.test(session.written) && /^[a-z]/.test(seg)) {
+                seg = seg[0].toUpperCase() + seg.slice(1);
+            }
+            session.written += seg;
+        }
+        // Auto sentence end — skipped when the speaker already supplied
+        // punctuation or a line break.
+        if (!/[,;:.!?，。！？；：\n]\s*$/.test(session.written)) {
+            session.written += session.isCJK ? '。' : '.';
+        }
+        return 'text';
+    }
+    function _render(session, interim) {
+        const t = session.cur;
+        if (!t) return;
+        const interimTxt = (interim || '').trim();
+        const shown = session.written +
+            (session.written && interimTxt ? (session.isCJK ? '' : ' ') : '') + interimTxt;
+        const shownTxt = (shown ? _writeGap(session) : '') + shown;
+        t.value = session.pre + shownTxt + session.post;
+        session.lastShown = shownTxt;
+        const caret = (session.pre + shownTxt).length;
+        try { t.selectionStart = t.selectionEnd = caret; } catch (err) {}
+    }
+
     function _recordViaSpeech(target, micBtn, SpeechRecognition) {
-            const session = { wantStop: false, rec: null, restarts: 0,
-                cur: null, pre: '', post: '', written: '', lastShown: '', next: 0,
-                langTag: diaryLang().value, triedAlt: false,
-                isCJK: isCJKLang(diaryLang().value) };
+            const session = _newWriteSession();
+            session.rec = null; session.restarts = 0; session.next = 0;
+            session.langTag = diaryLang().value; session.triedAlt = false;
             if (micBtn) micBtn._session = session;
-            const gap = () => (session.pre && !/\s$/.test(session.pre) && !session.isCJK) ? ' ' : '';
-            const dropInterim = () => {
-                // Strip any not-yet-final text we displayed — keep only finals.
-                if (session.cur && document.contains(session.cur)) {
-                    const w = session.written ? gap() + session.written : '';
-                    session.cur.value = session.pre + w + session.post;
-                }
-            };
             const finish = (msg, isErr) => {
-                dropInterim();
+                _dropInterim(session);
                 if (micBtn) { micBtn.classList.remove('recording'); micBtn._session = null; }
                 if (msg) dictateToast(msg, !!isErr);
             };
@@ -321,71 +390,17 @@
                 };
                 rec.onresult = (e) => {
                     session.restarts = 0;
-                    // Text follows the cursor: each result goes to whichever
-                    // editable box is focused right now.
-                    const t = editableEl(_dictateTarget) || session.cur;
-                    if (t !== session.cur) {
-                        dropInterim();
-                        session.cur = t;
-                        const pos = (typeof t.selectionStart === 'number') ? t.selectionStart : t.value.length;
-                        session.pre = t.value.slice(0, pos);
-                        session.post = t.value.slice(pos);
-                        session.written = '';
-                        session.lastShown = '';
-                    } else if (t.value !== session.pre + session.lastShown + session.post) {
-                        // The user edited the field (e.g. backspaced dictated
-                        // words) — resync the insertion point to the caret so
-                        // deleted text does not come back.
-                        const pos = (typeof t.selectionStart === 'number') ? t.selectionStart : t.value.length;
-                        session.pre = t.value.slice(0, pos);
-                        session.post = t.value.slice(pos);
-                        session.written = '';
-                        session.lastShown = '';
-                    }
+                    if (!_syncTarget(session)) return;
                     let interim = '';
                     for (let i = session.next; i < e.results.length; i++) {
                         const r = e.results[i];
                         if (!r.isFinal) { interim += r[0].transcript; continue; }
                         session.next = i + 1;
-                        const cmd = (r[0].transcript || '').trim().toLowerCase();
-                        if (CMD_UNDO.has(cmd)) {
-                            // Remove the last dictated sentence, punctuation included.
-                            session.written = session.written.replace(/\s*[^.!?。！？\n]*[.!?。！？]?\s*$/, '');
-                            continue;
-                        }
-                        if (CMD_STOP.has(cmd)) {
-                            session.wantStop = true;
+                        if (_applyFinal(session, r[0].transcript) === 'stop') {
                             try { rec.stop(); } catch (e2) {}
-                            continue;
-                        }
-                        let seg = transformDictation(r[0].transcript, session.isCJK);
-                        if (!seg) continue;
-                        if (/^[,;:.!?，。！？；：]/.test(seg)) {
-                            // A leading spoken mark replaces the auto period.
-                            session.written = session.written.replace(/[,;:.!?，。！？；：\s]+$/, '');
-                            if (session.written) session.written += seg;
-                            else session.written = seg.replace(/^[,;:.!?，。！？；：]+\s*/, '');
-                        } else {
-                            if (session.written && !session.isCJK && !/\s$/.test(session.written)) session.written += ' ';
-                            if (!session.isCJK && /[.!?]\s*$/.test(session.written) && /^[a-z]/.test(seg)) {
-                                seg = seg[0].toUpperCase() + seg.slice(1);
-                            }
-                            session.written += seg;
-                        }
-                        // Auto sentence end — skipped when the speaker already
-                        // supplied punctuation or a line break.
-                        if (!/[,;:.!?，。！？；：\n]\s*$/.test(session.written)) {
-                            session.written += session.isCJK ? '。' : '.';
                         }
                     }
-                    const interimTxt = interim.trim();
-                    const shown = session.written +
-                        (session.written && interimTxt ? (session.isCJK ? '' : ' ') : '') + interimTxt;
-                    const shownTxt = (shown ? gap() : '') + shown;
-                    t.value = session.pre + shownTxt + session.post;
-                    session.lastShown = shownTxt;
-                    const caret = (session.pre + shownTxt).length;
-                    try { t.selectionStart = t.selectionEnd = caret; } catch (err) {}
+                    _render(session, interim);
                 };
                 rec.onerror = (e) => {
                     if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
@@ -444,8 +459,9 @@
             const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
                 : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '');
             const SEG_MS = 4000;
-            const session = { wantStop: false, mr: null, segStart: 0,
-                timer: null, queue: Promise.resolve() };
+            const session = _newWriteSession();
+            session.mr = null; session.segStart = 0;
+            session.timer = null; session.queue = Promise.resolve();
             if (micBtn) micBtn._session = session;
 
             const newRecorder = () => {
@@ -459,7 +475,7 @@
                     clearTimeout(session.timer);
                     const blob = new Blob(chunks, { type: r.mimeType || 'audio/webm' });
                     const dur = Date.now() - session.segStart;
-                    session.queue = session.queue.then(() => _uploadChunk(blob, dur, target));
+                    session.queue = session.queue.then(() => _uploadChunk(blob, dur, session));
                     if (!session.wantStop) {
                         session.segStart = Date.now();
                         session.mr = newRecorder();
@@ -498,9 +514,12 @@
             dictateToast('Recording… tap the mic again to stop.');
     }
 
-    async function _uploadChunk(blob, durMs, target) {
+    async function _uploadChunk(blob, durMs, session) {
             // Near-empty clips make the transcriber hallucinate stock phrases.
             if (!blob || blob.size < 2000 || durMs < 600) return;
+            // Segments spoken after a voice "stop recording" are dropped —
+            // a manual stop still lets the final in-flight chunk through.
+            if (session.stoppedByCmd) return;
             try {
                 const fd = new FormData();
                 const ext = (blob.type || '').includes('mp4') ? 'm4a' : 'webm';
@@ -511,9 +530,16 @@
                 });
                 const data = await res.json().catch(() => ({}));
                 if (res.ok && data.success && data.text) {
-                    // Follow the cursor: text goes to whatever box is focused
-                    // when the segment returns.
-                    insertDictated(editableEl(_dictateTarget) || target, data.text);
+                    // Same pipeline as SpeechRecognition: commands, spoken
+                    // punctuation, auto sentence end, cursor-follow.
+                    if (!_syncTarget(session)) return;
+                    if (_applyFinal(session, data.text) === 'stop') {
+                        session.stoppedByCmd = true;
+                        if (session.mr && session.mr.state !== 'inactive') {
+                            try { session.mr.stop(); } catch (e) {}
+                        }
+                    }
+                    _render(session);
                 } else if (!res.ok || !data.success) {
                     dictateToast('Transcription failed' + (data.error ? ': ' + data.error : '.'), true);
                 }
