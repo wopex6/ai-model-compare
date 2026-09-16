@@ -6799,7 +6799,10 @@ def get_test_results_summary():
 @app.route('/health-profile')
 def health_profile_page():
     """Health Profile management page"""
-    return render_template('health_profile.html')
+    resp = make_response(render_template('health_profile.html'))
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    return resp
 
 @app.route('/dr-health')
 def dr_health_app():

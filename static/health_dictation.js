@@ -46,7 +46,13 @@
             const found = DIARY_LANGS.find(l => l.value === v);
             if (found) return found;
         } catch (e) {}
-        return DIARY_LANGS[1];
+        // No saved choice — follow the browser's language: zh-CN/Hans →
+        // Mandarin, other zh (HK/TW/Hant) → Cantonese, else English.
+        const nav = (navigator.language || '').toLowerCase();
+        if (nav.indexOf('zh') === 0) {
+            return /cn|hans/.test(nav) ? DIARY_LANGS[2] : DIARY_LANGS[1];
+        }
+        return DIARY_LANGS[0];
     }
 
     // ---------- Global dictation pill ----------
