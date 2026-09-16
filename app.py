@@ -6718,6 +6718,19 @@ def transcribe_diary_audio():
         if not api_key:
             return jsonify({'error': 'Server transcription is not configured'}), 503
 
+        # The client sends the user's dictation-language preference.  Passing
+        # it (plus a context prompt) stops the transcriber from guessing a
+        # wrong language or hallucinating stock phrases on faint audio.
+        lang_in = (request.form.get('lang') or '').strip().lower()
+        language = None
+        prompt = None
+        if lang_in.startswith(('zh', 'yue', 'cmn')):
+            language = 'zh'
+            prompt = '廣東話或普通話的個人健康日記。'
+        elif lang_in.startswith('en'):
+            language = 'en'
+            prompt = 'A personal health diary entry.'
+
         from openai import OpenAI
         client = OpenAI(
             api_key=api_key,
@@ -6725,9 +6738,15 @@ def transcribe_diary_audio():
             timeout=90.0,
             max_retries=2,
         )
+        kwargs = {}
+        if language:
+            kwargs['language'] = language
+        if prompt:
+            kwargs['prompt'] = prompt
         resp = client.audio.transcriptions.create(
             model=os.getenv('OPENAI_TRANSCRIBE_MODEL', 'whisper-1'),
             file=(secure_filename(f.filename) or 'audio.webm', audio, f.mimetype or 'audio/webm'),
+            **kwargs,
         )
         text = (getattr(resp, 'text', '') or '').strip()
         return jsonify({'success': True, 'text': text})
