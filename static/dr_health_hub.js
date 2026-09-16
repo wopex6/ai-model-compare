@@ -292,6 +292,10 @@
         return /iPad|iPhone|iPod/i.test(ua) || (platform === 'MacIntel' && maxTouch > 1);
     }
 
+    function isHuaweiDevice() {
+        return /huawei|honor/i.test(navigator.userAgent || '');
+    }
+
     // Dictation works via SpeechRecognition where available, otherwise by
     // recording in-app and transcribing server-side — which also covers iOS
     // and Huawei, where SpeechRecognition is missing or unsafe to open.
@@ -958,11 +962,13 @@
             for (let i = 0; i < schema.fields.length; i++) {
                 html += this.inputHtml(schema.fields[i], item[schema.fields[i].key]);
             }
-            if (id === 'diary' && _diaryIOS && !dictationSupported()) {
-                // Only when even in-app recording is unavailable — the
-                // keyboard mic icon dictates straight into the field instead.
+            if (id === 'diary' && (_diaryIOS || isHuaweiDevice())) {
+                // No pill on these devices — point at the usable alternative.
+                const tip = _diaryIOS
+                    ? 'Tip: tap into the Entry field, then use the microphone key on the keyboard to dictate.'
+                    : 'Voice dictation is not available on this device — please type your entry.';
                 html += '<div class="hub-mic-bar" style="margin:8px 0 12px; padding:10px; background:#f0f4ff; border-radius:8px; font-size:0.85rem; color:#555;">' +
-                    '<i class="fas fa-microphone"></i> Tip: tap into the Entry field, then use the microphone key on the keyboard to dictate.</div>';
+                    '<i class="fas fa-microphone"></i> ' + esc(tip) + '</div>';
             }
             html += '<div class="hub-row-actions">';
             html += '<button class="hub-btn primary" data-save="' + index + '"><i class="fas fa-check"></i> Save</button>';
@@ -1601,6 +1607,15 @@
         },
 
         async recordInto(target, micBtn) {
+            // The pill is hidden on iOS and Huawei/Honor — guard anyway.
+            if (isIOSDevice()) {
+                dictateToast(micHelpText(), true);
+                return;
+            }
+            if (isHuaweiDevice()) {
+                dictateToast('Voice dictation is not available on this device.', true);
+                return;
+            }
             if (!dictationSupported()) {
                 dictateToast(micHelpText(), true);
                 return;
@@ -1621,13 +1636,11 @@
                 return;
             }
 
-            const ua = navigator.userAgent || '';
-            const isHuawei = /huawei|honor/i.test(ua);
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            // Record in-app and transcribe server-side when SpeechRecognition
-            // is missing or unsafe: Huawei/EMUI kills the PWA when the speech
-            // activity opens, and iOS lacks it (or is unreliable in a PWA).
-            const useUpload = isHuawei || isIOSDevice() || !SpeechRecognition;
+            // iOS and Huawei never reach here (gated above).  On other
+            // devices without SpeechRecognition (e.g. Firefox), fall back to
+            // in-app recording + server transcription.
+            const useUpload = !SpeechRecognition;
 
             if (useUpload) {
                 this._recordViaUpload(target, micBtn);

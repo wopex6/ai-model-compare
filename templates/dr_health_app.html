@@ -861,13 +861,18 @@
         btn.addEventListener('click', () => showScreen(btn.dataset.target));
     });
 
-    // Global dictation pill — hidden only when neither SpeechRecognition nor
-    // in-app recording is available.  hub.js loads deferred, so wait for
-    // DOMContentLoaded before wiring.
+    // Global dictation pill — hidden on iOS (keyboard mic covers it) and
+    // Huawei/Honor (EMUI kills the app on mic use), and when neither
+    // SpeechRecognition nor in-app recording exists.  hub.js loads deferred,
+    // so wait for DOMContentLoaded before wiring.
     (function wireStaticMicPills() {
+        const ua = navigator.userAgent || '';
+        const isIOS = /iPad|iPhone|iPod/i.test(ua) ||
+            (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
+        const isHuawei = /huawei|honor/i.test(ua);
         const hasSpeech = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
         const hasRecorder = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
-        if (!hasSpeech && !hasRecorder) {
+        if (isIOS || isHuawei || (!hasSpeech && !hasRecorder)) {
             document.querySelectorAll('.hf-mic-pill').forEach(p => { p.style.display = 'none'; });
             return;
         }
