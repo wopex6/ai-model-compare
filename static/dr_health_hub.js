@@ -370,6 +370,18 @@
         _dictateToastTimer = setTimeout(() => t.classList.remove('show'), 2800);
     }
 
+    // Insert dictated text at the caret (or the end if there is none).
+    function insertDictated(el, text) {
+        if (!el || !text) return;
+        const pos = (typeof el.selectionStart === 'number') ? el.selectionStart : el.value.length;
+        const pre = el.value.slice(0, pos);
+        const post = el.value.slice(pos);
+        const sep = (pre && !/\s$/.test(pre)) ? ' ' : '';
+        el.value = pre + sep + text + post;
+        const caret = (pre + sep + text).length;
+        try { el.selectionStart = el.selectionEnd = caret; } catch (e) {}
+    }
+
     function micHelpText() {
         const isIOS = isIOSDevice();
         const isAndroid = /Android/i.test(navigator.userAgent || '');
@@ -1492,18 +1504,19 @@
                 dictateToast(micHelpText(), true);
                 return;
             }
-            // Dictate into whichever text box last had focus.
-            if (!target || !document.contains(target)) {
-                dictateToast('Tap a text box first, then the mic.', true);
-                return;
-            }
-
-            // Second tap while recording = stop.
+            // Second tap while recording = stop — checked before the target
+            // check so it works even when nothing is focused mid-session.
             const active = micBtn && micBtn._session;
             if (active) {
                 active.wantStop = true;
                 try { if (active.rec) active.rec.stop(); } catch (e) {}
                 try { if (active.mr && active.mr.state !== 'inactive') active.mr.stop(); } catch (e) {}
+                return;
+            }
+
+            // Dictate into whichever text box last had focus.
+            if (!target || !document.contains(target)) {
+                dictateToast('Tap a text box first, then the mic.', true);
                 return;
             }
 
@@ -1523,19 +1536,30 @@
         },
 
         _recordViaSpeech(target, micBtn, SpeechRecognition) {
-            const self = this;
-            const session = { wantStop: false, rec: null, committed: target.value, restarts: 0 };
+            const session = { wantStop: false, rec: null, restarts: 0,
+                cur: null, pre: '', post: '', written: '', next: 0 };
             if (micBtn) micBtn._session = session;
+            const dropInterim = () => {
+                // Strip any not-yet-final text we displayed — keep only finals.
+                if (session.cur && document.contains(session.cur)) {
+                    const w = session.written
+                        ? (session.pre && !/\s$/.test(session.pre) ? ' ' : '') + session.written
+                        : '';
+                    session.cur.value = session.pre + w + session.post;
+                }
+            };
             const finish = (msg, isErr) => {
+                dropInterim();
                 if (micBtn) { micBtn.classList.remove('recording'); micBtn._session = null; }
                 if (msg) dictateToast(msg, !!isErr);
             };
             const start = () => {
                 // Chrome on Android ends the session on a pause even with
                 // continuous=true, so restart transparently until the user
-                // taps the mic again.  Results reset per instance, so fold
-                // the current field text into the base before each start.
-                session.committed = target.value;
+                // taps the mic again.  Results reset per instance, so the
+                // result pointer resets too; written text already in the
+                // field is preserved via session.pre/written.
+                session.next = 0;
                 const rec = new SpeechRecognition();
                 session.rec = rec;
                 rec.lang = diaryLang().value;
@@ -1547,11 +1571,32 @@
                 };
                 rec.onresult = (e) => {
                     session.restarts = 0;
-                    let text = '';
-                    for (let i = 0; i < e.results.length; i++) {
-                        text += e.results[i][0].transcript;
+                    // Text follows the cursor: each result goes to whichever
+                    // editable box is focused right now.
+                    const t = editableEl(_dictateTarget) || session.cur;
+                    if (t !== session.cur) {
+                        dropInterim();
+                        session.cur = t;
+                        const pos = (typeof t.selectionStart === 'number') ? t.selectionStart : t.value.length;
+                        session.pre = t.value.slice(0, pos);
+                        session.post = t.value.slice(pos);
+                        session.written = '';
                     }
-                    target.value = session.committed + (session.committed && text ? ' ' : '') + text;
+                    let interim = '';
+                    for (let i = session.next; i < e.results.length; i++) {
+                        const r = e.results[i];
+                        if (r.isFinal) {
+                            session.written += (session.written ? ' ' : '') + r[0].transcript;
+                            session.next = i + 1;
+                        } else {
+                            interim += r[0].transcript;
+                        }
+                    }
+                    const shown = session.written + (session.written && interim ? ' ' : '') + interim;
+                    const shownTxt = (session.pre && shown && !/\s$/.test(session.pre) ? ' ' : '') + shown;
+                    t.value = session.pre + shownTxt + session.post;
+                    const caret = (session.pre + shownTxt).length;
+                    try { t.selectionStart = t.selectionEnd = caret; } catch (err) {}
                 };
                 rec.onerror = (e) => {
                     if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
@@ -1623,7 +1668,10 @@
                     });
                     const data = await res.json().catch(() => ({}));
                     if (res.ok && data.success && data.text) {
-                        target.value = (target.value ? target.value + ' ' : '') + data.text;
+                        // Follow the cursor: transcribed text goes to whatever
+                        // box is focused now, not the one recording started in.
+                        const t = editableEl(_dictateTarget) || target;
+                        insertDictated(t, data.text);
                         dictateToast('Voice recorded.');
                     } else {
                         dictateToast('Transcription failed' + (data.error ? ': ' + data.error : '.'), true);
