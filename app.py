@@ -6758,9 +6758,14 @@ def transcribe_diary_audio():
             for s in segs:
                 nsp = getattr(s, 'no_speech_prob', None)
                 alp = getattr(s, 'avg_logprob', None)
-                if nsp is not None and nsp >= 0.6:
+                ctr = getattr(s, 'compression_ratio', None)
+                if nsp is not None and nsp >= 0.45:
                     continue
-                if alp is not None and alp <= -1.0:
+                if alp is not None and alp <= -0.8:
+                    continue
+                # Whisper's own heuristic: a highly repetitive segment is a
+                # decoding loop, not speech.
+                if ctr is not None and ctr >= 2.4:
                     continue
                 parts.append(getattr(s, 'text', '') or '')
             text = ' '.join(p.strip() for p in parts if p.strip())

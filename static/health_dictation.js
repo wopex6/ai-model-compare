@@ -494,7 +494,7 @@
             start();
     }
 
-        // Rolling-segment recorder: restarts MediaRecorder every SEG_MS so
+        // Rolling-segment recorder: restarts MediaRecorder at each pause so
         // each upload is a complete file — transcribed text appears while the
         // user is still speaking.  Each recorder produces its own header, so
         // segments are independently valid.
@@ -514,18 +514,25 @@
             }
             const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm'
                 : (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : '');
-            const SEG_MS = 4000;
+            // Segments are cut at natural pauses, not on a fixed clock:
+            // slicing mid-word starves the transcriber of context (badly so
+            // for Chinese) and leaves fragments of trailing silence, which is
+            // what makes it hallucinate.
+            const TICK_MS = 100;        // level sampling period
+            const HANG_MS = 900;        // silence after speech that ends a segment
+            const MAX_SEG_MS = 20000;   // hard cap so text still streams
+            const MIN_SPEECH_MS = 350;  // below this a segment is not speech
             const session = _newWriteSession();
             session.mr = null; session.segStart = 0;
             session.timer = null; session.queue = Promise.resolve();
             session.segPeak = 0; session.levelTimer = null;
             session.audioCtx = null; session.silentWarned = false;
+            session.speechMs = 0; session.quietMs = 0; session.floor = 0.01;
             if (micBtn) micBtn._session = session;
 
-            // Live amplitude monitor: a segment that captured only silence
-            // must not be uploaded — the transcriber hallucinates stock
-            // phrases on dead air.  If monitoring is unavailable, segments
-            // are uploaded as before.
+            // Live amplitude monitor: drives both the level readout and the
+            // pause detection.  Without it (no AudioContext) we fall back to
+            // fixed-interval segments.
             try {
                 const AC = window.AudioContext || window.webkitAudioContext;
                 if (AC) {
@@ -542,6 +549,15 @@
                             if (v > now) now = v;
                         }
                         if (now > session.segPeak) session.segPeak = now;
+                        // Adaptive noise floor: quiet frames drift it up
+                        // slowly so a hissy mic does not read as speech.
+                        const speaking = now > Math.max(0.035, session.floor * 2.2);
+                        if (speaking) session.speechMs += TICK_MS;
+                        else {
+                            session.floor = session.floor * 0.97 + now * 0.03;
+                            if (session.speechMs) session.quietMs += TICK_MS;
+                        }
+                        if (speaking) session.quietMs = 0;
                         // Live level on the mic button: the user can see
                         // whether the microphone is actually delivering audio
                         // instead of guessing after a failed transcription.
@@ -551,7 +567,14 @@
                                 ? 'inset 0 0 0 ' + bars + 'px rgba(255,255,255,0.55)' : '';
                             micBtn.title = 'Mic level: ' + Math.round(now * 100) + '%';
                         }
-                    }, 100);
+                        // Cut on a pause after real speech, or at the cap.
+                        const elapsed = Date.now() - session.segStart;
+                        const pauseCut = session.speechMs >= MIN_SPEECH_MS && session.quietMs >= HANG_MS;
+                        const capCut = elapsed >= MAX_SEG_MS && session.speechMs >= MIN_SPEECH_MS;
+                        if ((pauseCut || capCut) && session.mr && session.mr.state === 'recording') {
+                            session.mr.stop();
+                        }
+                    }, TICK_MS);
                 }
             } catch (e) {}
 
@@ -574,9 +597,14 @@
                     const blob = new Blob(chunks, { type: r.mimeType || 'audio/webm' });
                     const dur = Date.now() - session.segStart;
                     const peak = session.segPeak; session.segPeak = 0;
-                    if (!session.levelTimer || peak >= 0.02) {
+                    const speechMs = session.speechMs;
+                    session.speechMs = 0; session.quietMs = 0;
+                    // Only segments containing real speech are transcribed —
+                    // sending near-silence is what produces hallucinations.
+                    const hasVoice = !session.levelTimer || speechMs >= MIN_SPEECH_MS;
+                    if (hasVoice) {
                         session.queue = session.queue.then(() => _uploadChunk(blob, dur, session));
-                    } else if (!session.silentWarned) {
+                    } else if (peak < 0.02 && !session.silentWarned) {
                         session.silentWarned = true;
                         dictateToast('No sound reached the page (peak ' + Math.round(peak * 100) +
                             '%). Another app or extension may be holding the microphone — close it, or pick the right input in Windows sound settings.', true);
@@ -586,9 +614,13 @@
                         session.mr = newRecorder();
                         if (session.mr) {
                             try { session.mr.start(1000); } catch (e) {}
-                            session.timer = setTimeout(() => {
-                                if (session.mr && session.mr.state === 'recording') session.mr.stop();
-                            }, SEG_MS);
+                            // Without level monitoring there is no pause
+                            // detection — fall back to a fixed cut.
+                            if (!session.levelTimer) {
+                                session.timer = setTimeout(() => {
+                                    if (session.mr && session.mr.state === 'recording') session.mr.stop();
+                                }, 6000);
+                            }
                         }
                     } else {
                         cleanupAudio();
@@ -615,11 +647,13 @@
                 dictateToast('Could not start recording: ' + e.message, true);
                 return;
             }
-            session.timer = setTimeout(() => {
-                if (session.mr && session.mr.state === 'recording') session.mr.stop();
-            }, SEG_MS);
+            if (!session.levelTimer) {
+                session.timer = setTimeout(() => {
+                    if (session.mr && session.mr.state === 'recording') session.mr.stop();
+                }, 6000);
+            }
             if (micBtn) micBtn.classList.add('recording');
-            dictateToast('Recording… tap the mic again to stop.');
+            dictateToast('Recording… speak, then pause. Tap the mic again to stop.');
     }
 
     async function _uploadChunk(blob, durMs, session) {
