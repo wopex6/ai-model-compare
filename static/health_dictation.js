@@ -316,20 +316,34 @@
         return t;
     }
     // Apply one final transcript segment to session.written.
-    // Returns 'undo' | 'stop' | 'text' | 'skip'.
+    // Returns 'stop' when a stop command fired, else 'ok'.
     function _applyFinal(session, raw) {
         // Recognisers add their own capitalisation/punctuation ("Scratch
-        // that.") — normalise before matching whole-utterance commands.
-        const cmd = (raw || '').trim().toLowerCase()
-            .replace(/[.!?。，！？,;:；：\s]+$/, '').replace(/\s+/g, ' ');
-        if (CMD_UNDO.has(cmd)) {
-            // Remove the last dictated sentence, punctuation included.
-            session.written = session.written.replace(/\s*[^.!?。！？\n]*[.!?。！？]?\s*$/, '');
-            return 'undo';
+        // that.") — normalise before matching commands.  A command can also
+        // share a segment with preceding speech ("take meds, stop
+        // recording." as one Whisper chunk), so peel command phrases off the
+        // end repeatedly; CJK commands need no space before them.
+        const TAIL = /[.!?。，！？,;:；：\s]+$/;
+        let text = (raw || '').replace(TAIL, '');
+        const actions = [];
+        for (;;) {
+            const n = text.toLowerCase().replace(/\s+/g, ' ').replace(TAIL, '');
+            let found = null, type = null;
+            for (const c of CMD_UNDO) {
+                if (n === c || n.endsWith(' ' + c) ||
+                    (/[㐀-鿿豈-﫿]/.test(c[0]) && n.endsWith(c))) { found = c; type = 'undo'; break; }
+            }
+            if (!found) for (const c of CMD_STOP) {
+                if (n === c || n.endsWith(' ' + c) ||
+                    (/[㐀-鿿豈-﫿]/.test(c[0]) && n.endsWith(c))) { found = c; type = 'stop'; break; }
+            }
+            if (!found) break;
+            actions.unshift(type);
+            text = (n === found) ? '' : text.slice(0, text.length - found.length).replace(TAIL, '');
         }
-        if (CMD_STOP.has(cmd)) { session.wantStop = true; return 'stop'; }
-        let seg = transformDictation(raw, session.isCJK);
-        if (!seg) return 'skip';
+        if (text) {
+            let seg = transformDictation(text, session.isCJK);
+            if (seg) {
         if (/^[,;:.!?，。！？；：]/.test(seg)) {
             // A leading spoken mark replaces the auto period.
             session.written = session.written.replace(/[,;:.!?，。！？；：\s]+$/, '');
@@ -347,7 +361,17 @@
         if (!/[,;:.!?，。！？；：\n]\s*$/.test(session.written)) {
             session.written += session.isCJK ? '。' : '.';
         }
-        return 'text';
+            }
+        }
+        for (const a of actions) {
+            if (a === 'undo') {
+                // Remove the last dictated sentence, punctuation included.
+                session.written = session.written.replace(/\s*[^.!?。！？\n]*[.!?。！？]?\s*$/, '');
+            } else {
+                session.wantStop = true;
+            }
+        }
+        return session.wantStop ? 'stop' : 'ok';
     }
     function _render(session, interim) {
         const t = session.cur;
