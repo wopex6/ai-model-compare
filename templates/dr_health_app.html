@@ -797,6 +797,7 @@
 <script src="{{ url_for('static', filename='auth_helper.js') }}" defer onerror="document.getElementById('login-error').textContent='Could not load auth_helper.js'; document.getElementById('login-error').style.color='#c62828';"></script>
 <script src="{{ url_for('static', filename='message_handler.js') }}" defer onerror="document.getElementById('login-error').textContent='Could not load message_handler.js'; document.getElementById('login-error').style.color='#c62828';"></script>
 <script src="{{ url_for('static', filename='conversation_box.js') }}" defer onerror="document.getElementById('login-error').textContent='Could not load conversation_box.js'; document.getElementById('login-error').style.color='#c62828';"></script>
+<script src="{{ url_for('static', filename='health_dictation.js') }}" defer></script>
 <script src="{{ url_for('static', filename='dr_health_hub.js') }}" defer onerror="document.getElementById('login-error').textContent='Could not load dr_health_hub.js'; document.getElementById('login-error').style.color='#c62828';"></script>
 
 <script>
@@ -861,23 +862,17 @@
         btn.addEventListener('click', () => showScreen(btn.dataset.target));
     });
 
-    // Global dictation pill — hidden on iOS (keyboard mic covers it) and
-    // Huawei/Honor (EMUI kills the app on mic use), and when neither
-    // SpeechRecognition nor in-app recording exists.  hub.js loads deferred,
-    // so wait for DOMContentLoaded before wiring.
+    // Global dictation pill — device gating lives in static/health_dictation.js
+    // (shared with the health website).  Scripts load deferred, so wait for
+    // DOMContentLoaded before wiring.
     (function wireStaticMicPills() {
-        const ua = navigator.userAgent || '';
-        const isIOS = /iPad|iPhone|iPod/i.test(ua) ||
-            (navigator.platform === 'MacIntel' && (navigator.maxTouchPoints || 0) > 1);
-        const isHuawei = /huawei|honor/i.test(ua);
-        const hasSpeech = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
-        const hasRecorder = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
-        if (isIOS || isHuawei || (!hasSpeech && !hasRecorder)) {
-            document.querySelectorAll('.hf-mic-pill').forEach(p => { p.style.display = 'none'; });
-            return;
-        }
         const wire = () => {
-            if (typeof DrHealthHub !== 'undefined') DrHealthHub.wireMicPills(document);
+            if (typeof HealthDictation === 'undefined') return;
+            if (!HealthDictation.pillAvailable()) {
+                document.querySelectorAll('.hf-mic-pill').forEach(p => { p.style.display = 'none'; });
+                return;
+            }
+            HealthDictation.wire(document);
         };
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', wire);

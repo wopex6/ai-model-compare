@@ -33,6 +33,7 @@ FILES = [
     'static/dr_health_hub.js',
     'static/lab_results.js',
     'static/health_review.js',
+    'static/health_dictation.js',
     'static/multi_user_app.js',
     'static/conversation_box.js',
     'static/dr_health_sw.js',
