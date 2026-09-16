@@ -382,6 +382,49 @@
         try { el.selectionStart = el.selectionEnd = caret; } catch (e) {}
     }
 
+    // Spoken punctuation commands.  Saying "comma" (or 逗號) turns the
+    // auto-inserted sentence end into a comma; other marks work the same way.
+    const PUNCT_EN = {
+        'comma': ',', 'period': '.', 'full stop': '.', 'question mark': '?',
+        'exclamation mark': '!', 'exclamation point': '!', 'semicolon': ';', 'colon': ':'
+    };
+    const PUNCT_ZH = {
+        '逗號': '，', '逗号': '，', '句號': '。', '句号': '。', '句點': '。',
+        '問號': '？', '问号': '？', '感嘆號': '！', '感叹号': '！'
+    };
+    const NL_WORDS = new Set(['new line', 'newline', '換行', '换行']);
+
+    function isCJKLang(lang) {
+        return /^(zh|yue|cmn)/i.test(lang || '');
+    }
+
+    // Normalize one recognised segment: trim stray spaces, convert spoken
+    // punctuation words to real marks.  CJK gets no spaces at all.
+    function transformDictation(raw, isCJK) {
+        let s = (raw || '').trim();
+        if (!s) return '';
+        if (isCJK) {
+            s = s.replace(/\s+/g, '');
+            for (const w of Object.keys(PUNCT_ZH)) s = s.split(w).join(PUNCT_ZH[w]);
+            for (const w of NL_WORDS) s = s.split(w).join('\n');
+            return s;
+        }
+        const parts = s.split(/\s+/);
+        let out = '';
+        for (let i = 0; i < parts.length; i++) {
+            let key = parts[i].toLowerCase();
+            const next = parts[i + 1];
+            const two = next ? key + ' ' + next.toLowerCase() : '';
+            if (two && (PUNCT_EN[two] !== undefined || NL_WORDS.has(two))) { key = two; i++; }
+            if (NL_WORDS.has(key)) { out = out.replace(/\s+$/, '') + '\n'; continue; }
+            const p = PUNCT_EN[key];
+            if (p !== undefined) { out = out.replace(/\s+$/, '') + p; continue; }
+            if (out && !/\s$/.test(out)) out += ' ';
+            out += parts[i];
+        }
+        return out;
+    }
+
     function micHelpText() {
         const isIOS = isIOSDevice();
         const isAndroid = /Android/i.test(navigator.userAgent || '');
@@ -1537,14 +1580,14 @@
 
         _recordViaSpeech(target, micBtn, SpeechRecognition) {
             const session = { wantStop: false, rec: null, restarts: 0,
-                cur: null, pre: '', post: '', written: '', next: 0 };
+                cur: null, pre: '', post: '', written: '', next: 0,
+                isCJK: isCJKLang(diaryLang().value) };
             if (micBtn) micBtn._session = session;
+            const gap = () => (session.pre && !/\s$/.test(session.pre) && !session.isCJK) ? ' ' : '';
             const dropInterim = () => {
                 // Strip any not-yet-final text we displayed — keep only finals.
                 if (session.cur && document.contains(session.cur)) {
-                    const w = session.written
-                        ? (session.pre && !/\s$/.test(session.pre) ? ' ' : '') + session.written
-                        : '';
+                    const w = session.written ? gap() + session.written : '';
                     session.cur.value = session.pre + w + session.post;
                 }
             };
@@ -1585,15 +1628,32 @@
                     let interim = '';
                     for (let i = session.next; i < e.results.length; i++) {
                         const r = e.results[i];
-                        if (r.isFinal) {
-                            session.written += (session.written ? ' ' : '') + r[0].transcript;
-                            session.next = i + 1;
+                        if (!r.isFinal) { interim += r[0].transcript; continue; }
+                        session.next = i + 1;
+                        let seg = transformDictation(r[0].transcript, session.isCJK);
+                        if (!seg) continue;
+                        if (/^[,;:.!?，。！？；：]/.test(seg)) {
+                            // A leading spoken mark replaces the auto period.
+                            session.written = session.written.replace(/[,;:.!?，。！？；：\s]+$/, '');
+                            if (session.written) session.written += seg;
+                            else session.written = seg.replace(/^[,;:.!?，。！？；：]+\s*/, '');
                         } else {
-                            interim += r[0].transcript;
+                            if (session.written && !session.isCJK && !/\s$/.test(session.written)) session.written += ' ';
+                            if (!session.isCJK && /[.!?]\s*$/.test(session.written) && /^[a-z]/.test(seg)) {
+                                seg = seg[0].toUpperCase() + seg.slice(1);
+                            }
+                            session.written += seg;
+                        }
+                        // Auto sentence end — skipped when the speaker already
+                        // supplied punctuation or a line break.
+                        if (!/[,;:.!?，。！？；：\n]\s*$/.test(session.written)) {
+                            session.written += session.isCJK ? '。' : '.';
                         }
                     }
-                    const shown = session.written + (session.written && interim ? ' ' : '') + interim;
-                    const shownTxt = (session.pre && shown && !/\s$/.test(session.pre) ? ' ' : '') + shown;
+                    const interimTxt = interim.trim();
+                    const shown = session.written +
+                        (session.written && interimTxt ? (session.isCJK ? '' : ' ') : '') + interimTxt;
+                    const shownTxt = (shown ? gap() : '') + shown;
                     t.value = session.pre + shownTxt + session.post;
                     const caret = (session.pre + shownTxt).length;
                     try { t.selectionStart = t.selectionEnd = caret; } catch (err) {}
