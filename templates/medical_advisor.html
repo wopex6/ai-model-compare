@@ -331,6 +331,26 @@
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
+
+        /* Dictation pill — shared behaviour lives in static/health_dictation.js */
+        .hf-mic-pill { display: flex; align-items: center; background: #fff; border: 1px solid #cfd8dc; border-radius: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.15); }
+        .hf-mic-pill > button { border: none; background: transparent; padding: 6px 10px; font-size: 0.85rem; color: #37474f; cursor: pointer; font-family: inherit; }
+        .hf-mic-lang { font-weight: 700; border-right: 1px solid #eceff1 !important; border-radius: 20px 0 0 20px; }
+        .hf-diary-mic { border-radius: 0 20px 20px 0; font-size: 1rem; }
+        .hf-diary-mic.recording { background: #c62828; color: #fff; border-radius: 0 20px 20px 0; animation: hf-mic-pulse 1s ease-in-out infinite; }
+        @keyframes hf-mic-pulse { 50% { opacity: 0.5; } }
+        .hf-lang-menu { position: absolute; top: 100%; right: 0; margin-top: 5px; min-width: 160px; background: #fff; border: 1px solid #cfd8dc; border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,0.18); overflow: hidden; z-index: 20; }
+        .hf-lang-menu button { display: block; width: 100%; text-align: left; padding: 10px 14px; border: none; background: #fff; font-size: 0.85rem; color: #263238; font-family: inherit; cursor: pointer; }
+        .hf-lang-menu button:active { background: #f0f4ff; }
+        .hf-lang-menu button.sel { font-weight: 700; color: #c62828; }
+        /* Lifted above the bottom-right corner — the avatar floater and
+           dictation browser extensions sit there and would cover it. */
+        .hf-dictate-pill { position: fixed; right: 14px; bottom: 155px; z-index: 150; }
+        .hf-dictate-pill.inactive { opacity: 0.4; }
+        .hf-dictate-pill .hf-lang-menu { top: auto; bottom: calc(100% + 6px); }
+        .hf-dictate-toast { position: fixed; right: 14px; bottom: 200px; z-index: 160; max-width: 260px; padding: 8px 12px; border-radius: 10px; background: #37474f; color: #fff; font-size: 0.8rem; opacity: 0; pointer-events: none; transition: opacity .2s; box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
+        .hf-dictate-toast.show { opacity: 1; }
+        .hf-dictate-toast.error { background: #c62828; }
     </style>
 </head>
 <body>
@@ -507,7 +527,15 @@
         </div>
     </div>
 
+    <!-- Shared dictation pill: dictates into whichever text box last had focus -->
+    <div class="hf-mic-pill hf-dictate-pill inactive">
+        <button type="button" class="hf-mic-lang" title="Dictation language">廣</button>
+        <button type="button" class="hf-diary-mic" title="Dictate into the focused text box"><i class="fas fa-microphone"></i></button>
+        <div class="hf-lang-menu" style="display:none;"></div>
+    </div>
+
     <script src="{{ url_for('static', filename='auth_helper.js') }}"></script>
+    <script src="{{ url_for('static', filename='health_dictation.js') }}?v=70"></script>
     <script src="{{ url_for('static', filename='character_history.js') }}"></script>
     <script src="{{ url_for('static', filename='message_handler.js') }}"></script>
     <script src="{{ url_for('static', filename='conversation_box.js') }}"></script>
@@ -620,6 +648,13 @@
 
         // Load daily insight
         window.addEventListener('load', async () => {
+            // Dictation pill — hidden where no dictation path exists (iOS,
+            // Huawei/Honor, or no mic support at all).
+            if (typeof HealthDictation !== 'undefined') {
+                const pill = document.querySelector('.hf-dictate-pill');
+                if (pill && !HealthDictation.pillAvailable()) pill.style.display = 'none';
+                else HealthDictation.wire(document);
+            }
             loadHealthProfile();
             try {
                 const response = await fetch('/medical_advisor/daily-insight');
