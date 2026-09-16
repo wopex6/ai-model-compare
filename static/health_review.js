@@ -255,6 +255,23 @@
         });
     }
 
+    // Complete/snooze a dated reminder by writing back to its source item.
+    // Shared so the PWA and the website cannot drift on the payload shape.
+    async function actOnReminder(fetcher, reminder, action, days) {
+        const resp = await fetcher('/api/health-profile/reminder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: action,
+                source_category: reminder.source_category,
+                source_index: reminder.source_index,
+                days: days || 7,
+            }),
+        });
+        const data = await resp.json().catch(function () { return {}; });
+        return { ok: resp.ok && data.success === true, data: data };
+    }
+
     // Categories that carry a lifecycle, and the verb each one ends with.
     const END_STATUS = {
         medications: 'stopped', supplements: 'stopped',
@@ -295,6 +312,7 @@
         historyNote: historyNote,
         setStatus: setStatus,
         maybeNotify: maybeNotify,
+        actOnReminder: actOnReminder,
         endStatusFor: function (category) { return END_STATUS[category] || ''; },
         hasLifecycle: function (category) { return !!END_STATUS[category]; },
     };
