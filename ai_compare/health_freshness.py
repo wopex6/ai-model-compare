@@ -496,12 +496,44 @@ def freshness_summary(data: Dict, today: Optional[date] = None) -> Dict:
 
 # ------------------------------------------------------------- applying it ---
 
-VALID_ACTIONS = ('confirm', 'changed', 'stopped', 'snooze', 'dismiss', 'pause')
+VALID_ACTIONS = ('confirm', 'changed', 'stopped', 'snooze', 'dismiss', 'pause',
+                 'accept', 'reject')
+
+
+def _apply_proposal(data: Dict, action: str, index: Optional[int]) -> Dict:
+    """Accept or discard a parked AI-inferred field change.
+
+    Proposals sit in `pending_changes` because an AI guess must not overwrite
+    what the user or a lab report stated. Accepting applies the change as a
+    user edit; rejecting just drops it. Either way the slot is consumed.
+    """
+    pending = data.get('pending_changes') or []
+    if not isinstance(index, int) or isinstance(index, bool) \
+            or index < 0 or index >= len(pending):
+        return {'ok': False, 'error': 'Suggestion no longer exists', 'item': None}
+    proposal = pending.pop(index)
+    if action == 'reject':
+        return {'ok': True, 'error': '', 'item': proposal}
+
+    category = str(proposal.get('category') or '')
+    if category not in LIFECYCLE_CATEGORIES:
+        return {'ok': True, 'error': '', 'item': proposal}
+    label = str(proposal.get('label') or '').strip().lower()
+    for item in data.get(category) or []:
+        if item_label(category, item).strip().lower() == label:
+            record_change(item, proposal.get('field'), proposal.get('to'),
+                          SOURCE_USER)
+            confirm_item(item)
+            return {'ok': True, 'error': '', 'item': item}
+    # The item the proposal referred to is gone; dropping it is the only
+    # honest outcome.
+    return {'ok': True, 'error': '', 'item': proposal}
 
 
 def apply_review_action(data: Dict, action: str, category: str = '',
                         index: Optional[int] = None, group_key: str = '',
                         changes: Optional[Dict] = None, days: int = 0,
+                        proposal_index: Optional[int] = None,
                         today: Optional[date] = None) -> Dict:
     """Apply one answer from the confirmation queue.
 
@@ -534,6 +566,9 @@ def apply_review_action(data: Dict, action: str, category: str = '',
     prefs['cooldown_days'] = DEFAULT_COOLDOWN_DAYS
     prefs['answered_count'] = int(prefs.get('answered_count') or 0) + 1
     mark_nudged(data)
+
+    if action in ('accept', 'reject'):
+        return _apply_proposal(data, action, proposal_index)
 
     if group_key:
         meta = _freshness_entry(data, group_key)
