@@ -363,5 +363,49 @@ class TestProfileIngest(unittest.TestCase):
         self.assertEqual(self.profile.data['conditions'][0]['status'], 'resolved')
 
 
+class TestProposals(unittest.TestCase):
+    """AI-inferred field changes park in pending_changes until the user
+    accepts or rejects them — the queue endpoint surfaces them for review."""
+
+    def _proposal(self, label='A'):
+        return {'field': 'dose', 'from': '5mg', 'to': '10mg',
+                'source': 'ai_inferred', 'category': 'medications',
+                'label': label, 'at': '2026-06-01T00:00:00'}
+
+    def test_accept_applies_the_change_and_confirms_the_item(self):
+        data = {'medications': [_med('A', confirmed_days_ago=200)],
+                'pending_changes': [self._proposal()]}
+        result = hf.apply_review_action(data, 'accept', proposal_index=0,
+                                        today=TODAY)
+        self.assertTrue(result['ok'])
+        self.assertEqual(data['medications'][0]['dose'], '10mg')
+        self.assertEqual(data['pending_changes'], [])
+        self.assertTrue(data['medications'][0]['verified_by_user'])
+
+    def test_reject_drops_the_proposal_without_changing_the_item(self):
+        data = {'medications': [_med('A')],
+                'pending_changes': [self._proposal()]}
+        result = hf.apply_review_action(data, 'reject', proposal_index=0,
+                                        today=TODAY)
+        self.assertTrue(result['ok'])
+        self.assertEqual(data['medications'][0]['dose'], '5mg')
+        self.assertEqual(data['pending_changes'], [])
+
+    def test_stale_proposal_index_is_rejected_safely(self):
+        data = {'medications': [_med('A')], 'pending_changes': []}
+        result = hf.apply_review_action(data, 'accept', proposal_index=0,
+                                        today=TODAY)
+        self.assertFalse(result['ok'])
+
+    def test_proposal_for_a_gone_item_is_dropped_not_stuck(self):
+        data = {'medications': [_med('A')],
+                'pending_changes': [self._proposal(label='NoSuchMed')]}
+        result = hf.apply_review_action(data, 'accept', proposal_index=0,
+                                        today=TODAY)
+        self.assertTrue(result['ok'])
+        self.assertEqual(data['pending_changes'], [])
+        self.assertEqual(data['medications'][0]['dose'], '5mg')
+
+
 if __name__ == '__main__':
     unittest.main()

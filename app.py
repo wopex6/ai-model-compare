@@ -7845,6 +7845,7 @@ def act_on_health_review():
             group_key=str(body.get('group_key') or ''),
             changes=changes,
             days=days,
+            proposal_index=body.get('proposal_index'),
         )
         if not result['ok']:
             return jsonify({'error': result['error']}), 400
@@ -7857,6 +7858,7 @@ def act_on_health_review():
             'queue': health_freshness.build_review_queue(profile.data),
             'due': summary['due'],
             'nudge_due': summary['nudge_due'],
+            'pending_changes': profile.data.get('pending_changes') or [],
         })
     except Exception as e:
         return _safe_error(e, 'act_on_health_review')

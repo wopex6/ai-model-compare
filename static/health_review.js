@@ -43,6 +43,7 @@
         const fetcher = o.fetcher || window.fetch.bind(window);
         const p = o.prefix || 'hr';
         let queue = [];
+        let proposals = [];
         let state = { due: 0, nudge_due: false };
 
         async function call(method, body) {
@@ -58,6 +59,7 @@
 
         function absorb(data) {
             queue = data.queue || [];
+            proposals = data.pending_changes || [];
             state = { due: data.due || 0, nudge_due: !!data.nudge_due };
             if (typeof o.onCount === 'function') o.onCount(state);
             render();
@@ -86,20 +88,22 @@
         }
 
         function render() {
-            if (!state.nudge_due || !queue.length) return hide();
             const entry = queue[0];
+            const showQ = !!(state.nudge_due && queue.length);
+            if (!showQ && !proposals.length) return hide();
             const total = Math.max(state.due, queue.length);
-            const canEdit = entry.kind === 'item' && EDIT_FIELDS[entry.category];
+            const canEdit = showQ && entry.kind === 'item' && EDIT_FIELDS[entry.category];
 
-            container.style.display = '';
-            container.innerHTML =
-                '<div class="' + p + '-card" data-priority="' + esc(entry.priority) + '">' +
-                    '<div class="' + p + '-head">' +
-                        '<span class="' + p + '-title">Quick check</span>' +
-                        '<span class="' + p + '-count">1 of ' + total + '</span>' +
-                        '<button type="button" class="' + p + '-close" data-act="dismiss" ' +
-                            'title="Not now — ask again later">&times;</button>' +
-                    '</div>' +
+            let html = '<div class="' + p + '-card" data-priority="' +
+                esc(showQ ? entry.priority : 'medium') + '">' +
+                '<div class="' + p + '-head">' +
+                    '<span class="' + p + '-title">Quick check</span>' +
+                    (showQ ? '<span class="' + p + '-count">1 of ' + total + '</span>' : '') +
+                    '<button type="button" class="' + p + '-close" data-act="dismiss" ' +
+                        'title="Not now — ask again later">&times;</button>' +
+                '</div>';
+            if (showQ) {
+                html +=
                     '<div class="' + p + '-q">' + esc(entry.question) + '</div>' +
                     (entry.detail ? '<div class="' + p + '-detail">' + esc(entry.detail) + '</div>' : '') +
                     '<div class="' + p + '-why">' + esc(ageText(entry)) + '</div>' +
@@ -112,14 +116,48 @@
                               '</button>' : '') +
                         '<button type="button" class="' + p + '-btn" data-act="snooze">Later</button>' +
                     '</div>' +
-                    '<div class="' + p + '-edit" hidden></div>' +
-                '</div>';
+                    '<div class="' + p + '-edit" hidden></div>';
+            }
+            // AI-inferred corrections parked for review: they must never apply
+            // silently, so each one asks before touching the stored value.
+            proposals.slice(0, 3).forEach(function (prop, i) {
+                html += '<div class="' + p + '-proposal">' +
+                    '<div class="' + p + '-q">Update ' + esc(prop.label) + ' — ' +
+                        esc(prop.field) + ': &ldquo;' + esc(prop.from || '(blank)') +
+                        '&rdquo; &rarr; &ldquo;' + esc(prop.to) + '&rdquo;?</div>' +
+                    '<div class="' + p + '-actions">' +
+                        '<button type="button" class="' + p + '-btn ' + p + '-yes" data-paccept="' + i + '">Apply</button>' +
+                        '<button type="button" class="' + p + '-btn" data-preject="' + i + '">Not correct</button>' +
+                    '</div></div>';
+            });
+            html += '</div>';
 
+            container.style.display = '';
+            container.innerHTML = html;
             container.querySelectorAll('[data-act]').forEach(function (btn) {
                 btn.addEventListener('click', function () {
                     onAction(entry, btn.getAttribute('data-act'));
                 });
             });
+            container.querySelectorAll('[data-paccept]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    actProposal(parseInt(btn.getAttribute('data-paccept'), 10), 'accept');
+                });
+            });
+            container.querySelectorAll('[data-preject]').forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    actProposal(parseInt(btn.getAttribute('data-preject'), 10), 'reject');
+                });
+            });
+        }
+
+        async function actProposal(index, action) {
+            try {
+                absorb(await call('POST', { action: action, proposal_index: index }));
+                if (typeof o.onUpdated === 'function') o.onUpdated(action, null);
+            } catch (err) {
+                try { absorb(await call('GET')); } catch (e) { hide(); }
+            }
         }
 
         function onAction(entry, action) {
