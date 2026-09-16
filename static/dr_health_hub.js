@@ -292,6 +292,14 @@
         return /iPad|iPhone|iPod/i.test(ua) || (platform === 'MacIntel' && maxTouch > 1);
     }
 
+    // Dictation works via SpeechRecognition where available, otherwise by
+    // recording in-app and transcribing server-side — which also covers iOS
+    // and Huawei, where SpeechRecognition is missing or unsafe to open.
+    function dictationSupported() {
+        if (window.SpeechRecognition || window.webkitSpeechRecognition) return true;
+        return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+    }
+
     // Dictation languages for the diary mic.  `short` is the pill label —
     // shown the way iOS shows it on the keyboard bubble.
     const DIARY_LANG_KEY = 'drHealth.diaryLang';
@@ -909,9 +917,9 @@
             for (let i = 0; i < schema.fields.length; i++) {
                 html += this.inputHtml(schema.fields[i], item[schema.fields[i].key]);
             }
-            if (id === 'diary' && _diaryIOS) {
-                // No web speech API on iOS — the keyboard mic icon dictates
-                // straight into the Entry field instead.
+            if (id === 'diary' && _diaryIOS && !dictationSupported()) {
+                // Only when even in-app recording is unavailable — the
+                // keyboard mic icon dictates straight into the field instead.
                 html += '<div class="hub-mic-bar" style="margin:8px 0 12px; padding:10px; background:#f0f4ff; border-radius:8px; font-size:0.85rem; color:#555;">' +
                     '<i class="fas fa-microphone"></i> Tip: tap into the Entry field, then use the microphone key on the keyboard to dictate.</div>';
             }
@@ -1552,7 +1560,7 @@
         },
 
         async recordInto(target, micBtn) {
-            if (isIOSDevice()) {
+            if (!dictationSupported()) {
                 dictateToast(micHelpText(), true);
                 return;
             }
@@ -1575,10 +1583,10 @@
             const ua = navigator.userAgent || '';
             const isHuawei = /huawei|honor/i.test(ua);
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            // Huawei/EMUI kills the PWA when SpeechRecognition opens its
-            // external activity — record in-app and transcribe server-side
-            // instead.  Same fallback when SpeechRecognition is missing.
-            const useUpload = isHuawei || !SpeechRecognition;
+            // Record in-app and transcribe server-side when SpeechRecognition
+            // is missing or unsafe: Huawei/EMUI kills the PWA when the speech
+            // activity opens, and iOS lacks it (or is unreliable in a PWA).
+            const useUpload = isHuawei || isIOSDevice() || !SpeechRecognition;
 
             if (useUpload) {
                 this._recordViaUpload(target, micBtn);
