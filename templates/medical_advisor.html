@@ -343,12 +343,13 @@
         .hf-lang-menu button { display: block; width: 100%; text-align: left; padding: 10px 14px; border: none; background: #fff; font-size: 0.85rem; color: #263238; font-family: inherit; cursor: pointer; }
         .hf-lang-menu button:active { background: #f0f4ff; }
         .hf-lang-menu button.sel { font-weight: 700; color: #c62828; }
-        /* Lifted above the bottom-right corner — the avatar floater and
-           dictation browser extensions sit there and would cover it. */
-        .hf-dictate-pill { position: fixed; right: 14px; bottom: 155px; z-index: 150; }
+        /* Bottom-left — dictation browser extensions inject their own mic
+           button (and an upward-opening popup) at bottom-right, and the
+           avatar floater is right:20px — both would cover ours there. */
+        .hf-dictate-pill { position: fixed; left: 14px; bottom: 20px; z-index: 150; }
         .hf-dictate-pill.inactive { opacity: 0.4; }
-        .hf-dictate-pill .hf-lang-menu { top: auto; bottom: calc(100% + 6px); }
-        .hf-dictate-toast { position: fixed; right: 14px; bottom: 200px; z-index: 160; max-width: 260px; padding: 8px 12px; border-radius: 10px; background: #37474f; color: #fff; font-size: 0.8rem; opacity: 0; pointer-events: none; transition: opacity .2s; box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
+        .hf-dictate-pill .hf-lang-menu { top: auto; bottom: calc(100% + 6px); left: 0; right: auto; }
+        .hf-dictate-toast { position: fixed; left: 14px; bottom: 66px; z-index: 160; max-width: 260px; padding: 8px 12px; border-radius: 10px; background: #37474f; color: #fff; font-size: 0.8rem; opacity: 0; pointer-events: none; transition: opacity .2s; box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
         .hf-dictate-toast.show { opacity: 1; }
         .hf-dictate-toast.error { background: #c62828; }
     </style>
