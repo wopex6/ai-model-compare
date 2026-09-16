@@ -390,11 +390,23 @@
             const session = _newWriteSession();
             session.rec = null; session.restarts = 0; session.next = 0;
             session.langTag = diaryLang().value; session.triedAlt = false;
+            session.startedAt = 0; session.gotResult = false; session.fastFails = 0;
             if (micBtn) micBtn._session = session;
             const finish = (msg, isErr) => {
                 _dropInterim(session);
                 if (micBtn) { micBtn.classList.remove('recording'); micBtn._session = null; }
                 if (msg) dictateToast(msg, !!isErr);
+            };
+            // SpeechRecognition needs to reach the browser vendor's speech
+            // service (Google on Chrome).  Where that is unreachable, fall
+            // back to in-app recording + server transcription instead of
+            // dying in a restart loop.
+            const fallback = (msg) => {
+                session.wantStop = true;
+                _dropInterim(session);
+                if (micBtn) { micBtn.classList.remove('recording'); micBtn._session = null; }
+                dictateToast(msg || 'Browser speech unavailable — using the recorder instead.');
+                _recordViaUpload(target, micBtn);
             };
             const start = () => {
                 // Chrome on Android ends the session on a pause even with
@@ -403,6 +415,7 @@
                 // result pointer resets too; written text already in the
                 // field is preserved via session.pre/written.
                 session.next = 0;
+                session.startedAt = Date.now();
                 const rec = new SpeechRecognition();
                 session.rec = rec;
                 rec.lang = session.langTag;
@@ -414,6 +427,7 @@
                 };
                 rec.onresult = (e) => {
                     session.restarts = 0;
+                    session.gotResult = true;
                     if (!_syncTarget(session)) return;
                     let interim = '';
                     for (let i = session.next; i < e.results.length; i++) {
@@ -441,12 +455,26 @@
                         }
                         session.wantStop = true;
                         finish('This language is not supported by your browser. Try English.', true);
+                    } else if (e.error === 'network') {
+                        // The vendor speech service is unreachable (blocked
+                        // network, extension, or region) — no point retrying.
+                        session.wantStop = true;
+                        fallback();
                     }
-                    // 'no-speech', 'aborted', 'network' — onend handles restart.
+                    // 'no-speech', 'aborted' — onend handles restart.
                 };
                 rec.onend = () => {
                     session.rec = null;
-                    if (session.wantStop) { finish('Voice recorded.'); return; }
+                    if (session.wantStop) {
+                        if (micBtn && !micBtn._session) return; // fallback took over
+                        finish('Voice recorded.');
+                        return;
+                    }
+                    // Sessions dying within ~2s with zero results = the
+                    // service itself is broken — switch engines.
+                    if (Date.now() - session.startedAt < 2000 && !session.gotResult) session.fastFails++;
+                    else session.fastFails = 0;
+                    if (session.fastFails >= 3) { fallback(); return; }
                     if (session.restarts >= 10) {
                         finish('Voice input stopped (too many silences). Tap the mic to start again.', true);
                         return;
