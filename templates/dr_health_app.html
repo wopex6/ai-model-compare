@@ -1036,6 +1036,13 @@
         loadHealthProfile();
         initReviewPrompt();
         showScreen(lastScreen());
+        // Refresh the copy of the emergency card held on this phone on every
+        // start, rather than only when the user happens to open it. It has to
+        // already be here before the emergency, not be fetched during one.
+        syncEmergencyFromServer().then(() => {
+            const btn = document.getElementById('login-emergency-btn');
+            if (btn && emergencyCardHasData(loadEmergencyCache())) btn.classList.add('visible');
+        }).catch(() => {});
     }
 
         // Lab-result helpers come from /static/lab_results.js (shared with health_profile.html).
@@ -2555,6 +2562,19 @@
 
     // ---------- Boot ----------
     window.openEmergency = openEmergency;
+    // Ask the OS to treat this phone's copy as persistent so it is not evicted
+    // when the device runs short of space. WebKit grants this readily for
+    // home-screen web apps; a refusal is normal elsewhere and not worth
+    // reporting, since the card is still there until something evicts it.
+    (function requestPersistentStorage() {
+        try {
+            if (navigator.storage && navigator.storage.persist) {
+                navigator.storage.persisted()
+                    .then((already) => { if (!already) return navigator.storage.persist(); })
+                    .catch(() => {});
+            }
+        } catch (e) {}
+    })();
     (function initRetainChoice() {
         const RETAIN_KEY = 'drHealth.retainPhoto';
         const el = document.getElementById('retain-photo');
