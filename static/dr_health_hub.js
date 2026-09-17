@@ -792,17 +792,13 @@
             }
             let html = '<div class="hub-form" data-index="' + index + '">';
             html += '<div class="hub-form-title">' + (isNew ? 'Add ' : 'Edit ') + esc(this.singular(schema.title)) + '</div>';
-            const _diaryIOS = window.HealthDictation ? HealthDictation.isIOSDevice() : false;
             for (let i = 0; i < schema.fields.length; i++) {
                 html += this.inputHtml(schema.fields[i], item[schema.fields[i].key]);
             }
-            if (id === 'diary' && (_diaryIOS || (window.HealthDictation && HealthDictation.isHuaweiDevice()))) {
-                // No pill on these devices — point at the usable alternative.
-                const tip = _diaryIOS
-                    ? 'Tip: tap into the Entry field, then use the microphone key on the keyboard to dictate.'
-                    : 'Voice dictation is not available on this device — please type your entry.';
+            if (id === 'diary' && window.HealthDictation && !HealthDictation.pillAvailable()) {
+                // No pill on this device — point at the OS voice typing.
                 html += '<div class="hub-mic-bar" style="margin:8px 0 12px; padding:10px; background:#f0f4ff; border-radius:8px; font-size:0.85rem; color:#555;">' +
-                    '<i class="fas fa-microphone"></i> ' + esc(tip) + '</div>';
+                    '<i class="fas fa-microphone"></i> Tip: tap into the Entry field. ' + esc(HealthDictation.osDictationHint()) + '</div>';
             }
             html += '<div class="hub-row-actions">';
             html += '<button class="hub-btn primary" data-save="' + index + '"><i class="fas fa-check"></i> Save</button>';

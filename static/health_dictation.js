@@ -24,12 +24,28 @@
         return /huawei|honor/i.test(navigator.userAgent || '');
     }
 
-    // Dictation works via SpeechRecognition where available, otherwise by
-    // recording in-app and transcribing server-side — which also covers iOS
-    // and Huawei, where SpeechRecognition is missing or unsafe to open.
+    // Record-in-app + server transcription (Whisper) is retired as a live
+    // dictation path: it is a batch model that hallucinates on Chinese and
+    // on pauses, and every OS ships better native voice typing (Win+H, the
+    // iOS keyboard mic, Gboard).  Flip to true to re-enable the fallback.
+    const UPLOAD_FALLBACK = false;
+
+    // Dictation needs the browser's own SpeechRecognition (Google's engine
+    // on Chrome/Android).  Where that is missing or unreachable, the user is
+    // pointed to the OS voice typing instead.
     function dictationSupported() {
         if (window.SpeechRecognition || window.webkitSpeechRecognition) return true;
-        return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+        return UPLOAD_FALLBACK && !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
+    }
+
+    // The native dictation the user should reach for on this device.
+    function osDictationHint() {
+        const ua = navigator.userAgent || '';
+        if (isIOSDevice()) return 'Use the iPhone keyboard microphone icon to dictate.';
+        if (/Android/i.test(ua)) return 'Use the keyboard microphone (Gboard / your keyboard\u2019s mic) to dictate.';
+        if (/Windows/i.test(ua)) return 'Press Win + H to use Windows voice typing in this box \u2014 free, real-time, supports Cantonese and Mandarin.';
+        if (/Mac OS X|Macintosh/i.test(ua)) return 'Use macOS Dictation: press the microphone key (or Fn twice) with the cursor in this box.';
+        return 'Use your system\u2019s voice typing (keyboard microphone) to dictate into this box.';
     }
 
     // Dictation languages for the diary mic.  `short` is the pill label —
@@ -242,7 +258,7 @@
                 return;
             }
             if (!dictationSupported()) {
-                dictateToast(micHelpText(), true);
+                dictateToast(osDictationHint(), true);
                 return;
             }
             // Second tap while recording = stop — checked before the target
@@ -262,16 +278,15 @@
             }
 
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            // iOS and Huawei never reach here (gated above).  On other
-            // devices without SpeechRecognition (e.g. Firefox), fall back to
-            // in-app recording + server transcription.
-            const useUpload = !SpeechRecognition;
-
-            if (useUpload) {
-                _recordViaUpload(target, micBtn);
-            } else {
-                _recordViaSpeech(target, micBtn, SpeechRecognition);
+            // iOS and Huawei never reach here (gated above).  Without
+            // SpeechRecognition the only remaining path is the retired
+            // upload fallback, reachable only when UPLOAD_FALLBACK is on.
+            if (!SpeechRecognition) {
+                if (UPLOAD_FALLBACK) _recordViaUpload(target, micBtn);
+                else dictateToast(osDictationHint(), true);
+                return;
             }
+            _recordViaSpeech(target, micBtn, SpeechRecognition);
     }
 
     // ---------- Shared write-session (speech + upload paths) ----------
@@ -400,16 +415,21 @@
                 if (msg) dictateToast(msg, !!isErr);
             };
             // SpeechRecognition needs to reach the browser vendor's speech
-            // service (Google on Chrome).  Where that is unreachable, fall
-            // back to in-app recording + server transcription instead of
-            // dying in a restart loop.
+            // service (Google on Chrome).  Where that is unreachable, stop
+            // cleanly and point at the OS voice typing instead of dying in a
+            // restart loop (or, if re-enabled, use the upload fallback).
             const fallback = (msg) => {
                 session.wantStop = true;
                 _dropInterim(session);
                 if (micBtn) { micBtn.classList.remove('recording'); micBtn._session = null; }
-                dictateToast(msg || ('Browser speech unavailable (' +
-                    (session.lastError || 'no result') + ') — using the recorder instead.'));
-                _recordViaUpload(target, micBtn);
+                if (UPLOAD_FALLBACK) {
+                    dictateToast(msg || ('Browser speech unavailable (' +
+                        (session.lastError || 'no result') + ') — using the recorder instead.'));
+                    _recordViaUpload(target, micBtn);
+                    return;
+                }
+                dictateToast('Browser speech is unavailable here (' + (session.lastError || 'no result') +
+                    '). ' + osDictationHint(), true);
             };
             const start = () => {
                 // Chrome on Android ends the session on a pause even with
@@ -701,6 +721,7 @@
         isIOSDevice: isIOSDevice,
         isHuaweiDevice: isHuaweiDevice,
         dictationSupported: dictationSupported,
+        osDictationHint: osDictationHint,
         diaryLang: diaryLang,
         micHelpText: micHelpText,
         toast: dictateToast,
