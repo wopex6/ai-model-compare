@@ -60,8 +60,14 @@ Things that will otherwise cost you an hour:
   images must be uploaded raw through the Files API, never through `pa_sync`.
 - **Reload commonly returns `409 slow_startup_error` on the first attempt.**
   Retry after ~20s. It is boot lag, not a failure.
-- **New files must be added to the `FILES` list in `pa_sync.py`,** otherwise
-  they are silently never deployed.
+- **The deploy set is derived from `git ls-files`** — every tracked text file
+  syncs automatically; new files need no registration. Exclusions live in
+  `pa_sync.py` (`_EXCLUDE_DIRS` / `_EXCLUDE_FILES` / `_EXCLUDE_EXT`): vendored
+  wheels, binaries, patient-data dirs and local-only tooling. If you add a
+  file that must NOT reach production, add it there — otherwise it will deploy.
+- **The drift check now covers ~450 files, so it takes several minutes** and
+  produces a long report. `python pa_sync.py | grep -v "^ok "` shows only
+  drift.
 - **Verify, do not assume.** `pa_sync` compares digests after upload. Never
   report something as deployed without that output.
 
@@ -196,7 +202,7 @@ static/
   dr_health_sw.js                 service worker — bump CACHE_NAME on asset change
 tests/                          pytest
 vendor/                         vendored wheels (no pip on production)
-pa_sync.py                      deploy: diff, upload, verify, reload
+pa_sync.py                      deploy: diff all tracked files, upload, verify, reload
 handoff.py                      session handoff snapshot
 ```
 

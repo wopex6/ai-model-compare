@@ -76,4 +76,6 @@ backups/backup_log.json
 # test_*.py
 personality_test_debug.png
 debug_*.md
-HANDOFF.md
+
+# LibreOffice lock artefacts — accidentally committed; never useful
+.~lock.*#

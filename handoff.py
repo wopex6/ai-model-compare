@@ -79,10 +79,12 @@ def git_state():
 
 
 def deploy_state():
-    """pa_sync with no --push only reports drift; it uploads nothing."""
-    ok, out = run([sys.executable, 'pa_sync.py'], timeout=600)
+    """pa_sync with no --push only reports drift; it uploads nothing.
+
+    The check covers every tracked file (~450), fetched concurrently (~2 min)."""
+    ok, out = run([sys.executable, 'pa_sync.py'], timeout=900)
     lines = [l for l in out.splitlines() if l.strip()]
-    drift = [l for l in lines if l.startswith(('STALE', 'MISSING'))]
+    drift = [l for l in lines if l.startswith(('STALE', 'MISSING', 'ERROR'))]
     verdict = ('Local and production match.' if not drift else
                '**%d file(s) differ from production.** Deploy with '
                '`python pa_sync.py --push`.' % len(drift))
