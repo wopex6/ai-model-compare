@@ -56,6 +56,14 @@
     }
     .login-card button.primary:active { background: #c62828; }
     #login-error { color: #c62828; font-size: 0.82rem; margin-top: 10px; min-height: 18px; }
+    .login-card button.emergency {
+        width: 100%; padding: 12px; margin-top: 6px;
+        border: 2px solid #c62828; border-radius: 10px;
+        background: white; color: #c62828; font-size: 0.95rem; font-weight: 600;
+        cursor: pointer; display: none;
+    }
+    .login-card button.emergency.visible { display: block; }
+    .login-card button.emergency:active { background: #fff5f5; }
 
     .install-wrap {
         margin-top: 18px; text-align: center; display: none;
@@ -225,6 +233,10 @@
     .emergency-section ul { padding-left: 18px; }
     .emergency-section .big { font-size: 1.2rem; font-weight: 700; }
     .emergency-empty { color: #999; font-style: italic; }
+    .emergency-cache-note {
+        background: #fff3cd; border: 1px solid #f0ad4e; color: #856404;
+        padding: 10px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px;
+    }
     #emergency-edit { display: none; }
     #emergency-edit .card { margin-bottom: 14px; }
     #emergency-edit input, #emergency-edit textarea {
@@ -626,6 +638,9 @@
                 <button class="primary" id="login-btn" type="submit">Log in</button>
             </form>
             <div id="login-error"></div>
+            <button class="emergency" id="login-emergency-btn" type="button">
+                <i class="fas fa-kit-medical"></i> Emergency Info
+            </button>
             <script>
                 window.doLogin = function() {
                     const errEl = document.getElementById('login-error');
@@ -2372,7 +2387,10 @@
         catch (e) { return null; }
     }
     function saveEmergencyCache(card) {
-        try { localStorage.setItem(EMERGENCY_KEY, JSON.stringify(card)); } catch (e) {}
+        // Stamp the copy so the login-screen view can say how old it is rather
+        // than presenting a months-old card as current.
+        const stamped = Object.assign({}, card, { cached_at: new Date().toISOString() });
+        try { localStorage.setItem(EMERGENCY_KEY, JSON.stringify(stamped)); } catch (e) {}
     }
     function emergencySummaryHtml(card) {
         const v = card || {};
@@ -2436,10 +2454,40 @@
         return loadEmergencyCache();
     }
 
+    function emergencyCardHasData(card) {
+        const v = card || {};
+        const listOf = (x) => Array.isArray(x) ? x : (x ? [x] : []);
+        return !!(v.name || v.age || v.blood || listOf(v.conditions).length ||
+            listOf(v.medications).length || listOf(v.allergies).length ||
+            v.history || v.doctors || v.ec_name || v.ec_phone);
+    }
+
     function openEmergency() {
+        document.getElementById('emergency-edit-btn').style.display = '';
         renderEmergency(loadEmergencyCache());
         document.getElementById('emergency-modal').classList.add('active');
         syncEmergencyFromServer().then(renderEmergency);
+    }
+
+    // Opened from the login screen, so there is no token and no server call:
+    // the card on this phone is all we have, and it is dated so nobody mistakes
+    // an old copy for the current one. Editing needs an account, so that button
+    // is hidden here.
+    function openEmergencyFromCache() {
+        const card = loadEmergencyCache();
+        renderEmergency(card);
+        const view = document.getElementById('emergency-view');
+        if (view) {
+            const when = card && card.cached_at ? new Date(card.cached_at) : null;
+            const note = document.createElement('div');
+            note.className = 'emergency-cache-note';
+            note.textContent = (when && !isNaN(when.getTime()))
+                ? 'Saved on this phone on ' + when.toLocaleString() + '. Log in to refresh it.'
+                : 'Saved on this phone. Log in to refresh it.';
+            view.insertAdjacentElement('afterbegin', note);
+        }
+        document.getElementById('emergency-edit-btn').style.display = 'none';
+        document.getElementById('emergency-modal').classList.add('active');
     }
     function closeEmergency() {
         document.getElementById('emergency-modal').classList.remove('active');
@@ -2455,9 +2503,7 @@
         const v = card || {};
         const view = document.getElementById('emergency-view');
         const listOf = (x) => Array.isArray(x) ? x : (x ? [x] : []);
-        const hasData = v.name || v.age || v.blood || listOf(v.conditions).length ||
-            listOf(v.medications).length || listOf(v.allergies).length ||
-            v.history || v.doctors || v.ec_name || v.ec_phone;
+        const hasData = emergencyCardHasData(v);
         let html = '<div style="margin-bottom:16px;"><span class="emergency-empty">Available offline · built from Personal Details</span></div>';
         if (!hasData) {
             html += '<div class="emergency-section"><p>No emergency details yet. Add them under Health → Personal Details.</p></div>';
@@ -2524,6 +2570,14 @@
     document.getElementById('emergency-btn').addEventListener('click', openEmergency);
     document.getElementById('emergency-close').addEventListener('click', closeEmergency);
     document.getElementById('emergency-edit-btn').addEventListener('click', editEmergency);
+    (function initLoginEmergencyButton() {
+        const btn = document.getElementById('login-emergency-btn');
+        if (!btn) return;
+        btn.addEventListener('click', openEmergencyFromCache);
+        // Only offer it when there is something to show — an empty card is
+        // worse than no button at all.
+        if (emergencyCardHasData(loadEmergencyCache())) btn.classList.add('visible');
+    })();
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', bootApp);
     } else {
