@@ -1,66 +1,27 @@
 # Handoff snapshot
 
-_Generated 2026-09-17 16:08 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-17 21:12 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Made pa_sync derive the deploy set from git ls-files (was a manual 19-file list missing 105 tracked files), added fetch retries, pushed the 16 stale/missing files, un-ignored HANDOFF.md, untracked .~lock junk. Dictation: Whisper upload path retired; OS voice typing is the fallback.
+Dr. Health review + fixes: emergency card readable from the login screen without signing in (cached, dated), cached on every app start with persistent-storage request, service worker moved to the site root so it can claim scope /dr-health (allow-list + background revalidation + offline page), and per-browser install instructions that hide once installed. All deployed and verified on production. NOT yet fixed, in priority order: _facts_for_prompt() in ai_compare/health_insights.py feeds stopped meds/supplements to Tier 2 advice as VERIFIED FACTS; HealthProfile.save() is a direct overwrite and _load() substitutes a blank profile on corrupt JSON, so a crash mid-write can wipe a record; plaintext password in localStorage and un-namespaced chat/emergency caches that survive logout on a shared device; unescaped innerHTML in message_handler.js and the profile/emergency renderers; /emergency page still reads drHealth.vitals.v1, which the PWA deletes during its legacy migration, so it shows an empty card.
 
 ## Git
 
 **Branch:** `main`  
-**Uncommitted files:** 9
-
-> Uncommitted work is the main handoff hazard: the next agent
-> cannot tell finished edits from half-written ones. Commit
-> before switching, even as `wip:`.
-
-```
-M .gitignore
-D  .~lock.app.py#
- M AGENTS.md
-D  ai_compare/.~lock.chatbot.py#
-D  ai_compare/.~lock.conversation_manager.py#
-D  ai_compare/.~lock.motivational_system.py#
- M handoff.py
- M pa_sync.py
-?? HANDOFF.md
-```
-
-<details><summary>diff --stat</summary>
-
-```
-.gitignore                                 |   4 +-
- .~lock.app.py#                             |   1 -
- AGENTS.md                                  |  12 +++-
- ai_compare/.~lock.chatbot.py#              |   1 -
- ai_compare/.~lock.conversation_manager.py# |   1 -
- ai_compare/.~lock.motivational_system.py#  |   1 -
- handoff.py                                 |   8 ++-
- pa_sync.py                                 | 105 ++++++++++++++++++++---------
- 8 files changed, 91 insertions(+), 42 deletions(-)
-warning: LF will be replaced by CRLF in .gitignore.
-The file will have its original line endings in your working directory
-warning: LF will be replaced by CRLF in AGENTS.md.
-The file will have its original line endings in your working directory
-warning: LF will be replaced by CRLF in handoff.py.
-The file will have its original line endings in your working directory
-warning: LF will be replaced by CRLF in pa_sync.py.
-The file will have its original line endings in your working directory
-```
-</details>
+**Uncommitted files:** 0
 
 Recent commits:
 
 ```
+6e7c430 install prompt: per-browser instructions, and hide it once installed
+4f01c29 docs: AutoDoc regeneration from this session's test runs
+80f16d8 pwa: serve the service worker from the root so it can claim /dr-health
+8c62640 emergency card: cache it on every app start, and ask the OS to keep it
+636cd67 emergency card: readable from the login screen without signing in
+661203d pa_sync: derive deploy set from git ls-files, fetch concurrently
 7dc75c2 dictation: retire the Whisper upload path; point to OS voice typing instead
 f634433 fix(dictation): cut segments at natural pauses instead of a fixed clock
-867e7a0 dictation: live mic-level readout, zh-HK fallback, named speech errors
-ce1f6ab fix(dictation): skip silent segments before uploading to transcriber
-da47a1e fix(dictation): auto-fallback to recorder when SpeechRecognition is broken
-207a274 dictation: move website pill clear of browser-extension mic zone, add to medical_advisor chat
-22c9704 fix(dictation): handle commands embedded mid-segment + cache-bust script
-889adc4 fix(dictation): upload path now runs full command/punctuation pipeline
 ```
 
 ## Production (PythonAnywhere)
@@ -110,7 +71,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-397 passed, 1 warning in 13.25s
+397 passed, 1 warning in 15.09s
 [AutoDoc] Monitoring stopped
 ```
 
