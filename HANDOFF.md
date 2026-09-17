@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-17 16:25 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-17 16:08 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-pa_sync now derives the deploy set from git ls-files (was a manual 19-file list missing 105 tracked files) and fetches concurrently with retries; pushed the 16 stale/missing files so production is a clean baseline. Un-ignored HANDOFF.md, untracked .~lock junk. Dictation: Whisper upload path retired; OS voice typing is the fallback.
+Made pa_sync derive the deploy set from git ls-files (was a manual 19-file list missing 105 tracked files), added fetch retries, pushed the 16 stale/missing files, un-ignored HANDOFF.md, untracked .~lock junk. Dictation: Whisper upload path retired; OS voice typing is the fallback.
 
 ## Git
 
@@ -32,13 +32,13 @@ D  ai_compare/.~lock.motivational_system.py#
 ```
 .gitignore                                 |   4 +-
  .~lock.app.py#                             |   1 -
- AGENTS.md                                  |  12 ++-
+ AGENTS.md                                  |  12 +++-
  ai_compare/.~lock.chatbot.py#              |   1 -
  ai_compare/.~lock.conversation_manager.py# |   1 -
  ai_compare/.~lock.motivational_system.py#  |   1 -
- handoff.py                                 |   8 +-
- pa_sync.py                                 | 113 +++++++++++++++++++++--------
- 8 files changed, 99 insertions(+), 42 deletions(-)
+ handoff.py                                 |   8 ++-
+ pa_sync.py                                 | 105 ++++++++++++++++++++---------
+ 8 files changed, 91 insertions(+), 42 deletions(-)
 warning: LF will be replaced by CRLF in .gitignore.
 The file will have its original line endings in your working directory
 warning: LF will be replaced by CRLF in AGENTS.md.
@@ -100,17 +100,17 @@ Everything on the server matches local.
 All passing.
 
 ```
-automated_greeting_system.py:594
-automated_greeting_system.py:594
-  C:\Users\trabc\CascadeProjects\ai-model-compare - Claude\automated_greeting_system.py:594: DeprecationWarning: The default datetime adapter is deprecated as of Python 3.12; see the sqlite3 documentation for suggested replacement recipes
-    cursor.execute('''
-
+........................................................................ [ 54%]
+........................................................................ [ 72%]
+........................................................................ [ 90%]
+.....................................                                    [100%]
+============================== warnings summary ===============================
 ..\..\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37
   C:\Users\trabc\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-397 passed, 4 warnings in 18.49s
+397 passed, 1 warning in 13.25s
 [AutoDoc] Monitoring stopped
 ```
 
