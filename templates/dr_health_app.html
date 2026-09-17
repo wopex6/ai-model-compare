@@ -818,8 +818,11 @@
 <script>
     // ---------- Register service worker ----------
     if ('serviceWorker' in navigator) {
-        const swUrl = '/static/dr_health_sw.js?v=44';
-        navigator.serviceWorker.register(swUrl, { updateViaCache: 'none' }).then(reg => {
+        // Served from the root by the /dr_health_sw.js route so it can claim
+        // scope /dr-health. Registering it from /static/ capped the scope at
+        // /static/, which controls no page, so nothing was ever cached for use.
+        const swUrl = '/dr_health_sw.js';
+        navigator.serviceWorker.register(swUrl, { scope: '/dr-health', updateViaCache: 'none' }).then(reg => {
             if (navigator.serviceWorker.controller) {
                 reg.addEventListener('updatefound', () => {
                     const newWorker = reg.installing;
@@ -834,6 +837,15 @@
             }
             // Check for update every 30 seconds while the app is open
             setInterval(() => { try { reg.update(); } catch (e) {} }, 30000);
+        }).catch(() => {});
+        // Retire the old /static/-scoped registration left on devices by
+        // earlier builds, so it stops holding a cache nothing can read.
+        navigator.serviceWorker.getRegistrations().then(regs => {
+            regs.forEach(r => {
+                const worker = r.active || r.waiting || r.installing;
+                const script = (worker && worker.scriptURL) || '';
+                if (script.indexOf('/static/dr_health_sw.js') !== -1) r.unregister();
+            });
         }).catch(() => {});
     }
     let currentProfile = null;

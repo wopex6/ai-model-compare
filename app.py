@@ -6820,6 +6820,21 @@ def dr_health_app():
     return resp
 
 
+@app.route('/dr_health_sw.js')
+def dr_health_service_worker():
+    """Serve the Dr. Health service worker from the site root.
+
+    A service worker can only claim a scope at or below its own path. Served
+    from /static/ it could reach no further than /static/, so it never
+    controlled /dr-health and the PWA had no offline capability at all. From
+    the root it can register with scope /dr-health, which is all it needs.
+    """
+    resp = send_from_directory(app.static_folder, 'dr_health_sw.js',
+                               mimetype='application/javascript')
+    resp.headers['Cache-Control'] = 'no-cache'
+    return resp
+
+
 @app.route('/emergency')
 def emergency_display():
     """Read-only emergency card PWA — opens straight to the vital info screen."""

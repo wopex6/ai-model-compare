@@ -173,7 +173,10 @@ def run():
 
     for path in ['/static/dr_health_hub.js', '/static/auth_helper.js',
                  '/static/conversation_box.js', '/static/message_handler.js',
-                 '/static/dr_health_sw.js', '/static/dr_health_manifest.json']:
+                 '/static/dr_health_sw.js', '/static/dr_health_manifest.json',
+                 # Root path too: the worker can only claim scope /dr-health
+                 # when served from here, not from /static/.
+                 '/dr_health_sw.js']:
         resp = s.get(f'{BASE_URL}{path}', timeout=TIMEOUT)
         r.check(f'{path} served', resp.status_code == 200, str(resp.status_code))
 
