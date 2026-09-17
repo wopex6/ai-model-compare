@@ -86,6 +86,13 @@
         line-height: 1.45; display: none; text-align: left;
     }
     .install-steps.show { display: block; }
+    .install-now {
+        display: none; width: 100%; margin-top: 10px; padding: 12px;
+        border: none; border-radius: 10px; background: #E53935; color: white;
+        font-size: 0.95rem; font-weight: 600; cursor: pointer;
+    }
+    .install-now.visible { display: block; }
+    .install-now:active { background: #c62828; }
     .install-steps ol { margin: 0; padding-left: 18px; }
     .install-steps li { margin-bottom: 6px; }
 
@@ -656,15 +663,13 @@
                     <i class="fas fa-arrow-up-from-bracket"></i>
                 </button>
                 <div class="install-hint" id="install-hint">Tap for install instructions</div>
-                <div class="install-steps" id="install-steps">
-                    <ol>
-                        <li><strong>Open in real Safari</strong>: if you came from Messages/ WhatsApp/ Mail, tap the box-with-arrow at the top-right and choose <strong>Safari</strong> (not just this preview).</li>
-                        <li>Make sure you are <strong>not in Private Browsing</strong> — “Add to Home Screen” is hidden there.</li>
-                        <li>Tap the <strong>Share icon</strong> (square with arrow) in Safari’s bottom toolbar. If it’s hidden, scroll up slightly.</li>
-                        <li>Scroll the share sheet down to the <strong>Actions</strong> section. If you still can’t see <strong>Add to Home Screen</strong>, tap <strong>Edit Actions…</strong> at the bottom and turn it on.</li>
-                        <li>Tap <strong>Add to Home Screen</strong>, then <strong>Add</strong>.</li>
-                    </ol>
-                </div>
+                <!-- Native install, offered only where the browser fires
+                     beforeinstallprompt; steps below are the fallback. -->
+                <button class="install-now" id="install-now-btn" type="button">
+                    <i class="fas fa-circle-down"></i> Install app
+                </button>
+                <!-- Filled by renderInstallSteps() for the detected browser. -->
+                <div class="install-steps" id="install-steps"></div>
             </div>
         </div>
     </div>
@@ -2374,17 +2379,192 @@
     document.getElementById('dm-close').addEventListener('click', closeDataManager);
 
     // ---------- Install prompt ----------
+    // Every browser buries this in a different menu, and generic instructions
+    // are the kind that get abandoned halfway. Installing matters more here
+    // than for most apps: WebKit wipes stored data after seven days without
+    // interaction unless the app went to the home screen, so an uninstalled
+    // app eventually has no offline emergency card.
+    const INSTALL_GUIDES = {
+        ios_safari: {
+            name: 'Safari',
+            steps: [
+                'Make sure you are <strong>not in Private Browsing</strong> — “Add to Home Screen” is hidden there.',
+                'Tap the <strong>Share icon</strong> (square with an arrow) in Safari’s bottom toolbar. If it is hidden, scroll up slightly.',
+                'Scroll the share sheet down to the <strong>Actions</strong> section. If you still cannot see <strong>Add to Home Screen</strong>, tap <strong>Edit Actions…</strong> at the bottom and turn it on.',
+                'Tap <strong>Add to Home Screen</strong>, then <strong>Add</strong>.'
+            ]
+        },
+        ios_inapp: {
+            name: 'iPhone',
+            steps: [
+                'This page is open inside another app, which cannot install it.',
+                'Tap the <strong>box-with-arrow</strong> icon (usually top-right) and choose <strong>Open in Safari</strong>.',
+                'In Safari: <strong>Share</strong> → <strong>Add to Home Screen</strong> → <strong>Add</strong>.'
+            ]
+        },
+        ios_other: {
+            name: 'iPhone',
+            steps: [
+                'Tap the <strong>Share</strong> or <strong>⋯ menu</strong> icon and look for <strong>Add to Home Screen</strong>.',
+                'If it is not offered, this browser cannot install web apps on iPhone — open the page in <strong>Safari</strong> instead.',
+                'In Safari: <strong>Share</strong> → <strong>Add to Home Screen</strong> → <strong>Add</strong>.'
+            ]
+        },
+        android_chromium: {
+            name: 'Chrome',
+            steps: [
+                'Tap the <strong>⋮ menu</strong> at the top-right.',
+                'Tap <strong>Add to Home screen</strong>, or <strong>Install app</strong> if offered.',
+                'Confirm with <strong>Install</strong> or <strong>Add</strong>.'
+            ]
+        },
+        samsung: {
+            name: 'Samsung Internet',
+            steps: [
+                'Tap the <strong>☰ menu</strong> at the bottom-right — or the <strong>install icon</strong> in the address bar, if one is shown.',
+                'Tap <strong>Add page to</strong>, then <strong>Home screen</strong>.',
+                'Confirm with <strong>Add</strong>.'
+            ]
+        },
+        firefox_android: {
+            name: 'Firefox',
+            steps: [
+                'Tap the <strong>⋮ menu</strong>.',
+                'Tap <strong>Install</strong> (older versions call it <strong>Add to Home screen</strong>).',
+                'Confirm with <strong>Add</strong>.'
+            ]
+        },
+        desktop_chromium: {
+            name: 'desktop',
+            steps: [
+                'Click the <strong>install icon</strong> in the address bar — a small screen with a downward arrow.',
+                'No icon? Chrome: menu → <strong>Cast, save and share</strong> → <strong>Install page as app</strong>. Edge: menu → <strong>Apps</strong> → <strong>Install this site as an app</strong>.',
+                'Confirm with <strong>Install</strong>.'
+            ]
+        },
+        macos_safari: {
+            name: 'Safari',
+            steps: [
+                'Open the <strong>File</strong> menu.',
+                'Choose <strong>Add to Dock…</strong>, then <strong>Add</strong>.'
+            ]
+        },
+        generic: {
+            name: 'this browser',
+            steps: [
+                'Open your browser’s menu.',
+                'Look for <strong>Install</strong>, <strong>Install app</strong> or <strong>Add to Home screen</strong>.',
+                'Confirm when prompted.'
+            ]
+        }
+    };
+
+    function detectInstallGuide() {
+        const ua = navigator.userAgent || '';
+        // iPadOS reports itself as a Mac, so touch points are the giveaway.
+        const isIOS = /iPad|iPhone|iPod/.test(ua) ||
+            (/Macintosh/.test(ua) && (navigator.maxTouchPoints || 0) > 1);
+
+        if (isIOS) {
+            if (/CriOS|EdgiOS|FxiOS|OPiOS/.test(ua)) return INSTALL_GUIDES.ios_other;
+            // Real Safari always carries "Safari"; embedded webviews do not.
+            if (!/Safari/.test(ua) || /FBAN|FBAV|Instagram|Line\/|MicroMessenger/.test(ua)) {
+                return INSTALL_GUIDES.ios_inapp;
+            }
+            return INSTALL_GUIDES.ios_safari;
+        }
+        if (/Android/.test(ua)) {
+            if (/SamsungBrowser/.test(ua)) return INSTALL_GUIDES.samsung;
+            if (/Firefox/.test(ua)) return INSTALL_GUIDES.firefox_android;
+            if (/Chrome|Edg/.test(ua)) {
+                return Object.assign({}, INSTALL_GUIDES.android_chromium,
+                    { name: /Edg/.test(ua) ? 'Edge' : 'Chrome' });
+            }
+            return INSTALL_GUIDES.generic;
+        }
+        if (/Macintosh/.test(ua) && /Safari/.test(ua) && !/Chrome|Chromium|Edg/.test(ua)) {
+            return INSTALL_GUIDES.macos_safari;
+        }
+        if (/Chrome|Chromium|Edg/.test(ua)) return INSTALL_GUIDES.desktop_chromium;
+        return INSTALL_GUIDES.generic;
+    }
+
+    // Static author-written markup, so innerHTML is safe here.
+    let installHintLabel = 'Tap for install instructions';
+    function renderInstallSteps() {
+        const guide = detectInstallGuide();
+        const box = document.getElementById('install-steps');
+        const hint = document.getElementById('install-hint');
+        if (box) {
+            box.innerHTML = '<ol>' +
+                guide.steps.map((s) => '<li>' + s + '</li>').join('') + '</ol>';
+        }
+        installHintLabel = 'Tap for ' + guide.name + ' install instructions';
+        if (hint && !box.classList.contains('show')) hint.textContent = installHintLabel;
+    }
+
+    // Running standalone proves it is installed. From a browser tab only
+    // Chromium can tell us, via a self-referencing related_applications entry
+    // in the manifest; Safari and Firefox return nothing, and in that case the
+    // button stays rather than us guessing wrong and hiding it.
+    async function appearsInstalled() {
+        if (window.matchMedia('(display-mode: standalone)').matches ||
+            window.navigator.standalone === true) {
+            return true;
+        }
+        try {
+            if (navigator.getInstalledRelatedApps) {
+                const apps = await navigator.getInstalledRelatedApps();
+                if (apps && apps.some((a) => a.platform === 'webapp')) return true;
+            }
+        } catch (e) {}
+        return false;
+    }
+
     function updateInstallPrompt() {
         const wrap = document.getElementById('install-wrap');
         if (!wrap) return;
-        const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator.standalone === true);
-        if (isStandalone) {
-            wrap.classList.remove('visible');
-        } else {
-            wrap.classList.add('visible');
-        }
+        appearsInstalled().then((installed) => {
+            wrap.classList.toggle('visible', !installed);
+        }).catch(() => wrap.classList.add('visible'));
     }
+    renderInstallSteps();
     updateInstallPrompt();
+    try {
+        window.matchMedia('(display-mode: standalone)')
+            .addEventListener('change', updateInstallPrompt);
+    } catch (e) {}
+
+    // Where the browser offers a real install prompt, use it — it beats asking
+    // someone to find a menu item.
+    let deferredInstallPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredInstallPrompt = e;
+        const btn = document.getElementById('install-now-btn');
+        if (btn) btn.classList.add('visible');
+    });
+    window.addEventListener('appinstalled', () => {
+        deferredInstallPrompt = null;
+        const btn = document.getElementById('install-now-btn');
+        if (btn) btn.classList.remove('visible');
+        updateInstallPrompt();
+    });
+
+    document.getElementById('install-now-btn').addEventListener('click', async () => {
+        if (!deferredInstallPrompt) return;
+        const btn = document.getElementById('install-now-btn');
+        btn.disabled = true;
+        try {
+            deferredInstallPrompt.prompt();
+            await deferredInstallPrompt.userChoice;
+        } catch (e) {}
+        // A prompt can only be used once, whatever the user chose.
+        deferredInstallPrompt = null;
+        btn.disabled = false;
+        btn.classList.remove('visible');
+        updateInstallPrompt();
+    });
 
     document.getElementById('install-pwa-btn').addEventListener('click', () => {
         const steps = document.getElementById('install-steps');
@@ -2392,7 +2572,7 @@
         const hint = document.getElementById('install-hint');
         hint.textContent = steps.classList.contains('show')
             ? 'Tap again to hide instructions'
-            : 'Tap for install instructions';
+            : installHintLabel;
     });
 
     // ---------- Emergency card ----------
