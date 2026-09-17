@@ -19,5 +19,8 @@
     { "src": "/static/icons/dr_health_icon_384.png", "sizes": "384x384", "type": "image/png", "purpose": "any maskable" },
     { "src": "/static/icons/dr_health_icon_512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ],
-  "categories": ["health", "medical", "utilities"]
+  "categories": ["health", "medical", "utilities"],
+  "related_applications": [
+    { "platform": "webapp", "url": "/static/dr_health_manifest.json", "id": "/dr-health" }
+  ]
 }
