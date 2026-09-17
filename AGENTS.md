@@ -73,11 +73,31 @@ Things that will otherwise cost you an hour:
 
 ### PWA caching
 
-`static/dr_health_sw.js` precaches the app shell. After changing any file in
-`static/` that the PWA uses, **bump `CACHE_NAME`** (e.g. `v47` → `v48`) and add
-the file to `SHELL_ASSETS` if it should work offline. Skip this and users keep
-running the old asset with no obvious symptom. The main HTML is network-only,
-so template edits appear immediately; static assets do not.
+`static/dr_health_sw.js` precaches the app shell. It is served from the site
+root by the `/dr_health_sw.js` route in `app.py` and registered with
+`scope: '/dr-health'` — **do not register it from `/static/`**. A worker can
+only claim a scope at or below its own path, so the `/static/` location capped
+its scope at a directory no page lives in, and for a long time it silently
+controlled nothing and cached nothing usable.
+
+`SHELL_ASSETS` is an allow-list: only those paths are ever cached, and anything
+else — every API, chat, session and history call — always goes to the network.
+A new file the PWA needs offline must be added there or it is simply never
+cached. Never add a path that returns user data.
+
+Cached assets are served from the copy on the device and revalidated in the
+background, so a stale asset self-heals after one launch. Bumping `CACHE_NAME`
+still forces the change through immediately and drops old caches, but
+forgetting it no longer strands users the way it used to. Opening the app is
+network-first with the stored shell as the offline fallback, so template edits
+appear immediately.
+
+Nothing here can be verified from a dev machine: it needs a real device over
+HTTPS, installed to the home screen, then put into airplane mode. Say so rather
+than implying coverage. Note also that WebKit deletes script-writable storage
+after seven days without interaction unless the app was **installed to the home
+screen** (`display: standalone` qualifies) — which is why the offline emergency
+card depends on installing rather than bookmarking.
 
 ---
 
