@@ -2,133 +2,145 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>Emergency Info</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Emergency</title>
 
 <link rel="manifest" href="{{ url_for('static', filename='emergency_manifest.json') }}">
 <meta name="theme-color" content="#c62828">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Emergency Info">
-<link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/dr_health_icon_192.png') }}">
-<link rel="icon" href="{{ url_for('static', filename='icons/dr_health_icon_192.png') }}">
+<meta name="apple-mobile-web-app-title" content="Emergency">
+<link rel="apple-touch-icon" href="/dr-health/emergency-icon-180.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/dr-health/emergency-icon-192.png">
 
-<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-
+<link rel="stylesheet" href="{{ url_for('static', filename='emergency_card.css') }}">
 <style>
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Segoe UI', system-ui, sans-serif; background: #fff; color: #333; overscroll-behavior: none; }
-#app { display: flex; flex-direction: column; min-height: 100vh; }
-
+html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Segoe UI', system-ui, sans-serif; background: #fff; color: #333; }
+#app { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; }
 .topbar {
     background: #c62828; color: #fff;
     padding: calc(env(safe-area-inset-top, 0px) + 14px) 16px 14px;
-    display: flex; align-items: center; justify-content: space-between;
-    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
 }
-.topbar h1 { margin: 0; font-size: 1.2rem; }
-.topbar a { color: #fff; text-decoration: none; font-size: 0.85rem; }
-
-.content { flex: 1; padding: 16px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-
-.emergency-section { margin-bottom: 18px; }
-.emergency-section h2 {
-    color: #c62828; font-size: 0.85rem; margin: 0 0 6px;
-    text-transform: uppercase; letter-spacing: 0.03em;
+.topbar h1 { margin: 0; font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.topbar a { color: #fff; text-decoration: none; font-size: 0.85rem; font-weight: 600; }
+.content { flex: 1; padding: 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.install-card {
+    background: #f7f9fa; border: 1px solid #e3e7ea; border-radius: 12px;
+    padding: 12px 14px; margin-bottom: 16px; font-size: 0.88rem; line-height: 1.45; color: #37474f;
 }
-.emergency-section p, .emergency-section ul { margin: 0; font-size: 1rem; line-height: 1.4; }
-.emergency-section ul { padding-left: 18px; }
-.emergency-section .big { font-size: 1.3rem; font-weight: 700; }
-
-.emergency-empty { color: #999; font-style: italic; padding: 20px 0; }
-.notice {
-    background: #fff3cd; border: 1px solid #f0ad4e; color: #856404;
-    padding: 10px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px;
+.install-card h2 { margin: 0 0 8px; font-size: 0.95rem; color: #c62828; }
+.install-card h3 { margin: 12px 0 4px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: #607d8b; }
+.install-card ol { margin: 0; padding-left: 18px; }
+.install-card li { margin-bottom: 4px; }
+.install-now {
+    display: none; width: 100%; margin-top: 10px; padding: 12px;
+    background: #c62828; color: #fff; border: none; border-radius: 10px;
+    font-size: 1rem; font-weight: 700; font-family: inherit;
 }
-.footer { padding: 12px 16px; text-align: center; color: #888; font-size: 0.75rem; }
+.install-now.visible { display: block; }
+.install-card.hidden { display: none; }
+.cross-icon { width: 22px; height: 22px; flex-shrink: 0; }
 </style>
 </head>
 <body>
 <div id="app">
     <div class="topbar">
-        <h1><i class="fas fa-kit-medical"></i> Emergency Info</h1>
-        <a href="/dr-health" id="update-link">Update</a>
+        <h1>
+            <svg class="cross-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <rect width="24" height="24" rx="4" fill="#fff"/>
+                <rect x="10" y="4" width="4" height="16" fill="#c62828"/>
+                <rect x="4" y="10" width="16" height="4" fill="#c62828"/>
+            </svg>
+            Emergency
+        </h1>
+        <a href="/dr-health">Dr. Health</a>
     </div>
-    <div class="content" id="emergency-content">
-        <div id="emergency-view"><p class="emergency-empty">Loading...</p></div>
+    <div class="content">
+        <div class="install-card" id="install-card">
+            <h2>Put this card on the home screen</h2>
+            <p>Once it is an icon of its own, anyone can open it in an emergency without unlocking Dr. Health. Works on Android and iPhone.</p>
+            <button class="install-now" id="install-now" type="button">Install Emergency icon</button>
+            <h3>Android — Chrome or Edge</h3>
+            <ol>
+                <li>Tap the <strong>⋮ menu</strong> at the top-right.</li>
+                <li>Tap <strong>Install app</strong> or <strong>Add to Home screen</strong>.</li>
+                <li>Confirm. The new red-cross icon opens this card.</li>
+            </ol>
+            <h3>Android — Samsung Internet</h3>
+            <ol>
+                <li>Tap the <strong>☰ menu</strong>, then <strong>Add page to</strong> → <strong>Home screen</strong>.</li>
+            </ol>
+            <h3>Android — Firefox</h3>
+            <ol>
+                <li>Tap the <strong>⋮ menu</strong>, then <strong>Install</strong> or <strong>Add to Home screen</strong>.</li>
+            </ol>
+            <h3>iPhone or iPad — Safari</h3>
+            <ol>
+                <li>Not in Private Browsing. Tap the <strong>Share</strong> icon (square with an arrow).</li>
+                <li><strong>Add to Home Screen</strong> → <strong>Add</strong>. Use Safari; Chrome on iPhone cannot install it.</li>
+            </ol>
+        </div>
+        <div id="emergency-view"></div>
     </div>
-    <div class="footer">Stored on this phone. Synced to the backend when online.</div>
 </div>
-
-<script src="{{ url_for('static', filename='auth_helper.js') }}"></script>
+<script src="{{ url_for('static', filename='emergency_card.js') }}"></script>
 <script>
-const VITALS_KEY = 'drHealth.vitals.v1';
-function loadVitals() {
-    try { return JSON.parse(localStorage.getItem(VITALS_KEY) || '{}'); }
-    catch { return {}; }
-}
-function saveVitalsObject(v) { localStorage.setItem(VITALS_KEY, JSON.stringify(v)); }
-function getDefaultVitals() { return { name:'', age:'', blood:'', conditions:'', medications:'', allergies:'', history:'', doctors:'', ecName:'', ecRel:'', ecPhone:'' }; }
-function getVitals() { return { ...getDefaultVitals(), ...loadVitals() }; }
-
-async function syncVitalsFromServer() {
-    if (!AuthHelper.isAuthenticated()) return getVitals();
-    try {
-        const resp = await AuthHelper.authenticatedFetch('/api/health-profile/vitals');
-        if (!resp.ok) throw new Error('Server not available');
-        const data = await resp.json();
-        if (data.success) {
-            const local = loadVitals();
-            const merged = { ...(data.vitals || {}), ...local };
-            saveVitalsObject(merged);
-            return merged;
-        }
-    } catch (e) { console.error('Could not sync vitals from server', e); }
-    return getVitals();
-}
-
-function section(title, text) {
-    return text ? `<div class="emergency-section"><h2>${title}</h2><p>${text.replace(/\n/g,'<br>')}</p></div>` : '';
-}
-function list(title, text) {
-    if (!text) return '';
-    const items = text.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
-    if (!items.length) return '';
-    return `<div class="emergency-section"><h2>${title}</h2><ul>${items.map(i => `<li>${i}</li>`).join('')}</ul></div>`;
-}
-function renderEmergency() {
-    const v = getVitals();
+(function () {
+    'use strict';
     const view = document.getElementById('emergency-view');
-    const hasData = v.name || v.age || v.blood || v.conditions || v.medications || v.allergies || v.history || v.doctors || v.ecName || v.ecPhone;
-    if (!hasData) {
-        view.innerHTML = '<p class="emergency-empty">No emergency information saved yet. Tap <b>Update</b> to open Dr. Health and add it.</p>';
-        return;
+    const card = window.EmergencyCard.load();
+    const when = card && card.cached_at ? new Date(card.cached_at) : null;
+    const lead = (when && !isNaN(when.getTime()))
+        ? '<div class="emergency-cache-note">Saved on this phone on ' + when.toLocaleString() + '. Open Dr. Health to refresh it.</div>'
+        : '<div class="emergency-cache-note">Saved on this phone. Open Dr. Health to refresh it.</div>';
+    window.EmergencyCard.render(view, card, {
+        leadHtml: window.EmergencyCard.hasData(card) ? lead : '',
+        emptyText: 'No emergency details on this phone yet. Open Dr. Health, add Personal Details and Medications while online, then return here.'
+    });
+
+    const standalone = window.matchMedia('(display-mode: standalone)').matches ||
+        window.navigator.standalone === true;
+    const installCard = document.getElementById('install-card');
+    if (standalone && installCard) installCard.classList.add('hidden');
+
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/dr_health_sw.js', {
+            scope: '/dr-health', updateViaCache: 'none'
+        }).catch(function () {});
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+            regs.forEach(function (r) {
+                const worker = r.active || r.waiting || r.installing;
+                const script = (worker && worker.scriptURL) || '';
+                if (script.indexOf('/static/emergency_sw.js') !== -1 ||
+                    script.indexOf('/static/dr_health_sw.js') !== -1) {
+                    r.unregister();
+                }
+            });
+        }).catch(function () {});
     }
-    let html = '';
-    html += section('Name', v.name);
-    html += section('Age / Blood type', [v.age, v.blood].filter(Boolean).join(' / '));
-    html += list('Medical conditions', v.conditions);
-    html += list('Current medications', v.medications);
-    html += list('Allergies', v.allergies);
-    html += section('Medical history', v.history);
-    html += section('Doctors', v.doctors);
-    html += `<div class="emergency-section"><h2>Emergency contact</h2>`;
-    html += v.ecName ? `<p class="big">${v.ecName}</p>` : '';
-    html += v.ecRel ? `<p>${v.ecRel}</p>` : '';
-    html += v.ecPhone ? `<p class="big">${v.ecPhone}</p>` : '';
-    html += '</div>';
-    view.innerHTML = html;
-}
 
-if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/static/emergency_sw.js', { scope: '/emergency' })
-        .catch(err => console.error('SW registration failed', err));
-}
-
-// show local immediately, then try to refresh from the server
-renderEmergency();
-syncVitalsFromServer().then(() => renderEmergency());
+    let deferredPrompt = null;
+    const installNow = document.getElementById('install-now');
+    window.addEventListener('beforeinstallprompt', function (e) {
+        e.preventDefault();
+        deferredPrompt = e;
+        if (installNow && !standalone) installNow.classList.add('visible');
+    });
+    window.addEventListener('appinstalled', function () {
+        if (installCard) installCard.classList.add('hidden');
+    });
+    if (installNow) {
+        installNow.addEventListener('click', function () {
+            if (!deferredPrompt) return;
+            deferredPrompt.prompt();
+            deferredPrompt = null;
+            installNow.classList.remove('visible');
+        });
+    }
+}());
 </script>
 </body>
 </html>

@@ -20,6 +20,17 @@
     { "src": "/static/icons/dr_health_icon_512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ],
   "categories": ["health", "medical", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Emergency Card",
+      "short_name": "Emergency",
+      "description": "Open the emergency card immediately",
+      "url": "/dr-health/emergency",
+      "icons": [
+        { "src": "/dr-health/emergency-icon-192.png", "sizes": "192x192", "type": "image/png" }
+      ]
+    }
+  ],
   "related_applications": [
     { "platform": "webapp", "url": "/static/dr_health_manifest.json", "id": "/dr-health" }
   ]

@@ -2,6 +2,8 @@
 from ai_compare.medical_advisor_health_context import (
     age_from_date_of_birth,
     anticoagulant_labels,
+    medication_card_entries,
+    medication_card_labels,
 )
 
 
@@ -37,3 +39,21 @@ def test_aspirin_is_flagged_as_antiplatelet():
         {'name': 'Cartia', 'dose': '100mg'},
     ])
     assert labels == ['Cartia 100mg']
+
+
+def test_medication_card_entries_name_dose_frequency():
+    entries = medication_card_entries([
+        {'name': 'metformin', 'dose': '500mg', 'frequency': 'twice daily',
+         'status': 'active'},
+        {'name': 'old drug', 'dose': '10mg', 'frequency': 'daily',
+         'status': 'stopped'},
+        {'name': 'aspirin', 'dosage': '100mg', 'status': 'active'},
+    ])
+    assert entries == [
+        {'name': 'metformin', 'dose': '500mg', 'frequency': 'twice daily',
+         'label': 'metformin 500mg twice daily'},
+        {'name': 'aspirin', 'dose': '100mg', 'frequency': '',
+         'label': 'aspirin 100mg'},
+    ]
+    assert medication_card_labels(entries) == [
+        'metformin 500mg twice daily', 'aspirin 100mg']

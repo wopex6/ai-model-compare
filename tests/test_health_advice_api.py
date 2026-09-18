@@ -340,7 +340,10 @@ class HealthAdviceApiTest(unittest.TestCase):
         self.assertEqual(card['name'], 'Test Person')
         self.assertEqual(card['blood'], 'O+')
         self.assertEqual(card['conditions'], ['diabetes'])
-        self.assertEqual(card['medications'], ['metformin 500mg'])
+        self.assertEqual(card['medications'], [{
+            'name': 'metformin', 'dose': '500mg', 'frequency': '',
+            'label': 'metformin 500mg',
+        }])
         self.assertEqual(card['allergies'], ['peanuts'])
         self.assertEqual(card['ec_phone'], '555-9999')
 
@@ -374,10 +377,15 @@ class HealthAdviceApiTest(unittest.TestCase):
         self.assertEqual(card['advance_care'][:11], 'Not for CPR')
         self.assertEqual(card['implants'], ['pacemaker 2019'])
         self.assertEqual(card['anticoagulants'], ['apixaban 5mg'])
-        self.assertEqual(card['medications'], ['apixaban 5mg twice daily'])
-        self.assertNotIn('old warfarin', ' '.join(card['medications']))
+        self.assertEqual(card['medications'], [{
+            'name': 'apixaban', 'dose': '5mg', 'frequency': 'twice daily',
+            'label': 'apixaban 5mg twice daily',
+        }])
+        self.assertNotIn('old warfarin', ' '.join(m['label'] for m in card['medications']))
         self.assertEqual(card['gp_phone'], '0295551234')
         self.assertEqual(card['language'], 'Cantonese; limited English')
+        vitals = self.client.get('/api/health-profile/vitals').get_json()['vitals']
+        self.assertEqual(vitals['medications'], 'apixaban 5mg twice daily')
 
     def test_personal_accepts_emergency_fields(self):
         self.seed({})

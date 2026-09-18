@@ -38,7 +38,7 @@ os.environ.setdefault('GLOG_minloglevel', '2')
 
 # Now import everything else
 print(f"{_startup_elapsed()} Starting imports...")
-from flask import Flask, render_template, request, jsonify, session, redirect, send_from_directory, make_response
+from flask import Flask, render_template, request, jsonify, session, redirect, send_from_directory, make_response, abort
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import asyncio
@@ -6453,7 +6453,10 @@ def update_ai_limits():
 # ============================================
 # HEALTH PROFILE API (Medical Advisor)
 # ============================================
-from ai_compare.medical_advisor_health_context import HealthContextManager
+from ai_compare.medical_advisor_health_context import (
+    HealthContextManager,
+    medication_card_labels,
+)
 from ai_compare import health_insights
 from ai_compare import health_freshness
 
@@ -6653,7 +6656,7 @@ def get_health_vitals():
         vitals = {
             'name': card['name'], 'age': card['age'], 'blood': card['blood'],
             'conditions': ', '.join(card['conditions']),
-            'medications': ', '.join(card['medications']),
+            'medications': ', '.join(medication_card_labels(card['medications'])),
             'allergies': ', '.join(card['allergies']),
             'history': card['history'], 'doctors': card['doctors'],
             'ecName': card['ec_name'], 'ecRel': card['ec_rel'], 'ecPhone': card['ec_phone'],
@@ -6820,6 +6823,33 @@ def dr_health_app():
     return resp
 
 
+@app.route('/dr-health/emergency')
+def dr_health_emergency():
+    """Home-screen Emergency Card — opens the cached card with no login.
+
+    Lives under /dr-health so the same service worker can cache it offline.
+    Android Chrome installs this as its own app (separate manifest); iPhone
+    Safari Add to Home Screen uses this URL as the launch URL.
+    """
+    resp = make_response(render_template('emergency_display.html'))
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
+
+
+@app.route('/dr-health/emergency-icon-<int:size>.png')
+def dr_health_emergency_icon(size):
+    """White-cross-on-red home-screen icon. Generated so it deploys as code."""
+    from ai_compare.emergency_icon import ALLOWED_SIZES, emergency_icon_png
+    if size not in ALLOWED_SIZES:
+        abort(404)
+    resp = make_response(emergency_icon_png(size))
+    resp.headers['Content-Type'] = 'image/png'
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
+
+
 @app.route('/dr_health_sw.js')
 def dr_health_service_worker():
     """Serve the Dr. Health service worker from the site root.
@@ -6837,8 +6867,10 @@ def dr_health_service_worker():
 
 @app.route('/emergency')
 def emergency_display():
-    """Read-only emergency card PWA — opens straight to the vital info screen."""
-    return render_template('emergency_display.html')
+    """Old URL. The home-screen card now lives under /dr-health/emergency so
+    the Dr. Health service worker can cache it (a worker cannot claim a
+    sibling path)."""
+    return redirect('/dr-health/emergency', code=302)
 
 @app.route('/api/health-profile/analyze', methods=['POST'])
 @require_auth

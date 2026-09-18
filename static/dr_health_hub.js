@@ -154,7 +154,7 @@
             title: 'Personal Details',
             icon: 'fa-id-card',
             desc: 'Identity, alerts and contacts for the emergency card',
-            hint: 'This is the only place these facts are entered. The emergency card is built from here plus your current conditions and medications — nothing is typed twice.',
+            hint: 'Identity, alerts and contacts live here. Medications are a separate list under Health → Medications — they still appear on the emergency card.',
             fields: [
                 { heading: 'Who you are' },
                 { key: 'name', label: 'Full name', type: 'text' },
@@ -225,7 +225,7 @@
         {
             group: 'Emergency & Identity',
             items: [
-                { id: 'vitals', kind: 'vitals', title: 'Emergency Card', icon: 'fa-kit-medical', desc: 'Read-only card from Personal Details, works offline' },
+                { id: 'vitals', kind: 'vitals', title: 'Emergency Card', icon: 'fa-kit-medical', desc: 'Opens the card. Edit Personal Details, Medications and Conditions to change it' },
                 { id: 'personal', kind: 'object', title: 'Personal Details', icon: 'fa-id-card' }
             ]
         },
@@ -504,6 +504,12 @@
         },
 
         go(view, section) {
+            if (view === 'vitals' || section === 'vitals') {
+                if (typeof window.openEmergency === 'function') {
+                    window.openEmergency();
+                    return;
+                }
+            }
             // Leaving the index: remember the scroll position so Back lands
             // where the user was instead of jumping to the top.
             const before = this.root ? this.root.querySelector('.hub-scroll') : null;
@@ -795,8 +801,17 @@
                     (item.reference_range ? ' · ref ' + esc(toText(item.reference_range)) : '') + '</span>';
             } else {
                 html += '<span class="hub-row-title">' + esc(itemTitle(id, item)) + '</span>';
-                const sub = itemSubtitle(id, item);
-                if (sub) html += '<span class="hub-row-sub">' + esc(sub) + '</span>';
+                if (id === 'medications' || id === 'supplements') {
+                    const dose = toText(item.dose) || toText(item.dosage);
+                    const freq = toText(item.frequency);
+                    html += '<span class="hub-row-sub hub-row-meds">';
+                    html += '<span><em>Dose</em> ' + esc(dose || '\u2014') + '</span>';
+                    html += '<span><em>Frequency</em> ' + esc(freq || '\u2014') + '</span>';
+                    html += '</span>';
+                } else {
+                    const sub = itemSubtitle(id, item);
+                    if (sub) html += '<span class="hub-row-sub">' + esc(sub) + '</span>';
+                }
             }
             html += '</span>';
             if (item.status) {
@@ -890,13 +905,15 @@
                     '" data-type="list" rows="4">' + esc(lines) + '</textarea>';
             } else if (field.type === 'dob') {
                 html += '<div class="hub-dob" data-dob="1">';
-                html += '<input class="hub-input" id="' + id + '" data-key="' + esc(field.key) +
-                    '" data-type="text" type="text" autocomplete="bday" ' +
+                html += '<div class="hub-dob-row">';
+                html += '<input class="hub-input hub-dob-text" id="' + id + '" data-key="' + esc(field.key) +
+                    '" data-type="text" type="text" autocomplete="off" autocapitalize="off" ' +
                     'placeholder="15/3/1954 or 15 Mar 1954" value="' + esc(toText(value)) + '">';
                 html += '<button type="button" class="hub-btn hub-dob-toggle" aria-expanded="false" ' +
                     'title="Open calendar with separate year and month">' +
-                    '<i class="fas fa-calendar-days"></i></button>';
-                html += '<div class="hub-dob-picker" hidden>';
+                    '<i class="fas fa-calendar-alt"></i></button>';
+                html += '</div>';
+                html += '<div class="hub-dob-picker">';
                 html += '<label class="hub-input-label">Year</label>' +
                     '<select class="hub-input hub-dob-year"></select>';
                 html += '<label class="hub-input-label">Month</label>' +
@@ -1144,12 +1161,14 @@
         },
 
         // ---------- Vitals ----------
+        // The Emergency Card hub tile opens the real card (openEmergency).
+        // This body is only a fallback if that function is missing.
         vitalsBody() {
             let html = '<div class="hub-note">';
-            html += 'A read-only card for paramedics. It is built only from Personal Details and your current conditions and medications — edit those, not this card. A copy is kept on this phone so it works without internet.';
+            html += 'This card is assembled from Personal Details, Medications and Conditions. Edit those pages to add or update it.';
             html += '</div>';
-            html += '<div class="hub-row-actions" style="padding:0 14px;">';
-            html += '<button class="hub-btn primary" id="hub-open-vitals"><i class="fas fa-kit-medical"></i> Open emergency card</button>';
+            html += '<div class="hub-row-actions" style="padding:0 14px 14px;">';
+            html += '<button class="hub-btn primary" id="hub-open-vitals">Open emergency card</button>';
             html += '</div>';
             return html;
         },
@@ -1499,7 +1518,7 @@
         wireDobPicker() {
             const wrap = this.root ? this.root.querySelector('[data-dob]') : null;
             if (!wrap) return;
-            const input = wrap.querySelector('input[data-key]');
+            const input = wrap.querySelector('.hub-dob-text');
             const toggle = wrap.querySelector('.hub-dob-toggle');
             const picker = wrap.querySelector('.hub-dob-picker');
             const yearEl = wrap.querySelector('.hub-dob-year');
@@ -1555,17 +1574,17 @@
                 fillYears(parsed.year);
                 fillMonths(parsed.month);
                 fillDays(parsed.year, parsed.month, parsed.day);
-                picker.hidden = false;
+                picker.classList.add('is-open');
                 toggle.setAttribute('aria-expanded', 'true');
             }
             function closePicker() {
-                picker.hidden = true;
+                picker.classList.remove('is-open');
                 toggle.setAttribute('aria-expanded', 'false');
             }
 
             toggle.addEventListener('click', function () {
-                if (picker.hidden) openPicker();
-                else closePicker();
+                if (picker.classList.contains('is-open')) closePicker();
+                else openPicker();
             });
             yearEl.addEventListener('change', function () {
                 const p = currentParts();

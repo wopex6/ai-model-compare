@@ -596,9 +596,52 @@ def anticoagulant_labels(medications) -> List[str]:
         hay = name.lower()
         if not any(marker in hay for marker in _ANTICOAGULANT_MARKERS):
             continue
-        label = ' '.join(filter(None, [name, str(item.get('dose') or '').strip()])).strip()
+        dose = str(item.get('dose') or item.get('dosage') or '').strip()
+        label = ' '.join(filter(None, [name, dose])).strip()
         out.append(label)
     return out
+
+
+def medication_card_entries(medications) -> List[Dict]:
+    """Current medications as name / dose / frequency for the emergency card."""
+    out = []
+    for item in medications or []:
+        if not isinstance(item, dict) or not is_active(item):
+            continue
+        name = str(item.get('name') or '').strip()
+        if not name:
+            continue
+        dose = str(item.get('dose') or item.get('dosage') or '').strip()
+        frequency = str(item.get('frequency') or '').strip()
+        label = ' '.join(filter(None, [name, dose, frequency])).strip()
+        out.append({
+            'name': name,
+            'dose': dose,
+            'frequency': frequency,
+            'label': label,
+        })
+    return out
+
+
+def medication_card_labels(medications) -> List[str]:
+    """One-line labels for legacy vitals joins and summaries."""
+    labels = []
+    for item in medications or []:
+        if isinstance(item, dict):
+            label = str(item.get('label') or '').strip()
+            if not label:
+                label = ' '.join(filter(None, [
+                    str(item.get('name') or '').strip(),
+                    str(item.get('dose') or item.get('dosage') or '').strip(),
+                    str(item.get('frequency') or '').strip(),
+                ])).strip()
+            if label:
+                labels.append(label)
+        else:
+            text = str(item).strip()
+            if text:
+                labels.append(text)
+    return labels
 
 
 class HealthProfile:
@@ -881,7 +924,8 @@ class HealthProfile:
         """Read-only emergency card derived from the single source of truth.
 
         Conditions and medications come from the live lists (current items
-        only, so a stopped drug never appears). Identity, alerts and contact
+        only, so a stopped drug never appears). Medications are name, dose and
+        frequency, not a single mashed line. Identity, alerts and contact
         fields come from `personal`. Blood thinners are highlighted from the
         current medication list rather than typed in a second time. The PWA
         caches this locally for offline use.
@@ -919,13 +963,6 @@ class HealthProfile:
         if derived_age:
             age = derived_age
 
-        def _med_line(m):
-            return " ".join(filter(None, [
-                str(m.get("name") or "").strip(),
-                str(m.get("dose") or "").strip(),
-                str(m.get("frequency") or "").strip(),
-            ])).strip()
-
         return {
             "name": self.data.get("name", ""),
             "date_of_birth": dob,
@@ -944,7 +981,7 @@ class HealthProfile:
                 (c.get("name", "") + (" (suspected)" if c.get("status") == "investigating" else ""))
                 for c in _current(self.data.get("conditions")) if c.get("name")
             ],
-            "medications": [_med_line(m) for m in current_meds if m.get("name")],
+            "medications": medication_card_entries(current_meds),
             "allergies": allergies,
             "history": personal.get("medical_history") or "",
             "gp_name": personal.get("gp_name") or "",
