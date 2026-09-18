@@ -41,5 +41,20 @@ for (const [label, ua, touch, expectedName] of cases) {
         ' -> ' + guide.name + (ok ? '' : '  (expected ' + expectedName + ')') +
         '   steps=' + guide.steps.length);
 }
-console.log(failures ? failures + ' FAILURE(S)' : 'all ' + cases.length + ' cases pass');
+// renderInstallSteps() lists every other browser's steps and excludes the
+// detected one by label, so duplicate or missing labels would either drop a
+// browser from that list or show the detected one twice.
+const guides = new Function(block + '\nreturn INSTALL_GUIDES;')();
+const labels = Object.keys(guides).map((k) => guides[k].label);
+if (labels.some((l) => !l)) {
+    console.log('FAIL  every guide needs a label -> ' + JSON.stringify(labels));
+    failures++;
+} else if (new Set(labels).size !== labels.length) {
+    console.log('FAIL  guide labels must be unique -> ' + JSON.stringify(labels));
+    failures++;
+} else {
+    console.log('PASS  ' + labels.length + ' guides, all labelled and unique');
+}
+
+console.log(failures ? failures + ' FAILURE(S)' : 'all checks pass (' + cases.length + ' user agents)');
 process.exit(failures ? 1 : 0);
