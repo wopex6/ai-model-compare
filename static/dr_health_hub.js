@@ -158,8 +158,8 @@
             fields: [
                 { heading: 'Who you are' },
                 { key: 'name', label: 'Full name', type: 'text' },
-                { key: 'date_of_birth', label: 'Date of birth', type: 'date',
-                  hint: 'Preferred over age — it does not go stale, and hospitals match records on it.' },
+                { key: 'date_of_birth', label: 'Date of birth', type: 'dob',
+                  hint: 'Type it (15/3/1954 or 15 Mar 1954) or open the calendar and pick year, month and day separately.' },
                 { key: 'age', label: 'Age (if no date of birth)', type: 'text' },
                 { key: 'gender', label: 'Sex / gender', type: 'text' },
                 { key: 'weight', label: 'Weight', type: 'text', hint: 'Include the unit, e.g. 72 kg. Used for drug doses on scene.' },
@@ -299,6 +299,50 @@
             return parts.join('; ');
         }
         return String(value);
+    }
+
+    // Day-first, matching parse_date() on the server (HK / AU).
+    const DOB_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    function parseDob(text) {
+        const raw = String(text || '').trim();
+        if (!raw) return null;
+        let m = raw.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+        if (m) return dobParts(Number(m[1]), Number(m[2]), Number(m[3]));
+        m = raw.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+        if (m) return dobParts(Number(m[3]), Number(m[2]), Number(m[1]));
+        m = raw.match(/^(\d{1,2})\s+([A-Za-z]{3,})\.?\s+(\d{4})$/);
+        if (m) {
+            const month = dobMonthNum(m[2]);
+            if (month) return dobParts(Number(m[3]), month, Number(m[1]));
+        }
+        m = raw.match(/^([A-Za-z]{3,})\.?\s+(\d{1,2}),?\s+(\d{4})$/);
+        if (m) {
+            const month = dobMonthNum(m[1]);
+            if (month) return dobParts(Number(m[3]), month, Number(m[2]));
+        }
+        return null;
+    }
+    function dobMonthNum(name) {
+        const key = String(name || '').slice(0, 3).toLowerCase();
+        for (let i = 0; i < DOB_MONTHS.length; i++) {
+            if (DOB_MONTHS[i].toLowerCase() === key) return i + 1;
+        }
+        return 0;
+    }
+    function dobParts(year, month, day) {
+        if (year < 1800 || year > 3000 || month < 1 || month > 12 || day < 1 || day > 31) return null;
+        const dim = daysInMonth(year, month);
+        if (day > dim) return null;
+        return { year: year, month: month, day: day };
+    }
+    function daysInMonth(year, month) {
+        return new Date(year, month, 0).getDate();
+    }
+    function pad2(n) {
+        return (n < 10 ? '0' : '') + n;
+    }
+    function isoDob(p) {
+        return p.year + '-' + pad2(p.month) + '-' + pad2(p.day);
     }
 
     function labelFor(key) {
@@ -844,6 +888,25 @@
                 const lines = Array.isArray(value) ? value.map(toText).join('\n') : toText(value);
                 html += '<textarea class="hub-input" id="' + id + '" data-key="' + esc(field.key) +
                     '" data-type="list" rows="4">' + esc(lines) + '</textarea>';
+            } else if (field.type === 'dob') {
+                html += '<div class="hub-dob" data-dob="1">';
+                html += '<input class="hub-input" id="' + id + '" data-key="' + esc(field.key) +
+                    '" data-type="text" type="text" autocomplete="bday" ' +
+                    'placeholder="15/3/1954 or 15 Mar 1954" value="' + esc(toText(value)) + '">';
+                html += '<button type="button" class="hub-btn hub-dob-toggle" aria-expanded="false" ' +
+                    'title="Open calendar with separate year and month">' +
+                    '<i class="fas fa-calendar-days"></i></button>';
+                html += '<div class="hub-dob-picker" hidden>';
+                html += '<label class="hub-input-label">Year</label>' +
+                    '<select class="hub-input hub-dob-year"></select>';
+                html += '<label class="hub-input-label">Month</label>' +
+                    '<select class="hub-input hub-dob-month"></select>';
+                html += '<label class="hub-input-label">Day</label>' +
+                    '<select class="hub-input hub-dob-day"></select>';
+                html += '<div class="hub-row-actions">';
+                html += '<button type="button" class="hub-btn primary hub-dob-apply">Use this date</button>';
+                html += '<button type="button" class="hub-btn hub-dob-cancel">Cancel</button>';
+                html += '</div></div></div>';
             } else if (field.type === 'select') {
                 html += '<select class="hub-input" id="' + id + '" data-key="' + esc(field.key) + '" data-type="text">';
                 html += '<option value=""></option>';
@@ -1429,6 +1492,100 @@
             if (window.HealthDictation) HealthDictation.wire(rootEl);
         },
 
+        // Native <input type="date"> is a poor fit for a 70-year-old DOB:
+        // some phones force the spinner and make you walk month by month.
+        // This picker has independent year / month / day lists. The text
+        // field stays free-typed either way.
+        wireDobPicker() {
+            const wrap = this.root ? this.root.querySelector('[data-dob]') : null;
+            if (!wrap) return;
+            const input = wrap.querySelector('input[data-key]');
+            const toggle = wrap.querySelector('.hub-dob-toggle');
+            const picker = wrap.querySelector('.hub-dob-picker');
+            const yearEl = wrap.querySelector('.hub-dob-year');
+            const monthEl = wrap.querySelector('.hub-dob-month');
+            const dayEl = wrap.querySelector('.hub-dob-day');
+            const apply = wrap.querySelector('.hub-dob-apply');
+            const cancel = wrap.querySelector('.hub-dob-cancel');
+            if (!input || !toggle || !picker || !yearEl || !monthEl || !dayEl) return;
+
+            function fillYears(selected) {
+                const now = new Date().getFullYear();
+                const start = now - 120;
+                let html = '';
+                for (let y = now; y >= start; y--) {
+                    html += '<option value="' + y + '"' + (y === selected ? ' selected' : '') + '>' + y + '</option>';
+                }
+                if (selected && (selected > now || selected < start)) {
+                    html = '<option value="' + selected + '" selected>' + selected + '</option>' + html;
+                }
+                yearEl.innerHTML = html;
+            }
+            function fillMonths(selected) {
+                let html = '';
+                for (let i = 0; i < DOB_MONTHS.length; i++) {
+                    const n = i + 1;
+                    html += '<option value="' + n + '"' + (n === selected ? ' selected' : '') + '>' +
+                        DOB_MONTHS[i] + '</option>';
+                }
+                monthEl.innerHTML = html;
+            }
+            function fillDays(year, month, selected) {
+                const dim = daysInMonth(year, month);
+                let html = '';
+                for (let d = 1; d <= dim; d++) {
+                    html += '<option value="' + d + '"' + (d === selected ? ' selected' : '') + '>' + d + '</option>';
+                }
+                dayEl.innerHTML = html;
+                if (selected > dim) dayEl.value = String(dim);
+            }
+            function currentParts() {
+                return {
+                    year: Number(yearEl.value),
+                    month: Number(monthEl.value),
+                    day: Number(dayEl.value)
+                };
+            }
+            function openPicker() {
+                const parsed = parseDob(input.value) || {
+                    year: new Date().getFullYear() - 70,
+                    month: 1,
+                    day: 1
+                };
+                fillYears(parsed.year);
+                fillMonths(parsed.month);
+                fillDays(parsed.year, parsed.month, parsed.day);
+                picker.hidden = false;
+                toggle.setAttribute('aria-expanded', 'true');
+            }
+            function closePicker() {
+                picker.hidden = true;
+                toggle.setAttribute('aria-expanded', 'false');
+            }
+
+            toggle.addEventListener('click', function () {
+                if (picker.hidden) openPicker();
+                else closePicker();
+            });
+            yearEl.addEventListener('change', function () {
+                const p = currentParts();
+                fillDays(p.year, p.month, p.day);
+            });
+            monthEl.addEventListener('change', function () {
+                const p = currentParts();
+                fillDays(p.year, p.month, p.day);
+            });
+            if (apply) {
+                apply.addEventListener('click', function () {
+                    const p = currentParts();
+                    if (!dobParts(p.year, p.month, p.day)) return;
+                    input.value = isoDob(p);
+                    closePicker();
+                });
+            }
+            if (cancel) cancel.addEventListener('click', closePicker);
+        },
+
         // ---------- Wiring ----------
         wireSection(id) {
             const self = this;
@@ -1461,6 +1618,7 @@
             } else if (kind === 'object') {
                 const save = this.root.querySelector('#hub-obj-save');
                 if (save) save.addEventListener('click', () => self.saveObject(id));
+                this.wireDobPicker();
             } else if (kind === 'vitals') {
                 const open = this.root.querySelector('#hub-open-vitals');
                 if (open) {

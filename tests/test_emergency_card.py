@@ -18,6 +18,11 @@ def test_age_from_date_of_birth_is_whole_years():
     assert age_from_date_of_birth('2000-03-01').isdigit()
 
 
+def test_age_from_free_typed_dates():
+    assert age_from_date_of_birth('15/3/1954') == age_from_date_of_birth('1954-03-15')
+    assert age_from_date_of_birth('15 Mar 1954') == age_from_date_of_birth('1954-03-15')
+
+
 def test_anticoagulant_labels_current_only():
     labels = anticoagulant_labels([
         {'name': 'Warfarin', 'dose': '5mg', 'status': 'stopped'},
