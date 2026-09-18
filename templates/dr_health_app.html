@@ -536,6 +536,14 @@
     }
     .hub-input:focus { outline: none; border-color: #c62828; }
     textarea.hub-input { resize: vertical; }
+    .hub-dob { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start; }
+    .hub-dob .hub-input { grid-column: 1; }
+    .hub-dob-toggle { grid-column: 2; margin-top: 0; min-width: 44px; height: 42px; }
+    .hub-dob-picker {
+        grid-column: 1 / -1; margin-top: 4px; padding: 10px;
+        background: #f7f9fa; border: 1px solid #e3e7ea; border-radius: 10px;
+    }
+    .hub-dob-picker[hidden] { display: none; }
 
     /* Global dictation pill — floats just above the bottom nav. */
     .hf-mic-pill {

@@ -397,6 +397,15 @@ class HealthAdviceApiTest(unittest.TestCase):
         self.assertEqual(pers['gp_phone'], '0295551234')
         self.assertNotIn('made_up_key', pers)
 
+    def test_personal_normalizes_free_typed_date_of_birth(self):
+        self.seed({})
+        body = self.client.put('/api/health-profile', json={'personal': {
+            'date_of_birth': '15/3/1954'}}).get_json()
+        self.assertEqual(body['profile']['personal']['date_of_birth'], '1954-03-15')
+        card = self.client.get('/api/health-profile/emergency-card').get_json()['card']
+        self.assertEqual(card['date_of_birth'], '1954-03-15')
+        self.assertTrue(card['age'].isdigit())
+
     def test_prompt_context_has_medical_info_but_no_identifiers(self):
         self.seed({'name': 'Secret Name',
                    'personal': {'blood_type': 'O+', 'allergies': ['penicillin'],

@@ -16,6 +16,7 @@ from ai_compare.health_insights import (
     apply_provenance_defaults,
     backfill_legacy_provenance,
     DEFAULT_ADVICE_SETTINGS,
+    parse_date,
 )
 from ai_compare.health_freshness import (
     STATUS_ACTIVE,
@@ -572,13 +573,9 @@ _ANTICOAGULANT_MARKERS = (
 
 
 def age_from_date_of_birth(dob) -> str:
-    """Years old today from an ISO date. Empty string if the value is unusable."""
-    raw = str(dob or '').strip()[:10]
-    if not raw:
-        return ''
-    try:
-        born = datetime.strptime(raw, '%Y-%m-%d').date()
-    except ValueError:
+    """Years old today. Accepts ISO and the free-typed formats parse_date knows."""
+    born = parse_date(dob)
+    if not born:
         return ''
     today = date.today()
     years = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
@@ -825,6 +822,9 @@ class HealthProfile:
         """Update personal info (age, gender, location, blood_type, emergency fields)"""
         for k, v in kwargs.items():
             if k in self.data["personal"] or k in self.PERSONAL_KEYS:
+                if k == "date_of_birth":
+                    parsed = parse_date(v)
+                    v = parsed.isoformat() if parsed else str(v or "").strip()
                 self.data["personal"][k] = v
         self.save()
 
