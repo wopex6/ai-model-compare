@@ -352,8 +352,7 @@ def run():
 
         # ---------- 13. Emergency card ----------
         r.section('13. Emergency card')
-        open_section(page, 'vitals')
-        page.click('#hub-open-vitals')
+        page.click('.hub-card[data-section="vitals"]')
         page.wait_for_timeout(1500)
         r.check('emergency modal opens from the hub',
                 page.is_visible('#emergency-modal.active'), 'modal not active')
@@ -361,7 +360,6 @@ def run():
         page.wait_for_timeout(500)
         r.check('emergency modal closes',
                 not page.is_visible('#emergency-modal.active'))
-        back_to_index(page)
 
         # ---------- 14. Delete ----------
         r.section('14. Delete flow')

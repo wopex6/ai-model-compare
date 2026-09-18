@@ -16,6 +16,7 @@
 <link rel="icon" href="{{ url_for('static', filename='icons/dr_health_icon_192.png') }}">
 
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='emergency_card.css') }}">
 
 <style>
     * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -481,7 +482,25 @@
     .hub-row-head:active { background: #f5f5f5; }
     .hub-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
     .hub-row-title { font-size: 0.92rem; font-weight: 600; color: #263238; word-break: break-word; }
-    .hub-row-sub { font-size: 0.76rem; color: #90a4ae; margin-top: 2px; word-break: break-word; }
+    .hub-row-sub { font-size: 0.85rem; color: #455a64; margin-top: 4px; word-break: break-word; }
+    .hub-row-meds { display: flex; flex-direction: column; gap: 2px; }
+    .hub-row-meds em, .hub-med-fields em, .emergency-med-meta em {
+        font-style: normal; color: #90a4ae; font-size: 0.7rem;
+        text-transform: uppercase; letter-spacing: 0.04em; margin-right: 6px;
+    }
+    .hub-meds { list-style: none; margin: 0; padding: 0; }
+    .hub-med-preview, .emergency-meds li {
+        margin-bottom: 10px; padding: 10px 12px;
+        background: #f7f9fa; border-radius: 10px;
+    }
+    .hub-med-name, .emergency-med-name {
+        display: block; font-weight: 700; font-size: 1.05rem; color: #263238;
+    }
+    .hub-med-fields, .emergency-med-meta {
+        display: flex; flex-direction: column; gap: 2px;
+        margin-top: 4px; color: #455a64; font-size: 0.9rem;
+    }
+    .emergency-meds { list-style: none; padding-left: 0; margin: 0; }
     .hub-pill {
         flex-shrink: 0; padding: 2px 8px; border-radius: 10px;
         font-size: 0.68rem; font-weight: 600; text-transform: uppercase;
@@ -500,6 +519,7 @@
     .hub-btn {
         padding: 9px 14px; border: 1px solid #cfd8dc; border-radius: 9px;
         background: #fff; color: #37474f; font-size: 0.85rem; font-family: inherit; cursor: pointer;
+        display: inline-block; text-decoration: none; text-align: center;
     }
     .hub-btn.primary { background: #c62828; border-color: #c62828; color: #fff; }
     .hub-btn.danger { background: #fff; border-color: #ef9a9a; color: #c62828; }
@@ -536,14 +556,16 @@
     }
     .hub-input:focus { outline: none; border-color: #c62828; }
     textarea.hub-input { resize: vertical; }
-    .hub-dob { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: start; }
-    .hub-dob .hub-input { grid-column: 1; }
-    .hub-dob-toggle { grid-column: 2; margin-top: 0; min-width: 44px; height: 42px; }
-    .hub-dob-picker {
-        grid-column: 1 / -1; margin-top: 4px; padding: 10px;
-        background: #f7f9fa; border: 1px solid #e3e7ea; border-radius: 10px;
+    .hub-dob { display: block; }
+    .hub-dob-row { display: flex; gap: 8px; align-items: stretch; }
+    .hub-dob-text {
+        flex: 1; min-width: 0; min-height: 44px; font-size: 16px;
+        -webkit-appearance: none; appearance: none;
     }
-    .hub-dob-picker[hidden] { display: none; }
+    .hub-dob-toggle { flex-shrink: 0; min-width: 44px; height: 44px; }
+    .hub-dob-picker { display: none; margin-top: 8px; padding: 10px;
+        background: #f7f9fa; border: 1px solid #e3e7ea; border-radius: 10px; }
+    .hub-dob-picker.is-open { display: block; }
 
     /* Global dictation pill — floats just above the bottom nav. */
     .hf-mic-pill {
@@ -858,6 +880,7 @@
 <script src="{{ url_for('static', filename='message_handler.js') }}" defer onerror="document.getElementById('login-error').textContent='Could not load message_handler.js'; document.getElementById('login-error').style.color='#c62828';"></script>
 <script src="{{ url_for('static', filename='conversation_box.js') }}" defer onerror="document.getElementById('login-error').textContent='Could not load conversation_box.js'; document.getElementById('login-error').style.color='#c62828';"></script>
 <script src="{{ url_for('static', filename='health_dictation.js') }}?v=70" defer></script>
+<script src="{{ url_for('static', filename='emergency_card.js') }}"></script>
 <script src="{{ url_for('static', filename='dr_health_hub.js') }}" defer onerror="document.getElementById('login-error').textContent='Could not load dr_health_hub.js'; document.getElementById('login-error').style.color='#c62828';"></script>
 
 <script>
@@ -2076,8 +2099,8 @@
         const preferred = {
             conditions: ['name', 'status', 'diagnosed_date', 'details'],
             test_results: ['test_name', 'value', 'reference_range', 'date', 'notes'],
-            medications: ['name', 'dosage', 'frequency', 'prescribed_date', 'notes'],
-            supplements: ['name', 'dosage', 'frequency', 'notes'],
+            medications: ['name', 'dose', 'frequency', 'prescribed_date', 'notes'],
+            supplements: ['name', 'dose', 'frequency', 'notes'],
             symptoms: ['name', 'severity', 'onset_date', 'frequency', 'notes'],
             action_plans: ['action', 'target_date', 'status', 'notes'],
             conversation_insights: ['topic', 'insight', 'priority', 'notes']
@@ -2714,17 +2737,23 @@
         const d = String(n || '').replace(/[^\d+]/g, '');
         return d ? 'tel:' + d : '';
     }
+    function medLabel(m) {
+        if (!m) return '';
+        if (typeof m === 'string') return m;
+        return m.label || [m.name, m.dose || m.dosage, m.frequency].filter(Boolean).join(' ');
+    }
     function emergencySummaryHtml(card) {
         const v = card || {};
         const listOf = (x) => Array.isArray(x) ? x.join(', ') : (x || '');
         if (!emergencyCardHasData(v)) return '';
+        const meds = (v.medications || []).map(medLabel).filter(Boolean).join(', ');
         let html = '<strong style="color:#c62828;"><i class="fas fa-kit-medical"></i> Emergency card:</strong><ul>';
         if (v.name) html += `<li><strong>${escCard(v.name)}</strong>${v.age ? ' (' + escCard(v.age) + ')' : ''}${v.blood ? ' • Blood: ' + escCard(v.blood) : ''}</li>`;
         if (v.advance_care) html += `<li>Advance care: ${escCard(v.advance_care)}</li>`;
         if ((v.allergies || []).length) html += `<li>Allergies: ${escCard(listOf(v.allergies))}</li>`;
         if ((v.anticoagulants || []).length) html += `<li>Blood thinners: ${escCard(listOf(v.anticoagulants))}</li>`;
+        if (meds) html += `<li>Medications: ${escCard(meds)}</li>`;
         if ((v.conditions || []).length) html += `<li>Conditions: ${escCard(listOf(v.conditions))}</li>`;
-        if ((v.medications || []).length) html += `<li>Medications: ${escCard(listOf(v.medications))}</li>`;
         if (v.gp_name || v.gp_phone) html += `<li>GP: ${escCard([v.gp_name, v.gp_phone].filter(Boolean).join(' — '))}</li>`;
         if (v.ec_name || v.ec_phone) html += `<li>Emergency contact: ${escCard([v.ec_name, v.ec_rel, v.ec_phone].filter(Boolean).join(' — '))}</li>`;
         html += '</ul>';
@@ -2777,6 +2806,9 @@
     }
 
     function emergencyCardHasData(card) {
+        if (typeof EmergencyCard !== 'undefined' && EmergencyCard.hasData) {
+            return EmergencyCard.hasData(card);
+        }
         const v = card || {};
         const listOf = (x) => Array.isArray(x) ? x : (x ? [x] : []);
         return !!(v.name || v.date_of_birth || v.age || v.blood || v.weight ||
@@ -2801,7 +2833,7 @@
     // is hidden here.
     function openEmergencyFromCache() {
         const card = loadEmergencyCache();
-        renderEmergency(card);
+        renderEmergency(card, { fromCache: true });
         const view = document.getElementById('emergency-view');
         if (view) {
             const when = card && card.cached_at ? new Date(card.cached_at) : null;
@@ -2825,65 +2857,37 @@
             DrHealthHub.go('object', 'personal');
         }
     }
-    function renderEmergency(card) {
-        const v = card || {};
+    function renderEmergency(card, opts) {
+        opts = opts || {};
         const view = document.getElementById('emergency-view');
-        const listOf = (x) => Array.isArray(x) ? x : (x ? [x] : []);
-        const hasData = emergencyCardHasData(v);
-        let html = '<div style="margin-bottom:16px;"><span class="emergency-empty">Available offline · edit in Health → Personal Details</span></div>';
-        if (!hasData) {
-            html += '<div class="emergency-section"><p>No emergency details yet. Add them under Health → Personal Details.</p></div>';
-            view.innerHTML = html;
+        if (typeof EmergencyCard === 'undefined' || !EmergencyCard.render) {
+            view.innerHTML = '<p class="emergency-empty">Could not load the emergency card.</p>';
             return;
         }
-        const section = (title, text, extraClass) => {
-            if (!text) return '';
-            const cls = extraClass ? ' emergency-section ' + extraClass : 'emergency-section';
-            return `<div class="${cls}"><h3>${escCard(title)}</h3><p>${escCard(String(text)).replace(/\n/g,'<br>')}</p></div>`;
-        };
-        const list = (title, items) => {
-            items = listOf(items).filter(Boolean);
-            if (!items.length) return '';
-            return `<div class="emergency-section"><h3>${escCard(title)}</h3><ul>${items.map(i => `<li>${escCard(i)}</li>`).join('')}</ul></div>`;
-        };
-        const phoneBlock = (title, name, rel, phone) => {
-            if (!name && !phone) return '';
-            const href = telHref(phone);
-            let block = `<div class="emergency-section"><h3>${escCard(title)}</h3>`;
-            if (name) block += `<p class="big">${escCard(name)}</p>`;
-            if (rel) block += `<p>${escCard(rel)}</p>`;
-            if (phone && href) {
-                block += `<p><a class="big" href="${escCard(href)}">${escCard(phone)}</a></p>`;
-            } else if (phone) {
-                block += `<p class="big">${escCard(phone)}</p>`;
-            }
-            return block + '</div>';
-        };
-        html += section('Name', v.name);
-        const identity = [
-            v.date_of_birth ? ('DOB ' + v.date_of_birth) : '',
-            v.age ? (v.age + ' yrs') : '',
-            v.gender || '',
-            v.weight ? ('Weight ' + v.weight) : '',
-            v.height ? ('Height ' + v.height) : '',
-            v.blood ? ('Blood ' + v.blood) : ''
-        ].filter(Boolean).join(' · ');
-        html += section('Identity', identity);
-        html += section('Advance care / not for CPR', v.advance_care, 'emergency-alert');
-        html += list('Allergies', v.allergies);
-        html += section('Anaphylaxis / adrenaline pen', v.anaphylaxis, v.anaphylaxis ? 'emergency-alert' : '');
-        html += list('Blood thinners / antiplatelets', v.anticoagulants);
-        html += list('Medical conditions', v.conditions);
-        html += list('Current medications', v.medications);
-        html += list('Implants and devices', v.implants);
-        html += section('Pregnancy', v.pregnancy);
-        html += section('Language / communication', v.language);
-        html += phoneBlock('Usual GP', v.gp_name, '', v.gp_phone);
-        html += phoneBlock('Emergency contact', v.ec_name, v.ec_rel, v.ec_phone);
-        html += section('Other doctors', v.doctors);
-        html += section('Other medical history', v.history);
-        html += section('Suburb / area', v.location);
-        view.innerHTML = html;
+        const actions = opts.fromCache ? '' : (
+            '<div class="emergency-source-actions">' +
+            '<button type="button" data-hub-go="personal">Personal Details</button>' +
+            '<button type="button" data-hub-go="medications">Medications</button>' +
+            '<button type="button" data-hub-go="conditions">Conditions</button>' +
+            '<a href="/dr-health/emergency">Home-screen icon</a>' +
+            '</div>'
+        );
+        EmergencyCard.render(view, card, {
+            leadHtml: actions,
+            emptyText: 'Nothing on the card yet. Add identity and alerts in Personal Details, medicines in Medications, and diagnoses in Conditions.'
+        });
+        const links = view.querySelectorAll('[data-hub-go]');
+        for (let i = 0; i < links.length; i++) {
+            links[i].addEventListener('click', function () {
+                const id = this.getAttribute('data-hub-go');
+                closeEmergency();
+                showScreen('hub-screen');
+                if (typeof DrHealthHub !== 'undefined' && DrHealthHub.root) {
+                    if (id === 'personal') DrHealthHub.go('object', 'personal');
+                    else DrHealthHub.go('list', id);
+                }
+            });
+        }
     }
 
     async function bootApp() {

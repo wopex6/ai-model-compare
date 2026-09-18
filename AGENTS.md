@@ -97,7 +97,18 @@ HTTPS, installed to the home screen, then put into airplane mode. Say so rather
 than implying coverage. Note also that WebKit deletes script-writable storage
 after seven days without interaction unless the app was **installed to the home
 screen** (`display: standalone` qualifies) — which is why the offline emergency
-card depends on installing rather than bookmarking.
+card depends on installing rather than bookmarking. The same constraint applies
+on **Android and iPhone**; do not write install steps or UI that assume Safari
+only.
+
+The Emergency home-screen icon is a second installed app at
+`/dr-health/emergency` (white cross on red, own manifest, no login). It reads
+the same `drHealth.emergencyCard.v1` cache the main app writes. Keep it under
+`/dr-health` so the existing worker can cache it. Navigate fallbacks must store
+that path separately — never write the Emergency HTML into the main
+`/dr-health` app shell. `/emergency` redirects there; do not revive a worker
+registered from `/static/emergency_sw.js`. A new file the PWA needs offline
+must be added to `SHELL_ASSETS` in `static/dr_health_sw.js`.
 
 ---
 
@@ -219,6 +230,7 @@ templates/
 static/
   lab_results.js                  shared: test-result logic
   health_review.js                shared: lifecycle + confirmation UI
+  emergency_card.js               shared: emergency card render (PWA + home-screen icon)
   dr_health_sw.js                 service worker — bump CACHE_NAME on asset change
 tests/                          pytest
 vendor/                         vendored wheels (no pip on production)

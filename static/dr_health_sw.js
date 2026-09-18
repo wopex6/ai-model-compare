@@ -13,11 +13,16 @@
 //   2. Cached assets are revalidated in the background every time they are
 //      used, so a stale copy survives at most one launch. Bumping CACHE_NAME
 //      forces it sooner, but forgetting to no longer strands users.
-const CACHE_NAME = 'dr-health-shell-v81';
+const CACHE_NAME = 'dr-health-shell-v85';
 const APP_SHELL = '/dr-health';
+const EMERGENCY_SHELL = '/dr-health/emergency';
 const SHELL_ASSETS = [
     APP_SHELL,
+    EMERGENCY_SHELL,
     '/static/dr_health_manifest.json',
+    '/static/emergency_manifest.json',
+    '/static/emergency_card.js',
+    '/static/emergency_card.css',
     '/static/lab_results.js',
     '/static/health_review.js',
     '/static/health_dictation.js',
@@ -26,7 +31,9 @@ const SHELL_ASSETS = [
     '/static/conversation_box.js',
     '/static/dr_health_hub.js',
     '/static/icons/dr_health_icon_192.png',
-    '/static/icons/dr_health_icon_512.png'
+    '/static/icons/dr_health_icon_512.png',
+    '/dr-health/emergency-icon-192.png',
+    '/dr-health/emergency-icon-512.png'
 ];
 const CACHEABLE = new Set(SHELL_ASSETS);
 
@@ -93,19 +100,23 @@ self.addEventListener('fetch', (event) => {
 
     // Opening the app: network first, so a deployed template change is seen
     // immediately and the page is never served stale while online. The stored
-    // shell is the fallback, which is what makes an offline open work.
+    // copy of THAT path is the fallback. Never write the Emergency page into
+    // the main app shell — they are two different start URLs.
     if (request.mode === 'navigate') {
+        const dest = url.pathname === EMERGENCY_SHELL ? EMERGENCY_SHELL : APP_SHELL;
         event.respondWith(
             fetch(request).then((response) => {
                 if (response && response.status === 200) {
                     const copy = response.clone();
                     event.waitUntil(
-                        caches.open(CACHE_NAME).then((cache) => cache.put(APP_SHELL, copy))
+                        caches.open(CACHE_NAME).then((cache) => cache.put(dest, copy))
                     );
                 }
                 return response;
             }).catch(() =>
-                caches.match(APP_SHELL).then((cached) => cached || offlineResponse())
+                caches.match(dest).then((cached) =>
+                    cached || caches.match(APP_SHELL).then((shell) => shell || offlineResponse())
+                )
             )
         );
         return;

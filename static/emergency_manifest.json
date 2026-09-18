@@ -1,22 +1,19 @@
 {
-  "name": "Emergency Info",
+  "id": "/dr-health/emergency",
+  "name": "Emergency",
   "short_name": "Emergency",
-  "description": "Read-only emergency card — medications, conditions, doctors and emergency contact",
-  "start_url": "/emergency",
-  "scope": "/emergency",
+  "description": "Opens the emergency card immediately — no login",
+  "start_url": "/dr-health/emergency",
+  "scope": "/dr-health/emergency",
   "display": "standalone",
-  "background_color": "#ffffff",
+  "background_color": "#c62828",
   "theme_color": "#c62828",
   "orientation": "portrait-primary",
   "icons": [
-    { "src": "/static/icons/dr_health_icon_72.png", "sizes": "72x72", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/static/icons/dr_health_icon_96.png", "sizes": "96x96", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/static/icons/dr_health_icon_128.png", "sizes": "128x128", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/static/icons/dr_health_icon_144.png", "sizes": "144x144", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/static/icons/dr_health_icon_152.png", "sizes": "152x152", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/static/icons/dr_health_icon_192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/static/icons/dr_health_icon_384.png", "sizes": "384x384", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/static/icons/dr_health_icon_512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "/dr-health/emergency-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/dr-health/emergency-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/dr-health/emergency-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/dr-health/emergency-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "categories": ["health", "medical", "utilities"]
 }

@@ -1,0 +1,46 @@
+/* Shared Emergency Card layout — PWA modal and the home-screen Emergency icon. */
+
+.emergency-section { margin-bottom: 18px; }
+.emergency-section h3 {
+    color: #c62828; font-size: 0.85rem; margin: 0 0 6px;
+    text-transform: uppercase; letter-spacing: 0.03em;
+}
+.emergency-section p, .emergency-section ul { margin: 0; font-size: 0.95rem; line-height: 1.4; }
+.emergency-section ul { padding-left: 18px; }
+.emergency-section .big { font-size: 1.2rem; font-weight: 700; }
+.emergency-section a.big { color: #c62828; text-decoration: none; }
+.emergency-alert {
+    background: #fff5f5; border-left: 4px solid #c62828; padding: 10px 12px;
+    border-radius: 0 8px 8px 0;
+}
+.emergency-source-note {
+    background: #f7f9fa; border: 1px solid #e3e7ea; border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 14px; font-size: 0.85rem;
+    color: #546e7a; line-height: 1.45;
+}
+.emergency-source-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.emergency-source-actions button, .emergency-source-actions a {
+    padding: 8px 12px; border: 1px solid #cfd8dc; border-radius: 9px;
+    background: #fff; color: #37474f; font-size: 0.82rem; font-family: inherit;
+    cursor: pointer; text-decoration: none; display: inline-block;
+}
+.emergency-cache-note {
+    background: #fff3cd; border: 1px solid #f0ad4e; color: #856404;
+    padding: 10px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px;
+}
+.emergency-meds { list-style: none; padding-left: 0; margin: 0; }
+.emergency-meds li {
+    margin-bottom: 10px; padding: 10px 12px;
+    background: #f7f9fa; border-radius: 10px;
+}
+.emergency-med-name {
+    display: block; font-weight: 700; font-size: 1.05rem; color: #263238;
+}
+.emergency-med-meta {
+    display: flex; flex-direction: column; gap: 2px;
+    margin-top: 4px; color: #455a64; font-size: 0.9rem;
+}
+.emergency-med-meta em {
+    font-style: normal; color: #90a4ae; font-size: 0.7rem;
+    text-transform: uppercase; letter-spacing: 0.04em; margin-right: 6px;
+}
