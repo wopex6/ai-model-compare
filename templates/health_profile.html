@@ -811,7 +811,12 @@ Examples:
                 if (pers.gender) html += `<li class="success">Gender: ${pers.gender}</li>`;
                 if (pers.location) html += `<li class="success">Location: ${pers.location}</li>`;
                 if (pers.age) html += `<li>Age: ${pers.age}</li>`;
+                if (pers.date_of_birth) html += `<li>Date of birth: ${pers.date_of_birth}</li>`;
+                if (pers.weight) html += `<li>Weight: ${pers.weight}</li>`;
                 if (pers.blood_type) html += `<li>Blood Type: ${pers.blood_type}</li>`;
+                if (pers.language) html += `<li>Language: ${pers.language}</li>`;
+                if (pers.advance_care) html += `<li>Advance care: ${pers.advance_care}</li>`;
+                if (pers.implants && pers.implants.length) html += `<li>Implants: ${[].concat(pers.implants).join(', ')}</li>`;
                 html += `</ul></div>`;
             }
 
@@ -1967,8 +1972,10 @@ Examples:
                 if (p.name) html += `<tr><th>Name</th><td>${p.name}</td></tr>`;
                 if (pers.gender) html += `<tr><th>Gender</th><td>${pers.gender}</td></tr>`;
                 if (pers.age) html += `<tr><th>Age</th><td>${pers.age}</td></tr>`;
-                if (pers.location) html += `<tr><th>Location</th><td>${pers.location}</td></tr>`;
+                if (pers.date_of_birth) html += `<tr><th>Date of birth</th><td>${pers.date_of_birth}</td></tr>`;
+                if (pers.weight) html += `<tr><th>Weight</th><td>${pers.weight}</td></tr>`;
                 if (pers.blood_type) html += `<tr><th>Blood Type</th><td>${pers.blood_type}</td></tr>`;
+                if (pers.advance_care) html += `<tr><th>Advance care</th><td>${pers.advance_care}</td></tr>`;
                 html += `</table>`;
             }
 

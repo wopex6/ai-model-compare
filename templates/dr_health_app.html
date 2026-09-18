@@ -253,6 +253,11 @@
     .emergency-section p, .emergency-section ul { margin: 0; font-size: 0.95rem; line-height: 1.4; }
     .emergency-section ul { padding-left: 18px; }
     .emergency-section .big { font-size: 1.2rem; font-weight: 700; }
+    .emergency-section a.big { color: #c62828; text-decoration: none; }
+    .emergency-alert {
+        background: #fff5f5; border-left: 4px solid #c62828; padding: 10px 12px;
+        border-radius: 0 8px 8px 0;
+    }
     .emergency-empty { color: #999; font-style: italic; }
     .emergency-cache-note {
         background: #fff3cd; border: 1px solid #f0ad4e; color: #856404;
@@ -516,6 +521,13 @@
     .hub-form { margin: 0 12px 12px; padding: 14px; background: #fff; border: 1px solid #e3e7ea; border-radius: 12px; }
     .hub-form-title { font-size: 0.95rem; font-weight: 700; color: #263238; margin-bottom: 10px; }
     .hub-form-hint { font-size: 0.78rem; color: #90a4ae; margin-bottom: 10px; }
+    .hub-form-group {
+        margin: 18px 0 4px; padding-top: 12px; border-top: 1px solid #eceff1;
+        font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em;
+        text-transform: uppercase; color: #c62828;
+    }
+    .hub-form-group:first-of-type { margin-top: 6px; padding-top: 0; border-top: none; }
+    .hub-field-hint { font-size: 0.72rem; color: #90a4ae; margin: -2px 0 6px; line-height: 1.35; }
     .hub-input-label { display: block; font-size: 0.75rem; color: #607d8b; margin: 10px 0 4px; }
     .hub-input {
         width: 100%; box-sizing: border-box; padding: 9px 10px;
@@ -2685,19 +2697,28 @@
         const stamped = Object.assign({}, card, { cached_at: new Date().toISOString() });
         try { localStorage.setItem(EMERGENCY_KEY, JSON.stringify(stamped)); } catch (e) {}
     }
+    function escCard(s) {
+        return (s == null ? '' : String(s))
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+    function telHref(n) {
+        const d = String(n || '').replace(/[^\d+]/g, '');
+        return d ? 'tel:' + d : '';
+    }
     function emergencySummaryHtml(card) {
         const v = card || {};
         const listOf = (x) => Array.isArray(x) ? x.join(', ') : (x || '');
-        if (!(v.name || v.age || v.blood || (v.conditions || []).length ||
-              (v.medications || []).length || (v.allergies || []).length ||
-              v.doctors || v.ec_name || v.ec_phone)) return '';
+        if (!emergencyCardHasData(v)) return '';
         let html = '<strong style="color:#c62828;"><i class="fas fa-kit-medical"></i> Emergency card:</strong><ul>';
-        if (v.name) html += `<li><strong>${v.name}</strong>${v.age ? ' (' + v.age + ')' : ''}${v.blood ? ' • Blood: ' + v.blood : ''}</li>`;
-        if ((v.conditions || []).length) html += `<li>Conditions: ${listOf(v.conditions)}</li>`;
-        if ((v.medications || []).length) html += `<li>Medications: ${listOf(v.medications)}</li>`;
-        if ((v.allergies || []).length) html += `<li>Allergies: ${listOf(v.allergies)}</li>`;
-        if (v.doctors) html += `<li>Doctors: ${String(v.doctors).replace(/\n/g, ', ')}</li>`;
-        if (v.ec_name || v.ec_phone) html += `<li>Emergency contact: ${[v.ec_name, v.ec_rel, v.ec_phone].filter(Boolean).join(' — ')}</li>`;
+        if (v.name) html += `<li><strong>${escCard(v.name)}</strong>${v.age ? ' (' + escCard(v.age) + ')' : ''}${v.blood ? ' • Blood: ' + escCard(v.blood) : ''}</li>`;
+        if (v.advance_care) html += `<li>Advance care: ${escCard(v.advance_care)}</li>`;
+        if ((v.allergies || []).length) html += `<li>Allergies: ${escCard(listOf(v.allergies))}</li>`;
+        if ((v.anticoagulants || []).length) html += `<li>Blood thinners: ${escCard(listOf(v.anticoagulants))}</li>`;
+        if ((v.conditions || []).length) html += `<li>Conditions: ${escCard(listOf(v.conditions))}</li>`;
+        if ((v.medications || []).length) html += `<li>Medications: ${escCard(listOf(v.medications))}</li>`;
+        if (v.gp_name || v.gp_phone) html += `<li>GP: ${escCard([v.gp_name, v.gp_phone].filter(Boolean).join(' — '))}</li>`;
+        if (v.ec_name || v.ec_phone) html += `<li>Emergency contact: ${escCard([v.ec_name, v.ec_rel, v.ec_phone].filter(Boolean).join(' — '))}</li>`;
         html += '</ul>';
         return html;
     }
@@ -2750,9 +2771,13 @@
     function emergencyCardHasData(card) {
         const v = card || {};
         const listOf = (x) => Array.isArray(x) ? x : (x ? [x] : []);
-        return !!(v.name || v.age || v.blood || listOf(v.conditions).length ||
-            listOf(v.medications).length || listOf(v.allergies).length ||
-            v.history || v.doctors || v.ec_name || v.ec_phone);
+        return !!(v.name || v.date_of_birth || v.age || v.blood || v.weight ||
+            v.gender || v.language || v.advance_care || v.anaphylaxis || v.pregnancy ||
+            listOf(v.conditions).length || listOf(v.medications).length ||
+            listOf(v.allergies).length || listOf(v.implants).length ||
+            listOf(v.anticoagulants).length ||
+            v.history || v.doctors || v.gp_name || v.gp_phone ||
+            v.ec_name || v.ec_phone);
     }
 
     function openEmergency() {
@@ -2797,32 +2822,59 @@
         const view = document.getElementById('emergency-view');
         const listOf = (x) => Array.isArray(x) ? x : (x ? [x] : []);
         const hasData = emergencyCardHasData(v);
-        let html = '<div style="margin-bottom:16px;"><span class="emergency-empty">Available offline · built from Personal Details</span></div>';
+        let html = '<div style="margin-bottom:16px;"><span class="emergency-empty">Available offline · edit in Health → Personal Details</span></div>';
         if (!hasData) {
             html += '<div class="emergency-section"><p>No emergency details yet. Add them under Health → Personal Details.</p></div>';
             view.innerHTML = html;
             return;
         }
-        const section = (title, text) => text ? `<div class="emergency-section"><h3>${title}</h3><p>${String(text).replace(/\n/g,'<br>')}</p></div>` : '';
+        const section = (title, text, extraClass) => {
+            if (!text) return '';
+            const cls = extraClass ? ' emergency-section ' + extraClass : 'emergency-section';
+            return `<div class="${cls}"><h3>${escCard(title)}</h3><p>${escCard(String(text)).replace(/\n/g,'<br>')}</p></div>`;
+        };
         const list = (title, items) => {
             items = listOf(items).filter(Boolean);
             if (!items.length) return '';
-            return `<div class="emergency-section"><h3>${title}</h3><ul>${items.map(i => `<li>${i}</li>`).join('')}</ul></div>`;
+            return `<div class="emergency-section"><h3>${escCard(title)}</h3><ul>${items.map(i => `<li>${escCard(i)}</li>`).join('')}</ul></div>`;
+        };
+        const phoneBlock = (title, name, rel, phone) => {
+            if (!name && !phone) return '';
+            const href = telHref(phone);
+            let block = `<div class="emergency-section"><h3>${escCard(title)}</h3>`;
+            if (name) block += `<p class="big">${escCard(name)}</p>`;
+            if (rel) block += `<p>${escCard(rel)}</p>`;
+            if (phone && href) {
+                block += `<p><a class="big" href="${escCard(href)}">${escCard(phone)}</a></p>`;
+            } else if (phone) {
+                block += `<p class="big">${escCard(phone)}</p>`;
+            }
+            return block + '</div>';
         };
         html += section('Name', v.name);
-        html += section('Age / Blood type', [v.age, v.blood].filter(Boolean).join(' / '));
+        const identity = [
+            v.date_of_birth ? ('DOB ' + v.date_of_birth) : '',
+            v.age ? (v.age + ' yrs') : '',
+            v.gender || '',
+            v.weight ? ('Weight ' + v.weight) : '',
+            v.height ? ('Height ' + v.height) : '',
+            v.blood ? ('Blood ' + v.blood) : ''
+        ].filter(Boolean).join(' · ');
+        html += section('Identity', identity);
+        html += section('Advance care / not for CPR', v.advance_care, 'emergency-alert');
+        html += list('Allergies', v.allergies);
+        html += section('Anaphylaxis / adrenaline pen', v.anaphylaxis, v.anaphylaxis ? 'emergency-alert' : '');
+        html += list('Blood thinners / antiplatelets', v.anticoagulants);
         html += list('Medical conditions', v.conditions);
         html += list('Current medications', v.medications);
-        html += list('Allergies', v.allergies);
-        html += section('Medical history', v.history);
-        html += section('Doctors', v.doctors);
-        if (v.ec_name || v.ec_rel || v.ec_phone) {
-            html += `<div class="emergency-section"><h3>Emergency contact</h3>`;
-            html += v.ec_name ? `<p class="big">${v.ec_name}</p>` : '';
-            html += v.ec_rel ? `<p>${v.ec_rel}</p>` : '';
-            html += v.ec_phone ? `<p class="big">${v.ec_phone}</p>` : '';
-            html += '</div>';
-        }
+        html += list('Implants and devices', v.implants);
+        html += section('Pregnancy', v.pregnancy);
+        html += section('Language / communication', v.language);
+        html += phoneBlock('Usual GP', v.gp_name, '', v.gp_phone);
+        html += phoneBlock('Emergency contact', v.ec_name, v.ec_rel, v.ec_phone);
+        html += section('Other doctors', v.doctors);
+        html += section('Other medical history', v.history);
+        html += section('Suburb / area', v.location);
         view.innerHTML = html;
     }
 
@@ -2848,6 +2900,7 @@
 
     // ---------- Boot ----------
     window.openEmergency = openEmergency;
+    window.syncEmergencyFromServer = syncEmergencyFromServer;
     // Ask the OS to treat this phone's copy as persistent so it is not evicted
     // when the device runs short of space. WebKit grants this readily for
     // home-screen web apps; a refusal is normal elsewhere and not worth
