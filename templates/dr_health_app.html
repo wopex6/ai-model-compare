@@ -93,6 +93,20 @@
     }
     .install-now.visible { display: block; }
     .install-now:active { background: #c62828; }
+    .install-detected { margin: 0 0 8px; font-size: 0.78rem; color: #666; }
+    .install-other-toggle, .install-dismiss, .install-reset {
+        background: none; border: none; padding: 6px 0; cursor: pointer;
+        font-size: 0.75rem; color: #c62828; text-decoration: underline;
+        font-family: inherit;
+    }
+    .install-dismiss { display: block; margin: 8px auto 0; }
+    .install-reset { display: none; margin: 10px auto 0; color: #888; }
+    .install-reset.visible { display: block; }
+    .install-other { display: none; margin-top: 8px; }
+    .install-other.show { display: block; }
+    .install-other h5 {
+        margin: 12px 0 4px; font-size: 0.78rem; color: #c62828;
+    }
     .install-steps ol { margin: 0; padding-left: 18px; }
     .install-steps li { margin-bottom: 6px; }
 
@@ -668,9 +682,15 @@
                 <button class="install-now" id="install-now-btn" type="button">
                     <i class="fas fa-circle-down"></i> Install app
                 </button>
-                <!-- Filled by renderInstallSteps() for the detected browser. -->
+                <!-- Filled by renderInstallSteps() for the detected browser,
+                     plus every other browser behind a toggle so wrong
+                     detection is never a dead end. -->
                 <div class="install-steps" id="install-steps"></div>
+                <button class="install-dismiss" id="install-dismiss" type="button">Already installed — hide this</button>
             </div>
+            <!-- Outside install-wrap so it can still be reached once the block
+                 above is hidden. -->
+            <button class="install-reset" id="install-reset" type="button">Install help</button>
         </div>
     </div>
 
@@ -2387,6 +2407,7 @@
     const INSTALL_GUIDES = {
         ios_safari: {
             name: 'Safari',
+            label: 'iPhone or iPad — Safari',
             steps: [
                 'Make sure you are <strong>not in Private Browsing</strong> — “Add to Home Screen” is hidden there.',
                 'Tap the <strong>Share icon</strong> (square with an arrow) in Safari’s bottom toolbar. If it is hidden, scroll up slightly.',
@@ -2396,6 +2417,7 @@
         },
         ios_inapp: {
             name: 'iPhone',
+            label: 'Opened inside another app (WhatsApp, Instagram, Messages)',
             steps: [
                 'This page is open inside another app, which cannot install it.',
                 'Tap the <strong>box-with-arrow</strong> icon (usually top-right) and choose <strong>Open in Safari</strong>.',
@@ -2404,6 +2426,7 @@
         },
         ios_other: {
             name: 'iPhone',
+            label: 'iPhone or iPad — Chrome, Firefox or Edge',
             steps: [
                 'Tap the <strong>Share</strong> or <strong>⋯ menu</strong> icon and look for <strong>Add to Home Screen</strong>.',
                 'If it is not offered, this browser cannot install web apps on iPhone — open the page in <strong>Safari</strong> instead.',
@@ -2412,6 +2435,7 @@
         },
         android_chromium: {
             name: 'Chrome',
+            label: 'Android — Chrome or Edge',
             steps: [
                 'Tap the <strong>⋮ menu</strong> at the top-right.',
                 'Tap <strong>Add to Home screen</strong>, or <strong>Install app</strong> if offered.',
@@ -2420,6 +2444,7 @@
         },
         samsung: {
             name: 'Samsung Internet',
+            label: 'Android — Samsung Internet',
             steps: [
                 'Tap the <strong>☰ menu</strong> at the bottom-right — or the <strong>install icon</strong> in the address bar, if one is shown.',
                 'Tap <strong>Add page to</strong>, then <strong>Home screen</strong>.',
@@ -2428,6 +2453,7 @@
         },
         firefox_android: {
             name: 'Firefox',
+            label: 'Android — Firefox',
             steps: [
                 'Tap the <strong>⋮ menu</strong>.',
                 'Tap <strong>Install</strong> (older versions call it <strong>Add to Home screen</strong>).',
@@ -2436,6 +2462,7 @@
         },
         desktop_chromium: {
             name: 'desktop',
+            label: 'Windows, Mac or Linux — Chrome or Edge',
             steps: [
                 'Click the <strong>install icon</strong> in the address bar — a small screen with a downward arrow.',
                 'No icon? Chrome: menu → <strong>Cast, save and share</strong> → <strong>Install page as app</strong>. Edge: menu → <strong>Apps</strong> → <strong>Install this site as an app</strong>.',
@@ -2444,6 +2471,7 @@
         },
         macos_safari: {
             name: 'Safari',
+            label: 'Mac — Safari',
             steps: [
                 'Open the <strong>File</strong> menu.',
                 'Choose <strong>Add to Dock…</strong>, then <strong>Add</strong>.'
@@ -2451,6 +2479,7 @@
         },
         generic: {
             name: 'this browser',
+            label: 'Any other browser',
             steps: [
                 'Open your browser’s menu.',
                 'Look for <strong>Install</strong>, <strong>Install app</strong> or <strong>Add to Home screen</strong>.',
@@ -2491,27 +2520,78 @@
 
     // Static author-written markup, so innerHTML is safe here.
     let installHintLabel = 'Tap for install instructions';
+    function stepsHtml(guide) {
+        return '<ol>' + guide.steps.map((s) => '<li>' + s + '</li>').join('') + '</ol>';
+    }
+
     function renderInstallSteps() {
         const guide = detectInstallGuide();
         const box = document.getElementById('install-steps');
         const hint = document.getElementById('install-hint');
-        if (box) {
-            box.innerHTML = '<ol>' +
-                guide.steps.map((s) => '<li>' + s + '</li>').join('') + '</ol>';
-        }
         installHintLabel = 'Tap for ' + guide.name + ' install instructions';
-        if (hint && !box.classList.contains('show')) hint.textContent = installHintLabel;
+        if (hint && box && !box.classList.contains('show')) hint.textContent = installHintLabel;
+        if (!box) return;
+
+        // Detection can be wrong — an unrecognised browser, or someone
+        // installing on a different device from the one they are reading on —
+        // so every other set of steps stays one tap away rather than the
+        // detected browser being the only thing on offer.
+        let others = '';
+        Object.keys(INSTALL_GUIDES).forEach((key) => {
+            const other = INSTALL_GUIDES[key];
+            if (other.label === guide.label) return;
+            others += '<h5>' + other.label + '</h5>' + stepsHtml(other);
+        });
+
+        box.innerHTML =
+            '<p class="install-detected">Steps for <strong>' + guide.label + '</strong></p>' +
+            stepsHtml(guide) +
+            '<button type="button" class="install-other-toggle" id="install-other-toggle">' +
+            'Using a different browser or device?</button>' +
+            '<div class="install-other" id="install-other">' + others + '</div>';
+
+        const toggle = document.getElementById('install-other-toggle');
+        const otherBox = document.getElementById('install-other');
+        if (toggle && otherBox) {
+            toggle.addEventListener('click', () => {
+                otherBox.classList.toggle('show');
+                toggle.textContent = otherBox.classList.contains('show')
+                    ? 'Hide other browsers'
+                    : 'Using a different browser or device?';
+            });
+        }
     }
 
-    // Running standalone proves it is installed. From a browser tab only
-    // Chromium can tell us, via a self-referencing related_applications entry
-    // in the manifest; Safari and Firefox return nothing, and in that case the
-    // button stays rather than us guessing wrong and hiding it.
+    // Three ways to know it is installed, in descending order of certainty:
+    //
+    //   1. We are running standalone. Proof, but only from inside the
+    //      installed app, which is not where the button is a nuisance.
+    //   2. getInstalledRelatedApps(), against the self-referencing
+    //      related_applications entry in the manifest. Chromium only.
+    //   3. A flag in localStorage, set when the browser reports an install or
+    //      when the user says so. Safari and Firefox offer no API at all, so
+    //      without this the button could never be dismissed on an iPhone.
+    //
+    // No browser can report an *uninstall*, so the flag is one-way — hence the
+    // "Install help" link, which is the way back if it is ever wrong.
+    const INSTALLED_KEY = 'drHealth.installed.v1';
+    function installedFlag() {
+        try { return localStorage.getItem(INSTALLED_KEY) === '1'; } catch (e) { return false; }
+    }
+    function setInstalledFlag(on) {
+        try {
+            if (on) localStorage.setItem(INSTALLED_KEY, '1');
+            else localStorage.removeItem(INSTALLED_KEY);
+        } catch (e) {}
+    }
+    function isStandaloneNow() {
+        return window.matchMedia('(display-mode: standalone)').matches ||
+            window.navigator.standalone === true;
+    }
+
     async function appearsInstalled() {
-        if (window.matchMedia('(display-mode: standalone)').matches ||
-            window.navigator.standalone === true) {
-            return true;
-        }
+        if (isStandaloneNow()) return true;
+        if (installedFlag()) return true;
         try {
             if (navigator.getInstalledRelatedApps) {
                 const apps = await navigator.getInstalledRelatedApps();
@@ -2523,9 +2603,13 @@
 
     function updateInstallPrompt() {
         const wrap = document.getElementById('install-wrap');
+        const reset = document.getElementById('install-reset');
         if (!wrap) return;
         appearsInstalled().then((installed) => {
             wrap.classList.toggle('visible', !installed);
+            // Inside the installed app the block is pointless either way, so
+            // only offer the way back when we are in a browser.
+            if (reset) reset.classList.toggle('visible', installed && !isStandaloneNow());
         }).catch(() => wrap.classList.add('visible'));
     }
     renderInstallSteps();
@@ -2546,8 +2630,18 @@
     });
     window.addEventListener('appinstalled', () => {
         deferredInstallPrompt = null;
+        setInstalledFlag(true);
         const btn = document.getElementById('install-now-btn');
         if (btn) btn.classList.remove('visible');
+        updateInstallPrompt();
+    });
+
+    document.getElementById('install-dismiss').addEventListener('click', () => {
+        setInstalledFlag(true);
+        updateInstallPrompt();
+    });
+    document.getElementById('install-reset').addEventListener('click', () => {
+        setInstalledFlag(false);
         updateInstallPrompt();
     });
 
