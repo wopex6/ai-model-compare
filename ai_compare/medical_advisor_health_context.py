@@ -7,7 +7,7 @@ import json
 from decimal import Decimal
 import os
 import re
-from datetime import datetime
+from datetime import date, datetime
 from typing import Dict, List, Optional
 from pathlib import Path
 
@@ -553,6 +553,57 @@ def _health_ai_chat(messages, max_tokens=2000, temperature=0.1, model=None):
     return response.choices[0].message.content
 
 
+# Drug names a paramedic wants called out separately from the full meds list.
+# Includes antiplatelets: the scene question is "will they bleed", not the
+# pharmacological class.
+_ANTICOAGULANT_MARKERS = (
+    'warfarin', 'coumadin', 'marevan',
+    'apixaban', 'eliquis',
+    'rivaroxaban', 'xarelto',
+    'dabigatran', 'pradaxa',
+    'edoxaban', 'lixiana',
+    'enoxaparin', 'clexane',
+    'heparin',
+    'clopidogrel', 'plavix',
+    'ticagrelor', 'brilinta',
+    'prasugrel', 'effient',
+    'aspirin', 'cartia', 'astrix', 'cardiprin', 'asasantin',
+)
+
+
+def age_from_date_of_birth(dob) -> str:
+    """Years old today from an ISO date. Empty string if the value is unusable."""
+    raw = str(dob or '').strip()[:10]
+    if not raw:
+        return ''
+    try:
+        born = datetime.strptime(raw, '%Y-%m-%d').date()
+    except ValueError:
+        return ''
+    today = date.today()
+    years = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+    if years < 0 or years > 130:
+        return ''
+    return str(years)
+
+
+def anticoagulant_labels(medications) -> List[str]:
+    """Current meds whose names look like a blood thinner or antiplatelet."""
+    out = []
+    for item in medications or []:
+        if not isinstance(item, dict) or not is_active(item):
+            continue
+        name = str(item.get('name') or '').strip()
+        if not name:
+            continue
+        hay = name.lower()
+        if not any(marker in hay for marker in _ANTICOAGULANT_MARKERS):
+            continue
+        label = ' '.join(filter(None, [name, str(item.get('dose') or '').strip()])).strip()
+        out.append(label)
+    return out
+
+
 class HealthProfile:
     """Persistent health profile for a user"""
 
@@ -628,10 +679,20 @@ class HealthProfile:
             "personal": {
                 "age": None,
                 "gender": None,
+                "date_of_birth": "",
                 "location": "",
                 "blood_type": "",
+                "weight": "",
+                "height": "",
+                "language": "",
                 "allergies": [],
+                "anaphylaxis": "",
+                "advance_care": "",
+                "implants": [],
+                "pregnancy": "",
                 "medical_history": "",
+                "gp_name": "",
+                "gp_phone": "",
                 "doctors": "",
                 "ec_name": "",
                 "ec_rel": "",
@@ -754,8 +815,9 @@ class HealthProfile:
         self.data["name"] = value
 
     PERSONAL_KEYS = {
-        "age", "gender", "location", "blood_type", "weight", "height",
-        "allergies", "medical_history", "doctors",
+        "age", "gender", "date_of_birth", "location", "blood_type", "weight", "height",
+        "language", "allergies", "anaphylaxis", "advance_care", "implants", "pregnancy",
+        "medical_history", "gp_name", "gp_phone", "doctors",
         "ec_name", "ec_rel", "ec_phone",
     }
 
@@ -819,46 +881,79 @@ class HealthProfile:
         """Read-only emergency card derived from the single source of truth.
 
         Conditions and medications come from the live lists (current items
-        only, so a stopped drug never appears), and identity/contact fields
-        come from `personal`.  The PWA caches this locally for offline use.
+        only, so a stopped drug never appears). Identity, alerts and contact
+        fields come from `personal`. Blood thinners are highlighted from the
+        current medication list rather than typed in a second time. The PWA
+        caches this locally for offline use.
         """
         personal = self.data.get("personal", {}) or {}
 
         def _current(items):
             out = []
             for it in items or []:
-                status = it.get("status") or "active"
-                if status in ("active", "paused", "investigating"):
+                if isinstance(it, dict) and is_active(it):
                     out.append(it)
             return out
 
         allergies = personal.get("allergies") or []
         if isinstance(allergies, str):
             allergies = [a.strip() for a in re.split(r"[\n,]+", allergies) if a.strip()]
+        else:
+            allergies = [str(a).strip() for a in allergies if str(a).strip()]
         for r in (self.data.get("diet", {}) or {}).get("restrictions", []) or []:
             if isinstance(r, str) and r.lower().startswith("allergy:"):
                 name = r.split(":", 1)[1].strip()
                 if name and name.lower() not in {a.lower() for a in allergies}:
                     allergies.append(name)
 
+        implants = personal.get("implants") or []
+        if isinstance(implants, str):
+            implants = [s.strip() for s in re.split(r"[\n,]+", implants) if s.strip()]
+        else:
+            implants = [str(s).strip() for s in implants if str(s).strip()]
+
+        current_meds = _current(self.data.get("medications"))
+        dob = str(personal.get("date_of_birth") or "").strip()
+        age = personal.get("age") or ""
+        derived_age = age_from_date_of_birth(dob)
+        if derived_age:
+            age = derived_age
+
+        def _med_line(m):
+            return " ".join(filter(None, [
+                str(m.get("name") or "").strip(),
+                str(m.get("dose") or "").strip(),
+                str(m.get("frequency") or "").strip(),
+            ])).strip()
+
         return {
             "name": self.data.get("name", ""),
-            "age": personal.get("age") or "",
+            "date_of_birth": dob,
+            "age": age or "",
+            "gender": personal.get("gender") or "",
+            "weight": personal.get("weight") or "",
+            "height": personal.get("height") or "",
             "blood": personal.get("blood_type") or "",
+            "language": personal.get("language") or "",
+            "advance_care": personal.get("advance_care") or "",
+            "anaphylaxis": personal.get("anaphylaxis") or "",
+            "pregnancy": personal.get("pregnancy") or "",
+            "implants": implants,
+            "anticoagulants": anticoagulant_labels(current_meds),
             "conditions": [
                 (c.get("name", "") + (" (suspected)" if c.get("status") == "investigating" else ""))
                 for c in _current(self.data.get("conditions")) if c.get("name")
             ],
-            "medications": [
-                " ".join(filter(None, [m.get("name", ""), m.get("dose", "")])).strip()
-                for m in _current(self.data.get("medications")) if m.get("name")
-            ],
+            "medications": [_med_line(m) for m in current_meds if m.get("name")],
             "allergies": allergies,
             "history": personal.get("medical_history") or "",
+            "gp_name": personal.get("gp_name") or "",
+            "gp_phone": personal.get("gp_phone") or "",
             "doctors": personal.get("doctors") or "",
             "ec_name": personal.get("ec_name") or "",
             "ec_rel": personal.get("ec_rel") or "",
             "ec_phone": personal.get("ec_phone") or "",
+            "location": personal.get("location") or "",
         }
 
     def _queue_proposals(self, proposals: List[Dict]):
@@ -2113,14 +2208,23 @@ class HealthProfile:
             parts = []
             if personal.get("gender"):
                 parts.append(personal['gender'])
-            if personal.get("age"):
-                parts.append(f"age {personal['age']}")
+            age = personal.get("age") or age_from_date_of_birth(personal.get("date_of_birth"))
+            if age:
+                parts.append(f"age {age}")
+            if personal.get("weight"):
+                parts.append(f"weight {personal['weight']}")
+            if personal.get("height"):
+                parts.append(f"height {personal['height']}")
             if personal.get("blood_type"):
                 parts.append(f"blood type {personal['blood_type']}")
             if personal.get("location"):
                 parts.append(personal['location'])
+            if personal.get("language"):
+                parts.append("language / communication: " + str(personal['language']))
+            if personal.get("pregnancy"):
+                parts.append("pregnancy: " + str(personal['pregnancy']))
             if parts:
-                sections.append("Patient: " + ", ".join(parts))
+                sections.append("Patient: " + ", ".join(str(p) for p in parts))
 
         # Allergies — safety-critical, so they lead the clinical picture.
         # Sources: Personal Details field plus diet restrictions tagged ALLERGY:.
@@ -2137,6 +2241,18 @@ class HealthProfile:
                     allergies.append(name)
         if allergies:
             sections.append("ALLERGIES (must not be contradicted by advice): " + ", ".join(allergies))
+
+        if personal.get("anaphylaxis"):
+            sections.append("Anaphylaxis / adrenaline pen: " + str(personal['anaphylaxis']))
+        if personal.get("advance_care"):
+            sections.append("Advance care / DNR: " + str(personal['advance_care']))
+        implants = personal.get("implants") or []
+        if isinstance(implants, str):
+            implants = [s.strip() for s in re.split(r"[\n,]+", implants) if s.strip()]
+        else:
+            implants = [str(s).strip() for s in implants if str(s).strip()]
+        if implants:
+            sections.append("Implants / devices: " + ", ".join(implants))
 
         if personal.get("medical_history"):
             sections.append(f"Medical history: {personal['medical_history']}")

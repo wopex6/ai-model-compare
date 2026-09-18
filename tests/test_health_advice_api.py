@@ -344,14 +344,57 @@ class HealthAdviceApiTest(unittest.TestCase):
         self.assertEqual(card['allergies'], ['peanuts'])
         self.assertEqual(card['ec_phone'], '555-9999')
 
+    def test_emergency_card_includes_paramedic_fields_and_derived_thinners(self):
+        self.seed({
+            'name': 'Test Person',
+            'personal': {
+                'date_of_birth': '1974-03-01',
+                'weight': '72 kg',
+                'advance_care': 'Not for CPR. Copy in the bedside drawer.',
+                'implants': ['pacemaker 2019'],
+                'anaphylaxis': 'Peanuts. EpiPen in the kitchen drawer.',
+                'gp_name': 'Dr Smith',
+                'gp_phone': '0295551234',
+                'ec_phone': '0411111111',
+                'language': 'Cantonese; limited English',
+            },
+            'medications': [
+                {'name': 'apixaban', 'dose': '5mg', 'frequency': 'twice daily',
+                 'status': 'active'},
+                {'name': 'old warfarin', 'status': 'stopped'},
+            ],
+        })
+        card = self.client.get('/api/health-profile/emergency-card').get_json()['card']
+        self.assertEqual(card['date_of_birth'], '1974-03-01')
+        self.assertEqual(card['age'], str(
+            __import__('datetime').date.today().year - 1974 -
+            ((__import__('datetime').date.today().month,
+              __import__('datetime').date.today().day) < (3, 1))))
+        self.assertEqual(card['weight'], '72 kg')
+        self.assertEqual(card['advance_care'][:11], 'Not for CPR')
+        self.assertEqual(card['implants'], ['pacemaker 2019'])
+        self.assertEqual(card['anticoagulants'], ['apixaban 5mg'])
+        self.assertEqual(card['medications'], ['apixaban 5mg twice daily'])
+        self.assertNotIn('old warfarin', ' '.join(card['medications']))
+        self.assertEqual(card['gp_phone'], '0295551234')
+        self.assertEqual(card['language'], 'Cantonese; limited English')
+
     def test_personal_accepts_emergency_fields(self):
         self.seed({})
         body = self.client.put('/api/health-profile', json={'personal': {
             'ec_name': 'Jane', 'ec_phone': '555-9999',
+            'date_of_birth': '1974-03-01', 'weight': '72 kg',
+            'advance_care': 'Not for CPR', 'implants': ['pacemaker'],
+            'gp_phone': '0295551234',
             'medical_history': 'Appendix 2010', 'made_up_key': 'nope'}}).get_json()
         pers = body['profile']['personal']
         self.assertEqual(pers['ec_name'], 'Jane')
         self.assertEqual(pers['medical_history'], 'Appendix 2010')
+        self.assertEqual(pers['date_of_birth'], '1974-03-01')
+        self.assertEqual(pers['weight'], '72 kg')
+        self.assertEqual(pers['advance_care'], 'Not for CPR')
+        self.assertEqual(pers['implants'], ['pacemaker'])
+        self.assertEqual(pers['gp_phone'], '0295551234')
         self.assertNotIn('made_up_key', pers)
 
     def test_prompt_context_has_medical_info_but_no_identifiers(self):
@@ -370,6 +413,17 @@ class HealthAdviceApiTest(unittest.TestCase):
         self.assertIn('walking daily', ctx)
         self.assertNotIn('Secret Name', ctx)
         self.assertNotIn('555-9999', ctx)
+        self.assertNotIn('Dr Smith', ctx)
+
+    def test_prompt_includes_alerts_but_not_gp_phone(self):
+        self.seed({'personal': {
+            'weight': '72 kg', 'advance_care': 'Not for CPR',
+            'implants': ['ICD'], 'gp_name': 'Dr Smith', 'gp_phone': '0295551234'}})
+        ctx = HealthContextManager.get_context_for_prompt(TEST_USER)
+        self.assertIn('72 kg', ctx)
+        self.assertIn('Not for CPR', ctx)
+        self.assertIn('ICD', ctx)
+        self.assertNotIn('0295551234', ctx)
         self.assertNotIn('Dr Smith', ctx)
 
 

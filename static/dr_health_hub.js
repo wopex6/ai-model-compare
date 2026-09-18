@@ -153,20 +153,40 @@
         personal: {
             title: 'Personal Details',
             icon: 'fa-id-card',
-            desc: 'Age, gender, blood type',
-            hint: 'Single source for your details. The emergency card is built from this - nothing is entered twice.',
+            desc: 'Identity, alerts and contacts for the emergency card',
+            hint: 'This is the only place these facts are entered. The emergency card is built from here plus your current conditions and medications — nothing is typed twice.',
             fields: [
+                { heading: 'Who you are' },
                 { key: 'name', label: 'Full name', type: 'text' },
-                { key: 'age', label: 'Age', type: 'text' },
-                { key: 'gender', label: 'Gender', type: 'text' },
-                { key: 'location', label: 'Location', type: 'text' },
+                { key: 'date_of_birth', label: 'Date of birth', type: 'date',
+                  hint: 'Preferred over age — it does not go stale, and hospitals match records on it.' },
+                { key: 'age', label: 'Age (if no date of birth)', type: 'text' },
+                { key: 'gender', label: 'Sex / gender', type: 'text' },
+                { key: 'weight', label: 'Weight', type: 'text', hint: 'Include the unit, e.g. 72 kg. Used for drug doses on scene.' },
+                { key: 'height', label: 'Height', type: 'text' },
                 { key: 'blood_type', label: 'Blood type', type: 'text' },
-                { key: 'allergies', label: 'Allergies - one per line', type: 'list' },
-                { key: 'medical_history', label: 'Medical history - major illnesses, surgeries, family history', type: 'textarea' },
-                { key: 'doctors', label: 'Doctors - name, specialty, phone; one per line', type: 'textarea' },
+                { key: 'language', label: 'Language / communication needs', type: 'text',
+                  hint: 'e.g. Cantonese, Auslan, hard of hearing.' },
+                { key: 'location', label: 'Suburb / area', type: 'text' },
+                { heading: 'Tell a paramedic first' },
+                { key: 'allergies', label: 'Allergies — one per line', type: 'list' },
+                { key: 'anaphylaxis', label: 'Anaphylaxis and where the adrenaline pen is', type: 'textarea',
+                  hint: 'e.g. Has had anaphylaxis to peanuts. EpiPen in the kitchen drawer / bag.' },
+                { key: 'advance_care', label: 'Advance care / not for CPR', type: 'textarea',
+                  hint: 'Leave blank if there is no plan. Shown at the top of the unlocked emergency card.' },
+                { key: 'implants', label: 'Implants and devices — one per line', type: 'list',
+                  hint: 'Pacemaker, ICD, insulin pump, stents, cochlear implant, metal joints.' },
+                { key: 'pregnancy', label: 'Pregnancy / due date', type: 'text',
+                  hint: 'Leave blank if not applicable.' },
+                { key: 'medical_history', label: 'Other medical history', type: 'textarea',
+                  hint: 'Major illnesses, surgeries, family history — not a second copy of conditions.' },
+                { heading: 'Who to call' },
+                { key: 'gp_name', label: 'Usual GP', type: 'text' },
+                { key: 'gp_phone', label: 'GP phone', type: 'tel' },
+                { key: 'doctors', label: 'Other doctors — name, specialty, phone; one per line', type: 'textarea' },
                 { key: 'ec_name', label: 'Emergency contact name', type: 'text' },
                 { key: 'ec_rel', label: 'Emergency contact relationship', type: 'text' },
-                { key: 'ec_phone', label: 'Emergency contact phone', type: 'text' }
+                { key: 'ec_phone', label: 'Emergency contact phone', type: 'tel' }
             ]
         },
         diet: {
@@ -808,9 +828,15 @@
         },
 
         inputHtml(field, value) {
+            if (field.heading) {
+                return '<div class="hub-form-group">' + esc(field.heading) + '</div>';
+            }
             const id = 'hf-' + field.key;
             let html = '<label class="hub-input-label" for="' + id + '">' + esc(field.label) +
                 (field.required ? ' *' : '') + '</label>';
+            if (field.hint) {
+                html += '<div class="hub-field-hint">' + esc(field.hint) + '</div>';
+            }
             if (field.type === 'textarea') {
                 html += '<textarea class="hub-input" id="' + id + '" data-key="' + esc(field.key) +
                     '" data-type="textarea" rows="3">' + esc(toText(value)) + '</textarea>';
@@ -828,7 +854,8 @@
                 }
                 html += '</select>';
             } else {
-                const t = field.type === 'date' ? 'date' : 'text';
+                const t = (field.type === 'date' || field.type === 'tel' || field.type === 'number')
+                    ? field.type : 'text';
                 html += '<input class="hub-input" id="' + id + '" data-key="' + esc(field.key) +
                     '" data-type="text" type="' + t + '" value="' + esc(toText(value)) + '">';
             }
@@ -865,10 +892,15 @@
             let html = '<div class="hub-form" data-object="' + esc(id) + '">';
             html += '<div class="hub-form-hint">' + esc(schema.hint || 'Changes save straight to your record.') + '</div>';
             for (let i = 0; i < schema.fields.length; i++) {
-                const value = (id === 'personal' && schema.fields[i].key === 'name')
+                const field = schema.fields[i];
+                if (field.heading) {
+                    html += '<div class="hub-form-group">' + esc(field.heading) + '</div>';
+                    continue;
+                }
+                const value = (id === 'personal' && field.key === 'name')
                     ? (this.profile && this.profile.name)
-                    : obj[schema.fields[i].key];
-                html += this.inputHtml(schema.fields[i], value);
+                    : obj[field.key];
+                html += this.inputHtml(field, value);
             }
             html += '<div class="hub-row-actions">';
             html += '<button class="hub-btn primary" id="hub-obj-save"><i class="fas fa-check"></i> Save</button>';
@@ -1051,8 +1083,7 @@
         // ---------- Vitals ----------
         vitalsBody() {
             let html = '<div class="hub-note">';
-            html += 'A read-only card for paramedics, built from Personal Details and your current ' +
-                'conditions and medications. A copy is kept on this phone so it works without internet.';
+            html += 'A read-only card for paramedics. It is built only from Personal Details and your current conditions and medications — edit those, not this card. A copy is kept on this phone so it works without internet.';
             html += '</div>';
             html += '<div class="hub-row-actions" style="padding:0 14px;">';
             html += '<button class="hub-btn primary" id="hub-open-vitals"><i class="fas fa-kit-medical"></i> Open emergency card</button>';
@@ -1611,6 +1642,10 @@
                 this.busy = false;
                 this.render();
                 this.status('Saved.');
+                if ((id === 'medications' || id === 'conditions') &&
+                    typeof window.syncEmergencyFromServer === 'function') {
+                    window.syncEmergencyFromServer().catch(function () {});
+                }
             } catch (e) {
                 this.busy = false;
                 this.status('Network error while saving.', true);
@@ -1674,6 +1709,9 @@
                 if (data.profile) this.profile = data.profile;
                 this.busy = false;
                 this.status('Saved.');
+                if (id === 'personal' && typeof window.syncEmergencyFromServer === 'function') {
+                    window.syncEmergencyFromServer().catch(function () {});
+                }
             } catch (e) {
                 this.busy = false;
                 this.status('Network error while saving.', true);
