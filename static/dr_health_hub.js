@@ -526,6 +526,18 @@
             if (scroller) scroller.scrollTop = (view === 'index' && this._indexScroll) ? this._indexScroll : 0;
         },
 
+        // One step up: leave an add/edit form for the list, leave a section
+        // for the hub. Never skip a level.
+        backOneLevel() {
+            if (this.adding || this.editIndex !== null) {
+                this.adding = false;
+                this.editIndex = null;
+                this.render();
+                return;
+            }
+            this.go('index');
+        },
+
         count(id) {
             if (id === 'reminders') {
                 if (!this.overview) return null;
@@ -881,7 +893,6 @@
             }
             html += '<div class="hub-row-actions">';
             html += '<button class="hub-btn primary" data-save="' + index + '"><i class="fas fa-check"></i> Save</button>';
-            html += '<button class="hub-btn" data-cancel="1">Cancel</button>';
             html += '</div></div>';
             return html;
         },
@@ -1611,7 +1622,7 @@
             const kind = this.kindOf(id);
 
             const back = this.root.querySelector('#hub-back');
-            if (back) back.addEventListener('click', () => self.go('index'));
+            if (back) back.addEventListener('click', () => self.backOneLevel());
 
             const filter = this.root.querySelector('#hub-filter');
             if (filter) {

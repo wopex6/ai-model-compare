@@ -356,7 +356,7 @@ def run():
         page.wait_for_timeout(1500)
         r.check('emergency modal opens from the hub',
                 page.is_visible('#emergency-modal.active'), 'modal not active')
-        page.click('#emergency-close')
+        page.click('#emergency-back')
         page.wait_for_timeout(500)
         r.check('emergency modal closes',
                 not page.is_visible('#emergency-modal.active'))
