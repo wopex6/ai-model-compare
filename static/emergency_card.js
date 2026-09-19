@@ -39,6 +39,52 @@
         catch (e) { return null; }
     }
 
+    function save(card) {
+        if (!card) return null;
+        const stamped = {};
+        const keys = Object.keys(card);
+        for (let i = 0; i < keys.length; i++) stamped[keys[i]] = card[keys[i]];
+        stamped.cached_at = new Date().toISOString();
+        try { localStorage.setItem(KEY, JSON.stringify(stamped)); } catch (e) {}
+        return stamped;
+    }
+
+    // Pull a newer card from the server when this phone already has a token.
+    // Never opens /dr-health — a leftover token only updates the cached card.
+    function refreshFromNetwork() {
+        return new Promise(function (resolve) {
+            let token = null;
+            try { token = localStorage.getItem('authToken'); } catch (e) {}
+            if (!token) {
+                resolve(load());
+                return;
+            }
+            let done = false;
+            function finish(card) {
+                if (done) return;
+                done = true;
+                resolve(card || load());
+            }
+            const timer = setTimeout(function () { finish(load()); }, 8000);
+            fetch('/api/health-profile/emergency-card', {
+                headers: { Authorization: 'Bearer ' + token }
+            }).then(function (resp) {
+                if (!resp.ok) throw new Error('unavailable');
+                return resp.json();
+            }).then(function (data) {
+                clearTimeout(timer);
+                if (data && data.success && data.card) {
+                    finish(save(data.card));
+                    return;
+                }
+                finish(load());
+            }).catch(function () {
+                clearTimeout(timer);
+                finish(load());
+            });
+        });
+    }
+
     function hasData(card) {
         const v = card || {};
         return !!(v.name || v.date_of_birth || v.age || v.blood || v.weight ||
@@ -155,6 +201,8 @@
     root.EmergencyCard = {
         KEY: KEY,
         load: load,
+        save: save,
+        refreshFromNetwork: refreshFromNetwork,
         hasData: hasData,
         medLabel: medLabel,
         esc: esc,
