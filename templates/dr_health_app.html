@@ -237,12 +237,17 @@
     .emergency-header {
         background: #c62828; color: white;
         padding: 14px 16px; display: flex; align-items: center; justify-content: space-between;
-        flex: 0 0 auto;
+        flex: 0 0 auto; gap: 8px;
     }
-    .emergency-header h2 { margin: 0; font-size: 1.15rem; }
+    .emergency-header h2 { margin: 0; font-size: 1.15rem; flex: 1; }
     .emergency-header button {
         background: white; color: #c62828; border: none; border-radius: 50%;
         width: 36px; height: 36px; font-size: 1.1rem; cursor: pointer;
+    }
+    #emergency-back {
+        border-radius: 18px; width: auto; padding: 0 12px;
+        font-size: 0.9rem; font-weight: 600;
+        display: inline-flex; align-items: center; gap: 6px; flex: 0 0 auto;
     }
     .emergency-content {
         flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px;
@@ -836,6 +841,7 @@
     <!-- ============ EMERGENCY MODAL ============ -->
     <div id="emergency-modal">
         <div class="emergency-header">
+            <button type="button" id="emergency-back" title="Back to previous page"><i class="fas fa-arrow-left"></i> Back</button>
             <h2><i class="fas fa-kit-medical"></i> Emergency Info</h2>
             <div style="display:flex; gap:8px; align-items:center;">
                 <button class="action" id="emergency-edit-btn" title="Edit in Personal Details"><i class="fas fa-pen"></i></button>
@@ -2939,6 +2945,7 @@
         });
     })();
     document.getElementById('emergency-btn').addEventListener('click', openEmergency);
+    document.getElementById('emergency-back').addEventListener('click', closeEmergency);
     document.getElementById('emergency-close').addEventListener('click', closeEmergency);
     document.getElementById('emergency-edit-btn').addEventListener('click', editEmergency);
     (function initLoginEmergencyButton() {

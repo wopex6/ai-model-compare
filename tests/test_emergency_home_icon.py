@@ -29,6 +29,11 @@ def test_emergency_page_and_icons_are_public():
     assert 'Android' in html
     assert "register('/dr_health_sw.js'" in html
     assert "register('/static/emergency_sw.js'" not in html
+    assert 'id="emergency-refresh"' in html
+    assert 'id="emergency-close"' in html
+    assert 'autoRefresh' in html
+    assert 'href="/dr-health"' not in html
+    assert 'href="/dr-health/"' not in html
 
     redir = client.get('/emergency', follow_redirects=False)
     assert redir.status_code == 302
@@ -42,6 +47,14 @@ def test_emergency_page_and_icons_are_public():
 
     missing = client.get('/dr-health/emergency-icon-16.png')
     assert missing.status_code == 404
+
+
+def test_logged_in_emergency_modal_has_back():
+    html = open(os.path.join(os.path.dirname(__file__), '..',
+                             'templates', 'dr_health_app.html'),
+                encoding='utf-8').read()
+    assert 'id="emergency-back"' in html
+    assert 'id="emergency-close"' in html
 
 
 def test_emergency_manifest_is_its_own_app():
@@ -71,7 +84,7 @@ def test_service_worker_caches_emergency_shell_separately():
     assert "EMERGENCY_SHELL = '/dr-health/emergency'" in sw
     assert '/static/emergency_card.js' in sw
     assert "pathname === EMERGENCY_SHELL" in sw
-    assert 'dr-health-shell-v85' in sw
+    assert 'dr-health-shell-v86' in sw
     # The previous bug: every navigate was stored as the main app shell, so
     # opening Emergency offline would have overwritten /dr-health.
     assert 'cache.put(APP_SHELL, copy)' not in sw

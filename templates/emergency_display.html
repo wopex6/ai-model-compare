@@ -24,8 +24,22 @@ html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Segoe UI', s
     padding: calc(env(safe-area-inset-top, 0px) + 14px) 16px 14px;
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
 }
-.topbar h1 { margin: 0; font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
-.topbar a { color: #fff; text-decoration: none; font-size: 0.85rem; font-weight: 600; }
+.topbar h1 { margin: 0; font-size: 1.15rem; font-weight: 700; display: flex; align-items: center; gap: 8px; flex: 1; }
+.topbar-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+.topbar-actions button {
+    background: #fff; color: #c62828; border: none; border-radius: 18px;
+    padding: 7px 12px; font-size: 0.85rem; font-weight: 700; font-family: inherit;
+    cursor: pointer;
+}
+.topbar-actions button:disabled { opacity: 0.6; }
+#closed-screen {
+    display: none; position: fixed; inset: 0; z-index: 20;
+    background: #8b0000; color: #fff;
+    flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 24px;
+}
+#closed-screen.visible { display: flex; }
+#closed-screen p { margin: 0 0 16px; font-size: 1.1rem; }
 .content { flex: 1; padding: 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .install-card {
     background: #f7f9fa; border: 1px solid #e3e7ea; border-radius: 12px;
@@ -56,7 +70,10 @@ html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Segoe UI', s
             </svg>
             Emergency
         </h1>
-        <a href="/dr-health">Dr. Health</a>
+        <div class="topbar-actions">
+            <button type="button" id="emergency-refresh">Refresh</button>
+            <button type="button" id="emergency-close">Close</button>
+        </div>
     </div>
     <div class="content">
         <div class="install-card" id="install-card">
@@ -86,20 +103,70 @@ html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Segoe UI', s
         <div id="emergency-view"></div>
     </div>
 </div>
+<div id="closed-screen">
+    <p>Emergency card closed.</p>
+</div>
 <script src="{{ url_for('static', filename='emergency_card.js') }}"></script>
 <script>
 (function () {
     'use strict';
     const view = document.getElementById('emergency-view');
-    const card = window.EmergencyCard.load();
-    const when = card && card.cached_at ? new Date(card.cached_at) : null;
-    const lead = (when && !isNaN(when.getTime()))
-        ? '<div class="emergency-cache-note">Saved on this phone on ' + when.toLocaleString() + '. Open Dr. Health to refresh it.</div>'
-        : '<div class="emergency-cache-note">Saved on this phone. Open Dr. Health to refresh it.</div>';
-    window.EmergencyCard.render(view, card, {
-        leadHtml: window.EmergencyCard.hasData(card) ? lead : '',
-        emptyText: 'No emergency details on this phone yet. Open Dr. Health, add Personal Details and Medications while online, then return here.'
+    const refreshBtn = document.getElementById('emergency-refresh');
+    const closeBtn = document.getElementById('emergency-close');
+    const closedScreen = document.getElementById('closed-screen');
+    let refreshing = false;
+
+    function leadHtml(card, status) {
+        const when = card && card.cached_at ? new Date(card.cached_at) : null;
+        const stamp = (when && !isNaN(when.getTime()))
+            ? 'Saved on this phone on ' + when.toLocaleString() + '.'
+            : 'Saved on this phone.';
+        const extra = status ? ' ' + status : '';
+        return '<div class="emergency-cache-note">' + stamp + extra + '</div>';
+    }
+
+    function showCard(card, status) {
+        window.EmergencyCard.render(view, card, {
+            sourceNote: false,
+            leadHtml: window.EmergencyCard.hasData(card) ? leadHtml(card, status) : '',
+            emptyText: 'No emergency details on this phone yet. Sign in to Dr. Health on this phone first — this icon does not open that app.'
+        });
+    }
+
+    function autoRefresh() {
+        if (refreshing) return Promise.resolve();
+        refreshing = true;
+        if (refreshBtn) refreshBtn.disabled = true;
+        showCard(window.EmergencyCard.load(), 'Refreshing…');
+        const pull = (window.EmergencyCard.refreshFromNetwork
+            ? window.EmergencyCard.refreshFromNetwork()
+            : Promise.resolve(window.EmergencyCard.load()));
+        return Promise.resolve(pull).then(function (card) {
+            showCard(card || window.EmergencyCard.load());
+        }).catch(function () {
+            showCard(window.EmergencyCard.load());
+        }).then(function () {
+            refreshing = false;
+            if (refreshBtn) refreshBtn.disabled = false;
+        });
+    }
+
+    function closeStandalone() {
+        if (closedScreen) closedScreen.classList.add('visible');
+        try { window.close(); } catch (e) {}
+    }
+
+    showCard(window.EmergencyCard.load());
+    autoRefresh();
+    window.addEventListener('pageshow', function (e) {
+        if (closedScreen) closedScreen.classList.remove('visible');
+        if (e.persisted) autoRefresh();
     });
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') autoRefresh();
+    });
+    if (refreshBtn) refreshBtn.addEventListener('click', autoRefresh);
+    if (closeBtn) closeBtn.addEventListener('click', closeStandalone);
 
     const standalone = window.matchMedia('(display-mode: standalone)').matches ||
         window.navigator.standalone === true;
