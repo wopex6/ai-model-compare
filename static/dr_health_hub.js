@@ -461,6 +461,7 @@
         adding: false,
         filter: '',
         busy: false,
+        navStack: [],
 
         init(rootEl) {
             this.root = rootEl;
@@ -503,20 +504,30 @@
             }
         },
 
-        go(view, section) {
+        go(view, section, opts) {
+            opts = opts || {};
             if (view === 'vitals' || section === 'vitals') {
                 if (typeof window.openEmergency === 'function') {
                     window.openEmergency();
                     return;
                 }
             }
+            const destSection = section || null;
             // Leaving the index: remember the scroll position so Back lands
             // where the user was instead of jumping to the top.
             const before = this.root ? this.root.querySelector('.hub-scroll') : null;
             if (before && this.route && this.route.view === 'index') {
                 this._indexScroll = before.scrollTop;
             }
-            this.route = { view: view, section: section || null };
+            if (!opts.skipPush &&
+                (this.route.view !== view || this.route.section !== destSection)) {
+                this.pushReturn({
+                    kind: 'hub',
+                    view: this.route.view,
+                    section: this.route.section
+                });
+            }
+            this.route = { view: view, section: destSection };
             this.openIndex = null;
             this.editIndex = null;
             this.adding = false;
@@ -526,8 +537,16 @@
             if (scroller) scroller.scrollTop = (view === 'index' && this._indexScroll) ? this._indexScroll : 0;
         },
 
-        // One step up: leave an add/edit form for the list, leave a section
-        // for the hub. Never skip a level.
+        pushReturn(frame) {
+            if (!frame) return;
+            const last = this.navStack.length ? this.navStack[this.navStack.length - 1] : null;
+            if (last && last.kind === frame.kind && last.view === frame.view &&
+                last.section === frame.section) return;
+            this.navStack.push(frame);
+        },
+
+        // Always the previous screen: form → list, list → wherever we came
+        // from (hub, emergency card, or another section). Never skip a level.
         backOneLevel() {
             if (this.adding || this.editIndex !== null) {
                 this.adding = false;
@@ -535,7 +554,17 @@
                 this.render();
                 return;
             }
-            this.go('index');
+            const prev = this.navStack.pop();
+            if (!prev || prev.kind === 'hub' && prev.view === 'index' && !prev.section) {
+                this.go('index', null, { skipPush: true });
+                return;
+            }
+            if (prev.kind === 'emergency') {
+                this.go(prev.view || 'index', prev.section, { skipPush: true });
+                if (typeof window.openEmergency === 'function') window.openEmergency();
+                return;
+            }
+            this.go(prev.view, prev.section, { skipPush: true });
         },
 
         count(id) {
