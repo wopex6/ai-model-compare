@@ -2826,10 +2826,24 @@
             v.ec_name || v.ec_phone);
     }
 
+    // Overlay on top of login or the hub. A history entry means the phone
+    // Back button returns to that same screen instead of leaving the app.
+    let emergencyHistoryPushed = false;
+
+    function revealEmergencyModal() {
+        const modal = document.getElementById('emergency-modal');
+        const already = modal.classList.contains('active');
+        modal.classList.add('active');
+        if (!already && !(history.state && history.state.emergency)) {
+            history.pushState({ emergency: true }, '');
+            emergencyHistoryPushed = true;
+        }
+    }
+
     function openEmergency() {
         document.getElementById('emergency-edit-btn').style.display = '';
         renderEmergency(loadEmergencyCache());
-        document.getElementById('emergency-modal').classList.add('active');
+        revealEmergencyModal();
         syncEmergencyFromServer().then(renderEmergency);
     }
 
@@ -2851,11 +2865,26 @@
             view.insertAdjacentElement('afterbegin', note);
         }
         document.getElementById('emergency-edit-btn').style.display = 'none';
-        document.getElementById('emergency-modal').classList.add('active');
+        revealEmergencyModal();
     }
     function closeEmergency() {
-        document.getElementById('emergency-modal').classList.remove('active');
+        const modal = document.getElementById('emergency-modal');
+        if (!modal.classList.contains('active')) return;
+        modal.classList.remove('active');
+        if (emergencyHistoryPushed && history.state && history.state.emergency) {
+            emergencyHistoryPushed = false;
+            history.back();
+        } else {
+            emergencyHistoryPushed = false;
+        }
     }
+    window.addEventListener('popstate', function () {
+        const modal = document.getElementById('emergency-modal');
+        if (modal && modal.classList.contains('active')) {
+            emergencyHistoryPushed = false;
+            modal.classList.remove('active');
+        }
+    });
     function editEmergency() {
         closeEmergency();
         showScreen('hub-screen');
