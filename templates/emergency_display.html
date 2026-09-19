@@ -151,10 +151,32 @@ html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Segoe UI', s
         });
     }
 
-    function closeStandalone() {
-        if (closedScreen) closedScreen.classList.add('visible');
-        try { window.close(); } catch (e) {}
+    function cameFromDrHealth() {
+        try {
+            if (!document.referrer) return false;
+            const ref = new URL(document.referrer);
+            if (ref.origin !== location.origin) return false;
+            return ref.pathname !== '/dr-health/emergency' && ref.pathname !== '/emergency';
+        } catch (e) {
+            return false;
+        }
     }
+
+    function closeStandalone() {
+        // Opened from login or the signed-in app: go back there.
+        // Opened from the home-screen icon: close this app so the home screen
+        // is underneath. Never invent a path into Dr. Health.
+        if (cameFromDrHealth()) {
+            window.history.back();
+            return;
+        }
+        try { window.close(); } catch (e) {}
+        setTimeout(function () {
+            if (!document.hidden && closedScreen) closedScreen.classList.add('visible');
+        }, 200);
+    }
+
+    if (cameFromDrHealth() && closeBtn) closeBtn.textContent = 'Back';
 
     showCard(window.EmergencyCard.load());
     autoRefresh();

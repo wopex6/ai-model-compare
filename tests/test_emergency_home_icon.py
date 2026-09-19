@@ -32,6 +32,8 @@ def test_emergency_page_and_icons_are_public():
     assert 'id="emergency-refresh"' in html
     assert 'id="emergency-close"' in html
     assert 'autoRefresh' in html
+    assert 'cameFromDrHealth' in html
+    assert 'window.close()' in html
     assert 'href="/dr-health"' not in html
     assert 'href="/dr-health/"' not in html
 
@@ -55,6 +57,8 @@ def test_logged_in_emergency_modal_has_back():
                 encoding='utf-8').read()
     assert 'id="emergency-back"' in html
     assert 'id="emergency-close"' in html
+    assert "pushState({ emergency: true }" in html
+    assert "addEventListener('popstate'" in html
 
 
 def test_emergency_manifest_is_its_own_app():
@@ -84,7 +88,7 @@ def test_service_worker_caches_emergency_shell_separately():
     assert "EMERGENCY_SHELL = '/dr-health/emergency'" in sw
     assert '/static/emergency_card.js' in sw
     assert "pathname === EMERGENCY_SHELL" in sw
-    assert 'dr-health-shell-v86' in sw
+    assert 'dr-health-shell-v87' in sw
     # The previous bug: every navigate was stored as the main app shell, so
     # opening Emergency offline would have overwritten /dr-health.
     assert 'cache.put(APP_SHELL, copy)' not in sw
