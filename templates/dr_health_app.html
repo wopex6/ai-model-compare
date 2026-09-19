@@ -845,7 +845,6 @@
             <h2><i class="fas fa-kit-medical"></i> Emergency Info</h2>
             <div style="display:flex; gap:8px; align-items:center;">
                 <button class="action" id="emergency-edit-btn" title="Edit in Personal Details"><i class="fas fa-pen"></i></button>
-                <button id="emergency-close" title="Close"><i class="fas fa-times"></i></button>
             </div>
         </div>
         <div class="emergency-content">
@@ -2975,7 +2974,6 @@
     })();
     document.getElementById('emergency-btn').addEventListener('click', openEmergency);
     document.getElementById('emergency-back').addEventListener('click', closeEmergency);
-    document.getElementById('emergency-close').addEventListener('click', closeEmergency);
     document.getElementById('emergency-edit-btn').addEventListener('click', editEmergency);
     (function initLoginEmergencyButton() {
         const btn = document.getElementById('login-emergency-btn');
