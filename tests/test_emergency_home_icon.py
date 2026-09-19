@@ -59,6 +59,9 @@ def test_logged_in_emergency_modal_has_back():
     assert "pushState({ emergency: true }" in html
     assert "addEventListener('popstate'" in html
     assert 'id="emergency-close"' not in html
+    assert 'leaveEmergencyToHub' in html
+    assert 'skipPush: true' in html
+    assert "kind: 'emergency'" in html
 
 
 def test_emergency_manifest_is_its_own_app():
@@ -88,7 +91,7 @@ def test_service_worker_caches_emergency_shell_separately():
     assert "EMERGENCY_SHELL = '/dr-health/emergency'" in sw
     assert '/static/emergency_card.js' in sw
     assert "pathname === EMERGENCY_SHELL" in sw
-    assert 'dr-health-shell-v88' in sw
+    assert 'dr-health-shell-v90' in sw
     # The previous bug: every navigate was stored as the main app shell, so
     # opening Emergency offline would have overwritten /dr-health.
     assert 'cache.put(APP_SHELL, copy)' not in sw
@@ -135,7 +138,10 @@ def test_hub_back_goes_one_level():
                encoding='utf-8').read()
     assert 'backOneLevel' in hub
     assert 'self.backOneLevel()' in hub
-    assert "this.go('index')" in hub
+    assert 'navStack' in hub
+    assert 'pushReturn' in hub
+    assert "prev.kind === 'emergency'" in hub
+    assert 'skipPush' in hub
     assert "back.addEventListener('click', () => self.go('index'))" not in hub
     assert 'data-cancel="1"' not in hub
     assert 'hub-dob-cancel' in hub

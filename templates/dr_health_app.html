@@ -2839,6 +2839,22 @@
         }
     }
 
+    function leaveEmergencyToHub(kind, section) {
+        closeEmergency();
+        showScreen('hub-screen');
+        if (typeof DrHealthHub !== 'undefined' && DrHealthHub.go) {
+            const r = DrHealthHub.route || {};
+            if (DrHealthHub.pushReturn) {
+                DrHealthHub.pushReturn({
+                    kind: 'emergency',
+                    view: r.view,
+                    section: r.section
+                });
+            }
+            DrHealthHub.go(kind, section, { skipPush: true });
+        }
+    }
+
     function openEmergency() {
         document.getElementById('emergency-edit-btn').style.display = '';
         renderEmergency(loadEmergencyCache());
@@ -2885,11 +2901,7 @@
         }
     });
     function editEmergency() {
-        closeEmergency();
-        showScreen('hub-screen');
-        if (typeof DrHealthHub !== 'undefined' && DrHealthHub.root) {
-            DrHealthHub.go('object', 'personal');
-        }
+        leaveEmergencyToHub('object', 'personal');
     }
     function renderEmergency(card, opts) {
         opts = opts || {};
@@ -2914,12 +2926,8 @@
         for (let i = 0; i < links.length; i++) {
             links[i].addEventListener('click', function () {
                 const id = this.getAttribute('data-hub-go');
-                closeEmergency();
-                showScreen('hub-screen');
-                if (typeof DrHealthHub !== 'undefined' && DrHealthHub.root) {
-                    if (id === 'personal') DrHealthHub.go('object', 'personal');
-                    else DrHealthHub.go('list', id);
-                }
+                if (id === 'personal') leaveEmergencyToHub('object', 'personal');
+                else leaveEmergencyToHub('list', id);
             });
         }
     }
