@@ -6728,6 +6728,38 @@ def pair_emergency_card():
     except Exception as e:
         return _safe_error(e, 'pair_emergency_card')
 
+
+@app.route('/api/health-profile/visit-brief', methods=['GET'])
+@require_auth
+def get_visit_brief():
+    """Current meds, allergies, abnormal labs and questions for a GP visit."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        profile.migrate_vitals()
+        return jsonify({'success': True, 'brief': profile.visit_brief()})
+    except Exception as e:
+        return _safe_error(e, 'get_visit_brief')
+
+
+@app.route('/api/health-profile/explain-test', methods=['POST'])
+@require_auth
+def explain_health_test():
+    """Explain one stored lab row. Citations are limited to that test and current meds."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        data = request.get_json(silent=True) or {}
+        try:
+            index = int(data.get('index'))
+        except (TypeError, ValueError):
+            return jsonify({'error': 'index is required'}), 400
+        result = health_insights.explain_test_result(profile.data, index)
+        profile.save()
+        return jsonify({'success': True, 'explanation': result})
+    except Exception as e:
+        return _safe_error(e, 'explain_health_test')
+
 @app.route('/api/health-profile/transcribe', methods=['POST'])
 @require_auth
 def transcribe_diary_audio():

@@ -139,6 +139,9 @@
         font-size: 0.72rem; color: #e65100; background: #fff3e0;
         padding: 8px 14px; border-bottom: 1px solid #ffe0b2;
     }
+    #chat-review-prompt { flex: 0 0 auto; padding: 8px 12px 0; max-height: 42%; overflow-y: auto; }
+    #chat-review-prompt:empty { display: none; padding: 0; }
+    #chat-review-prompt .hr-card { margin-bottom: 8px; }
     #chatMessages {
         flex: 1; overflow-y: auto; padding: 14px; -webkit-overflow-scrolling: touch;
     }
@@ -156,18 +159,27 @@
     #quick-topics-bar .qt {
         flex: 0 0 auto; background: white; border: 1px solid #ffcdd2; color: #c62828;
         padding: 7px 12px; border-radius: 16px; font-size: 0.78rem; white-space: nowrap; cursor: pointer;
+        max-width: 220px; overflow: hidden; text-overflow: ellipsis;
     }
 
+    .chat-attach-status {
+        font-size: 0.75rem; color: #666; padding: 0 12px 4px; min-height: 0;
+    }
     .chat-input-area {
         flex: 0 0 auto; padding: 10px 12px calc(env(safe-area-inset-bottom, 0px) + 10px);
         background: white; border-top: 1px solid #eee; display: flex; gap: 8px; align-items: flex-end;
+    }
+    .chat-attach-btn {
+        background: white; color: #c62828; border: 1px solid #ffcdd2;
+        border-radius: 50%; width: 42px; height: 42px; flex: 0 0 auto;
+        display: flex; align-items: center; justify-content: center; cursor: pointer;
     }
     .chat-input-area textarea {
         flex: 1; padding: 10px 14px; border: 1px solid #ddd; border-radius: 18px;
         font-size: 0.95rem; outline: none; resize: none; max-height: 100px; font-family: inherit;
     }
     .chat-input-area textarea:focus { border-color: #E53935; }
-    .chat-input-area button {
+    .chat-input-area button#sendBtn {
         background: #E53935; color: white; border: none; border-radius: 50%;
         width: 42px; height: 42px; flex: 0 0 auto; display: flex; align-items: center; justify-content: center;
         cursor: pointer;
@@ -751,6 +763,7 @@
     <!-- ============ CHAT SCREEN ============ -->
     <div class="screen" id="chat-screen">
         <div id="chat-disclaimer"><i class="fas fa-exclamation-triangle"></i> General health information only — not a substitute for professional medical care.</div>
+        <div id="chat-review-prompt"></div>
         <div id="chatMessages"></div>
         <div id="quick-topics-bar">
             <div class="qt" data-msg="Help me understand a symptom I'm experiencing">🩺 Symptom</div>
@@ -759,7 +772,11 @@
             <div class="qt" data-msg="How can I improve my sleep quality?">😴 Sleep</div>
             <div class="qt" data-msg="What preventive health screenings should I consider?">📋 Preventive Care</div>
         </div>
+        <div id="chat-attach-status" class="chat-attach-status"></div>
         <div class="chat-input-area">
+            <input type="file" id="chat-file" accept="image/*,application/pdf" multiple hidden>
+            <button type="button" class="chat-attach-btn" id="chat-photo-btn" title="Take or choose a photo"><i class="fas fa-camera"></i></button>
+            <button type="button" class="chat-attach-btn" id="chat-file-btn" title="Attach a PDF or image"><i class="fas fa-paperclip"></i></button>
             <textarea id="userInput" rows="1" placeholder="Ask a health question..."></textarea>
             <button id="sendBtn"><i class="fas fa-paper-plane"></i></button>
         </div>
@@ -946,6 +963,11 @@
         }
         if (id === 'profile-screen') { loadHealthProfile(); loadStoredDocuments(); }
         if (id === 'hub-screen') openHub();
+        if (id === 'chat-screen') {
+            if (chatReviewPrompt) chatReviewPrompt.refresh();
+            personaliseQuickTopics();
+            maybeShowDigestInChat();
+        }
     }
     function lastScreen() {
         try {
@@ -1122,12 +1144,15 @@
                         shouldScroll: false
                     });
                 }
+                personaliseQuickTopics();
+                maybeShowDigestInChat();
             }
         });
 
         document.querySelectorAll('#quick-topics-bar .qt').forEach(el => {
             el.addEventListener('click', () => ConversationBox.sendQuickMessage(el.dataset.msg));
         });
+        wireChatAttach();
 
         loadHealthProfile();
         initReviewPrompt();
@@ -1146,20 +1171,205 @@
 
     // ---------- Quick check (shared with health_profile.html; see static/health_review.js) ----------
     let reviewPrompt = null;
+    let chatReviewPrompt = null;
+
+    function refreshReviewPrompts() {
+        if (reviewPrompt) reviewPrompt.refresh();
+        if (chatReviewPrompt) chatReviewPrompt.refresh();
+    }
 
     function initReviewPrompt() {
-        const host = document.getElementById('review-prompt');
-        if (!host || typeof HealthReview === 'undefined') return;
-        reviewPrompt = HealthReview.mount(host, {
+        const opts = {
             fetcher: (url, init) => AuthHelper.authenticatedFetch(url, init),
             prefix: 'hr',
-            // Answering can retire or edit an item, so the summary below has to
-            // be redrawn to stay in step with the card.
             onUpdated: (action) => {
                 if (action !== 'snooze' && action !== 'dismiss') loadHealthProfile();
+                refreshReviewPrompts();
             },
+        };
+        const host = document.getElementById('review-prompt');
+        if (host && typeof HealthReview !== 'undefined') {
+            reviewPrompt = HealthReview.mount(host, opts);
+        }
+        const chatHost = document.getElementById('chat-review-prompt');
+        if (chatHost && typeof HealthReview !== 'undefined') {
+            chatReviewPrompt = HealthReview.mount(chatHost, opts);
+        }
+        refreshReviewPrompts();
+    }
+
+    const DEFAULT_CHAT_TOPICS = [
+        { msg: "Help me understand a symptom I'm experiencing", label: "🩺 Symptom" },
+        { msg: "What are good daily wellness habits?", label: "💪 Wellness" },
+        { msg: "What should a balanced diet look like?", label: "🥗 Nutrition" },
+        { msg: "How can I improve my sleep quality?", label: "😴 Sleep" },
+        { msg: "What preventive health screenings should I consider?", label: "📋 Preventive Care" }
+    ];
+
+    function wireQuickTopics() {
+        document.querySelectorAll('#quick-topics-bar .qt').forEach(el => {
+            el.onclick = () => ConversationBox.sendQuickMessage(el.dataset.msg);
         });
-        reviewPrompt.refresh();
+    }
+
+    function escAttr(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;')
+            .replace(/\n/g, ' ').replace(/\r/g, '');
+    }
+
+    async function personaliseQuickTopics() {
+        const bar = document.getElementById('quick-topics-bar');
+        if (!bar) return;
+        let extras = [];
+        try {
+            const resp = await AuthHelper.authenticatedFetch('/api/health-profile/overview');
+            const data = await resp.json();
+            const obs = (data && data.overview && data.overview.observations) || [];
+            for (let i = 0; i < obs.length && extras.length < 3; i++) {
+                const o = obs[i];
+                if (!o || !o.title) continue;
+                extras.push({
+                    msg: 'Please explain this observation from my records and what I should ask my clinician: ' + o.title + (o.detail ? '. ' + o.detail : ''),
+                    label: (o.severity === 'urgent' ? '⚠️ ' : '📌 ') + o.title
+                });
+            }
+        } catch (e) { /* keep the generic topics */ }
+        const topics = extras.concat(DEFAULT_CHAT_TOPICS).slice(0, 6);
+        bar.innerHTML = topics.map(t =>
+            '<div class="qt" data-msg="' + escAttr(t.msg) + '">' + escAttr(t.label) + '</div>'
+        ).join('');
+        wireQuickTopics();
+    }
+
+    let digestChatShown = false;
+    function formatDigestChat(d) {
+        const lines = [];
+        lines.push(d.period === 'monthly' ? 'Your monthly review is ready.' : 'Your weekly review is ready.');
+        if (d.period_start) lines.push(d.period_start + ' to ' + d.period_end + '.');
+        if (d.added_total) {
+            const bits = [];
+            const added = d.added || {};
+            for (const k in added) {
+                if (Object.prototype.hasOwnProperty.call(added, k)) bits.push(added[k] + ' ' + k.replace(/_/g, ' '));
+            }
+            lines.push('New in this period: ' + bits.join(', ') + '.');
+        }
+        const flags = d.red_flags || [];
+        for (let i = 0; i < flags.length; i++) {
+            lines.push('Attention: ' + flags[i].title + (flags[i].detail ? ' — ' + flags[i].detail : ''));
+        }
+        const due = d.reminders_due || [];
+        if (due.length) lines.push(due.length + ' reminder(s) need attention.');
+        const obs = d.observations || [];
+        const extra = [];
+        for (let i = 0; i < obs.length && extra.length < 3; i++) {
+            if (obs[i].severity === 'urgent') continue;
+            extra.push(obs[i].title);
+        }
+        if (extra.length) lines.push('From your records: ' + extra.join('; ') + '.');
+        lines.push('Open Health → Review for the full summary. This is general information, not a diagnosis.');
+        return lines.join('\n');
+    }
+
+    async function maybeShowDigestInChat() {
+        if (digestChatShown || typeof MessageHandler === 'undefined') return;
+        try {
+            const seenKey = 'drHealth.digestChat.';
+            const ovResp = await AuthHelper.authenticatedFetch('/api/health-profile/overview');
+            const ovData = await ovResp.json();
+            if (!ovData || !ovData.overview || !ovData.overview.digest_due) return;
+            const resp = await AuthHelper.authenticatedFetch('/api/health-profile/digest?mark_seen=1');
+            const data = await resp.json();
+            const d = data && data.digest;
+            if (!d) return;
+            const key = seenKey + (d.period_end || d.generated_at || '');
+            try { if (localStorage.getItem(key)) { digestChatShown = true; return; } } catch (e) {}
+            MessageHandler.addMessage({ content: formatDigestChat(d), role: 'bot', shouldScroll: false });
+            digestChatShown = true;
+            try { localStorage.setItem(key, '1'); } catch (e) {}
+        } catch (e) { /* digest is optional */ }
+    }
+
+    function setChatAttachStatus(text) {
+        const el = document.getElementById('chat-attach-status');
+        if (el) el.textContent = text || '';
+    }
+
+    async function uploadChatFiles(files) {
+        if (!files || !files.length) return;
+        setChatAttachStatus('Uploading ' + files.length + ' file(s)…');
+        let ok = 0, failed = 0, lastError = '', lastPending = null, lastMeta = null;
+        for (let i = 0; i < files.length; i++) {
+            const formData = new FormData();
+            formData.append('file', files[i]);
+            formData.append('retain', 'false');
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await resp.json();
+                if (resp.ok && data.success !== false && data.pending_review) {
+                    ok++;
+                    lastPending = data.pending_review;
+                    lastMeta = {
+                        source_file: data.source_file,
+                        extracted_text: data.extracted_text,
+                        extracted_text_preview: data.extracted_text_preview,
+                        stored_document: data.stored_document
+                    };
+                } else {
+                    failed++;
+                    lastError = data.error || 'Upload failed.';
+                }
+            } catch (e) {
+                failed++;
+                lastError = 'Network error.';
+            }
+        }
+        if (lastPending) {
+            setChatAttachStatus(ok + ' file(s) ready to review.');
+            if (typeof setReviewState === 'function') setReviewState(lastPending, lastMeta);
+            if (typeof openReviewModal === 'function') openReviewModal(lastPending, lastMeta);
+            refreshReviewPrompts();
+            if (typeof MessageHandler !== 'undefined') {
+                MessageHandler.addMessage({
+                    content: 'I found structured data in that file. Review the extracted items, then confirm anything still outstanding in the quick check above.',
+                    role: 'bot',
+                    shouldScroll: true
+                });
+            }
+            if (typeof playNotificationSound === 'function') playNotificationSound();
+        } else {
+            setChatAttachStatus(failed ? lastError : 'No structured data found.');
+        }
+    }
+
+    function wireChatAttach() {
+        const input = document.getElementById('chat-file');
+        const photoBtn = document.getElementById('chat-photo-btn');
+        const fileBtn = document.getElementById('chat-file-btn');
+        if (!input) return;
+        if (photoBtn) {
+            photoBtn.addEventListener('click', () => {
+                input.setAttribute('accept', 'image/*');
+                input.setAttribute('capture', 'environment');
+                input.click();
+            });
+        }
+        if (fileBtn) {
+            fileBtn.addEventListener('click', () => {
+                input.setAttribute('accept', 'image/*,application/pdf');
+                input.removeAttribute('capture');
+                input.click();
+            });
+        }
+        input.addEventListener('change', () => {
+            const files = input.files ? Array.from(input.files) : [];
+            input.value = '';
+            uploadChatFiles(files);
+        });
     }
 
     // ---------- Health profile ----------

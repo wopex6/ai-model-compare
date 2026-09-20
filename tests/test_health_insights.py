@@ -405,5 +405,73 @@ class TestDigestAndOverview(unittest.TestCase):
         self.assertEqual(hi.build_overview(data, self.today)['reminders'], [])
 
 
+class TestPromptLanguageAndExplain(unittest.TestCase):
+    def _profile(self):
+        return {
+            'conditions': [{'name': 'High cholesterol', 'status': 'active',
+                            'source': hi.SOURCE_USER, 'verified_by_user': True}],
+            'medications': [{'name': 'Atorvastatin', 'dose': '20mg', 'status': 'active',
+                             'source': hi.SOURCE_USER, 'verified_by_user': True}],
+            'test_results': [
+                {'test_name': 'LDL', 'value': '4.3', 'date': '2026-05-01',
+                 'source': hi.SOURCE_DOCUMENT, 'verified_by_user': True},
+                {'test_name': 'Ferritin', 'value': '20', 'date': '2026-05-01',
+                 'source': hi.SOURCE_AI, 'verified_by_user': False},
+            ],
+        }
+
+    def _fake_chat(self, payload, calls):
+        def chat(messages, max_tokens=None, temperature=None, model=None):
+            calls.append(messages)
+            return json.dumps(payload)
+        return chat
+
+    def test_language_follows_locale_and_spoken_field(self):
+        self.assertIn('English', hi.prompt_language_note({}))
+        self.assertIn('Traditional Chinese', hi.prompt_language_note({
+            'advice_settings': {'locale': 'zh-HK'}}))
+        self.assertIn('Traditional Chinese', hi.prompt_language_note({
+            'personal': {'language': 'Cantonese'}}))
+
+    def test_explain_cites_only_that_test_and_keeps_cached_advice(self):
+        data = self._profile()
+        data['ai_advice'] = {'suggestions': [{'title': 'keep me'}]}
+        calls = []
+        chat = self._fake_chat({'suggestions': [
+            {'title': 'LDL note', 'detail': 'Your LDL is 4.3.', 'cites': ['LDL']},
+            {'title': 'Guess', 'detail': 'Ferritin is low.', 'cites': ['Ferritin']},
+        ]}, calls)
+        result = hi.explain_test_result(data, 0, chat=chat, today=date(2026, 6, 1))
+        titles = [s['title'] for s in result['suggestions']]
+        self.assertIn('LDL note', titles)
+        self.assertNotIn('Guess', titles)
+        self.assertEqual(data['ai_advice']['suggestions'][0]['title'], 'keep me')
+        self.assertIn('Write in English', calls[0][1]['content'])
+
+    def test_explain_respects_opt_out_and_does_not_cite_unverified_row(self):
+        data = self._profile()
+        data['advice_settings'] = {'ai_enabled': False}
+        calls = []
+        result = hi.explain_test_result(data, 0, chat=self._fake_chat({}, calls),
+                                        today=date(2026, 6, 1))
+        self.assertEqual(calls, [])
+        self.assertIn('turned off', result['reason'])
+
+        data['advice_settings'] = {'ai_enabled': True}
+        chat = self._fake_chat({'suggestions': [
+            {'title': 'Ferritin note', 'detail': 'Low.', 'cites': ['Ferritin']},
+        ]}, calls)
+        result = hi.explain_test_result(data, 1, chat=chat, today=date(2026, 6, 1))
+        self.assertEqual(result['suggestions'], [])
+
+    def test_advice_prompt_uses_personal_language(self):
+        data = self._profile()
+        data['personal'] = {'language': 'Cantonese'}
+        calls = []
+        hi.generate_advice(data, today=date(2026, 6, 1),
+                           chat=self._fake_chat({'suggestions': []}, calls))
+        self.assertIn('Traditional Chinese', calls[0][1]['content'])
+
+
 if __name__ == '__main__':
     unittest.main()

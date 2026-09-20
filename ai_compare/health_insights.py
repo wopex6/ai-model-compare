@@ -835,6 +835,19 @@ DEFAULT_ADVICE_SETTINGS = {
 DIGEST_PERIOD_DAYS = {'weekly': 7, 'monthly': 30}
 
 
+def prompt_language_note(data: Dict) -> str:
+    """Which language the model should write in for this patient."""
+    settings = advice_settings(data)
+    locale = str(settings.get('locale') or 'en')
+    spoken = str((data.get('personal') or {}).get('language') or '')
+    blob = (locale + ' ' + spoken).lower()
+    if locale == 'zh-HK' or any(token in blob for token in (
+            'cantonese', 'zh-hk', 'zh_hk', 'traditional chinese',
+            '中文', '廣東', '广东', '粤')):
+        return 'Write in Traditional Chinese (Hong Kong).'
+    return 'Write in English.'
+
+
 def advice_settings(data: Dict) -> Dict:
     """Merge stored preferences over the defaults."""
     stored = data.get('advice_settings')
@@ -1157,8 +1170,7 @@ def generate_advice(data: Dict, force: bool = False, today: Optional[date] = Non
     if chat is None:
         from ai_compare.medical_advisor_health_context import _health_ai_chat as chat
 
-    locale_note = ('Write in Traditional Chinese (Hong Kong).'
-                   if str(settings.get('locale')) == 'zh-HK' else 'Write in English.')
+    locale_note = prompt_language_note(data)
     user_prompt = (
         'VERIFIED FACTS:\n' + verified +
         ('\n\nUNVERIFIED AI GUESSES (confirm before relying on these):\n' + unverified
@@ -1203,6 +1215,84 @@ def generate_advice(data: Dict, force: bool = False, today: Optional[date] = Non
     }
     data['ai_advice'] = advice
     return advice
+
+
+def explain_test_result(data: Dict, index: int, chat=None,
+                        today: Optional[date] = None) -> Dict:
+    """Explain one stored lab row. Citable names are that test and current meds.
+
+    Does not replace the profile's cached weekly advice.
+    """
+    today = today or date.today()
+    settings = advice_settings(data)
+    if not settings.get('ai_enabled'):
+        return empty_advice('AI advice is turned off in your settings.')
+
+    rows = data.get('test_results') or []
+    if not isinstance(index, int) or index < 0 or index >= len(rows):
+        return empty_advice('That test result is not on your record.')
+    item = rows[index]
+    if not isinstance(item, dict) or not item.get('test_name'):
+        return empty_advice('That test result is not on your record.')
+
+    current_meds = [m for m in (data.get('medications') or [])
+                    if isinstance(m, dict) and m.get('name') and not _is_done(m)]
+    current_conds = [c for c in (data.get('conditions') or [])
+                     if isinstance(c, dict) and c.get('name') and not _is_done(c)]
+    mini = {
+        'personal': data.get('personal') or {},
+        'medications': current_meds,
+        'conditions': current_conds,
+        'test_results': [item],
+    }
+    verified, unverified, citable = _facts_for_prompt(mini)
+    if not verified.strip():
+        return empty_advice('Add some health information first.')
+
+    usage = _usage(data, today)
+    if int(usage.get('count', 0)) >= daily_cap():
+        return empty_advice('Daily AI limit reached. Try again tomorrow.')
+
+    if chat is None:
+        from ai_compare.medical_advisor_health_context import _health_ai_chat as chat
+
+    locale_note = prompt_language_note(data)
+    user_prompt = (
+        'Explain this single test result to the patient. Cite only the facts '
+        'below. Do not diagnose or change medicines.\n\n'
+        'VERIFIED FACTS:\n' + verified +
+        ('\n\nUNVERIFIED AI GUESSES (confirm before relying on these):\n' + unverified
+         if unverified.strip() else '') +
+        '\n\n' + locale_note
+    )
+    model = os.getenv('HEALTH_ADVICE_MODEL', '') or None
+    try:
+        raw = chat(
+            [{'role': 'system', 'content': ADVICE_SYSTEM_PROMPT},
+             {'role': 'user', 'content': user_prompt}],
+            max_tokens=800,
+            temperature=0.2,
+            model=model,
+        )
+        parsed = json.loads(_strip_fences(raw))
+    except Exception as e:
+        return empty_advice('Could not explain this result right now: ' + str(e)[:120])
+
+    if not isinstance(parsed, dict):
+        return empty_advice('The AI returned an unexpected format.')
+
+    validated = validate_advice(parsed, citable)
+    usage['count'] = int(usage.get('count', 0)) + 1
+    return {
+        'test_name': item.get('test_name'),
+        'value': item.get('value'),
+        'date': item.get('date'),
+        'suggestions': validated['suggestions'],
+        'questions_for_doctor': validated['questions_for_doctor'],
+        'disclaimer': DISCLAIMER,
+        'reason': '',
+        'cached': False,
+    }
 
 
 # --------------------------------------------------------------- weekly digest ---
