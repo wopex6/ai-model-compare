@@ -23,14 +23,19 @@ def test_emergency_page_and_icons_are_public():
     html = page.get_data(as_text=True)
     assert 'emergency_card.js' in html
     assert 'emergency_manifest.json' in html
-    assert 'Add to Home screen' in html
-    assert 'Android — Firefox' in html
-    assert 'iPhone or iPad' in html
-    assert 'Android' in html
+    assert 'id="install-now"' in html
+    assert 'Add to home screen' in html
+    assert 'iPhone has no install button' in html
+    assert 'Add to Home Screen' in html
+    assert 'Android — Firefox' not in html
     assert "register('/dr_health_sw.js'" in html
     assert "register('/static/emergency_sw.js'" not in html
     assert 'id="emergency-refresh"' in html
     assert 'id="emergency-close"' in html
+    assert 'id="emergency-pair-form"' in html
+    assert 'emergency-card/pair' in open(
+        os.path.join(os.path.dirname(__file__), '..', 'static', 'emergency_card.js'),
+        encoding='utf-8').read()
     assert 'autoRefresh' in html
     assert 'cameFromDrHealth' in html
     assert 'window.close()' in html
@@ -62,6 +67,11 @@ def test_logged_in_emergency_modal_has_back():
     assert 'leaveEmergencyToHub' in html
     assert 'skipPush: true' in html
     assert "kind: 'emergency'" in html
+    assert "JSON.stringify({username: u})" in html
+    assert "JSON.stringify({username: u, password: p})" not in html
+    assert "modal: 'review'" in html
+    assert "modal: 'data'" in html
+    assert 'id="emergency-show-pair"' in html
 
 
 def test_emergency_manifest_is_its_own_app():
@@ -91,7 +101,7 @@ def test_service_worker_caches_emergency_shell_separately():
     assert "EMERGENCY_SHELL = '/dr-health/emergency'" in sw
     assert '/static/emergency_card.js' in sw
     assert "pathname === EMERGENCY_SHELL" in sw
-    assert 'dr-health-shell-v90' in sw
+    assert 'dr-health-shell-v92' in sw
     # The previous bug: every navigate was stored as the main app shell, so
     # opening Emergency offline would have overwritten /dr-health.
     assert 'cache.put(APP_SHELL, copy)' not in sw
@@ -142,6 +152,7 @@ def test_hub_back_goes_one_level():
     assert 'pushReturn' in hub
     assert "prev.kind === 'emergency'" in hub
     assert 'skipPush' in hub
+    assert 'hubNav' in hub
     assert "back.addEventListener('click', () => self.go('index'))" not in hub
     assert 'data-cancel="1"' not in hub
     assert 'hub-dob-cancel' in hub

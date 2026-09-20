@@ -526,6 +526,7 @@
                     view: this.route.view,
                     section: this.route.section
                 });
+                try { history.pushState({ hubNav: true }, ''); } catch (e) {}
             }
             this.route = { view: view, section: destSection };
             this.openIndex = null;
@@ -1651,7 +1652,13 @@
             const kind = this.kindOf(id);
 
             const back = this.root.querySelector('#hub-back');
-            if (back) back.addEventListener('click', () => self.backOneLevel());
+            if (back) back.addEventListener('click', () => {
+                if (history.state && history.state.hubNav) {
+                    history.back();
+                    return;
+                }
+                self.backOneLevel();
+            });
 
             const filter = this.root.querySelector('#hub-filter');
             if (filter) {

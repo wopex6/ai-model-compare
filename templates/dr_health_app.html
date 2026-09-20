@@ -930,7 +930,13 @@
         'profile-screen': 'Records'
     };
     const LAST_SCREEN_KEY = 'drHealth.lastScreen';
-    function showScreen(id) {
+    function showScreen(id, opts) {
+        opts = opts || {};
+        const current = document.querySelector('.screen.active');
+        const currentId = current ? current.id : '';
+        if (!opts.skipPush && currentId && currentId !== id && SCREEN_TITLES[id]) {
+            try { history.pushState({ screen: id }, ''); } catch (e) {}
+        }
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         document.getElementById(id).classList.add('active');
         document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.target === id));
@@ -1034,7 +1040,7 @@
                 return;
             }
             AuthHelper.setAuthToken(data.token);
-            localStorage.setItem(CREDENTIALS_KEY, JSON.stringify({username: u, password: p}));
+            localStorage.setItem(CREDENTIALS_KEY, JSON.stringify({username: u}));
             document.getElementById('login-screen').classList.add('hidden');
             initApp();
         } catch (e) {
@@ -1053,6 +1059,11 @@
     document.getElementById('logout-btn').addEventListener('click', () => {
         AuthHelper.clearAuthToken();
         clearStoredCredentials();
+        try {
+            localStorage.removeItem('drHealth.lastNotify');
+            localStorage.removeItem('drHealth.lastNotifyCount');
+            localStorage.removeItem(LAST_SCREEN_KEY);
+        } catch (e) {}
         location.reload();
     });
 
@@ -1120,7 +1131,8 @@
 
         loadHealthProfile();
         initReviewPrompt();
-        showScreen(lastScreen());
+        showScreen(lastScreen(), { skipPush: true });
+        try { history.replaceState({ screen: lastScreen() }, ''); } catch (e) {}
         // Refresh the copy of the emergency card held on this phone on every
         // start, rather than only when the user happens to open it. It has to
         // already be here before the emergency, not be fetched during one.
@@ -1627,10 +1639,23 @@
         return (s || '').toString().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
+    let reviewHistoryPushed = false;
     function closeReviewModal() {
-        document.getElementById('review-modal').classList.remove('active');
+        const modal = document.getElementById('review-modal');
+        if (!modal || !modal.classList.contains('active')) {
+            currentPending = null;
+            currentMeta = {};
+            return;
+        }
+        modal.classList.remove('active');
         currentPending = null;
         currentMeta = {};
+        if (reviewHistoryPushed && history.state && history.state.modal === 'review') {
+            reviewHistoryPushed = false;
+            history.back();
+        } else {
+            reviewHistoryPushed = false;
+        }
     }
 
     function setReviewState(extracted, meta = {}) {
@@ -1833,7 +1858,14 @@
             container.innerHTML = '<p style="color:#c62828">Could not build review view: ' + escapeHtml(String(e && e.message || e)) + '</p>';
         } finally {
             const modal = document.getElementById('review-modal');
-            if (modal) modal.classList.add('active');
+            if (modal) {
+                const already = modal.classList.contains('active');
+                modal.classList.add('active');
+                if (!already && !(history.state && history.state.modal === 'review')) {
+                    history.pushState({ modal: 'review' }, '');
+                    reviewHistoryPushed = true;
+                }
+            }
         }
     }
 
@@ -2063,13 +2095,27 @@
     if (hardRefreshBtn) hardRefreshBtn.onclick = () => { window.location.reload(true); };
 
     // Data Manager
+    let dmHistoryPushed = false;
     function closeDataManager() {
-        document.getElementById('data-manager-modal').classList.remove('active');
+        const modal = document.getElementById('data-manager-modal');
+        if (!modal || !modal.classList.contains('active')) return;
+        modal.classList.remove('active');
+        if (dmHistoryPushed && history.state && history.state.modal === 'data') {
+            dmHistoryPushed = false;
+            history.back();
+        } else {
+            dmHistoryPushed = false;
+        }
     }
 
     async function openDataManagerModal() {
         const modal = document.getElementById('data-manager-modal');
+        const already = modal.classList.contains('active');
         modal.classList.add('active');
+        if (!already && !(history.state && history.state.modal === 'data')) {
+            history.pushState({ modal: 'data' }, '');
+            dmHistoryPushed = true;
+        }
         const status = document.getElementById('dm-status');
         status.textContent = 'Loading...';
         try {
@@ -2804,6 +2850,12 @@
             const data = await resp.json();
             if (data.success && data.card) {
                 saveEmergencyCache(data.card);
+                if (data.pair_code) {
+                    lastPairCode = data.pair_code;
+                    if (typeof EmergencyCard !== 'undefined' && EmergencyCard.setPairToken) {
+                        EmergencyCard.setPairToken(data.pair_code);
+                    }
+                }
                 return data.card;
             }
         } catch (e) { /* offline — the cached copy is the whole point */ }
@@ -2828,6 +2880,7 @@
     // Overlay on top of login or the hub. A history entry means the phone
     // Back button returns to that same screen instead of leaving the app.
     let emergencyHistoryPushed = false;
+    let lastPairCode = '';
 
     function revealEmergencyModal() {
         const modal = document.getElementById('emergency-modal');
@@ -2841,7 +2894,7 @@
 
     function leaveEmergencyToHub(kind, section) {
         closeEmergency();
-        showScreen('hub-screen');
+        showScreen('hub-screen', { skipPush: true });
         if (typeof DrHealthHub !== 'undefined' && DrHealthHub.go) {
             const r = DrHealthHub.route || {};
             if (DrHealthHub.pushReturn) {
@@ -2893,11 +2946,37 @@
             emergencyHistoryPushed = false;
         }
     }
-    window.addEventListener('popstate', function () {
-        const modal = document.getElementById('emergency-modal');
-        if (modal && modal.classList.contains('active')) {
+    window.addEventListener('popstate', function (e) {
+        const st = e.state || {};
+        const emergency = document.getElementById('emergency-modal');
+        if (emergency && emergency.classList.contains('active')) {
             emergencyHistoryPushed = false;
-            modal.classList.remove('active');
+            emergency.classList.remove('active');
+            return;
+        }
+        const review = document.getElementById('review-modal');
+        if (review && review.classList.contains('active')) {
+            reviewHistoryPushed = false;
+            review.classList.remove('active');
+            return;
+        }
+        const dm = document.getElementById('data-manager-modal');
+        if (dm && dm.classList.contains('active')) {
+            dmHistoryPushed = false;
+            dm.classList.remove('active');
+            return;
+        }
+        const hub = document.getElementById('hub-screen');
+        const drilled = hub && hub.classList.contains('active') && window.DrHealthHub &&
+            (DrHealthHub.adding || DrHealthHub.editIndex !== null ||
+             (DrHealthHub.navStack && DrHealthHub.navStack.length) ||
+             (DrHealthHub.route && DrHealthHub.route.view !== 'index'));
+        if (drilled) {
+            DrHealthHub.backOneLevel();
+            return;
+        }
+        if (st.screen && SCREEN_TITLES[st.screen]) {
+            showScreen(st.screen, { skipPush: true });
         }
     });
     function editEmergency() {
@@ -2916,7 +2995,13 @@
             '<button type="button" data-hub-go="medications">Medications</button>' +
             '<button type="button" data-hub-go="conditions">Conditions</button>' +
             '<a href="/dr-health/emergency">Home-screen icon</a>' +
-            '</div>'
+            '</div>' +
+            (lastPairCode
+                ? '<div class="emergency-pair-note">' +
+                  '<button type="button" id="emergency-show-pair">Link home-screen icon</button>' +
+                  '<p id="emergency-pair-code" hidden>On the Emergency icon, tap Refresh and enter this setup code if the card is empty: <strong>' +
+                  escCard(lastPairCode) + '</strong></p></div>'
+                : '')
         );
         EmergencyCard.render(view, card, {
             leadHtml: actions,
@@ -2930,19 +3015,27 @@
                 else leaveEmergencyToHub('list', id);
             });
         }
+        const showPair = document.getElementById('emergency-show-pair');
+        const pairCode = document.getElementById('emergency-pair-code');
+        if (showPair && pairCode) {
+            showPair.addEventListener('click', function () {
+                pairCode.hidden = !pairCode.hidden;
+            });
+        }
     }
 
     async function bootApp() {
         const creds = getStoredCredentials();
-        if (creds && creds.username && creds.password) {
-            if (typeof creds.username !== 'string' || typeof creds.password !== 'string') {
-                clearStoredCredentials();
-                return;
-            }
+        if (creds && creds.password) {
+            // Older builds stored the password. Drop it and keep the username.
+            try {
+                localStorage.setItem(CREDENTIALS_KEY, JSON.stringify({
+                    username: typeof creds.username === 'string' ? creds.username : ''
+                }));
+            } catch (e) { clearStoredCredentials(); }
+        }
+        if (creds && typeof creds.username === 'string' && creds.username) {
             document.getElementById('login-username').value = creds.username;
-            document.getElementById('login-password').value = creds.password;
-            await doLogin(creds.username, creds.password);
-            return;
         }
         if (AuthHelper.isAuthenticated()) {
             document.getElementById('login-screen').classList.add('hidden');

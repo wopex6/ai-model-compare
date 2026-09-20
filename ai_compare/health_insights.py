@@ -962,8 +962,13 @@ def _facts_for_prompt(data: Dict) -> Tuple[str, str, set]:
 
     for item in data.get('conditions') or []:
         if isinstance(item, dict) and item.get('name'):
-            add(item, 'Condition: ' + str(item['name']) +
-                ' (status ' + str(item.get('status') or 'unknown') + ')', item['name'])
+            if _is_done(item):
+                line = ('Condition (RESOLVED — do not treat as current): ' +
+                        str(item['name']))
+            else:
+                line = ('Condition: ' + str(item['name']) +
+                        ' (status ' + str(item.get('status') or 'unknown') + ')')
+            add(item, line, item['name'])
 
     for category, label in (('medications', 'Medication'), ('supplements', 'Supplement')):
         for item in data.get(category) or []:
@@ -973,12 +978,22 @@ def _facts_for_prompt(data: Dict) -> Tuple[str, str, set]:
                     bits.append(str(item['dose']))
                 if item.get('purpose'):
                     bits.append('for ' + str(item['purpose']))
-                add(item, label + ': ' + ' '.join(bits), item['name'])
+                joined = ' '.join(bits)
+                if _is_done(item):
+                    line = label + ' (STOPPED — do not treat as current): ' + joined
+                else:
+                    line = label + ': ' + joined
+                add(item, line, item['name'])
 
     for item in data.get('symptoms') or []:
         if isinstance(item, dict) and item.get('description'):
-            add(item, 'Symptom: ' + str(item['description']) +
-                ' (' + str(item.get('severity') or 'unspecified') + ')', item['description'])
+            if _is_done(item):
+                line = ('Symptom (RESOLVED — do not treat as current): ' +
+                        str(item['description']))
+            else:
+                line = ('Symptom: ' + str(item['description']) +
+                        ' (' + str(item.get('severity') or 'unspecified') + ')')
+            add(item, line, item['description'])
 
     # Latest 40 dated results keep the prompt small without losing recent trends.
     tests = []

@@ -50,11 +50,13 @@ html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Segoe UI', s
 .install-card ol { margin: 0; padding-left: 18px; }
 .install-card li { margin-bottom: 4px; }
 .install-now {
-    display: none; width: 100%; margin-top: 10px; padding: 12px;
+    display: block; width: 100%; margin-top: 10px; padding: 12px;
     background: #c62828; color: #fff; border: none; border-radius: 10px;
     font-size: 1rem; font-weight: 700; font-family: inherit;
 }
-.install-now.visible { display: block; }
+.install-now[hidden] { display: none; }
+.install-hint { margin: 10px 0 0; font-size: 0.88rem; line-height: 1.45; }
+.install-hint[hidden] { display: none; }
 .install-card.hidden { display: none; }
 .cross-icon { width: 22px; height: 22px; flex-shrink: 0; }
 </style>
@@ -78,28 +80,25 @@ html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Segoe UI', s
     <div class="content">
         <div class="install-card" id="install-card">
             <h2>Put this card on the home screen</h2>
-            <p>Once it is an icon of its own, anyone can open it in an emergency without unlocking Dr. Health. Works on Android and iPhone.</p>
-            <button class="install-now" id="install-now" type="button">Install Emergency icon</button>
-            <h3>Android — Chrome or Edge</h3>
-            <ol>
-                <li>Tap the <strong>⋮ menu</strong> at the top-right.</li>
-                <li>Tap <strong>Install app</strong> or <strong>Add to Home screen</strong>.</li>
-                <li>Confirm. The new red-cross icon opens this card.</li>
-            </ol>
-            <h3>Android — Samsung Internet</h3>
-            <ol>
-                <li>Tap the <strong>☰ menu</strong>, then <strong>Add page to</strong> → <strong>Home screen</strong>.</li>
-            </ol>
-            <h3>Android — Firefox</h3>
-            <ol>
-                <li>Tap the <strong>⋮ menu</strong>, then <strong>Install</strong> or <strong>Add to Home screen</strong>.</li>
-            </ol>
-            <h3>iPhone or iPad — Safari</h3>
-            <ol>
-                <li>Not in Private Browsing. Tap the <strong>Share</strong> icon (square with an arrow).</li>
-                <li><strong>Add to Home Screen</strong> → <strong>Add</strong>. Use Safari; Chrome on iPhone cannot install it.</li>
-            </ol>
+            <p>Once it is an icon of its own, anyone can open it in an emergency without unlocking Dr. Health.</p>
+            <button class="install-now" id="install-now" type="button">Add to home screen</button>
+            <p class="install-hint" id="install-ios" hidden>
+                iPhone has no install button. In Safari (not Private Browsing), tap
+                <strong>Share</strong> (square with an arrow), then
+                <strong>Add to Home Screen</strong>.
+            </p>
+            <p class="install-hint" id="install-fallback" hidden>
+                If no prompt appears, open the browser menu and choose
+                <strong>Add to Home screen</strong> or <strong>Install app</strong>
+                (Samsung: <strong>Add page to</strong> → <strong>Home screen</strong>).
+            </p>
         </div>
+        <form class="emergency-pair-form" id="emergency-pair-form" hidden>
+            <label for="emergency-pair-input">If this card is empty on a home-screen icon, enter the setup code from signed-in Dr. Health → Emergency Info.</label>
+            <input id="emergency-pair-input" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Setup code">
+            <button type="submit">Save code and refresh</button>
+            <div class="emergency-pair-status" id="emergency-pair-status"></div>
+        </form>
         <div id="emergency-view"></div>
     </div>
 </div>
@@ -125,12 +124,18 @@ html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Segoe UI', s
         return '<div class="emergency-cache-note">' + stamp + extra + '</div>';
     }
 
+    function showPairForm(show) {
+        const form = document.getElementById('emergency-pair-form');
+        if (form) form.hidden = !show;
+    }
+
     function showCard(card, status) {
         window.EmergencyCard.render(view, card, {
             sourceNote: false,
             leadHtml: window.EmergencyCard.hasData(card) ? leadHtml(card, status) : '',
-            emptyText: 'No emergency details on this phone yet. Sign in to Dr. Health on this phone first — this icon does not open that app.'
+            emptyText: 'No emergency details on this phone yet. On iPhone the home-screen icon has its own storage, so enter the setup code from signed-in Dr. Health → Emergency Info. This icon does not open that app.'
         });
+        showPairForm(!window.EmergencyCard.hasData(card));
     }
 
     function autoRefresh() {
@@ -190,6 +195,31 @@ html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Segoe UI', s
     if (refreshBtn) refreshBtn.addEventListener('click', autoRefresh);
     if (closeBtn) closeBtn.addEventListener('click', closeStandalone);
 
+    const pairForm = document.getElementById('emergency-pair-form');
+    if (pairForm) {
+        pairForm.addEventListener('submit', function (ev) {
+            ev.preventDefault();
+            const input = document.getElementById('emergency-pair-input');
+            const status = document.getElementById('emergency-pair-status');
+            const code = input ? String(input.value || '').trim() : '';
+            if (code.length < 20) {
+                if (status) status.textContent = 'That code is too short.';
+                return;
+            }
+            if (window.EmergencyCard && EmergencyCard.setPairToken) {
+                EmergencyCard.setPairToken(code);
+            }
+            if (status) status.textContent = 'Refreshing…';
+            autoRefresh().then(function () {
+                if (status) {
+                    status.textContent = window.EmergencyCard.hasData(window.EmergencyCard.load())
+                        ? 'Card updated.'
+                        : 'Code saved. If the card is still empty, check the code and try again.';
+                }
+            });
+        });
+    }
+
     const standalone = window.matchMedia('(display-mode: standalone)').matches ||
         window.navigator.standalone === true;
     const installCard = document.getElementById('install-card');
@@ -211,22 +241,39 @@ html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Segoe UI', s
         }).catch(function () {});
     }
 
+    function isIos() {
+        const ua = navigator.userAgent || '';
+        if (/iPhone|iPad|iPod/i.test(ua)) return true;
+        return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1;
+    }
+
     let deferredPrompt = null;
     const installNow = document.getElementById('install-now');
+    const installIos = document.getElementById('install-ios');
+    const installFallback = document.getElementById('install-fallback');
+    // iPhone/iPad never fire beforeinstallprompt. Android Chrome, Edge and
+    // Samsung Internet can: keep the button and run the native prompt.
+    if (isIos()) {
+        if (installNow) installNow.hidden = true;
+        if (installIos) installIos.hidden = false;
+    }
     window.addEventListener('beforeinstallprompt', function (e) {
         e.preventDefault();
         deferredPrompt = e;
-        if (installNow && !standalone) installNow.classList.add('visible');
+        if (installNow && !standalone) installNow.hidden = false;
+        if (installFallback) installFallback.hidden = true;
     });
     window.addEventListener('appinstalled', function () {
         if (installCard) installCard.classList.add('hidden');
     });
     if (installNow) {
         installNow.addEventListener('click', function () {
-            if (!deferredPrompt) return;
-            deferredPrompt.prompt();
-            deferredPrompt = null;
-            installNow.classList.remove('visible');
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt = null;
+                return;
+            }
+            if (installFallback) installFallback.hidden = false;
         });
     }
 }());
