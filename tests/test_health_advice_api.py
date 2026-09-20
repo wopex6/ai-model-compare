@@ -464,6 +464,97 @@ class HealthAdviceApiTest(unittest.TestCase):
         self.assertEqual(hit.status_code, 200)
         self.assertEqual(hit.get_json()['card']['name'], 'Pair Person')
 
+    def test_prompt_packs_question_relevant_sections_and_language(self):
+        foods = ['oatmeal'] * 80
+        self.seed({
+            'personal': {'allergies': ['penicillin'], 'language': 'Cantonese',
+                         'blood_type': 'O+'},
+            'test_results': [{'test_name': 'LDL', 'value': '4.3', 'date': '2026-05-01'}],
+            'diet': {'daily_foods': foods},
+            'diary': [{'title': 'Walked', 'content': 'park'}],
+        })
+        profile = HealthContextManager.get_profile(TEST_USER)
+        packed = profile.format_for_prompt(max_chars=220, question='What does my LDL mean?')
+        self.assertIn('penicillin', packed)
+        self.assertIn('LDL', packed)
+        self.assertNotIn('oatmeal', packed)
+        ctx = HealthContextManager.get_context_for_prompt(TEST_USER, question='LDL')
+        self.assertIn('Traditional Chinese', ctx)
+        self.assertIn('Reply in that language', ctx)
+
+        from ai_compare.medical_advisor_health_context import pack_prompt_sections
+        always = 'ALLERGIES (must not be contradicted by advice): penicillin'
+        labs = 'Recent Tests: LDL: 4.3'
+        foods_line = 'Daily Foods: ' + ', '.join(['oats'] * 60)
+        out = pack_prompt_sections([always, foods_line, labs],
+                                   max_chars=len(always) + len(labs) + 8,
+                                   question='LDL cholesterol')
+        self.assertIn('penicillin', out)
+        self.assertIn('LDL', out)
+        self.assertNotIn('oats', out)
+
+    def test_visit_brief_omits_stopped_meds_and_answered_questions(self):
+        self.seed({
+            'name': 'Pat',
+            'personal': {'allergies': ['penicillin'], 'language': 'English'},
+            'medications': [
+                {'name': 'Warfarin', 'dose': '5mg', 'status': 'active'},
+                {'name': 'Old statin', 'status': 'stopped'},
+            ],
+            'test_results': [
+                {'test_name': 'LDL', 'value': '4.8', 'reference_range': '0-3.0',
+                 'date': '2026-05-01'},
+            ],
+            'questions_for_doctor': [
+                {'question': 'Can I change my statin?', 'answered': False},
+                {'question': 'Old question', 'answered': True},
+            ],
+        })
+        body = self.client.get('/api/health-profile/visit-brief').get_json()
+        self.assertTrue(body['success'])
+        brief = body['brief']
+        self.assertEqual(brief['name'], 'Pat')
+        blob = json.dumps(brief)
+        self.assertIn('Warfarin', blob)
+        self.assertNotIn('Old statin', blob)
+        self.assertEqual(brief['abnormal_tests'][0]['flag'], 'high')
+        questions = [q['question'] for q in brief['questions_for_doctor']]
+        self.assertIn('Can I change my statin?', questions)
+        self.assertNotIn('Old question', questions)
+
+    def test_explain_test_route_uses_original_index(self):
+        self.seed({
+            'test_results': [
+                {'test_name': 'LDL', 'value': '4.3', 'date': '2026-05-01',
+                 'source': hi.SOURCE_DOCUMENT, 'verified_by_user': True},
+            ],
+            'conditions': [{'name': 'High cholesterol', 'status': 'active',
+                            'source': hi.SOURCE_USER, 'verified_by_user': True}],
+        })
+        calls = []
+
+        def fake_chat(messages, max_tokens=None, temperature=None, model=None):
+            calls.append(messages)
+            return json.dumps({'suggestions': [
+                {'title': 'LDL note', 'detail': 'Your LDL is 4.3.', 'cites': ['LDL']},
+            ]})
+
+        original = mahc._health_ai_chat
+        mahc._health_ai_chat = fake_chat
+        try:
+            miss = self.client.post('/api/health-profile/explain-test', json={})
+            self.assertEqual(miss.status_code, 400)
+            body = self.client.post('/api/health-profile/explain-test',
+                                    json={'index': 0}).get_json()
+        finally:
+            mahc._health_ai_chat = original
+        self.assertTrue(body['success'])
+        self.assertEqual(body['explanation']['test_name'], 'LDL')
+        self.assertEqual(body['explanation']['suggestions'][0]['title'], 'LDL note')
+        stored = json.loads(self.path.read_text(encoding='utf-8'))
+        self.assertIsNone(stored.get('ai_advice'))
+        self.assertEqual(stored['ai_advice_usage']['count'], 1)
+
 
 if __name__ == '__main__':
     unittest.main()

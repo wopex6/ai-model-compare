@@ -101,7 +101,7 @@ def test_service_worker_caches_emergency_shell_separately():
     assert "EMERGENCY_SHELL = '/dr-health/emergency'" in sw
     assert '/static/emergency_card.js' in sw
     assert "pathname === EMERGENCY_SHELL" in sw
-    assert 'dr-health-shell-v92' in sw
+    assert 'dr-health-shell-v93' in sw
     # The previous bug: every navigate was stored as the main app shell, so
     # opening Emergency offline would have overwritten /dr-health.
     assert 'cache.put(APP_SHELL, copy)' not in sw
@@ -156,4 +156,20 @@ def test_hub_back_goes_one_level():
     assert "back.addEventListener('click', () => self.go('index'))" not in hub
     assert 'data-cancel="1"' not in hub
     assert 'hub-dob-cancel' in hub
+    assert 'GP visit brief' in hub
+    assert 'Explain this result' in hub
+    assert '/api/health-profile/visit-brief' in hub
+    assert '/api/health-profile/explain-test' in hub
+
+
+def test_chat_has_attach_review_and_digest_hooks():
+    html = open(os.path.join(os.path.dirname(__file__), '..',
+                             'templates', 'dr_health_app.html'),
+                encoding='utf-8').read()
+    assert 'id="chat-review-prompt"' in html
+    assert 'id="chat-photo-btn"' in html
+    assert 'id="chat-file-btn"' in html
+    assert 'personaliseQuickTopics' in html
+    assert 'maybeShowDigestInChat' in html
+    assert '/api/health-profile/upload' in html
 

@@ -419,7 +419,8 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
         prompt = super()._build_enhanced_prompt(user_message, include_context, user_id)
 
         if self.character_id == "medical_advisor" and user_id:
-            health_context = HealthContextManager.get_context_for_prompt(str(user_id))
+            health_context = HealthContextManager.get_context_for_prompt(
+                str(user_id), question=user_message)
             if health_context:
                 profile_instruction = f"""{health_context}
 

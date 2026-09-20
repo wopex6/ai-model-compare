@@ -1016,6 +1016,59 @@ class HealthProfile:
             "location": personal.get("location") or "",
         }
 
+    def visit_brief(self) -> Dict:
+        """One-page summary a patient can show a clinician.
+
+        Current items only. Name is included because the patient is handing
+        this to their own GP — unlike the chat prompt, which stays anonymous.
+        """
+        card = self.emergency_card()
+        from ai_compare.health_insights import range_position
+
+        abnormal = []
+        for t in self.data.get("test_results") or []:
+            if not isinstance(t, dict) or not t.get("test_name"):
+                continue
+            flag = range_position(t.get("value"), t.get("reference_range"))
+            if flag not in ("high", "low"):
+                continue
+            abnormal.append({
+                "test_name": t.get("test_name"),
+                "value": t.get("value") or "",
+                "reference_range": t.get("reference_range") or "",
+                "date": t.get("date") or "",
+                "flag": flag,
+            })
+        abnormal = abnormal[-12:]
+
+        questions = []
+        for q in self.data.get("questions_for_doctor") or []:
+            if not isinstance(q, dict) or q.get("answered") or not is_active(q):
+                continue
+            text = str(q.get("question") or q.get("title") or "").strip()
+            if text:
+                questions.append({
+                    "question": text,
+                    "context": str(q.get("context") or "").strip(),
+                })
+
+        return {
+            "name": card.get("name") or "",
+            "date_of_birth": card.get("date_of_birth") or "",
+            "age": card.get("age") or "",
+            "language": card.get("language") or "",
+            "allergies": card.get("allergies") or [],
+            "conditions": card.get("conditions") or [],
+            "medications": card.get("medications") or [],
+            "anticoagulants": card.get("anticoagulants") or [],
+            "abnormal_tests": abnormal,
+            "questions_for_doctor": questions[-8:],
+            "advance_care": card.get("advance_care") or "",
+            "gp_name": card.get("gp_name") or "",
+            "gp_phone": card.get("gp_phone") or "",
+            "generated_at": datetime.now().isoformat(),
+        }
+
     def ensure_emergency_pair_token(self) -> str:
         """Long-lived code that can refresh the home-screen Emergency icon.
 
@@ -2265,7 +2318,7 @@ class HealthProfile:
 
     # --- Context Generation ---
 
-    def format_for_prompt(self, max_chars: int = 2000) -> str:
+    def format_for_prompt(self, max_chars: int = 4000, question: str = '') -> str:
         """Format health profile as context for the AI prompt"""
         _personal_vals = self.data.get("personal", {}) or {}
         _has_personal = any(v for v in _personal_vals.values())
@@ -2490,17 +2543,62 @@ class HealthProfile:
             )
             sections.append(insight_text)
 
-        full_text = "\n".join(sections)
-
-        # Truncate if needed
-        if len(full_text) > max_chars:
-            full_text = full_text[:max_chars] + "..."
-
-        return full_text
+        return pack_prompt_sections(sections, max_chars=max_chars, question=question)
 
     def to_dict(self) -> Dict:
         """Return full profile as dict"""
         return self.data.copy()
+
+
+_ALWAYS_PROMPT_PREFIXES = (
+    'Patient:',
+    'ALLERGIES',
+    'Anaphylaxis',
+    'Advance care',
+    'Implants / devices:',
+    'Active Conditions',
+    'Current Symptoms',
+    'Medications (currently',
+    'Medications (STOPPED',
+    'Supplements/Herbs (currently',
+)
+
+
+def _prompt_tokens(text: str) -> set:
+    return set(re.findall(r'[a-z0-9\u4e00-\u9fff]+', (text or '').lower()))
+
+
+def pack_prompt_sections(sections, max_chars: int = 4000, question: str = '') -> str:
+    """Keep safety-critical lines, then the sections that match the question.
+
+    Drops whole sections when the budget is exceeded instead of cutting a
+    line in half, which used to hide allergies after a long lab dump.
+    """
+    q_tokens = _prompt_tokens(question)
+    always, optional = [], []
+    for block in sections or []:
+        text = str(block or '').strip()
+        if not text:
+            continue
+        if any(text.startswith(prefix) for prefix in _ALWAYS_PROMPT_PREFIXES):
+            always.append(text)
+        else:
+            optional.append(text)
+
+    def score(text):
+        if not q_tokens:
+            return 0
+        return len(q_tokens & _prompt_tokens(text))
+
+    optional.sort(key=score, reverse=True)
+    packed, size = [], 0
+    for block in always + optional:
+        extra = len(block) + (1 if packed else 0)
+        if packed and size + extra > max_chars and block not in always:
+            continue
+        packed.append(block)
+        size += extra
+    return '\n'.join(packed)
 
 
 def find_profile_by_pair_token(token: str) -> Optional[HealthProfile]:
@@ -2554,15 +2652,18 @@ class HealthContextManager:
         return cls._profiles[user_id]
 
     @classmethod
-    def get_context_for_prompt(cls, user_id: str) -> str:
+    def get_context_for_prompt(cls, user_id: str, question: str = "") -> str:
         """Get formatted health context for injection into AI prompt"""
         profile = cls.get_profile(user_id)
-        context = profile.format_for_prompt()
+        context = profile.format_for_prompt(question=question)
         if not context:
             return ""
+        from ai_compare.health_insights import prompt_language_note
+        lang = prompt_language_note(profile.data)
         return (
             "\n\n--- PATIENT HEALTH CONTEXT (use this to personalize responses) ---\n"
             f"{context}\n{cls.provenance_note(user_id)}"
+            f"LANGUAGE: {lang} Reply in that language.\n"
             "--- END HEALTH CONTEXT ---\n"
         )
 

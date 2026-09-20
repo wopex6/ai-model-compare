@@ -219,7 +219,8 @@
             items: [
                 { id: 'advice', kind: 'advice', title: 'Advice & Insights', icon: 'fa-lightbulb', desc: 'What your records show' },
                 { id: 'reminders', kind: 'reminders', title: 'Reminders', icon: 'fa-bell', desc: 'Due and upcoming' },
-                { id: 'digest', kind: 'digest', title: 'Review', icon: 'fa-newspaper', desc: 'Your periodic summary' }
+                { id: 'digest', kind: 'digest', title: 'Review', icon: 'fa-newspaper', desc: 'Your periodic summary' },
+                { id: 'visit', kind: 'visit', title: 'GP visit brief', icon: 'fa-briefcase-medical', desc: 'One page for your appointment' }
             ]
         },
         {
@@ -462,6 +463,7 @@
         filter: '',
         busy: false,
         navStack: [],
+        explainResult: null,
 
         init(rootEl) {
             this.root = rootEl;
@@ -580,7 +582,7 @@
                 const sug = (this.overview.advice && this.overview.advice.suggestions) || [];
                 return obs.length + sug.length;
             }
-            if (id === 'digest') return null;
+            if (id === 'digest' || id === 'visit') return null;
             if (!this.profile) return null;
             if (LIST_SECTIONS[id]) {
                 const arr = this.profile[id];
@@ -738,6 +740,7 @@
             else if (kind === 'advice') html += this.adviceBody();
             else if (kind === 'reminders') html += this.remindersBody();
             else if (kind === 'digest') html += '<div id="hub-tool" class="hub-tool"><em>Building your review…</em></div>';
+            else if (kind === 'visit') html += '<div id="hub-tool" class="hub-tool"><em>Preparing your visit brief…</em></div>';
             else if (kind === 'settings') html += this.settingsBody();
             html += '</div>';
             html += '<div class="hub-status" id="hub-status"></div>';
@@ -893,8 +896,15 @@
                     html += '<button class="hub-btn primary" data-verify="' + index + '"><i class="fas fa-check-double"></i> Confirm</button>';
                 }
                 html += '<button class="hub-btn" data-edit="' + index + '"><i class="fas fa-pen"></i> Edit</button>';
+                if (id === 'test_results') {
+                    html += '<button class="hub-btn" data-explain="' + index + '"><i class="fas fa-comment-medical"></i> Explain this result</button>';
+                }
                 html += '<button class="hub-btn danger" data-delete="' + index + '"><i class="fas fa-trash"></i> Delete</button>';
-                html += '</div></div>';
+                html += '</div>';
+                if (id === 'test_results' && this.explainResult && this.explainResult.index === index) {
+                    html += this.explainHtml(this.explainResult.explanation);
+                }
+                html += '</div>';
             }
             html += '</div>';
             return html;
@@ -1128,6 +1138,33 @@
             return '<div class="hub-disclaimer"><i class="fas fa-circle-info"></i> ' + esc(text) + '</div>';
         },
 
+        explainHtml(exp) {
+            if (!exp) return '';
+            let html = '<div class="hub-note ai">';
+            html += '<span class="hub-prov ai_inferred">AI</span> <strong>About ' +
+                esc(exp.test_name || 'this result') + '</strong>';
+            if (exp.value) html += ' — ' + esc(String(exp.value));
+            if (exp.date) html += ' <span class="hub-when">' + esc(String(exp.date)) + '</span>';
+            const sug = exp.suggestions || [];
+            const qs = exp.questions_for_doctor || [];
+            if (exp.reason && !sug.length && !qs.length) {
+                html += '<br>' + esc(exp.reason);
+            }
+            for (let i = 0; i < sug.length; i++) {
+                html += '<br><strong>' + esc(sug[i].title) + '</strong><br>' + esc(sug[i].detail);
+                if (sug[i].cites && sug[i].cites.length) {
+                    html += '<div class="hub-cites">Based on: ' + esc(sug[i].cites.join(', ')) + '</div>';
+                }
+            }
+            for (let i = 0; i < qs.length; i++) {
+                html += '<br>' + esc(qs[i].question || '');
+                if (qs[i].context) html += '<br>' + esc(qs[i].context);
+            }
+            html += '</div>';
+            html += this.disclaimerHtml(exp.disclaimer);
+            return html;
+        },
+
         // ---------- Reminders ----------
         remindersBody() {
             const ov = this.overview;
@@ -1338,6 +1375,32 @@
             }
         },
 
+        async explainTest(index) {
+            if (this.busy) return;
+            this.busy = true;
+            this.status('Explaining this result…');
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/explain-test', {
+                    method: 'POST',
+                    body: JSON.stringify({ index: index })
+                });
+                const data = await resp.json();
+                this.busy = false;
+                if (!resp.ok || !data.success) {
+                    this.status((data && data.error) ? data.error : 'Could not explain this result.', true);
+                    return;
+                }
+                this.explainResult = { index: index, explanation: data.explanation || {} };
+                this.openIndex = index;
+                this.render();
+                const exp = this.explainResult.explanation;
+                this.status(exp.reason ? exp.reason : 'Explanation ready.', !!exp.reason);
+            } catch (e) {
+                this.busy = false;
+                this.status('Network error while explaining this result.', true);
+            }
+        },
+
         async actOnReminder(id, action) {
             if (this.busy) return;
             const reminder = this.findReminder(id);
@@ -1504,6 +1567,146 @@
                 el.innerHTML = html + this.disclaimerHtml(d.disclaimer);
             } catch (e) {
                 el.innerHTML = '<div class="hub-note error">Could not build your review.</div>';
+            }
+        },
+
+        visitLine(label, value) {
+            if (value === null || value === undefined || value === '') return '';
+            if (Array.isArray(value) && !value.length) return '';
+            return '<div class="hub-field"><span class="hub-field-label">' + esc(label) +
+                '</span><span class="hub-field-value">' + esc(Array.isArray(value) ? value.join(', ') : value) +
+                '</span></div>';
+        },
+
+        visitText(brief) {
+            const lines = [];
+            lines.push('GP visit brief' + (brief.name ? ' — ' + brief.name : ''));
+            if (brief.date_of_birth) lines.push('Date of birth: ' + brief.date_of_birth);
+            if (brief.age) lines.push('Age: ' + brief.age);
+            if (brief.language) lines.push('Language: ' + brief.language);
+            if (brief.gp_name) lines.push('GP: ' + brief.gp_name + (brief.gp_phone ? ' ' + brief.gp_phone : ''));
+            const allergies = brief.allergies || [];
+            lines.push('Allergies: ' + (allergies.length ? allergies.join(', ') : 'none recorded'));
+            const conds = brief.conditions || [];
+            if (conds.length) lines.push('Conditions: ' + conds.join(', '));
+            const meds = brief.medications || [];
+            if (meds.length) {
+                lines.push('Current medications:');
+                for (let i = 0; i < meds.length; i++) {
+                    const m = meds[i];
+                    lines.push('  - ' + (m.label || m.name || '') +
+                        (m.dose && String(m.label || '').indexOf(m.dose) === -1 ? ' ' + m.dose : '') +
+                        (m.frequency && String(m.label || '').indexOf(m.frequency) === -1 ? ' ' + m.frequency : ''));
+                }
+            }
+            const thinners = brief.anticoagulants || [];
+            if (thinners.length) lines.push('Blood thinners: ' + thinners.join(', '));
+            const tests = brief.abnormal_tests || [];
+            if (tests.length) {
+                lines.push('Recent results outside range:');
+                for (let i = 0; i < tests.length; i++) {
+                    const t = tests[i];
+                    lines.push('  - ' + t.test_name + ': ' + t.value +
+                        (t.reference_range ? ' (ref ' + t.reference_range + ')' : '') +
+                        (t.flag ? ' [' + t.flag + ']' : '') +
+                        (t.date ? ' ' + t.date : ''));
+                }
+            }
+            const qs = brief.questions_for_doctor || [];
+            if (qs.length) {
+                lines.push('Questions to ask:');
+                for (let i = 0; i < qs.length; i++) {
+                    lines.push('  - ' + qs[i].question);
+                }
+            }
+            if (brief.advance_care) lines.push('Advance care: ' + brief.advance_care);
+            lines.push('');
+            lines.push('Prepared from my Dr. Health record. Not a medical document.');
+            return lines.join('\n');
+        },
+
+        async loadVisitBrief() {
+            const el = this.root.querySelector('#hub-tool');
+            if (!el) return;
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/visit-brief');
+                const data = await resp.json();
+                const brief = (data && data.brief) ? data.brief : null;
+                if (!brief) {
+                    el.innerHTML = '<div class="hub-note error">Could not build a visit brief.</div>';
+                    return;
+                }
+                let html = '<div class="hub-note">Show or copy this at your appointment. It is assembled from current medications, conditions and recent labs — not a second record.</div>';
+                html += this.visitLine('Name', brief.name);
+                html += this.visitLine('Date of birth', brief.date_of_birth);
+                html += this.visitLine('Age', brief.age);
+                html += this.visitLine('Language', brief.language);
+                html += this.visitLine('GP', [brief.gp_name, brief.gp_phone].filter(Boolean).join(' · '));
+                html += this.visitLine('Allergies', brief.allergies && brief.allergies.length ? brief.allergies : 'none recorded');
+                html += this.visitLine('Conditions', brief.conditions);
+                const meds = brief.medications || [];
+                if (meds.length) {
+                    html += '<div class="hub-group-label">Current medications</div>';
+                    for (let i = 0; i < meds.length; i++) {
+                        const m = meds[i] || {};
+                        html += '<div class="hub-note"><strong>' + esc(m.name || '') + '</strong>';
+                        if (m.dose || m.frequency) {
+                            html += '<br>' + esc([m.dose, m.frequency].filter(Boolean).join(' · '));
+                        }
+                        html += '</div>';
+                    }
+                }
+                if (brief.anticoagulants && brief.anticoagulants.length) {
+                    html += '<div class="hub-note warn"><strong>Blood thinners</strong><br>' +
+                        esc(brief.anticoagulants.join(', ')) + '</div>';
+                }
+                const tests = brief.abnormal_tests || [];
+                if (tests.length) {
+                    html += '<div class="hub-group-label">Results outside range</div>';
+                    for (let i = 0; i < tests.length; i++) {
+                        const t = tests[i];
+                        html += '<div class="hub-note"><strong>' + esc(t.test_name) + '</strong> ' +
+                            esc(t.value || '') +
+                            (t.reference_range ? ' · ref ' + esc(t.reference_range) : '') +
+                            (t.flag ? ' · ' + esc(t.flag) : '') +
+                            (t.date ? '<br><span class="hub-when">' + esc(t.date) + '</span>' : '') +
+                            '</div>';
+                    }
+                }
+                const qs = brief.questions_for_doctor || [];
+                if (qs.length) {
+                    html += '<div class="hub-group-label">Questions to ask</div>';
+                    for (let i = 0; i < qs.length; i++) {
+                        html += '<div class="hub-note"><strong>' + esc(qs[i].question) + '</strong>';
+                        if (qs[i].context) html += '<br>' + esc(qs[i].context);
+                        html += '</div>';
+                    }
+                }
+                if (brief.advance_care) {
+                    html += '<div class="hub-note warn"><strong>Advance care</strong><br>' +
+                        esc(brief.advance_care) + '</div>';
+                }
+                html += '<div class="hub-row-actions" style="padding:8px 14px 14px;">';
+                html += '<button class="hub-btn primary" id="hub-visit-copy"><i class="fas fa-copy"></i> Copy</button>';
+                html += '</div>';
+                html += this.disclaimerHtml('Prepared from your current record. Not a medical document.');
+                el.innerHTML = html;
+                const copyBtn = el.querySelector('#hub-visit-copy');
+                const text = this.visitText(brief);
+                if (copyBtn) {
+                    copyBtn.addEventListener('click', function () {
+                        const done = function () { copyBtn.textContent = 'Copied'; };
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                            navigator.clipboard.writeText(text).then(done).catch(function () {
+                                window.prompt('Copy this visit brief:', text);
+                            });
+                        } else {
+                            window.prompt('Copy this visit brief:', text);
+                        }
+                    });
+                }
+            } catch (e) {
+                el.innerHTML = '<div class="hub-note error">Could not build a visit brief.</div>';
             }
         },
 
@@ -1705,6 +1908,8 @@
                 this.loadSummary();
             } else if (kind === 'digest') {
                 this.loadDigest();
+            } else if (kind === 'visit') {
+                this.loadVisitBrief();
             } else if (kind === 'advice') {
                 const refresh = this.root.querySelector('#hub-advice-refresh');
                 if (refresh) refresh.addEventListener('click', () => self.refreshAdvice());
@@ -1781,6 +1986,13 @@
             for (let i = 0; i < verifies.length; i++) {
                 verifies[i].addEventListener('click', function () {
                     self.verifyItem(id, parseInt(this.getAttribute('data-verify'), 10));
+                });
+            }
+
+            const explains = root.querySelectorAll('[data-explain]');
+            for (let i = 0; i < explains.length; i++) {
+                explains[i].addEventListener('click', function () {
+                    self.explainTest(parseInt(this.getAttribute('data-explain'), 10));
                 });
             }
 
