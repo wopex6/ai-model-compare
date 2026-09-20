@@ -6480,14 +6480,27 @@ def _parse_iso_datetime(iso_text):
 
 def _get_retention_days(profile):
     settings = profile.data.setdefault('upload_settings', {})
-    raw_days = settings.get('retention_days', 365)
+    # Default is effectively "keep" (10 years): uploaded documents are the
+    # original evidence for extracted facts, so silent early deletion is the
+    # wrong default for a lifelong record. Users can still shorten it.
+    raw_days = settings.get('retention_days', 3650)
     try:
         days = int(raw_days)
     except (TypeError, ValueError):
-        days = 365
+        days = 3650
     days = max(1, min(days, 3650))
     settings['retention_days'] = days
     return days
+
+
+def _doc_expiry(doc, retention_days):
+    """Expiry datetime for a stored doc, or None when kept forever."""
+    if doc.get('keep_forever'):
+        return None
+    uploaded_at = _parse_iso_datetime(doc.get('uploaded_at'))
+    if not uploaded_at:
+        return None
+    return uploaded_at + timedelta(days=retention_days)
 
 
 def _cleanup_expired_uploaded_documents(profile):
@@ -6496,13 +6509,13 @@ def _cleanup_expired_uploaded_documents(profile):
         return 0
 
     retention_days = _get_retention_days(profile)
-    cutoff = datetime.now() - timedelta(days=retention_days)
+    now = datetime.now()
     kept = []
     removed = 0
 
     for doc in docs:
-        uploaded_at = _parse_iso_datetime(doc.get('uploaded_at'))
-        if uploaded_at and uploaded_at < cutoff:
+        expires = _doc_expiry(doc, retention_days)
+        if expires and expires < now:
             for key in ('stored_path', 'extracted_text_path', 'result_path'):
                 abs_path = doc.get(key)
                 if abs_path and os.path.exists(abs_path):
@@ -6556,6 +6569,7 @@ def _store_uploaded_health_document(user_id, file_storage, file_bytes, content_h
         'size_bytes': len(file_bytes),
         'uploaded_at': datetime.now().isoformat(),
         'mime_type': file_storage.mimetype or '',
+        'keep_forever': False,
         'extracted_text_path': '',
         'result_path': ''
     }
@@ -6771,6 +6785,10 @@ def transcribe_diary_audio():
     forward it to the configured OpenAI-compatible transcription endpoint.
     """
     try:
+        user_id = str(request.current_user['user_id'])
+        limited = _health_ai_rate_limit(user_id)
+        if limited:
+            return limited
         f = request.files.get('audio')
         if not f or not f.filename:
             return jsonify({'error': 'No audio file uploaded'}), 400
@@ -6941,6 +6959,9 @@ def analyze_health_info():
     """Analyze pasted health text with AI and store structured data"""
     try:
         user_id = str(request.current_user['user_id'])
+        limited = _health_ai_rate_limit(user_id)
+        if limited:
+            return limited
         data = request.get_json()
         raw_text = data.get('text', '').strip()
         if not raw_text:
@@ -7265,14 +7286,59 @@ def _extract_text_from_file_bytes(file_bytes, ext):
     raise RuntimeError(f'OpenAI vision failed after retries: {str(last_error)}')
 
 
+_UPLOAD_MAGIC = {
+    '.pdf': [b'%PDF'],
+    '.png': [b'\x89PNG\r\n\x1a\n'],
+    '.jpg': [b'\xff\xd8\xff'],
+    '.jpeg': [b'\xff\xd8\xff'],
+    '.webp': [b'RIFF'],
+    '.gif': [b'GIF87a', b'GIF89a'],
+    '.bmp': [b'BM'],
+}
+
+
+def _file_matches_extension(file_bytes, ext):
+    """Cheap content sniff so a mislabelled or disguised upload fails fast
+    instead of burning an OCR/vision call on garbage."""
+    sigs = _UPLOAD_MAGIC.get(ext)
+    if not sigs:
+        return False
+    if not any(file_bytes.startswith(s) for s in sigs):
+        return False
+    if ext == '.webp':
+        return file_bytes[8:12] == b'WEBP'
+    return True
+
+
+def _health_ai_rate_limit(user_id):
+    """429 gate for endpoints that spend real money (OCR, vision, Whisper).
+
+    Keyed by user, not IP — a home IP can be shared. Buckets are per worker
+    process, so the effective ceiling is the limit times the worker count;
+    that is still a hard stop against runaway retry loops."""
+    rl = get_rate_limiter()
+    if not rl:
+        return None
+    allowed, info = rl.check_limit(f'health:{user_id}', 'ai')
+    if allowed:
+        return None
+    return jsonify({
+        'error': 'Too many requests — wait a moment and try again.',
+        'retry_after': info.get('reset_in', 60)
+    }), 429
+
+
 @app.route('/api/health-profile/upload', methods=['POST'])
 @require_auth
 def upload_health_document():
     """Upload PDF or image file, extract health info, and analyze it"""
     try:
         user_id = str(request.current_user['user_id'])
+        limited = _health_ai_rate_limit(user_id)
+        if limited:
+            return limited
         profile = HealthContextManager.get_profile(user_id)
-        profile.data.setdefault('upload_settings', {'retention_days': 365})
+        profile.data.setdefault('upload_settings', {})
         profile.data.setdefault('uploaded_documents', [])
         _cleanup_expired_uploaded_documents(profile)
 
@@ -7292,6 +7358,8 @@ def upload_health_document():
         file_bytes = file.read()
         if len(file_bytes) > 10 * 1024 * 1024:  # 10MB limit
             return jsonify({'error': 'File too large (max 10MB)'}), 400
+        if not _file_matches_extension(file_bytes, ext):
+            return jsonify({'error': 'File content does not match its extension.'}), 400
 
         retain = request.form.get('retain', 'true').lower() != 'false'
 
@@ -7362,11 +7430,13 @@ def upload_health_document():
         result['source_file'] = file.filename
         in_library = stored_doc and any(d.get('content_hash') == content_hash for d in profile.data.get('uploaded_documents', []))
         if in_library:
+            expires = _doc_expiry(stored_doc, retention_days)
             result['stored_document'] = {
                 'original_name': stored_doc.get('original_name'),
                 'stored_name': stored_doc.get('stored_name'),
                 'uploaded_at': stored_doc.get('uploaded_at'),
-                'expires_at': (datetime.fromisoformat(stored_doc['uploaded_at']) + timedelta(days=retention_days)).isoformat(),
+                'expires_at': expires.isoformat() if expires else None,
+                'keep_forever': bool(stored_doc.get('keep_forever')),
                 'retention_days': retention_days,
                 'size_bytes': stored_doc.get('size_bytes')
             }
@@ -7383,6 +7453,9 @@ def reparse_uploaded_document():
     """Re-extract text from a previously uploaded document and analyze it again."""
     try:
         user_id = str(request.current_user['user_id'])
+        limited = _health_ai_rate_limit(user_id)
+        if limited:
+            return limited
         profile = HealthContextManager.get_profile(user_id)
         data = request.get_json() or {}
         stored_name = data.get('stored_name')
@@ -7532,20 +7605,70 @@ def list_health_documents():
     try:
         user_id = str(request.current_user['user_id'])
         profile = HealthContextManager.get_profile(user_id)
-        _cleanup_expired_uploaded_documents(profile)
+        # Cleanup deletes files and rewrites the list — a GET with side
+        # effects must persist, or the JSON keeps pointing at deleted files.
+        if _cleanup_expired_uploaded_documents(profile):
+            profile.save()
+        retention_days = _get_retention_days(profile)
+        now = datetime.now()
         uploaded = profile.data.get('uploaded_documents', [])
         documents = []
         for d in uploaded:
+            expires = _doc_expiry(d, retention_days)
+            days_left = (expires - now).days if expires else None
             documents.append({
                 'original_name': d.get('original_name'),
                 'stored_name': d.get('stored_name'),
                 'uploaded_at': d.get('uploaded_at'),
-                'expires_at': d.get('expires_at'),
-                'retention_days': d.get('retention_days'),
+                'expires_at': expires.isoformat() if expires else None,
+                'days_until_expiry': days_left,
+                'expiring_soon': days_left is not None and days_left <= 30,
+                'keep_forever': bool(d.get('keep_forever')),
+                'retention_days': retention_days,
                 'size_bytes': d.get('size_bytes'),
                 'content_hash': d.get('content_hash')
             })
         return jsonify({'documents': documents})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/health-profile/documents', methods=['PUT'])
+@require_auth
+def update_health_document():
+    """Set per-document flags. Currently: keep_forever (exempt from the
+    retention cleanup — the file is the original evidence for extracted facts)."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        data = request.get_json() or {}
+        stored_name = data.get('stored_name')
+        index = data.get('index')
+
+        uploaded = profile.data.get('uploaded_documents', [])
+        doc = None
+        if stored_name:
+            doc = next((d for d in uploaded if d.get('stored_name') == stored_name), None)
+        elif isinstance(index, int) and 0 <= index < len(uploaded):
+            doc = uploaded[index]
+
+        if not doc:
+            return jsonify({'error': 'Document not found'}), 404
+
+        if 'keep_forever' in data:
+            doc['keep_forever'] = bool(data['keep_forever'])
+        profile.save()
+
+        retention_days = _get_retention_days(profile)
+        expires = _doc_expiry(doc, retention_days)
+        return jsonify({
+            'success': True,
+            'document': {
+                'stored_name': doc.get('stored_name'),
+                'keep_forever': bool(doc.get('keep_forever')),
+                'expires_at': expires.isoformat() if expires else None,
+            }
+        })
     except Exception as e:
         return _safe_error(e, 'api')
 
@@ -7589,6 +7712,68 @@ def delete_health_document():
         return jsonify({'success': True})
     except Exception as e:
         return _safe_error(e, 'api')
+
+
+@app.route('/api/health-profile/export', methods=['GET'])
+@require_auth
+def export_health_profile():
+    """Download the whole health record: profile JSON plus the original
+    uploaded documents, as one zip. Doubles as the user-side backup."""
+    try:
+        import io
+        import zipfile
+        from flask import send_file
+
+        user_id = str(request.current_user['user_id'])
+        limited = _health_ai_rate_limit(user_id)
+        if limited:
+            return limited
+        profile = HealthContextManager.get_profile(user_id)
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+            z.writestr('profile.json',
+                       json.dumps(profile.to_dict(), ensure_ascii=False, indent=2))
+            for doc in profile.data.get('uploaded_documents', []):
+                stored = doc.get('stored_path')
+                if not stored or not os.path.exists(stored):
+                    continue
+                arc = 'documents/%s' % (doc.get('original_name') or
+                                        os.path.basename(stored))
+                try:
+                    z.write(stored, arc)
+                except OSError:
+                    pass
+        buf.seek(0)
+        return send_file(
+            buf,
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name='health-profile-export-%s.zip'
+                          % datetime.now().strftime('%Y%m%d'),
+        )
+    except Exception as e:
+        return _safe_error(e, 'export_health_profile')
+
+
+@app.route('/api/health-profile/changes', methods=['GET'])
+@require_auth
+def health_profile_changes():
+    """Deterministic change log: what was added, confirmed, retired or
+    edited within the last N days. Surfaces history that already exists on
+    items but was never visible in one place."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        try:
+            days = int(request.args.get('days', 30))
+        except (TypeError, ValueError):
+            days = 30
+        days = max(1, min(days, 365))
+        events = health_insights.recent_changes(profile.data, days=days)
+        return jsonify({'success': True, 'days': days, 'changes': events})
+    except Exception as e:
+        return _safe_error(e, 'health_profile_changes')
 
 
 @app.route('/api/health-profile/item', methods=['DELETE'])

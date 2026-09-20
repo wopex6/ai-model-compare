@@ -1,6 +1,7 @@
 """Home-screen Emergency icon: dedicated page, generated PNG, SW allow-list."""
 import json
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -101,7 +102,9 @@ def test_service_worker_caches_emergency_shell_separately():
     assert "EMERGENCY_SHELL = '/dr-health/emergency'" in sw
     assert '/static/emergency_card.js' in sw
     assert "pathname === EMERGENCY_SHELL" in sw
-    assert 'dr-health-shell-v93' in sw
+    # Version-agnostic: the cache name bumps every static change, so assert the
+    # pattern, not the number (pinning it broke on every legitimate bump).
+    assert re.search(r"CACHE_NAME = 'dr-health-shell-v\d+'", sw)
     # The previous bug: every navigate was stored as the main app shell, so
     # opening Emergency offline would have overwritten /dr-health.
     assert 'cache.put(APP_SHELL, copy)' not in sw

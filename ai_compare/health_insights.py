@@ -1309,6 +1309,86 @@ def digest_due(data: Dict, today: Optional[date] = None) -> bool:
     return (today - last).days >= period
 
 
+def recent_changes(data: Dict, days: int = 30,
+                   today: Optional[date] = None) -> List[Dict]:
+    """Deterministic change log: items added, retired or edited in the window.
+
+    The history entries already exist on items; this surfaces them in one
+    place, newest first."""
+    today = today or date.today()
+    cutoff = (datetime.combine(today, datetime.min.time())
+              - timedelta(days=days)).isoformat()
+
+    events = []
+    for category in list(PROVENANCE_CATEGORIES) + ['diary', 'provider_notes',
+                                                   'questions_for_doctor',
+                                                   'follow_ups']:
+        items = data.get(category) or []
+        if not isinstance(items, list):
+            continue
+        for idx, item in enumerate(items):
+            if not isinstance(item, dict):
+                continue
+            name = (item.get('name') or item.get('test_name') or
+                    item.get('title') or item.get('question') or
+                    item.get('text') or '')
+            for ev in item.get('history') or []:
+                ts = str(ev.get('at') or ev.get('date') or '')
+                if ts and ts >= cutoff:
+                    events.append({
+                        'when': ts, 'category': category, 'index': idx,
+                        'name': name,
+                        'event': ev.get('event') or ev.get('type') or 'change',
+                        'detail': ev.get('note') or ev.get('detail') or '',
+                    })
+            added = str(item.get('added_at') or item.get('created_at') or '')
+            if added and added >= cutoff:
+                events.append({
+                    'when': added, 'category': category, 'index': idx,
+                    'name': name, 'event': 'added',
+                    'detail': str(item.get('source') or ''),
+                })
+            ended = str(item.get('ended_on') or '')
+            if ended and ended >= cutoff:
+                events.append({
+                    'when': ended, 'category': category, 'index': idx,
+                    'name': name, 'event': 'retired',
+                    'detail': str(item.get('end_reason') or ''),
+                })
+    events.sort(key=lambda e: e['when'], reverse=True)
+    return events
+
+
+def expiring_documents(data: Dict, within_days: int = 30,
+                       today: Optional[date] = None) -> List[Dict]:
+    """Stored documents whose retention expiry is inside the window.
+
+    Docs flagged keep_forever never expire. The UI can warn before the
+    cleanup deletes the original file."""
+    today = today or date.today()
+    try:
+        days = int((data.get('upload_settings') or {}).get('retention_days', 3650))
+    except (TypeError, ValueError):
+        days = 3650
+    horizon = today + timedelta(days=within_days)
+    out = []
+    for doc in data.get('uploaded_documents') or []:
+        if not isinstance(doc, dict) or doc.get('keep_forever'):
+            continue
+        uploaded = parse_date(doc.get('uploaded_at'))
+        if not uploaded:
+            continue
+        expires = uploaded + timedelta(days=days)
+        if expires <= horizon:
+            out.append({
+                'original_name': doc.get('original_name'),
+                'stored_name': doc.get('stored_name'),
+                'expires_at': expires.isoformat(),
+                'days_until_expiry': (expires - today).days,
+            })
+    return out
+
+
 def build_digest(data: Dict, today: Optional[date] = None) -> Dict:
     """A periodic review: what changed, what needs attention, what is coming up.
 
@@ -1350,6 +1430,9 @@ def build_digest(data: Dict, today: Optional[date] = None) -> Dict:
         'red_flags': red_flags(observations),
         'observations': observations,
         'reminders_due': due_soon,
+        'recent_changes': recent_changes(data, days=period, today=today),
+        'expiring_documents': expiring_documents(data, within_days=30,
+                                                 today=today),
         'suggestions': cached.get('suggestions', []),
         'questions_for_doctor': cached.get('questions_for_doctor', []),
         'provenance': provenance_counts(data),
