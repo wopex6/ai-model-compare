@@ -268,3 +268,39 @@ handoff.py                      session handoff snapshot
   and durable notes in this file.
 - **Escalate rather than work around** auth problems, permission errors or
   failing CI that would require weakening a security control.
+
+---
+
+## 8. Open work (replace this when it ships)
+
+As of 20 Sep 2026, branch `cursor/emergency-card-paramedic-fields`, commit
+`4277472`, PWA cache `dr-health-shell-v93`, deployed.
+
+Shipped in that commit: question-packed chat context (whole sections dropped,
+allergies/current meds kept); Chat photo/PDF attach plus the confirmation
+queue in the thread; observation-based quick topics; one-page GP visit brief;
+lab-row “Explain this result” (citations only, daily cap, does not overwrite
+weekly `ai_advice`); weekly digest as a Chat line; replies follow Personal
+Details language / Settings locale.
+
+Next, in order:
+
+1. After-visit return — photograph the new script or letter, park extracted
+   meds as proposals, offer to mark visit questions answered. Never retire or
+   add a drug as fact until the user confirms.
+2. Chat “I stopped X / my GP started Y” as confirmation-queue proposals.
+   `---PROFILE_UPDATE---` already writes `ai_inferred`; if the model skips
+   that block the record still shows the old current meds.
+3. Deterministic drug-interaction flags in chat context. The hub tool exists;
+   the model does not see it.
+
+Not verified from a desktop: v93 on an installed phone, airplane-mode
+emergency card, a live Cantonese reply. Local Flask on :5050/:5051 may still
+be a process started before the new routes — a 404 there is a stale process,
+not a missing feature.
+
+Do not revive `/static/emergency_sw.js`, a second emergency-card editor, or
+password-in-localStorage. Do not commit AutoDoc leftovers (`README.md`,
+`ENHANCEMENTS.md`, `AI_REGENERATION_SPEC.md`, `SYSTEM_REGENERATION_GUIDE.md`).
+`pa_sync` still uploads dirty tracked files, so restore those four before a
+deploy if AutoDoc has touched them.
