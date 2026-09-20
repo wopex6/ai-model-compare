@@ -1301,8 +1301,100 @@
             html += '</div>';
 
             const docs = (this.profile && Array.isArray(this.profile.uploaded_documents)) ? this.profile.uploaded_documents : [];
-            html += '<div class="hub-note"><strong>' + docs.length + '</strong> document(s) currently stored.</div>';
+            html += '<div class="hub-form" style="margin-top:20px; border-top:1px solid #e3e7ea; padding-top:16px;">';
+            html += '<div class="hub-form-title">Stored documents</div>';
+            html += '<div id="hub-docs"><div class="hub-note"><strong>' + docs.length + '</strong> document(s) stored — loading details…</div></div>';
+            html += '<div class="hub-row-actions"><button class="hub-btn" id="hub-export"><i class="fas fa-download"></i> Download my whole record (zip)</button></div>';
+            html += '<div class="hub-form-hint">Documents marked "keep" are never auto-deleted. The export is also your backup.</div>';
+            html += '</div>';
             return html;
+        },
+
+        async loadDocuments() {
+            const el = this.root.querySelector('#hub-docs');
+            if (!el) return;
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/documents');
+                const data = await resp.json();
+                const docs = (data && Array.isArray(data.documents)) ? data.documents : [];
+                if (!docs.length) {
+                    el.innerHTML = '<div class="hub-note">No documents stored.</div>';
+                    return;
+                }
+                let html = '';
+                for (let i = 0; i < docs.length; i++) {
+                    const d = docs[i];
+                    html += '<div class="hub-note' + (d.expiring_soon ? ' warn' : '') + '">';
+                    html += '<strong>' + esc(d.original_name || d.stored_name || 'Document') + '</strong>';
+                    if (d.keep_forever) {
+                        html += '<br>Kept forever.';
+                    } else if (d.expires_at) {
+                        html += '<br>Deleted after ' + esc(String(d.expires_at).slice(0, 10)) +
+                            (d.expiring_soon ? ' — expiring soon' : '');
+                    }
+                    html += '<br><label class="hub-check"><input type="checkbox" data-doc-keep="' +
+                        esc(d.stored_name || '') + '"' + (d.keep_forever ? ' checked' : '') +
+                        '> Keep this document</label>';
+                    html += '</div>';
+                }
+                el.innerHTML = html;
+                const self = this;
+                const boxes = el.querySelectorAll('[data-doc-keep]');
+                for (let i = 0; i < boxes.length; i++) {
+                    boxes[i].addEventListener('change', function () {
+                        self.setDocKeep(this.getAttribute('data-doc-keep'), this.checked);
+                    });
+                }
+            } catch (e) {
+                el.innerHTML = '<div class="hub-note error">Could not load document list.</div>';
+            }
+        },
+
+        async setDocKeep(storedName, keep) {
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/documents', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ stored_name: storedName, keep_forever: !!keep })
+                });
+                const data = await resp.json();
+                if (!resp.ok || !data.success) {
+                    this.status((data && data.error) ? data.error : 'Could not update the document.', true);
+                } else {
+                    this.status(keep ? 'Document will be kept.' : 'Document follows the retention period.');
+                }
+            } catch (e) {
+                this.status('Network error while updating the document.', true);
+            }
+        },
+
+        async exportRecord() {
+            if (this.busy) return;
+            this.busy = true;
+            this.status('Preparing your export…');
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/export');
+                this.busy = false;
+                if (!resp.ok) {
+                    let msg = 'Could not build the export.';
+                    try { const d = await resp.json(); if (d && d.error) msg = d.error; } catch (e) {}
+                    this.status(msg, true);
+                    return;
+                }
+                const blob = await resp.blob();
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'health-profile-export.zip';
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 10000);
+                this.status('Export downloaded.');
+            } catch (e) {
+                this.busy = false;
+                this.status('Network error while exporting.', true);
+            }
         },
 
         async saveAdviceSettings() {
@@ -1535,6 +1627,32 @@
                         esc(bits.join(', ')) + '</div>';
                 } else {
                     html += '<div class="hub-note"><strong>New in this period</strong><br>Nothing was added.</div>';
+                }
+
+                const changes = d.recent_changes || [];
+                if (changes.length) {
+                    html += '<div class="hub-group-label">What changed</div>';
+                    for (let i = 0; i < changes.length && i < 20; i++) {
+                        const c = changes[i];
+                        const when = String(c.when || '').slice(0, 10);
+                        html += '<div class="hub-note">' + esc(when) + ' — ' +
+                            esc(labelFor(c.category || '').toLowerCase()) + ': ' +
+                            esc(c.name || 'item') + ' <em>' + esc(c.event || '') + '</em>' +
+                            (c.detail ? '<br><span style="opacity:.7">' + esc(c.detail) + '</span>' : '') +
+                            '</div>';
+                    }
+                }
+
+                const expiring = d.expiring_documents || [];
+                if (expiring.length) {
+                    html += '<div class="hub-group-label">Documents nearing expiry</div>';
+                    for (let i = 0; i < expiring.length; i++) {
+                        const doc = expiring[i];
+                        html += '<div class="hub-note warn"><i class="fas fa-file-circle-exclamation"></i> ' +
+                            esc(doc.original_name || doc.stored_name || 'Document') +
+                            ' is deleted in ' + esc(String(doc.days_until_expiry)) + ' day(s). ' +
+                            'Open Settings to keep it.</div>';
+                    }
                 }
 
                 const flags = d.red_flags || [];
@@ -1902,6 +2020,9 @@
                 if (change) change.addEventListener('click', () => self.savePassword());
                 const adviceSave = this.root.querySelector('#hub-advice-settings-save');
                 if (adviceSave) adviceSave.addEventListener('click', () => self.saveAdviceSettings());
+                const exp = this.root.querySelector('#hub-export');
+                if (exp) exp.addEventListener('click', () => self.exportRecord());
+                this.loadDocuments();
             } else if (kind === 'interactions') {
                 this.loadInteractions();
             } else if (kind === 'summary') {

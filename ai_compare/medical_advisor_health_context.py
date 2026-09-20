@@ -3,11 +3,13 @@ Medical Advisor Health Context System
 Stores and retrieves ongoing health information for personalized medical guidance.
 Each user has a persistent health profile that accumulates over conversations.
 """
+import copy
 import json
 from decimal import Decimal
 import os
 import re
 import secrets
+import shutil
 from datetime import date, datetime
 from typing import Dict, List, Optional
 from pathlib import Path
@@ -29,10 +31,108 @@ from ai_compare.health_freshness import (
 
 
 HEALTH_DATA_DIR = Path(__file__).parent.parent / "health_profiles"
+BACKUP_DIR = HEALTH_DATA_DIR / "_backups"
+# Rotating copies kept per user so a bad write or mistaken edit can be
+# recovered. The file is small, so keeping many is cheap insurance.
+BACKUP_KEEP = 20
 
 
 class ProfileCorruptError(ValueError):
     """The profile file exists but cannot be read. Never replace it with a blank."""
+
+
+def _item_key(item):
+    """Stable identity for a list item during a 3-way merge.
+
+    Prefers explicit ids, then a human-readable primary field, then a date
+    secondary so the same test name on different days stays distinct."""
+    if not isinstance(item, dict):
+        return ('raw', json.dumps(item, sort_keys=True, default=str))
+    primary = ''
+    for k in ('id', 'name', 'test_name', 'title', 'question', 'text', 'content'):
+        v = item.get(k)
+        if v:
+            primary = str(v).strip().lower()
+            break
+    secondary = ''
+    for k in ('date', 'added_at', 'created_at', 'ended_on'):
+        v = item.get(k)
+        if v:
+            secondary = str(v)
+            break
+    return (primary or json.dumps(item, sort_keys=True, default=str), secondary)
+
+
+def _item_ts(item):
+    """Best available timestamp on an item; later string wins."""
+    best = ''
+    if isinstance(item, dict):
+        for k in ('updated_at', 'last_confirmed_at', 'added_at', 'created_at',
+                  'ended_on', 'date'):
+            v = str(item.get(k) or '')
+            if v > best:
+                best = v
+    return best
+
+
+def _merge_value(base, ours, remote):
+    """Three-way merge of a profile subtree.
+
+    base = what this worker loaded, ours = this worker's mutated copy,
+    remote = what another worker wrote to disk since then.
+
+    - Only one side changed -> take that side.
+    - Both changed a dict -> merge field by field.
+    - Both changed a list -> union by _item_key; same-key conflicts go to the
+      item with the later timestamp (tie -> ours, the request in flight).
+    - Both changed a scalar -> ours wins: it is the user's most recent action.
+    """
+    if ours == remote:
+        return ours
+    if ours == base:
+        return remote
+    if remote == base:
+        return ours
+
+    if isinstance(ours, dict) and isinstance(remote, dict):
+        base = base if isinstance(base, dict) else {}
+        out = {}
+        for k in set(base) | set(ours) | set(remote):
+            in_o, in_r, in_b = k in ours, k in remote, k in base
+            if in_o and in_r:
+                out[k] = _merge_value(base.get(k), ours[k], remote[k])
+            elif in_o:
+                # Remote deleted it (was in base) or never had it — keep our edit.
+                out[k] = ours[k]
+            elif in_r:
+                # We deleted it if it was in base; otherwise it is remote's new key.
+                if not in_b:
+                    out[k] = remote[k]
+            # in neither -> stays absent
+        return out
+
+    if isinstance(ours, list) and isinstance(remote, list):
+        result = list(remote)
+        index = {_item_key(i): pos for pos, i in enumerate(result)}
+        for item in ours:
+            key = _item_key(item)
+            pos = index.get(key)
+            if pos is None:
+                index[key] = len(result)
+                result.append(item)
+            elif _item_ts(item) >= _item_ts(result[pos]):
+                result[pos] = item
+        return result
+
+    return ours
+
+
+def merge_profiles(base: Dict, ours: Dict, remote: Dict) -> Dict:
+    """Merge a concurrent foreign write into our mutated profile data."""
+    merged = {}
+    for k in set(base) | set(ours) | set(remote):
+        merged[k] = _merge_value(base.get(k), ours.get(k), remote.get(k))
+    return merged
 
 
 _DATE_RE = re.compile(
@@ -662,6 +762,9 @@ class HealthProfile:
         self.ingest_source = SOURCE_USER
         self.data = self._load()
         self._file_stamp = self._current_file_stamp()
+        # Snapshot of what we loaded; save() diffs against it when another
+        # worker wrote the file in between (3-way merge instead of clobber).
+        self._loaded_base = copy.deepcopy(self.data)
         changed = self._normalize_test_results()
         changed += self._deduplicate_test_results()
         if changed:
@@ -688,6 +791,7 @@ class HealthProfile:
             return False
         self.data = self._load()
         self._file_stamp = stamp
+        self._loaded_base = copy.deepcopy(self.data)
         changed = self._normalize_test_results()
         changed += self._deduplicate_test_results()
         if changed:
@@ -775,7 +879,10 @@ class HealthProfile:
             "conversation_insights": [],
             "diary": [],
             "upload_settings": {
-                "retention_days": 365
+                # 3650 ≈ keep: uploaded documents are the original evidence
+                # for extracted facts; silent early deletion is the wrong
+                # default for a lifelong record.
+                "retention_days": 3650
             },
             "uploaded_documents": [],
             "pending_changes": [],
@@ -787,13 +894,27 @@ class HealthProfile:
         }
 
     def save(self):
-        """Persist to disk via a temp file so a crash cannot leave a blank profile."""
+        """Persist to disk via a temp file so a crash cannot leave a blank profile.
+
+        If another worker wrote the file since we loaded it, their changes are
+        merged in (3-way merge against our load snapshot) rather than silently
+        overwritten — the check reload narrows the race but cannot close it.
+        """
         self.data["updated_at"] = datetime.now().isoformat()
         # Stamp provenance in one place rather than in every add_* method. Items
         # already carrying a canonical source are left untouched, so this is
         # idempotent and cannot relabel history.
         apply_provenance_defaults(self.data, self.ingest_source)
         HEALTH_DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+        if self.file_path.exists():
+            stamp = self._current_file_stamp()
+            if stamp is not None and stamp != self._file_stamp:
+                remote = self._load()
+                self.data = merge_profiles(
+                    self._loaded_base or {}, self.data, remote)
+
+        self._backup_existing()
         tmp_path = self.file_path.with_name(self.file_path.name + '.tmp')
         try:
             with open(tmp_path, 'w', encoding='utf-8') as f:
@@ -807,6 +928,31 @@ class HealthProfile:
             except OSError:
                 pass
             raise
+        # Record our own write so it is not mistaken for another worker's.
+        self._file_stamp = self._current_file_stamp()
+        self._loaded_base = copy.deepcopy(self.data)
+
+    def _backup_existing(self):
+        """Keep a timestamped copy of the on-disk file before replacing it.
+
+        Rotates to BACKUP_KEEP copies per user. A backup failure must never
+        block the save itself.
+        """
+        if not self.file_path.exists():
+            return
+        try:
+            dest_dir = BACKUP_DIR / self.user_id
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')
+            shutil.copy2(self.file_path, dest_dir / f'{stamp}.json')
+            copies = sorted(dest_dir.glob('*.json'))
+            for old in copies[:-BACKUP_KEEP]:
+                try:
+                    old.unlink()
+                except OSError:
+                    pass
+        except OSError:
+            pass
         # Record our own write so it is not mistaken for another worker's.
         self._file_stamp = self._current_file_stamp()
 

@@ -1,0 +1,209 @@
+"""Profile backup rotation, cross-worker merge, upload sniffing, retention flags."""
+import json
+import os
+import sys
+import uuid
+from datetime import datetime, timedelta
+from unittest.mock import patch
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from ai_compare.medical_advisor_health_context import (
+    BACKUP_DIR,
+    BACKUP_KEEP,
+    HEALTH_DATA_DIR,
+    HealthContextManager,
+    HealthProfile,
+    merge_profiles,
+)
+
+
+def _user():
+    return 'safety_test_' + uuid.uuid4().hex[:10]
+
+
+def _cleanup(user_id):
+    path = HEALTH_DATA_DIR / f'{user_id}.json'
+    path.unlink(missing_ok=True)
+    bdir = BACKUP_DIR / str(user_id)
+    if bdir.exists():
+        for f in bdir.glob('*.json'):
+            f.unlink(missing_ok=True)
+        try:
+            bdir.rmdir()
+        except OSError:
+            pass
+    HealthContextManager._profiles.pop(str(user_id), None)
+
+
+def test_save_keeps_rotating_backups():
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        profile.data['name'] = 'One'
+        profile.save()
+        profile.data['name'] = 'Two'
+        profile.save()
+        profile.data['name'] = 'Three'
+        profile.save()
+        bdir = BACKUP_DIR / str(user_id)
+        copies = sorted(bdir.glob('*.json'))
+        assert len(copies) >= 2
+        # Oldest backup contains the first saved name, not the latest
+        first = json.loads(copies[0].read_text(encoding='utf-8'))
+        assert first['name'] == 'One'
+        assert json.loads(profile.file_path.read_text(encoding='utf-8'))['name'] == 'Three'
+    finally:
+        _cleanup(user_id)
+
+
+def test_backup_rotation_is_bounded():
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        for i in range(BACKUP_KEEP + 5):
+            profile.data['name'] = f'v{i}'
+            profile.save()
+        copies = list((BACKUP_DIR / str(user_id)).glob('*.json'))
+        assert len(copies) <= BACKUP_KEEP
+    finally:
+        _cleanup(user_id)
+
+
+def test_foreign_write_is_merged_not_clobbered():
+    """Worker A loads, worker B writes a med, worker A saves a condition:
+    both changes must survive."""
+    user_id = _user()
+    try:
+        worker_a = HealthProfile(user_id)
+        worker_a.data['name'] = 'Base'
+        worker_a.save()
+
+        worker_b = HealthProfile(user_id)  # loads A's saved state
+        worker_b.data.setdefault('medications', []).append(
+            {'name': 'Metformin', 'added_at': datetime.now().isoformat()})
+        worker_b.save()
+
+        # A never reloaded — its save must merge B's medication, not erase it.
+        worker_a.data.setdefault('conditions', []).append(
+            {'name': 'T2 diabetes', 'added_at': datetime.now().isoformat()})
+        worker_a.save()
+
+        final = json.loads((HEALTH_DATA_DIR / f'{user_id}.json')
+                           .read_text(encoding='utf-8'))
+        med_names = [m.get('name') for m in final.get('medications', [])]
+        cond_names = [c.get('name') for c in final.get('conditions', [])]
+        assert 'Metformin' in med_names
+        assert 'T2 diabetes' in cond_names
+    finally:
+        _cleanup(user_id)
+
+
+def test_merge_helpers():
+    base = {'medications': [{'name': 'A'}], 'name': 'x'}
+    ours = {'medications': [{'name': 'A'}, {'name': 'B'}], 'name': 'x'}
+    remote = {'medications': [{'name': 'A'}, {'name': 'C'}], 'name': 'y'}
+    merged = merge_profiles(base, ours, remote)
+    names = sorted(m['name'] for m in merged['medications'])
+    assert names == ['A', 'B', 'C']
+    assert merged['name'] == 'y'  # remote changed it, we did not -> remote
+
+
+def test_merge_conflicting_scalar_prefers_ours():
+    base = {'name': 'old'}
+    ours = {'name': 'ours'}
+    remote = {'name': 'theirs'}
+    assert merge_profiles(base, ours, remote)['name'] == 'ours'
+
+
+# --- upload content sniffing -------------------------------------------------
+
+def test_magic_byte_check():
+    import app as app_mod
+    assert app_mod._file_matches_extension(b'%PDF-1.4 rest', '.pdf')
+    assert app_mod._file_matches_extension(b'\x89PNG\r\n\x1a\nrest', '.png')
+    assert app_mod._file_matches_extension(b'\xff\xd8\xff\xe0rest', '.jpg')
+    assert app_mod._file_matches_extension(b'RIFFxxxxWEBPrest', '.webp')
+    assert app_mod._file_matches_extension(b'GIF89arest', '.gif')
+    assert app_mod._file_matches_extension(b'BMrest', '.bmp')
+    assert not app_mod._file_matches_extension(b'not a pdf', '.pdf')
+    assert not app_mod._file_matches_extension(b'%PDF-1.4', '.png')
+    assert not app_mod._file_matches_extension(b'RIFFxxxxWAVE', '.webp')
+    assert not app_mod._file_matches_extension(b'', '.pdf')
+
+
+# --- retention flags ----------------------------------------------------------
+
+def _profile_with_doc(days_old=400, keep=False):
+    user_id = _user()
+    profile = HealthProfile(user_id)
+    doc = {
+        'original_name': 'report.pdf',
+        'stored_name': 'x_report.pdf',
+        'stored_path': '',  # nonexistent -> counts as "file gone" branch, so set a real one
+        'uploaded_at': (datetime.now() - timedelta(days=days_old)).isoformat(),
+        'content_hash': 'abc',
+        'keep_forever': keep,
+    }
+    return user_id, profile, doc
+
+
+def test_keep_forever_survives_retention_cleanup(tmp_path):
+    import app as app_mod
+    user_id, profile, doc = _profile_with_doc(days_old=400, keep=True)
+    real = tmp_path / 'report.pdf'
+    real.write_bytes(b'%PDF-1.4')
+    doc['stored_path'] = str(real)
+    profile.data['uploaded_documents'] = [doc]
+    profile.data['upload_settings'] = {'retention_days': 30}
+    try:
+        removed = app_mod._cleanup_expired_uploaded_documents(profile)
+        assert removed == 0
+        assert real.exists()
+        assert profile.data['uploaded_documents'] == [doc]
+    finally:
+        _cleanup(user_id)
+
+
+def test_expired_doc_is_removed_without_keep_flag(tmp_path):
+    import app as app_mod
+    user_id, profile, doc = _profile_with_doc(days_old=400, keep=False)
+    real = tmp_path / 'report.pdf'
+    real.write_bytes(b'%PDF-1.4')
+    doc['stored_path'] = str(real)
+    profile.data['uploaded_documents'] = [doc]
+    profile.data['upload_settings'] = {'retention_days': 30}
+    try:
+        removed = app_mod._cleanup_expired_uploaded_documents(profile)
+        assert removed == 1
+        assert not real.exists()
+        assert profile.data['uploaded_documents'] == []
+    finally:
+        _cleanup(user_id)
+
+
+def test_recent_changes_and_expiring_docs():
+    from ai_compare import health_insights
+    today = datetime.now().date()
+    data = {
+        'upload_settings': {'retention_days': 30},
+        'uploaded_documents': [
+            {'original_name': 'old.pdf',
+             'stored_name': 's1',
+             'uploaded_at': (today - timedelta(days=20)).isoformat()},
+            {'original_name': 'keep.pdf',
+             'stored_name': 's2', 'keep_forever': True,
+             'uploaded_at': (today - timedelta(days=100)).isoformat()},
+        ],
+        'medications': [
+            {'name': 'Metformin',
+             'added_at': (today - timedelta(days=3)).isoformat()},
+        ],
+        'conditions': [],
+        'symptoms': [],
+    }
+    changes = health_insights.recent_changes(data, days=30, today=today)
+    assert any(c['event'] == 'added' and c['name'] == 'Metformin' for c in changes)
+    expiring = health_insights.expiring_documents(data, within_days=30, today=today)
+    names = [d['original_name'] for d in expiring]
+    assert 'old.pdf' in names and 'keep.pdf' not in names

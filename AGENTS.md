@@ -211,8 +211,20 @@ during a backfill — it hides stale data instead of surfacing it.
 
 - **Never commit patient data.** `health_profiles/` and
   `health_uploaded_documents/` are gitignored — the latter holds real medical
-  PDFs and OCR output. Once in git history they cannot be removed without
-  rewriting it. Be careful with `git add -A`; check `git status` first.
+  PDFs and OCR output. `health_profiles/_backups/` is where `save()` rotates
+  timestamped copies (last 20 per user) — that is the recovery path, do not
+  delete it, and it stays inside the gitignored tree. Be careful with
+  `git add -A`; check `git status` first.
+- **`save()` merges foreign writes.** Profiles are cached per worker; when the
+  file changed since load, `save()` three-way merges the remote copy into ours
+  (`merge_profiles`) instead of clobbering. Lists union by item key, dicts
+  merge per field, scalar conflicts keep the in-flight (ours) value.
+- **Uploaded documents are evidence, not cache.** `keep_forever` on a doc
+  exempts it from retention cleanup; the retention default for new profiles is
+  3650 days (~keep). `GET /documents` lists `expires_at`/`expiring_soon`, the
+  digest warns 30 days ahead, and `PUT /documents` toggles keep. The full
+  record exports via `GET /api/health-profile/export` (zip: profile JSON +
+  originals); a change log is at `GET /api/health-profile/changes?days=N`.
 - **Secrets come from the environment.** `PYTHONANYWHERE_API_TOKEN`, model API
   keys and `JWT_SECRET`/`SECRET_KEY` load from `.env`. Never hardcode, echo or
   commit them. `app.py` warns on startup when insecure defaults are in use.
