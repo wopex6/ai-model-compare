@@ -7,6 +7,7 @@ import json
 from decimal import Decimal
 import os
 import re
+import secrets
 from datetime import date, datetime
 from typing import Dict, List, Optional
 from pathlib import Path
@@ -28,6 +29,10 @@ from ai_compare.health_freshness import (
 
 
 HEALTH_DATA_DIR = Path(__file__).parent.parent / "health_profiles"
+
+
+class ProfileCorruptError(ValueError):
+    """The profile file exists but cannot be read. Never replace it with a blank."""
 
 
 _DATE_RE = re.compile(
@@ -697,15 +702,22 @@ class HealthProfile:
         'user_entered' ingest default and being treated as confirmed fact.
         """
         HEALTH_DATA_DIR.mkdir(parents=True, exist_ok=True)
-        data = None
-        if self.file_path.exists():
+        if not self.file_path.exists():
+            data = self._default_profile()
+        else:
             try:
                 with open(self.file_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-            except (json.JSONDecodeError, IOError):
-                data = None
-        if data is None:
-            data = self._default_profile()
+            except (json.JSONDecodeError, OSError) as exc:
+                raise ProfileCorruptError(
+                    f'Health profile for {self.user_id} is unreadable and '
+                    'was not replaced with a blank profile.'
+                ) from exc
+            if not isinstance(data, dict):
+                raise ProfileCorruptError(
+                    f'Health profile for {self.user_id} is not an object and '
+                    'was not replaced with a blank profile.'
+                )
         backfill_legacy_provenance(data)
         backfill_lifecycle(data)
         return data
@@ -775,15 +787,26 @@ class HealthProfile:
         }
 
     def save(self):
-        """Persist to disk"""
+        """Persist to disk via a temp file so a crash cannot leave a blank profile."""
         self.data["updated_at"] = datetime.now().isoformat()
         # Stamp provenance in one place rather than in every add_* method. Items
         # already carrying a canonical source are left untouched, so this is
         # idempotent and cannot relabel history.
         apply_provenance_defaults(self.data, self.ingest_source)
         HEALTH_DATA_DIR.mkdir(parents=True, exist_ok=True)
-        with open(self.file_path, 'w', encoding='utf-8') as f:
-            json.dump(self.data, f, indent=2, ensure_ascii=False)
+        tmp_path = self.file_path.with_name(self.file_path.name + '.tmp')
+        try:
+            with open(tmp_path, 'w', encoding='utf-8') as f:
+                json.dump(self.data, f, indent=2, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, self.file_path)
+        except Exception:
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+            raise
         # Record our own write so it is not mistaken for another worker's.
         self._file_stamp = self._current_file_stamp()
 
@@ -992,6 +1015,21 @@ class HealthProfile:
             "ec_phone": personal.get("ec_phone") or "",
             "location": personal.get("location") or "",
         }
+
+    def ensure_emergency_pair_token(self) -> str:
+        """Long-lived code that can refresh the home-screen Emergency icon.
+
+        iPhone isolates storage between two home-screen apps on the same
+        origin, so the Emergency icon cannot read the card the signed-in app
+        cached. A setup code is the only way to share it without a login.
+        """
+        token = str(self.data.get("emergency_pair_token") or "").strip()
+        if len(token) >= 20:
+            return token
+        token = secrets.token_urlsafe(24)
+        self.data["emergency_pair_token"] = token
+        self.save()
+        return token
 
     def _queue_proposals(self, proposals: List[Dict]):
         """Park AI-suggested field changes for the user to review.
@@ -2463,6 +2501,35 @@ class HealthProfile:
     def to_dict(self) -> Dict:
         """Return full profile as dict"""
         return self.data.copy()
+
+
+def find_profile_by_pair_token(token: str) -> Optional[HealthProfile]:
+    """Locate a profile whose emergency setup code matches ``token``.
+
+    Used by the unauthenticated Emergency icon. Tokens are long random
+    strings; a miss returns None rather than creating a profile.
+    """
+    offered = str(token or "").strip()
+    if len(offered) < 20:
+        return None
+    if not HEALTH_DATA_DIR.exists():
+        return None
+    for path in HEALTH_DATA_DIR.glob("*.json"):
+        if path.name.startswith(".") or path.name.endswith(".tmp"):
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        stored = str(data.get("emergency_pair_token") or "").strip()
+        if len(stored) < 20 or len(stored) != len(offered):
+            continue
+        if secrets.compare_digest(stored, offered):
+            user_id = str(data.get("user_id") or path.stem)
+            return HealthContextManager.get_profile(user_id)
+    return None
 
 
 class HealthContextManager:

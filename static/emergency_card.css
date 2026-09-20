@@ -28,6 +28,24 @@
     background: #fff3cd; border: 1px solid #f0ad4e; color: #856404;
     padding: 10px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px;
 }
+.emergency-pair-note {
+    background: #f7f9fa; border: 1px solid #e3e7ea; border-radius: 10px;
+    padding: 10px 12px; margin-bottom: 14px; font-size: 0.85rem;
+    color: #546e7a; line-height: 1.45;
+}
+.emergency-pair-note[hidden], .emergency-pair-form[hidden] { display: none; }
+.emergency-pair-form { margin: 12px 0 16px; }
+.emergency-pair-form label { display: block; font-size: 0.85rem; margin-bottom: 6px; }
+.emergency-pair-form input {
+    width: 100%; padding: 10px; border: 1px solid #cfd8dc; border-radius: 8px;
+    font-size: 1rem; font-family: inherit; box-sizing: border-box;
+}
+.emergency-pair-form button {
+    margin-top: 8px; padding: 10px 14px; border: none; border-radius: 8px;
+    background: #c62828; color: #fff; font-weight: 700; font-family: inherit;
+    cursor: pointer;
+}
+.emergency-pair-status { margin-top: 8px; font-size: 0.85rem; }
 .emergency-meds { list-style: none; padding-left: 0; margin: 0; }
 .emergency-meds li {
     margin-bottom: 10px; padding: 10px 12px;

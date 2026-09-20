@@ -1434,6 +1434,11 @@ def favicon():
 # ---------- Safe error helper (W6: never leak internals) ----------
 def _safe_error(e, context='request'):
     """Log the real error server-side and return a generic message to the client."""
+    if e.__class__.__name__ == 'ProfileCorruptError':
+        _log.error("Corrupt profile in %s: %s", context, e)
+        return jsonify({
+            'error': 'Your health profile file is damaged and was not replaced with a blank profile. Restore a backup.'
+        }), 409
     _log.error("Internal error in %s: %s", context, e, exc_info=True)
     return jsonify({'error': 'An internal error occurred. Please try again later.'}), 500
 
@@ -6455,6 +6460,7 @@ def update_ai_limits():
 # ============================================
 from ai_compare.medical_advisor_health_context import (
     HealthContextManager,
+    find_profile_by_pair_token,
     medication_card_labels,
 )
 from ai_compare import health_insights
@@ -6693,9 +6699,34 @@ def get_emergency_card():
         user_id = str(request.current_user['user_id'])
         profile = HealthContextManager.get_profile(user_id)
         profile.migrate_vitals()
-        return jsonify({'success': True, 'card': profile.emergency_card()})
+        return jsonify({
+            'success': True,
+            'card': profile.emergency_card(),
+            'pair_code': profile.ensure_emergency_pair_token(),
+        })
     except Exception as e:
         return _safe_error(e, 'get_emergency_card')
+
+
+@app.route('/api/health-profile/emergency-card/pair', methods=['POST'])
+def pair_emergency_card():
+    """Refresh the home-screen Emergency icon with a setup code, no login."""
+    try:
+        rl = get_rate_limiter()
+        if rl:
+            allowed, info = rl.check_limit(request.remote_addr, 'auth')
+            if not allowed:
+                return jsonify({'error': 'Too many attempts. Please try again later.',
+                                'retry_after': info.get('reset_in', 60)}), 429
+        data = request.get_json(silent=True) or {}
+        token = str(data.get('token') or data.get('pair_code') or '').strip()
+        profile = find_profile_by_pair_token(token)
+        if not profile:
+            return jsonify({'error': 'Unknown setup code.'}), 404
+        profile.migrate_vitals()
+        return jsonify({'success': True, 'card': profile.emergency_card()})
+    except Exception as e:
+        return _safe_error(e, 'pair_emergency_card')
 
 @app.route('/api/health-profile/transcribe', methods=['POST'])
 @require_auth

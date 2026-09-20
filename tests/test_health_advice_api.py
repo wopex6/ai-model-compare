@@ -443,6 +443,27 @@ class HealthAdviceApiTest(unittest.TestCase):
         self.assertNotIn('0295551234', ctx)
         self.assertNotIn('Dr Smith', ctx)
 
+    def test_emergency_card_returns_pair_code_and_pair_endpoint_reads_it(self):
+        self.seed({'name': 'Pair Person',
+                   'personal': {'blood_type': 'O+'}})
+        body = self.client.get('/api/health-profile/emergency-card').get_json()
+        self.assertTrue(body['success'])
+        self.assertEqual(body['card']['name'], 'Pair Person')
+        code = body['pair_code']
+        self.assertGreaterEqual(len(code), 20)
+        self.assertNotIn('pair_code', body['card'])
+        stored = json.loads(self.path.read_text(encoding='utf-8'))
+        self.assertEqual(stored.get('emergency_pair_token'), code)
+
+        guest = app_module.app.test_client()
+        miss = guest.post('/api/health-profile/emergency-card/pair',
+                          json={'token': 'not-a-real-setup-code-value'})
+        self.assertEqual(miss.status_code, 404)
+        hit = guest.post('/api/health-profile/emergency-card/pair',
+                         json={'token': code})
+        self.assertEqual(hit.status_code, 200)
+        self.assertEqual(hit.get_json()['card']['name'], 'Pair Person')
+
 
 if __name__ == '__main__':
     unittest.main()

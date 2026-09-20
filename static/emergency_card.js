@@ -12,6 +12,7 @@
     'use strict';
 
     const KEY = 'drHealth.emergencyCard.v1';
+    const PAIR_KEY = 'drHealth.emergencyPair.v1';
 
     function esc(s) {
         return (s == null ? '' : String(s))
@@ -49,13 +50,37 @@
         return stamped;
     }
 
-    // Pull a newer card from the server when this phone already has a token.
-    // Never opens /dr-health — a leftover token only updates the cached card.
+    function pairToken() {
+        try { return localStorage.getItem(PAIR_KEY) || ''; } catch (e) { return ''; }
+    }
+
+    function setPairToken(token) {
+        const t = String(token || '').trim();
+        if (!t) return;
+        try { localStorage.setItem(PAIR_KEY, t); } catch (e) {}
+    }
+
+    function fetchCard(url, options) {
+        return fetch(url, options).then(function (resp) {
+            if (!resp.ok) throw new Error('unavailable');
+            return resp.json();
+        }).then(function (data) {
+            if (data && data.success && data.card) {
+                if (data.pair_code) setPairToken(data.pair_code);
+                return save(data.card);
+            }
+            return null;
+        });
+    }
+
+    // Pull a newer card when this phone has a login token or a setup code.
+    // Never opens /dr-health — leftover credentials only update the cached card.
     function refreshFromNetwork() {
         return new Promise(function (resolve) {
-            let token = null;
-            try { token = localStorage.getItem('authToken'); } catch (e) {}
-            if (!token) {
+            let auth = null;
+            try { auth = localStorage.getItem('authToken'); } catch (e) {}
+            const pair = pairToken();
+            if (!auth && !pair) {
                 resolve(load());
                 return;
             }
@@ -66,18 +91,18 @@
                 resolve(card || load());
             }
             const timer = setTimeout(function () { finish(load()); }, 8000);
-            fetch('/api/health-profile/emergency-card', {
-                headers: { Authorization: 'Bearer ' + token }
-            }).then(function (resp) {
-                if (!resp.ok) throw new Error('unavailable');
-                return resp.json();
-            }).then(function (data) {
+            const pull = auth
+                ? fetchCard('/api/health-profile/emergency-card', {
+                    headers: { Authorization: 'Bearer ' + auth }
+                })
+                : fetchCard('/api/health-profile/emergency-card/pair', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: pair })
+                });
+            pull.then(function (card) {
                 clearTimeout(timer);
-                if (data && data.success && data.card) {
-                    finish(save(data.card));
-                    return;
-                }
-                finish(load());
+                finish(card);
             }).catch(function () {
                 clearTimeout(timer);
                 finish(load());
@@ -200,8 +225,11 @@
 
     root.EmergencyCard = {
         KEY: KEY,
+        PAIR_KEY: PAIR_KEY,
         load: load,
         save: save,
+        pairToken: pairToken,
+        setPairToken: setPairToken,
         refreshFromNetwork: refreshFromNetwork,
         hasData: hasData,
         medLabel: medLabel,

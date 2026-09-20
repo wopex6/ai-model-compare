@@ -110,6 +110,12 @@ that path separately — never write the Emergency HTML into the main
 registered from `/static/emergency_sw.js`. A new file the PWA needs offline
 must be added to `SHELL_ASSETS` in `static/dr_health_sw.js`.
 
+On iPhone, two home-screen apps from the same origin have isolated
+localStorage, so the Emergency icon often cannot see the card Dr. Health
+cached. Pair them with `emergency_pair_token` / `POST /api/health-profile/emergency-card/pair`
+and `drHealth.emergencyPair.v1`. Do not store the account password in
+localStorage; the JWT and this setup code are enough.
+
 ---
 
 ## 3. Testing
@@ -175,8 +181,10 @@ Consequences, all of which have bitten already:
 
 - Anything listing medications, supplements, symptoms or conditions **must
   filter to active**, or stopped items read as current. This matters most in
-  the AI context (`format_for_prompt`), drug-interaction checks, polypharmacy
-  counts and reminders — a stopped drug presented as current is a safety bug.
+  the AI context (`format_for_prompt` and `_facts_for_prompt`), drug-interaction
+  checks, polypharmacy counts and reminders — a stopped drug presented as
+  current is a safety bug. Stopped items still belong in the prompt, labelled
+  `STOPPED — do not treat as current`.
 - Stopped items still belong in the AI context, under an explicit *"STOPPED —
   do not treat as current"* heading. What someone came off changes the advice.
 - UI helpers that split a list **must preserve original indices**. The item
@@ -220,7 +228,7 @@ during a backfill — it hides stale data instead of surfacing it.
 ```
 app.py                          Flask app and all HTTP routes (large)
 ai_compare/
-  medical_advisor_health_context.py   HealthProfile: storage, ingest, AI context
+  medical_advisor_health_context.py   HealthProfile: atomic save, ingest, AI context
   health_insights.py                  provenance, reminders, observations, advice
   health_freshness.py                 lifecycle, change history, confirmation queue
   character_routes.py                 per-character chat endpoints

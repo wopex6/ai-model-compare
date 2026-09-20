@@ -327,6 +327,28 @@ class TestAdviceGating(unittest.TestCase):
         self.assertNotIn('Suspected apnoea', verified)
         self.assertNotIn(hi.normalize_test_key('Suspected apnoea'), citable)
 
+    def test_stopped_items_are_labelled_not_current(self):
+        data = self._profile()
+        data['medications'] = [
+            {'name': 'metformin', 'dose': '500mg', 'status': 'active',
+             'source': hi.SOURCE_USER, 'verified_by_user': True},
+            {'name': 'old drug', 'dose': '10mg', 'status': 'stopped',
+             'source': hi.SOURCE_USER, 'verified_by_user': True},
+        ]
+        data['supplements'] = [
+            {'name': 'vitamin D', 'status': 'stopped',
+             'source': hi.SOURCE_USER, 'verified_by_user': True},
+        ]
+        data['conditions'].append({'name': 'gout', 'status': 'resolved',
+                                   'source': hi.SOURCE_USER, 'verified_by_user': True})
+        verified, unverified, citable = hi._facts_for_prompt(data)
+        self.assertIn('Medication: metformin 500mg', verified)
+        self.assertIn('Medication (STOPPED — do not treat as current): old drug 10mg', verified)
+        self.assertIn('Supplement (STOPPED — do not treat as current): vitamin D', verified)
+        self.assertIn('Condition (RESOLVED — do not treat as current): gout', verified)
+        self.assertNotIn('Medication: old drug', verified)
+        self.assertIn(hi.normalize_test_key('old drug'), citable)
+
     def test_model_failure_degrades_gracefully(self):
         def boom(messages, max_tokens=None, temperature=None, model=None):
             raise RuntimeError('no api key')
