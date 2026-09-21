@@ -1704,9 +1704,19 @@
             if (brief.language) lines.push('Language: ' + brief.language);
             if (brief.gp_name) lines.push('GP: ' + brief.gp_name + (brief.gp_phone ? ' ' + brief.gp_phone : ''));
             const allergies = brief.allergies || [];
-            lines.push('Allergies: ' + (allergies.length ? allergies.join(', ') : 'none recorded'));
+            lines.push('Allergies:');
+            if (allergies.length) {
+                for (let i = 0; i < allergies.length; i++) lines.push('  - ' + allergies[i]);
+            } else {
+                lines.push('  none recorded');
+            }
             const conds = brief.conditions || [];
-            if (conds.length) lines.push('Conditions: ' + conds.join(', '));
+            lines.push('Conditions:');
+            if (conds.length) {
+                for (let i = 0; i < conds.length; i++) lines.push('  - ' + conds[i]);
+            } else {
+                lines.push('  none recorded');
+            }
             const meds = brief.medications || [];
             if (meds.length) {
                 lines.push('Current medications:');
@@ -1727,6 +1737,16 @@
                     lines.push('  - ' + t.test_name + ': ' + t.value +
                         (t.reference_range ? ' (ref ' + t.reference_range + ')' : '') +
                         (t.flag ? ' [' + t.flag + ']' : '') +
+                        (t.date ? ' ' + t.date : ''));
+                }
+            }
+            const back = brief.normalised_tests || [];
+            if (back.length) {
+                lines.push('Back in range (previously abnormal):');
+                for (let i = 0; i < back.length; i++) {
+                    const t = back[i];
+                    lines.push('  - ' + t.test_name + ': ' + t.value +
+                        (t.reference_range ? ' (ref ' + t.reference_range + ')' : '') +
                         (t.date ? ' ' + t.date : ''));
                 }
             }
@@ -1760,8 +1780,24 @@
                 html += this.visitLine('Age', brief.age);
                 html += this.visitLine('Language', brief.language);
                 html += this.visitLine('GP', [brief.gp_name, brief.gp_phone].filter(Boolean).join(' · '));
-                html += this.visitLine('Allergies', brief.allergies && brief.allergies.length ? brief.allergies : 'none recorded');
-                html += this.visitLine('Conditions', brief.conditions);
+                html += '<div class="hub-group-label">Allergies</div>';
+                const allergies = brief.allergies || [];
+                if (allergies.length) {
+                    for (let i = 0; i < allergies.length; i++) {
+                        html += '<div class="hub-note warn"><i class="fas fa-triangle-exclamation"></i> ' + esc(allergies[i]) + '</div>';
+                    }
+                } else {
+                    html += '<div class="hub-note">none recorded</div>';
+                }
+                html += '<div class="hub-group-label">Conditions</div>';
+                const conds = brief.conditions || [];
+                if (conds.length) {
+                    for (let i = 0; i < conds.length; i++) {
+                        html += '<div class="hub-note">' + esc(conds[i]) + '</div>';
+                    }
+                } else {
+                    html += '<div class="hub-note">none recorded</div>';
+                }
                 const meds = brief.medications || [];
                 if (meds.length) {
                     html += '<div class="hub-group-label">Current medications</div>';
@@ -1787,6 +1823,19 @@
                             esc(t.value || '') +
                             (t.reference_range ? ' · ref ' + esc(t.reference_range) : '') +
                             (t.flag ? ' · ' + esc(t.flag) : '') +
+                            (t.date ? '<br><span class="hub-when">' + esc(t.date) + '</span>' : '') +
+                            '</div>';
+                    }
+                }
+                const back = brief.normalised_tests || [];
+                if (back.length) {
+                    html += '<div class="hub-group-label">Back in range</div>';
+                    for (let i = 0; i < back.length; i++) {
+                        const t = back[i];
+                        html += '<div class="hub-note ok"><strong>' + esc(t.test_name) + '</strong> ' +
+                            esc(t.value || '') +
+                            (t.reference_range ? ' · ref ' + esc(t.reference_range) : '') +
+                            ' — normal now (was out of range before)' +
                             (t.date ? '<br><span class="hub-when">' + esc(t.date) + '</span>' : '') +
                             '</div>';
                     }
