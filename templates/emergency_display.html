@@ -190,7 +190,13 @@ html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Segoe UI', s
         if (e.persisted) autoRefresh();
     });
     document.addEventListener('visibilitychange', function () {
-        if (document.visibilityState === 'visible') autoRefresh();
+        // iOS standalone apps resume without a pageshow — if the user closed
+        // via the Close button, the "closed" overlay would otherwise stay up
+        // forever and the icon looked broken on reopen.
+        if (document.visibilityState === 'visible') {
+            if (closedScreen) closedScreen.classList.remove('visible');
+            autoRefresh();
+        }
     });
     if (refreshBtn) refreshBtn.addEventListener('click', autoRefresh);
     if (closeBtn) closeBtn.addEventListener('click', closeStandalone);

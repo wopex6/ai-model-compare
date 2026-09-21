@@ -79,5 +79,76 @@ class TestHealthTestResultsSummary(unittest.TestCase):
         self.assertIn("Latest TSH remains elevated.", summary["insights"])
 
 
+class TestVisitBrief(unittest.TestCase):
+    """The brief must show the LATEST result per test — a reading that
+    normalised must not be presented as a current problem."""
+
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.health_dir = Path(self.temp_dir.name)
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def _make_profile(self, data):
+        self.health_dir.mkdir(parents=True, exist_ok=True)
+        with open(self.health_dir / "test-user.json", "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        with patch("ai_compare.medical_advisor_health_context.HEALTH_DATA_DIR", self.health_dir):
+            return HealthProfile("test-user")
+
+    def test_normalised_result_is_not_flagged_as_current(self):
+        # S Iron was high in Apr 2025 but normal on 2026-09-09 — the old
+        # highs must not appear as current abnormalities.
+        profile = self._make_profile({
+            "user_id": "test-user",
+            "name": "Test User",
+            "test_results": [
+                {"test_name": "S Iron", "value": "45 umol/L",
+                 "reference_range": "10 - 30", "date": "2025-04-10"},
+                {"test_name": "S Iron", "value": "40 umol/L",
+                 "reference_range": "10 - 30", "date": "2025-05-10"},
+                {"test_name": "S Iron", "value": "20 umol/L",
+                 "reference_range": "10 - 30", "date": "2026-09-09"},
+            ],
+        })
+        brief = profile.visit_brief()
+        flagged = [t["test_name"] for t in brief["abnormal_tests"]]
+        self.assertNotIn("S Iron", flagged)
+        normalised = {t["test_name"]: t for t in brief["normalised_tests"]}
+        self.assertIn("S Iron", normalised)
+        self.assertEqual(normalised["S Iron"]["date"], "2026-09-09")
+
+    def test_latest_abnormal_still_shows(self):
+        profile = self._make_profile({
+            "user_id": "test-user",
+            "test_results": [
+                {"test_name": "eGFR", "value": "80",
+                 "reference_range": "60 - 200", "date": "2025-01-01"},
+                {"test_name": "eGFR", "value": "45",
+                 "reference_range": "60 - 200", "date": "2026-09-09"},
+            ],
+        })
+        brief = profile.visit_brief()
+        flagged = {t["test_name"]: t for t in brief["abnormal_tests"]}
+        self.assertIn("eGFR", flagged)
+        self.assertEqual(flagged["eGFR"]["date"], "2026-09-09")
+        self.assertEqual(flagged["eGFR"]["flag"], "low")
+        # was normal before, now abnormal — not a "normalised" test
+        self.assertNotIn("eGFR", [t["test_name"] for t in brief["normalised_tests"]])
+
+    def test_single_normal_result_not_listed(self):
+        profile = self._make_profile({
+            "user_id": "test-user",
+            "test_results": [
+                {"test_name": "Vitamin D", "value": "78 nmol/L",
+                 "reference_range": "50 - 150", "date": "2026-09-09"},
+            ],
+        })
+        brief = profile.visit_brief()
+        self.assertEqual(brief["abnormal_tests"], [])
+        self.assertEqual(brief["normalised_tests"], [])
+
+
 if __name__ == "__main__":
     unittest.main()

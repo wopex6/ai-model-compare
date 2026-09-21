@@ -1171,21 +1171,41 @@ class HealthProfile:
         card = self.emergency_card()
         from ai_compare.health_insights import range_position
 
-        abnormal = []
+        # Only the LATEST result per test counts. A reading that was high last
+        # year but is normal now must not be presented as a current problem —
+        # and a result that just came back in range is worth telling the GP.
+        by_test = {}
         for t in self.data.get("test_results") or []:
             if not isinstance(t, dict) or not t.get("test_name"):
                 continue
+            key = str(t.get("test_name")).strip().lower()
+            dt = parse_date(t.get("date")) or parse_date(t.get("added_at"))
+            by_test.setdefault(key, []).append((dt or date.min, t))
+
+        abnormal = []
+        normalised = []
+        for _key, rows in by_test.items():
+            rows.sort(key=lambda r: r[0])
+            t = rows[-1][1]
             flag = range_position(t.get("value"), t.get("reference_range"))
-            if flag not in ("high", "low"):
-                continue
-            abnormal.append({
+            row = {
                 "test_name": t.get("test_name"),
                 "value": t.get("value") or "",
                 "reference_range": t.get("reference_range") or "",
                 "date": t.get("date") or "",
                 "flag": flag,
-            })
-        abnormal = abnormal[-12:]
+            }
+            if flag in ("high", "low"):
+                abnormal.append((rows[-1][0], row))
+            elif len(rows) > 1 and any(
+                    range_position(p.get("value"), p.get("reference_range"))
+                    in ("high", "low") for _d, p in rows[:-1]):
+                normalised.append((rows[-1][0], row))
+
+        abnormal = [r for _d, r in sorted(abnormal, key=lambda x: x[0],
+                                          reverse=True)][:12]
+        normalised = [r for _d, r in sorted(normalised, key=lambda x: x[0],
+                                            reverse=True)][:6]
 
         questions = []
         for q in self.data.get("questions_for_doctor") or []:
@@ -1208,6 +1228,7 @@ class HealthProfile:
             "medications": card.get("medications") or [],
             "anticoagulants": card.get("anticoagulants") or [],
             "abnormal_tests": abnormal,
+            "normalised_tests": normalised,
             "questions_for_doctor": questions[-8:],
             "advance_care": card.get("advance_care") or "",
             "gp_name": card.get("gp_name") or "",
