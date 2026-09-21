@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-21 16:07 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-21 16:45 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-visit brief: latest-per-test flagging + back-in-range list; allergies/conditions as lists; iOS emergency closed-overlay stuck-on-reopen fixed. SW v95. Deployed 3b3c6f6. Real iOS reopen not device-verified.
+brief field rows now indented; emergency closed-screen removed (Close only shows as Back from inside app). Deployed 521703c, SW v96.
 
 ## Git
 
@@ -14,14 +14,14 @@ visit brief: latest-per-test flagging + back-in-range list; allergies/conditions
 Recent commits:
 
 ```
+521703c emergency card: drop the fake closed screen; align brief field rows
+3b7c883 handoff: snapshot after visit brief and iOS reopen fix deploy
 3b3c6f6 visit brief: latest result per test only, plus back-in-range list; iOS emergency reopen fix
 a80e70c handoff: snapshot after health-data safety deploy
 bc39efb health data safety: backups, cross-worker merge, retention keep flags, export
 fc773c1 handoff: snapshot after visit brief and lab explain deploy
 46c6990 docs: current Dr. Health open work for the next agent
 4277472 chat and hub: packed context, visit brief, lab explain, and locale replies
-349b9b4 emergency card: pair iPhone storage, install button, and safer profile saves
-e0f1c14 hub back: always return to the previous screen, including Emergency Info
 ```
 
 ## Production (PythonAnywhere)
@@ -71,7 +71,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-409 passed, 1 warning in 19.70s
+409 passed, 1 warning in 19.95s
 [AutoDoc] Monitoring stopped
 ```
 
