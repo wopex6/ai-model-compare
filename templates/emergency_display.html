@@ -32,14 +32,6 @@ html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Segoe UI', s
     cursor: pointer;
 }
 .topbar-actions button:disabled { opacity: 0.6; }
-#closed-screen {
-    display: none; position: fixed; inset: 0; z-index: 20;
-    background: #8b0000; color: #fff;
-    flex-direction: column; align-items: center; justify-content: center;
-    text-align: center; padding: 24px;
-}
-#closed-screen.visible { display: flex; }
-#closed-screen p { margin: 0 0 16px; font-size: 1.1rem; }
 .content { flex: 1; padding: 16px; padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .install-card {
     background: #f7f9fa; border: 1px solid #e3e7ea; border-radius: 12px;
@@ -102,9 +94,6 @@ html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Segoe UI', s
         <div id="emergency-view"></div>
     </div>
 </div>
-<div id="closed-screen">
-    <p>Emergency card closed.</p>
-</div>
 <script src="{{ url_for('static', filename='emergency_card.js') }}"></script>
 <script>
 (function () {
@@ -112,7 +101,6 @@ html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Segoe UI', s
     const view = document.getElementById('emergency-view');
     const refreshBtn = document.getElementById('emergency-refresh');
     const closeBtn = document.getElementById('emergency-close');
-    const closedScreen = document.getElementById('closed-screen');
     let refreshing = false;
 
     function leadHtml(card, status) {
@@ -169,34 +157,31 @@ html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Segoe UI', s
 
     function closeStandalone() {
         // Opened from login or the signed-in app: go back there.
-        // Opened from the home-screen icon: close this app so the home screen
-        // is underneath. Never invent a path into Dr. Health.
+        // An installed app cannot close itself or jump to the home screen —
+        // the only way out is the device's own gesture, so the button is
+        // hidden whenever there is nowhere to go back to.
         if (cameFromDrHealth()) {
             window.history.back();
             return;
         }
         try { window.close(); } catch (e) {}
-        setTimeout(function () {
-            if (!document.hidden && closedScreen) closedScreen.classList.add('visible');
-        }, 200);
     }
 
-    if (cameFromDrHealth() && closeBtn) closeBtn.textContent = 'Back';
+    if (closeBtn) {
+        if (cameFromDrHealth()) {
+            closeBtn.textContent = 'Back';
+        } else {
+            closeBtn.style.display = 'none';
+        }
+    }
 
     showCard(window.EmergencyCard.load());
     autoRefresh();
     window.addEventListener('pageshow', function (e) {
-        if (closedScreen) closedScreen.classList.remove('visible');
         if (e.persisted) autoRefresh();
     });
     document.addEventListener('visibilitychange', function () {
-        // iOS standalone apps resume without a pageshow — if the user closed
-        // via the Close button, the "closed" overlay would otherwise stay up
-        // forever and the icon looked broken on reopen.
-        if (document.visibilityState === 'visible') {
-            if (closedScreen) closedScreen.classList.remove('visible');
-            autoRefresh();
-        }
+        if (document.visibilityState === 'visible') autoRefresh();
     });
     if (refreshBtn) refreshBtn.addEventListener('click', autoRefresh);
     if (closeBtn) closeBtn.addEventListener('click', closeStandalone);
