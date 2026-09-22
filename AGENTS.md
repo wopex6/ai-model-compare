@@ -171,6 +171,17 @@ Adding a feature to one page? Put the logic in the shared module and let each
 page render it. Three copies of this logic existed before; consolidating them
 was deliberate work, easily undone by accident.
 
+### Duplicate test results keep the stored value
+
+Same canonical test name + same normalized date = the same measurement, and
+the stored row wins: `add_test_result` discards an incoming differing value
+and only backfills empty `reference_range`/`notes`/`date`. The stored value
+was reviewed (by the user or a prior import); a re-scan must not clobber it.
+Two draws on one day genuinely differ? They belong on different `date`s —
+there is no same-day two-value representation. A row may also carry a `unit`
+field; `lab_results.js` prefers it over extracting the unit from `value`, and
+the group header derives its default range/unit from the newest row.
+
 ### Items are retired, never deleted
 
 Health items carry `status` / `started_on` / `ended_on` / `last_confirmed_at` /

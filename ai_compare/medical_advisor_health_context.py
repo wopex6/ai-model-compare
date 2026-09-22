@@ -1396,17 +1396,16 @@ class HealthProfile:
         test_name = self._resolve_test_name(test_name, reference_range, value, date_val)
         for t in existing:
             if self._is_duplicate_test_result(t, test_name, value, date_val):
-                # Same mineral on the same date: overwrite with the latest value
-                t["value"] = value
-                t["test_name"] = test_name
-                if date_val:
-                    t["date"] = date_val
-                if reference_range:
+                # Same test on the same date: the stored value was already
+                # reviewed/verified, so a differing incoming value is
+                # discarded — only fill in metadata the stored row lacks.
+                if not t.get("reference_range") and reference_range:
                     t["reference_range"] = reference_range
-                if notes:
+                if not t.get("notes") and notes:
                     t["notes"] = notes
-                t["added_at"] = datetime.now().isoformat()
-                return True  # Updated existing entry
+                if not t.get("date") and date_val:
+                    t["date"] = date_val
+                return True  # Duplicate handled — stored value kept
         entry = {
             "test_name": test_name,
             "value": value,

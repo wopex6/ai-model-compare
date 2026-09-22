@@ -251,17 +251,20 @@ def run():
                     timeout=TIMEOUT, json={'index': 0, 'status': 'bogus'}).status_code == 400,
             'expected 400')
 
-    # Same test + same date is an intentional upsert: it overwrites rather than
-    # appending, so re-scanning the same lab report cannot duplicate rows.
+    # Same test + same date is an intentional dedup: the stored value was
+    # already reviewed, so a differing incoming value is discarded rather
+    # than overwriting — re-scanning a report can neither duplicate rows
+    # nor clobber a verified number.
     dup = dict(LIST_CATEGORIES['test_results'])
     dup['value'] = '61 ug/L'
     resp = s.post(f'{BASE_URL}/api/health-profile/item', headers=auth, timeout=TIMEOUT,
                   json={'category': 'test_results', 'item': dup})
     rows = body(resp).get('profile', {}).get('test_results', [])
-    r.check('test_results upserts same test on same date',
+    r.check('test_results dedups same test on same date',
             resp.status_code == 200 and len(rows) == 1, f'{resp.status_code} len={len(rows)}')
-    r.check('test_results upsert overwrites the value',
-            rows and '61' in str(rows[0].get('value')), str(rows[:1]))
+    r.check('test_results dedup keeps the stored value',
+            rows and '55' in str(rows[0].get('value')) and '61' not in str(rows[0].get('value')),
+            str(rows[:1]))
 
     resp = s.post(f'{BASE_URL}/api/health-profile/item', headers=auth, timeout=TIMEOUT,
                   json={'category': 'test_results', 'item': {'value': '1'}})
