@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-22 21:42 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-23 09:22 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Deployed 67f6b06 (SW v101): removed stale onclick closure that re-opened the previous doc's review after a new photo; doc viewer now fits images to width (pinch zoom on) and PDFs with #view=Fit; explicit blank unit wins over value-text extraction.
+Deployed d178178 (SW v102): GET /document-result reopens stored analysis without an AI call; stored docs get a Review button when has_result; Use-this-photo shows busy pulse while uploading.
 
 ## Git
 
@@ -14,19 +14,19 @@ Deployed 67f6b06 (SW v101): removed stale onclick closure that re-opened the pre
 Recent commits:
 
 ```
+d178178 records: reopen stored analysis without re-analysing; upload button busy state
+a0da3a3 handoff: snapshot after stale-review, viewer zoom and blank-unit deploy
 67f6b06 pwa: fix stale review showing previous doc; doc viewer fit + zoom; blank unit sticks
 79a0173 handoff: snapshot after ref+unit merge-gate deploy
 47dc854 test merge rules: same reference range AND unit required before merging
 2da5613 handoff: snapshot after unit-aware test dedup deploy
 f367461 test dedup: unit mismatch means different measurement; keep qualifiers in display key
 f5a0f54 handoff: snapshot after test-dup keep-stored and edit-fields deploy
-3a07353 test results: keep stored value on same-date dup; editable test name; all standard fields shown
-4e3b7e2 handoff: snapshot after review-close, doc viewer, doc ordering and default range/unit deploy
 ```
 
 ## Production (PythonAnywhere)
 
-Local and production match.
+**4 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
 
 ```
 ok       tests/test_ui_features.py
@@ -53,25 +53,27 @@ ok       web_enhancement_test_runner.py
 ok       webhook_deploy.py
 ok       wisdom_profiles/23.json
 ok       wisdom_profiles/23_hypotheses.json
-Everything on the server matches local.
+4 file(s) stale. Re-run with --push to upload.
 ```
+
+Reload often returns `409 slow_startup_error` on the first attempt — retry rather than debug it.
 
 ## Tests
 
 All passing.
 
 ```
-........................................................................ [ 52%]
-........................................................................ [ 70%]
-........................................................................ [ 88%]
-.................................................                        [100%]
-============================== warnings summary ===============================
+automated_greeting_system.py:416
+automated_greeting_system.py:416
+  C:\Users\trabc\CascadeProjects\ai-model-compare - Claude\automated_greeting_system.py:416: DeprecationWarning: The default datetime adapter is deprecated as of Python 3.12; see the sqlite3 documentation for suggested replacement recipes
+    cursor.execute('''
+
 ..\..\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37
   C:\Users\trabc\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-409 passed, 1 warning in 20.39s
+409 passed, 5 warnings in 44.17s
 [AutoDoc] Monitoring stopped
 ```
 
