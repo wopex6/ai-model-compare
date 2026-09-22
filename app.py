@@ -7864,6 +7864,19 @@ def add_health_profile_item():
                 item.get('notes', '')
             ):
                 return jsonify({'error': 'Duplicate or invalid test result'}), 400
+            # add_test_result only takes the core fields — carry the rest
+            # (unit, source, verified_by_user) onto the row it wrote or the
+            # duplicate it matched, so a hand-entered unit is not dropped.
+            core = {'test_name', 'value', 'reference_range', 'date', 'notes'}
+            extras = {k: v for k, v in item.items()
+                      if k not in core and v not in (None, '')}
+            if extras:
+                for t in reversed(profile.data.get('test_results', [])):
+                    if profile._is_duplicate_test_result(
+                            t, item.get('test_name', ''), item.get('value', ''),
+                            item.get('date', '')):
+                        t.update(extras)
+                        break
         else:
             profile.data.setdefault(category, []).append(item)
         profile.save()

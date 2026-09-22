@@ -365,6 +365,28 @@ def test_list_documents_newest_first():
         _cleanup(user_id)
 
 
+def test_duplicate_same_date_keeps_stored_value():
+    """Same test + same date with a different value: the stored row was
+    already reviewed, so the incoming value is discarded and only missing
+    metadata is backfilled — re-scanning cannot clobber a verified number."""
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        profile.add_test_result('Ferritin', '55 ug/L', '30 - 300', '2024-08-01')
+        profile.add_test_result('Ferritin', '61 ug/L', '', '2024-08-01', 'second reading')
+        rows = profile.data['test_results']
+        assert len(rows) == 1
+        assert '55' in rows[0]['value'] and '61' not in rows[0]['value']
+        # ref range already present, notes were missing -> backfilled
+        assert rows[0]['notes'] == 'second reading'
+
+        # Same test on a different date is a genuinely new result
+        profile.add_test_result('Ferritin', '61 ug/L', '30 - 300', '2024-09-01')
+        assert len(profile.data['test_results']) == 2
+    finally:
+        _cleanup(user_id)
+
+
 def test_update_item_persists_default_range_and_unit():
     """PUT /item accepts an explicit unit alongside reference_range — this is
     how the data manager stores a test's default range/unit on the newest
@@ -399,5 +421,35 @@ def test_update_item_persists_default_range_and_unit():
         # Value and date untouched — defaults never rewrite history.
         assert row['value'] == '140 mmol/L'
         assert row['date'] == '2026-01-01'
+    finally:
+        _cleanup(user_id)
+
+
+def test_post_item_carries_unit_and_provenance():
+    """POST /item for a test result must not silently drop fields beyond the
+    five add_test_result arguments — a hand-entered unit, the user_entered
+    source and verified_by_user all belong on the stored row."""
+    import app as app_mod
+    user_id = _user()
+    try:
+        HealthProfile(user_id).save()
+        app_mod.app.config['TESTING'] = True
+        client = app_mod.app.test_client()
+        with client.session_transaction() as sess:
+            sess['user_id'] = user_id
+            sess['username'] = 'safety-test'
+
+        resp = client.post('/api/health-profile/item', json={
+            'category': 'test_results',
+            'item': {'test_name': 'Sodium', 'value': '140',
+                     'unit': 'mmol/L', 'reference_range': '135 - 145',
+                     'date': '2026-09-09'}
+        })
+        assert resp.status_code == 200
+
+        row = HealthProfile(user_id).data['test_results'][0]
+        assert row['unit'] == 'mmol/L'
+        assert row['source'] == 'user_entered'
+        assert row['verified_by_user'] is True
     finally:
         _cleanup(user_id)

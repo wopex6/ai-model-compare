@@ -2482,6 +2482,7 @@
             form.appendChild(i);
             return i;
         };
+        const nameIn = mk('test_name', 'Test name', latest.item.test_name || group.displayName);
         const refIn = mk('reference_range', 'Default reference range', group.ref || (latest.item.reference_range || ''));
         const unitIn = mk('unit', 'Default unit (e.g. mmol/L)', group.unit || (latest.item.unit || ''));
         const actions = document.createElement('div');
@@ -2501,44 +2502,62 @@
         cancelBtn.addEventListener('click', () => openDataManagerModal());
         saveBtn.addEventListener('click', async () => {
             const status = document.getElementById('dm-status');
+            const newName = nameIn.value.trim();
+            if (!newName) {
+                if (status) status.textContent = 'Test name is required.';
+                nameIn.focus();
+                return;
+            }
             if (status) status.textContent = 'Saving...';
             try {
-                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/item', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        category: 'test_results',
-                        index: latest.idx,
-                        updates: {
-                            reference_range: refIn.value.trim(),
-                            unit: unitIn.value.trim()
-                        }
-                    })
-                });
-                const data = await resp.json();
-                if (resp.ok && data.success !== false) {
-                    renderDataManager(data.profile);
-                    if (status) status.textContent = 'Saved.';
-                } else {
-                    if (status) status.textContent = data.error || 'Save failed.';
+                // The name defines the group, so a rename applies to every
+                // row in it; range/unit are the group default and live on
+                // the newest row only.
+                const jobs = group.entries.map(e => {
+                    const updates = {};
+                    if ((e.item.test_name || '') !== newName) updates.test_name = newName;
+                    if (e === latest) {
+                        updates.reference_range = refIn.value.trim();
+                        updates.unit = unitIn.value.trim();
+                    }
+                    return Object.keys(updates).length ? { index: e.idx, updates } : null;
+                }).filter(Boolean);
+                let profile = null;
+                for (const job of jobs) {
+                    const resp = await AuthHelper.authenticatedFetch('/api/health-profile/item', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ category: 'test_results', index: job.index, updates: job.updates })
+                    });
+                    const data = await resp.json();
+                    if (!resp.ok || data.success === false) {
+                        if (status) status.textContent = data.error || 'Save failed.';
+                        return;
+                    }
+                    profile = data.profile;
                 }
+                if (profile) renderDataManager(profile); else openDataManagerModal();
+                if (status) status.textContent = 'Saved.';
             } catch (e) {
                 if (status) status.textContent = 'Network error.';
             }
         });
     }
 
+    const DM_HIDDEN = new Set(['added_at', 'updated_at', 'user_id', 'id']);
+    const DM_PREFERRED = {
+        conditions: ['name', 'status', 'diagnosed_date', 'details'],
+        test_results: ['test_name', 'value', 'unit', 'reference_range', 'date', 'notes'],
+        medications: ['name', 'dose', 'frequency', 'prescribed_date', 'notes'],
+        supplements: ['name', 'dose', 'frequency', 'notes'],
+        symptoms: ['name', 'severity', 'onset_date', 'frequency', 'notes'],
+        action_plans: ['action', 'target_date', 'status', 'notes'],
+        conversation_insights: ['topic', 'insight', 'priority', 'notes']
+    };
+
     function renderItemCard(item, cat) {
-        const hidden = new Set(['added_at', 'updated_at', 'user_id', 'id']);
-        const preferred = {
-            conditions: ['name', 'status', 'diagnosed_date', 'details'],
-            test_results: ['test_name', 'value', 'reference_range', 'date', 'notes'],
-            medications: ['name', 'dose', 'frequency', 'prescribed_date', 'notes'],
-            supplements: ['name', 'dose', 'frequency', 'notes'],
-            symptoms: ['name', 'severity', 'onset_date', 'frequency', 'notes'],
-            action_plans: ['action', 'target_date', 'status', 'notes'],
-            conversation_insights: ['topic', 'insight', 'priority', 'notes']
-        };
+        const hidden = DM_HIDDEN;
+        const preferred = DM_PREFERRED;
         const order = (preferred[cat] || []).filter(k => k in item && !hidden.has(k));
         const extra = Object.keys(item).filter(k => !hidden.has(k) && !order.includes(k));
         const keys = [...order, ...extra];
@@ -2765,8 +2784,12 @@
         div.innerHTML = '';
         const form = document.createElement('div');
         form.className = 'dm-edit-form';
-        const hidden = new Set(['added_at', 'updated_at', 'user_id', 'id']);
-        const fields = Object.keys(item).filter(k => !hidden.has(k));
+        const hidden = DM_HIDDEN;
+        // Always offer the standard fields for the category, even when the
+        // row lacks the key — otherwise a missing reference_range/unit/notes
+        // can never be typed in, and the edit silently can't be saved.
+        const fields = [...new Set([...(DM_PREFERRED[cat] || []), ...Object.keys(item)])]
+            .filter(k => !hidden.has(k));
         const inputs = {};
 
         fields.forEach(k => {
