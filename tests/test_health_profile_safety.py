@@ -404,6 +404,26 @@ def test_same_date_different_units_are_not_duplicates():
         _cleanup(user_id)
 
 
+def test_name_merge_requires_same_unit_and_reference():
+    """Folding a name variant onto the canonical name is a merge — it needs
+    the same reference range and unit. 'Bicarb' measured in a different unit
+    than the stored 'Bicarbonate' series must keep its own name."""
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        profile.add_test_result('Bicarbonate', '24 mmol/L', '22 - 29 mmol/L', '2024-01-01')
+        profile.add_test_result('Bicarb', '2.4 g/dL', '2.0 - 3.0 g/dL', '2024-02-01')
+        names = [r['test_name'] for r in profile.data['test_results']]
+        assert 'Bicarb' in names  # not folded onto the incompatible series
+
+        # Same name+date+value is still one reading even if the ref was
+        # transcribed differently.
+        profile.add_test_result('Bicarbonate', '24 mmol/L', '22-29', '2024-01-01')
+        assert len(profile.data['test_results']) == 2
+    finally:
+        _cleanup(user_id)
+
+
 def test_update_item_persists_default_range_and_unit():
     """PUT /item accepts an explicit unit alongside reference_range — this is
     how the data manager stores a test's default range/unit on the newest

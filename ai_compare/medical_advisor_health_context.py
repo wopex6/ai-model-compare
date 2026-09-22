@@ -1454,13 +1454,21 @@ class HealthProfile:
             # One has a date and the other does not: treat as distinct
             return False
 
-        # The name key strips qualifiers like '(NGSP)'/'(IFCC)', so rows that
-        # are genuinely different measurements can share it. When both sides
-        # carry a determinable unit and the units disagree, they are not the
-        # same measurement — 'HbA1c (IFCC)' in mmol/mol must never dedup onto
-        # 'HbA1c (NGSP)' in %.
-        existing_unit = self._test_unit_hint(
-            existing_entry.get("value", ""), existing_entry.get("reference_range", ""))
+        # Identical value on the same date under the same key is the same
+        # reading regardless of how the reference range was transcribed.
+        if (self._normalize_value_for_compare(existing_entry.get("value", ""))
+                == self._normalize_value_for_compare(value)):
+            return True
+
+        # Merging requires the same unit AND the same reference range.  The
+        # name key strips qualifiers like '(NGSP)'/'(IFCC)', so rows that are
+        # genuinely different measurements can share it — 'HbA1c (IFCC)' in
+        # mmol/mol must never merge onto 'HbA1c (NGSP)' in %, and neither may
+        # two same-date readings whose laboratories state different ranges.
+        existing_ref = existing_entry.get("reference_range", "")
+        if not _references_compatible(existing_ref, reference_range):
+            return False
+        existing_unit = self._test_unit_hint(existing_entry.get("value", ""), existing_ref)
         incoming_unit = self._test_unit_hint(value, reference_range)
         if not _units_compatible(existing_unit, incoming_unit):
             return False
@@ -1914,6 +1922,21 @@ class HealthProfile:
                 return False
         return True
 
+    def _name_series_accepts(self, canonical_name: str, reference_range: str, unit: str) -> bool:
+        """True when no stored row under this exact canonical name contradicts
+        the incoming reference range or unit.  Unlike _series_accepts this
+        matches on the canonical display name, not the qualifier-stripped key,
+        so '(NGSP)' and '(IFCC)' rows are judged separately."""
+        for row in self.data.get("test_results", []):
+            if _canonical_test_name(row.get("test_name", "")) != canonical_name:
+                continue
+            if not _references_compatible(reference_range, row.get("reference_range", "")):
+                return False
+            other_unit = self._test_unit_hint(row.get("value", ""), row.get("reference_range", ""))
+            if not _units_compatible(unit, other_unit):
+                return False
+        return True
+
     def _merge_loses_data(self, key: str, other_key: str, date: str = "", value: str = "") -> bool:
         """True when renaming one series onto another would overwrite a reading.
 
@@ -1954,9 +1977,17 @@ class HealthProfile:
         canonical = _canonical_test_name(test_name)
         if not canonical:
             return test_name
+        incoming_unit = self._test_unit_hint(value, reference_range)
+        # Folding a variant onto the canonical name is a merge, and merging
+        # requires the same reference range and unit.  Check only rows that
+        # already carry that exact canonical name — a differently-qualified
+        # series ('HbA1c (IFCC)' mmol/mol) must not block or absorb
+        # 'HbA1c (NGSP)' %.
+        if _compact_key(canonical) != _compact_key(test_name):
+            if not self._name_series_accepts(canonical, reference_range, incoming_unit):
+                return test_name
         key = _canonical_test_key(canonical)
         aliases = self.data.setdefault("test_name_aliases", {})
-        incoming_unit = self._test_unit_hint(value, reference_range)
         learned = aliases.get(key)
         if learned:
             if self._series_accepts(learned, reference_range, incoming_unit):
