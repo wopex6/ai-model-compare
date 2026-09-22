@@ -209,18 +209,99 @@ def test_recent_changes_and_expiring_docs():
     assert 'old.pdf' in names and 'keep.pdf' not in names
 
 
+# --- apply_extracted_data: everything shown in review must be saved -----------
+
+def test_apply_extracted_saves_every_schema_key_and_extras():
+    """The review screen renders every key the extractor returns. Whatever
+    the user accepts must land in the profile — known keys in their proper
+    store, extra item fields merged into free-text fields, and unknown
+    top-level keys kept as a clinical note."""
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        extracted = {
+            "foods": ["oats"],
+            "food_notes": ["avoid salt"],
+            "restrictions": ["grapefruit"],
+            "medications": [{"name": "Aspirin", "dose": "100mg",
+                             "purpose": "heart", "frequency": "daily"}],
+            "supplements": [{"name": "Vitamin D", "dose": "1000IU",
+                             "purpose": "bones"}],
+            "symptoms": [{"description": "headache", "severity": "mild",
+                          "triggers": ["stress"], "duration": "2 days"}],
+            "conditions": [{"name": "Hypertension", "details": "stage 1",
+                            "status": "active", "diagnosed_date": "2026-01-01"}],
+            "test_results": [{"test_name": "eGFR", "value": "45 mL/min",
+                              "reference_range": "60 - 200",
+                              "date": "2026-09-09",
+                              "flag": "L"}],
+            "action_plans": [{"title": "Reduce salt", "steps": ["cook at home"]}],
+            "next_steps": [{"title": "Repeat bloods", "due_date": "2026-12-01"}],
+            "questions_for_doctor": [{"question": "Check dose?"}],
+            "lifestyle_notes": ["walks daily"],
+            "warnings": ["interaction risk"],
+            "insights": [{"insight": "BP trending up", "category": "prognosis"}],
+            "allergies": ["penicillin"],
+            "personal": {"age": 64, "blood_type": "O+"},
+            "procedures": [{"name": "Appendectomy", "date": "1990",
+                            "notes": "uncomplicated"}],
+            "family_history": ["father - prostate cancer"],
+            "clinical_notes": [{"date": "2026-09-09", "note": "GP review"}],
+            # Unknown top-level key — shown in review, must not vanish
+            "lab_facility": "PathLab Central",
+        }
+        actions = profile.apply_extracted_data(extracted)
+        assert actions, "nothing was applied"
+        d = profile.data
+
+        assert "oats" in d["diet"]["daily_foods"]
+        assert "avoid salt" in d["diet"]["notes"]
+        assert "grapefruit" in d["diet"]["restrictions"]
+        assert any(r == "ALLERGY: penicillin" for r in d["diet"]["restrictions"])
+
+        med = next(m for m in d["medications"] if m.get("name") == "Aspirin")
+        assert "frequency" in str(med)
+
+        assert any(s.get("name") == "Vitamin D" for s in d["supplements"])
+        sym = next(s for s in d["symptoms"] if "headache" in s.get("description", ""))
+        assert "duration" in str(sym)
+
+        assert any(c.get("name") == "Hypertension" for c in d["conditions"])
+        tr = next(t for t in d["test_results"] if t.get("test_name") == "eGFR")
+        assert tr["date"] == "2026-09-09"
+        assert "45" in tr["value"]
+        # extra field 'flag' preserved in notes
+        assert "flag" in (tr.get("notes") or "")
+
+        assert any(p.get("title") == "Reduce salt" for p in d["action_plans"])
+        assert any(f.get("title") == "Repeat bloods" for f in d["follow_ups"])
+        assert any(q.get("question") == "Check dose?" for q in d["questions_for_doctor"])
+        assert any("walks daily" in i.get("insight", "") for i in d["conversation_insights"])
+        assert any("interaction risk" in i.get("insight", "") for i in d["conversation_insights"])
+        assert any("BP trending up" in i.get("insight", "") for i in d["conversation_insights"])
+        assert any("prostate cancer" in i.get("insight", "") for i in d["conversation_insights"])
+
+        assert d["personal"]["age"] == 64
+        assert d["personal"]["blood_type"] == "O+"
+        assert any("[Procedure] Appendectomy" == c.get("name") for c in d["conditions"])
+        assert any("GP review" in n for n in d["provider_notes"])
+        # unknown key kept
+        assert any("lab facility" in n.lower() and "PathLab Central" in n
+                   for n in d["provider_notes"])
+    finally:
+        _cleanup(user_id)
+
+
 # --- document viewing ---------------------------------------------------------
 
 def test_view_document_serves_own_file_only(tmp_path):
-    """The view endpoint must serve the user's stored file and refuse
+    """The document endpoint must serve the user's stored file and refuse
     anything that is not registered in that user's profile."""
     import app as app_mod
     user_id = _user()
     try:
         profile = HealthProfile(user_id)
-        user_dir = tmp_path / str(user_id)
-        user_dir.mkdir(parents=True)
-        real = user_dir / '20260901_ab12_report.pdf'
+        real = tmp_path / '20260901_ab12_report.pdf'
         real.write_bytes(b'%PDF-1.4 hello')
         profile.data['uploaded_documents'] = [{
             'original_name': 'report.pdf',
@@ -237,16 +318,13 @@ def test_view_document_serves_own_file_only(tmp_path):
             sess['user_id'] = user_id
             sess['username'] = 'safety-test'
 
-        with patch.object(app_mod, 'HEALTH_UPLOADS_DIR', tmp_path):
-            resp = client.get(f'/api/health-profile/documents/{real.name}')
-            assert resp.status_code == 200
-            assert resp.data == b'%PDF-1.4 hello'
+        resp = client.get(f'/api/health-profile/document?stored_name={real.name}')
+        assert resp.status_code == 200
+        assert resp.data == b'%PDF-1.4 hello'
 
-            # A file that exists on disk but is not in the profile must not
-            # be served — the profile entry is the access check.
-            stray = user_dir / 'not_in_profile.pdf'
-            stray.write_bytes(b'%PDF-1.4 stray')
-            resp = client.get(f'/api/health-profile/documents/{stray.name}')
-            assert resp.status_code == 404
+        # A file that exists on disk but is not in the profile must not
+        # be served — the profile entry is the access check.
+        resp = client.get('/api/health-profile/document?stored_name=not_in_profile.pdf')
+        assert resp.status_code == 404
     finally:
         _cleanup(user_id)

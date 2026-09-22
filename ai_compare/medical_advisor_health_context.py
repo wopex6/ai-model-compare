@@ -1599,6 +1599,20 @@ class HealthProfile:
         """
         actions = []
 
+        def _extras(item: dict, known: tuple) -> str:
+            """Fields the extractor emitted beyond what the store accepts.
+            The review screen shows them — dropping them here would make the
+            saved record smaller than what the user approved."""
+            parts = []
+            for k, v in (item or {}).items():
+                if k in known or v in (None, "", [], {}):
+                    continue
+                parts.append(f"{k}: {v if not isinstance(v, (dict, list)) else json.dumps(v, ensure_ascii=False)}")
+            return "; ".join(parts)
+
+        def _merge_notes(notes: str, extra: str) -> str:
+            return "; ".join(p for p in (str(notes or "").strip(), extra) if p)
+
         removed_duplicates = self._deduplicate_test_results()
         if removed_duplicates:
             actions.append(f"Removed {removed_duplicates} duplicate test result(s)")
@@ -1641,26 +1655,30 @@ class HealthProfile:
         # Medications (prescribed drugs) — stored in medications[], NOT supplements[]
         for med in extracted.get("medications", []) + extracted.get("new_medications", []):
             if med.get("name"):
-                if self.add_medication(med["name"], med.get("dose", ""), med.get("purpose", "")):
+                purpose = _merge_notes(med.get("purpose", ""), _extras(med, ("name", "dose", "purpose")))
+                if self.add_medication(med["name"], med.get("dose", ""), purpose):
                     actions.append(f"Added medication: {med['name']}")
 
         # Supplements (vitamins, herbs, minerals)
         for sup in extracted.get("supplements", []) + extracted.get("new_supplements", []):
             if sup.get("name"):
-                if self.add_supplement(sup["name"], sup.get("dose", ""), sup.get("purpose", "")):
+                purpose = _merge_notes(sup.get("purpose", ""), _extras(sup, ("name", "dose", "purpose")))
+                if self.add_supplement(sup["name"], sup.get("dose", ""), purpose):
                     actions.append(f"Added supplement: {sup['name']}")
 
         # Symptoms
         for sym in extracted.get("symptoms", []) + extracted.get("new_symptoms", []):
             if sym.get("description"):
-                if self.add_symptom(sym["description"], sym.get("triggers", []), sym.get("severity", "moderate")):
+                desc = _merge_notes(sym["description"], _extras(sym, ("description", "triggers", "severity")))
+                if self.add_symptom(desc, sym.get("triggers", []), sym.get("severity", "moderate")):
                     actions.append(f"Added symptom: {sym['description']}")
 
         # Conditions
         for cond in extracted.get("conditions", []) + extracted.get("new_conditions", []):
             if cond.get("name"):
+                details = _merge_notes(cond.get("details", ""), _extras(cond, ("name", "details", "status", "diagnosed_date")))
                 if self.add_condition(
-                    cond["name"], cond.get("details", ""),
+                    cond["name"], details,
                     cond.get("status", "active"), cond.get("diagnosed_date", "")
                 ):
                     actions.append(f"Added condition: {cond['name']}" + (f" ({cond['diagnosed_date']})" if cond.get('diagnosed_date') else ""))
@@ -1679,9 +1697,11 @@ class HealthProfile:
                     if self.add_test_result(sub_name, sub_value, sub_ref, test.get("date", ""), test.get("notes", "")):
                         actions.append(f"Added test: {sub_name}")
             else:
+                notes = _merge_notes(test.get("notes", ""), _extras(
+                    test, ("test_name", "value", "reference_range", "date", "notes")))
                 if self.add_test_result(
                     test["test_name"], value,
-                    test.get("reference_range", ""), test.get("date", ""), test.get("notes", "")
+                    test.get("reference_range", ""), test.get("date", ""), notes
                 ):
                     actions.append(f"Added test: {test['test_name']}")
 
@@ -1771,7 +1791,7 @@ class HealthProfile:
         # Procedures / surgeries
         for proc in extracted.get("procedures", []):
             if proc.get("name"):
-                detail = proc.get("notes", "")
+                detail = _merge_notes(proc.get("notes", ""), _extras(proc, ("name", "date", "notes")))
                 date = proc.get("date", "")
                 if self.add_condition(f"[Procedure] {proc['name']}", detail, "resolved", date):
                     actions.append(f"Added procedure: {proc['name']}")
@@ -1781,6 +1801,37 @@ class HealthProfile:
             if fh:
                 if self.add_conversation_insight(f"Family history: {fh}", category="family_history"):
                     actions.append(f"Added family history: {fh}")
+
+        # Catch-all: anything the extractor returned outside the known schema
+        # was still shown on the review screen. Keep it as a provider note
+        # rather than letting accepted data silently vanish.
+        _consumed = {
+            "foods", "new_foods", "food_notes",
+            "restrictions", "new_restrictions",
+            "medications", "new_medications",
+            "supplements", "new_supplements",
+            "symptoms", "new_symptoms",
+            "conditions", "new_conditions",
+            "test_results", "new_test_results",
+            "action_plans", "next_steps", "questions_for_doctor",
+            "lifestyle_notes", "lifestyle_updates", "clinical_notes",
+            "warnings", "insights", "advice",
+            "allergies", "new_allergies",
+            "personal", "personal_updates",
+            "procedures", "family_history",
+        }
+        leftovers = []
+        for key, val in extracted.items():
+            if key in _consumed or val in (None, "", [], {}):
+                continue
+            text = val if isinstance(val, str) else json.dumps(val, ensure_ascii=False)
+            leftovers.append(f"{key.replace('_', ' ')}: {text[:400]}")
+        if leftovers:
+            existing_notes = self.data.setdefault("provider_notes", [])
+            note = "Additional extracted data — " + "; ".join(leftovers)
+            if note not in existing_notes:
+                existing_notes.append(note)
+                actions.append(f"Kept {len(leftovers)} extra extracted field(s) as a clinical note")
 
         if actions:
             self.save()
