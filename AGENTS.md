@@ -177,11 +177,15 @@ Same canonical test name + same normalized date = the same measurement, and
 the stored row wins: `add_test_result` discards an incoming differing value
 and only backfills empty `reference_range`/`notes`/`date`. The stored value
 was reviewed (by the user or a prior import); a re-scan must not clobber it.
-Exception: when both sides carry a determinable **unit** and the units
-disagree, they are not the same measurement — the name key strips qualifiers
-like '(NGSP)'/'(IFCC)', so 'HbA1c (IFCC)' in mmol/mol must not dedup onto
-'HbA1c (NGSP)' in %. `normalizeTestType` likewise keeps qualifiers in the
-display key for the same reason. A row may also carry a `unit` field;
+Exception: merging requires the same **reference range and unit** — when both
+are determinable and either disagrees, they are not the same measurement. The
+name key strips qualifiers like '(NGSP)'/'(IFCC)', so 'HbA1c (IFCC)' in
+mmol/mol must not dedup onto 'HbA1c (NGSP)' in %. The same gate applies to
+name canonicalisation in `_resolve_test_name` (via `_name_series_accepts`):
+a variant only folds onto an existing series when its ref and unit agree.
+Same name+date+identical value is still one reading regardless of how the
+ref was transcribed. `normalizeTestType` keeps qualifiers in the display key
+for the same reason. A row may also carry a `unit` field;
 `lab_results.js` prefers it over extracting the unit from `value`, and the
 group header derives its default range/unit from the newest row.
 
