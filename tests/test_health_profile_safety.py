@@ -330,6 +330,45 @@ def test_view_document_serves_own_file_only(tmp_path):
         _cleanup(user_id)
 
 
+def test_document_result_serves_stored_analysis(tmp_path):
+    """Reviewing a stored document must return the saved analysis JSON —
+    a file read, not another model call."""
+    import app as app_mod
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        result_file = tmp_path / 'hash1_result.json'
+        result_file.write_text(json.dumps({'extracted': {'medications': [{'name': 'Aspirin'}]}}),
+                               encoding='utf-8')
+        text_file = tmp_path / 'hash1.txt'
+        text_file.write_text('Aspirin 100mg daily', encoding='utf-8')
+        profile.data['uploaded_documents'] = [{
+            'original_name': 'report.pdf',
+            'stored_name': 's_report.pdf',
+            'uploaded_at': datetime.now().isoformat(),
+            'result_path': str(result_file),
+            'extracted_text_path': str(text_file),
+        }]
+        profile.save()
+
+        app_mod.app.config['TESTING'] = True
+        client = app_mod.app.test_client()
+        with client.session_transaction() as sess:
+            sess['user_id'] = user_id
+            sess['username'] = 'safety-test'
+
+        resp = client.get('/api/health-profile/document-result?stored_name=s_report.pdf')
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data['pending_review']['medications'][0]['name'] == 'Aspirin'
+        assert data['extracted_text'] == 'Aspirin 100mg daily'
+
+        # Unknown document -> 404; document with no stored analysis -> 404
+        assert client.get('/api/health-profile/document-result?stored_name=nope.pdf').status_code == 404
+    finally:
+        _cleanup(user_id)
+
+
 def test_list_documents_newest_first():
     """GET /documents returns newest upload first, while the stored list
     order is untouched (the index-based delete fallback depends on it)."""

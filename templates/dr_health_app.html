@@ -642,6 +642,13 @@
         animation: hf-mic-pulse 1s ease-in-out infinite;
     }
     @keyframes hf-mic-pulse { 50% { opacity: 0.5; } }
+
+    /* Upload-in-progress feedback — orange pulse so the tap is acknowledged */
+    #accept-photo-btn.busy {
+        background: #e65100; color: #fff; border-color: #e65100;
+        animation: accept-busy 0.9s ease-in-out infinite;
+    }
+    @keyframes accept-busy { 50% { opacity: 0.55; } }
     .hf-lang-menu {
         position: absolute; top: 100%; right: 0; margin-top: 5px; min-width: 160px;
         background: #fff; border: 1px solid #cfd8dc; border-radius: 10px;
@@ -1531,6 +1538,9 @@
                 html += `<div style="font-size:0.85rem;word-break:break-word;"><strong>${name}</strong><br><span style="color:#999;font-size:0.75rem;">${uploaded} ${size}</span></div>`;
                 html += `<div style="display:flex;gap:6px;">`;
                 html += `<button class="btn-secondary" type="button" onclick="viewStoredDocument('${escapeHtml(doc.stored_name)}')" style="font-size:0.75rem;">View</button>`;
+                if (doc.has_result) {
+                    html += `<button class="btn-secondary" type="button" onclick="openStoredReview('${escapeHtml(doc.stored_name)}')" style="font-size:0.75rem;">Review</button>`;
+                }
                 html += `<button class="btn-secondary" type="button" onclick="reuseStoredDocument('${escapeHtml(doc.stored_name)}')" style="font-size:0.75rem;">Use</button>`;
                 html += `<button class="btn-secondary" type="button" onclick="deleteStoredDocument('${escapeHtml(doc.stored_name)}', ${idx})" style="font-size:0.75rem;">Delete</button>`;
                 html += `</div></div>`;
@@ -1540,6 +1550,36 @@
             el.innerHTML = '<em style="color:#999;">Could not load stored documents.</em>';
         }
     }
+
+    // Reopen the stored analysis for a document — reads the saved result,
+    // no re-analysis (and no AI cost) involved.
+    async function openStoredReview(storedName) {
+        const status = document.getElementById('profile-status');
+        if (status) status.textContent = 'Loading stored analysis…';
+        try {
+            const resp = await AuthHelper.authenticatedFetch(
+                '/api/health-profile/document-result?stored_name=' + encodeURIComponent(storedName));
+            const data = await resp.json();
+            if (!resp.ok || !data.pending_review) {
+                if (status) status.textContent = data.error || 'No stored analysis for this document.';
+                return;
+            }
+            const meta = {
+                source_file: data.source_file,
+                extracted_text: data.extracted_text,
+                extracted_text_preview: data.extracted_text_preview,
+                stored_document: data.stored_document
+            };
+            setReviewState(data.pending_review, meta);
+            window.__pendingReview = data.pending_review;
+            window.__pendingMeta = meta;
+            if (status) status.textContent = '';
+            openReviewModal(data.pending_review, meta);
+        } catch (e) {
+            if (status) status.textContent = 'Open error: ' + (e && e.message || e);
+        }
+    }
+    window.openStoredReview = openStoredReview;
 
     async function viewStoredDocument(storedName) {
         // Auth goes in a header, so a plain link can't open the file — fetch
@@ -1787,7 +1827,11 @@
     document.getElementById('accept-photo-btn').addEventListener('click', async () => {
         const fileInput = document.getElementById('profile-file');
         const status = document.getElementById('profile-status');
+        const btn = document.getElementById('accept-photo-btn');
         if (!fileInput.files || !fileInput.files.length) { status.textContent = 'Choose one or more files first.'; return; }
+        btn.classList.add('busy');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Analyzing…';
         const files = Array.from(fileInput.files);
         let ok = 0, failed = 0, lastError = '', lastPending = null, lastMeta = null;
         const retainEl = document.getElementById('retain-photo');
@@ -1835,7 +1879,9 @@
             if (reviewAction) reviewAction.style.display = 'none';
         }
         fileInput.value = '';
-        updatePhotoPreview();
+        btn.classList.remove('busy');
+        btn.disabled = false;
+        updatePhotoPreview();  // also restores the button label
     });
 
     // Photo preview / accept / retake helpers

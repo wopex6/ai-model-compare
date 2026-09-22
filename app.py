@@ -7598,6 +7598,53 @@ def get_health_document():
         return _safe_error(e, 'api')
 
 
+@app.route('/api/health-profile/document-result', methods=['GET'])
+@require_auth
+def get_health_document_result():
+    """Return the stored analysis JSON for a document without re-running AI.
+
+    Upload and reparse already write `<hash>_result.json` next to the
+    extracted text, so reopening a review is a file read, not a model call.
+    """
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        stored_name = request.args.get('stored_name')
+        doc = next((d for d in profile.data.get('uploaded_documents', [])
+                    if d.get('stored_name') == stored_name), None)
+        if not doc:
+            return jsonify({'error': 'Document not found'}), 404
+
+        result_path = doc.get('result_path')
+        if not result_path or not Path(result_path).exists():
+            return jsonify({'error': 'No stored analysis for this document — use Re-analyse.'}), 404
+        try:
+            result = json.loads(Path(result_path).read_text(encoding='utf-8'))
+        except (ValueError, OSError):
+            return jsonify({'error': 'Stored analysis is unreadable — use Re-analyse.'}), 500
+
+        if 'pending_review' not in result and 'extracted' in result:
+            result['pending_review'] = result['extracted']
+        extracted_text = ''
+        text_path = doc.get('extracted_text_path')
+        if text_path and Path(text_path).exists():
+            try:
+                extracted_text = Path(text_path).read_text(encoding='utf-8')
+            except OSError:
+                extracted_text = ''
+        result['extracted_text'] = extracted_text
+        result['extracted_text_preview'] = extracted_text[:4000] + ('...' if len(extracted_text) > 4000 else '')
+        result['source_file'] = doc.get('original_name')
+        result['stored_document'] = {
+            'original_name': doc.get('original_name'),
+            'stored_name': doc.get('stored_name'),
+            'uploaded_at': doc.get('uploaded_at'),
+        }
+        return jsonify(result)
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
 @app.route('/api/health-profile/documents', methods=['GET'])
 @require_auth
 def list_health_documents():
@@ -7626,7 +7673,8 @@ def list_health_documents():
                 'keep_forever': bool(d.get('keep_forever')),
                 'retention_days': retention_days,
                 'size_bytes': d.get('size_bytes'),
-                'content_hash': d.get('content_hash')
+                'content_hash': d.get('content_hash'),
+                'has_result': bool(d.get('result_path') and os.path.exists(d['result_path']))
             })
         # Newest upload first — display order only; the stored list (and the
         # index-based delete fallback) keeps its original order.
