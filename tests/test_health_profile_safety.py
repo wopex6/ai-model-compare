@@ -207,3 +207,46 @@ def test_recent_changes_and_expiring_docs():
     expiring = health_insights.expiring_documents(data, within_days=30, today=today)
     names = [d['original_name'] for d in expiring]
     assert 'old.pdf' in names and 'keep.pdf' not in names
+
+
+# --- document viewing ---------------------------------------------------------
+
+def test_view_document_serves_own_file_only(tmp_path):
+    """The view endpoint must serve the user's stored file and refuse
+    anything that is not registered in that user's profile."""
+    import app as app_mod
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        user_dir = tmp_path / str(user_id)
+        user_dir.mkdir(parents=True)
+        real = user_dir / '20260901_ab12_report.pdf'
+        real.write_bytes(b'%PDF-1.4 hello')
+        profile.data['uploaded_documents'] = [{
+            'original_name': 'report.pdf',
+            'stored_name': real.name,
+            'stored_path': str(real),
+            'mime_type': 'application/pdf',
+            'uploaded_at': datetime.now().isoformat(),
+        }]
+        profile.save()
+
+        app_mod.app.config['TESTING'] = True
+        client = app_mod.app.test_client()
+        with client.session_transaction() as sess:
+            sess['user_id'] = user_id
+            sess['username'] = 'safety-test'
+
+        with patch.object(app_mod, 'HEALTH_UPLOADS_DIR', tmp_path):
+            resp = client.get(f'/api/health-profile/documents/{real.name}')
+            assert resp.status_code == 200
+            assert resp.data == b'%PDF-1.4 hello'
+
+            # A file that exists on disk but is not in the profile must not
+            # be served — the profile entry is the access check.
+            stray = user_dir / 'not_in_profile.pdf'
+            stray.write_bytes(b'%PDF-1.4 stray')
+            resp = client.get(f'/api/health-profile/documents/{stray.name}')
+            assert resp.status_code == 404
+    finally:
+        _cleanup(user_id)

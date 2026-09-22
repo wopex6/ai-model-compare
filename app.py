@@ -7714,6 +7714,42 @@ def delete_health_document():
         return _safe_error(e, 'api')
 
 
+@app.route('/api/health-profile/documents/<path:stored_name>', methods=['GET'])
+@require_auth
+def view_health_document(stored_name):
+    """Serve a stored uploaded document inline so the user can view the
+    original report — the evidence behind the extracted facts."""
+    try:
+        from flask import send_file
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        doc = next((d for d in profile.data.get('uploaded_documents', [])
+                    if d.get('stored_name') == stored_name), None)
+        if not doc:
+            return jsonify({'error': 'Document not found'}), 404
+
+        user_dir = (HEALTH_UPLOADS_DIR / user_id).resolve()
+        # stored_name is user-controlled input here — resolve and confirm it
+        # stays inside this user's upload dir before touching the filesystem.
+        target = (user_dir / secure_filename(stored_name)).resolve()
+        if target.parent != user_dir or not target.exists():
+            return jsonify({'error': 'File not found on server'}), 404
+
+        mime = doc.get('mime_type') or ''
+        if not mime:
+            import mimetypes
+            mime = mimetypes.guess_type(
+                doc.get('original_name') or stored_name)[0] or 'application/octet-stream'
+        return send_file(
+            target,
+            mimetype=mime,
+            as_attachment=False,
+            download_name=doc.get('original_name') or stored_name,
+        )
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
 @app.route('/api/health-profile/export', methods=['GET'])
 @require_auth
 def export_health_profile():
