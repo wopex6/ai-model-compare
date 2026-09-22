@@ -7628,6 +7628,9 @@ def list_health_documents():
                 'size_bytes': d.get('size_bytes'),
                 'content_hash': d.get('content_hash')
             })
+        # Newest upload first — display order only; the stored list (and the
+        # index-based delete fallback) keeps its original order.
+        documents.sort(key=lambda d: d.get('uploaded_at') or '', reverse=True)
         return jsonify({'documents': documents})
     except Exception as e:
         return _safe_error(e, 'api')

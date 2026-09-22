@@ -223,6 +223,22 @@
     .add-info-method textarea { margin: 0; }
     #analyze-btn { width: 100%; box-sizing: border-box; margin-top: 8px; display: flex; align-items: center; gap: 8px; }
 
+    /* In-app document viewer — window.open() is unreliable in standalone
+       mode, so stored documents open in this overlay instead */
+    #doc-viewer { display: none; position: fixed; inset: 0; z-index: 70; background: #fff; flex-direction: column; }
+    #doc-viewer.open { display: flex; }
+    .doc-viewer-bar {
+        display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+        padding: calc(env(safe-area-inset-top, 0px) + 10px) 14px 10px;
+        background: #c62828; color: #fff;
+    }
+    .doc-viewer-bar button {
+        background: #fff; color: #c62828; border: none; border-radius: 16px;
+        padding: 6px 14px; font-size: 0.85rem; font-weight: 700; cursor: pointer; flex-shrink: 0;
+    }
+    .doc-viewer-bar span { font-size: 0.88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #doc-viewer-frame { flex: 1; border: none; width: 100%; background: #fff; }
+
     /* Bottom nav */
     .bottom-nav {
         position: fixed; left: 0; right: 0; bottom: 0; z-index: 100;
@@ -890,6 +906,15 @@
 
 </div>
 
+    <!-- ============ DOCUMENT VIEWER ============ -->
+    <div id="doc-viewer">
+        <div class="doc-viewer-bar">
+            <button type="button" id="doc-viewer-back"><i class="fas fa-arrow-left"></i> Back</button>
+            <span id="doc-viewer-name"></span>
+        </div>
+        <iframe id="doc-viewer-frame" title="Document viewer"></iframe>
+    </div>
+
     <!-- ============ EMERGENCY MODAL ============ -->
     <div id="emergency-modal">
         <div class="emergency-header">
@@ -1482,6 +1507,8 @@
         }
     }
 
+    let storedDocsCache = [];
+
     async function loadStoredDocuments() {
         const el = document.getElementById('stored-documents-list');
         if (!el) return;
@@ -1490,7 +1517,10 @@
             const resp = await AuthHelper.authenticatedFetch('/api/health-profile/documents');
             if (!resp.ok) { el.innerHTML = '<em style="color:#999;">Could not load stored documents.</em>'; return; }
             const data = await resp.json();
-            const docs = data.documents || [];
+            const docs = (data.documents || []).slice();
+            // Newest first — the file you just uploaded should be at the top.
+            docs.sort((a, b) => new Date(b.uploaded_at || 0) - new Date(a.uploaded_at || 0));
+            storedDocsCache = docs;
             if (!docs.length) { el.innerHTML = '<em style="color:#999;">No stored documents yet.</em>'; return; }
             let html = '';
             docs.forEach((doc, idx) => {
@@ -1512,9 +1542,14 @@
     }
 
     async function viewStoredDocument(storedName) {
-        // Auth goes in a header, so a plain link can't open the file —
-        // fetch it, then open the blob.
+        // Auth goes in a header, so a plain link can't open the file — fetch
+        // it, then show it in the in-app viewer (window.open is unreliable
+        // in standalone mode and leaves no way back).
         const status = document.getElementById('profile-status');
+        const viewer = document.getElementById('doc-viewer');
+        const frame = document.getElementById('doc-viewer-frame');
+        const nameEl = document.getElementById('doc-viewer-name');
+        if (!viewer || !frame) return;
         if (status) status.textContent = 'Opening document…';
         try {
             const resp = await AuthHelper.authenticatedFetch(
@@ -1524,24 +1559,26 @@
                 return;
             }
             const blob = await resp.blob();
-            const url = URL.createObjectURL(blob);
-            const win = window.open(url, '_blank');
-            if (!win) {
-                // Popup blocked (some standalone PWAs): fall back to download.
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = storedName;
-                document.body.appendChild(a);
-                a.click();
-                a.remove();
-            }
-            setTimeout(() => URL.revokeObjectURL(url), 60000);
+            if (frame._url) URL.revokeObjectURL(frame._url);
+            frame._url = URL.createObjectURL(blob);
+            frame.src = frame._url;
+            const doc = storedDocsCache.find(d => d.stored_name === storedName);
+            if (nameEl) nameEl.textContent = (doc && doc.original_name) || storedName;
+            viewer.classList.add('open');
             if (status) status.textContent = '';
         } catch (e) {
             if (status) status.textContent = 'Open error: ' + (e && e.message || e);
         }
     }
     window.viewStoredDocument = viewStoredDocument;
+
+    document.getElementById('doc-viewer-back').addEventListener('click', () => {
+        const viewer = document.getElementById('doc-viewer');
+        const frame = document.getElementById('doc-viewer-frame');
+        if (frame && frame._url) { URL.revokeObjectURL(frame._url); frame._url = null; }
+        if (frame) frame.src = 'about:blank';
+        if (viewer) viewer.classList.remove('open');
+    });
 
     async function reuseStoredDocument(storedName) {
         const el = document.getElementById('stored-documents-list');
@@ -2357,7 +2394,9 @@
 
     document.getElementById('review-close').addEventListener('click', closeReviewModal);
     document.getElementById('review-accept-all').addEventListener('click', () => setReviewAll(true));
-    document.getElementById('review-reject-all').addEventListener('click', () => setReviewAll(false));
+    // "Reject all" means discard the review — just close, don't leave the
+    // user staring at unchecked boxes.
+    document.getElementById('review-reject-all').addEventListener('click', closeReviewModal);
     document.getElementById('review-save').addEventListener('click', saveReview);
     const reviewLatestBtn = document.getElementById('review-latest-btn');
     if (reviewLatestBtn) {
@@ -2421,6 +2460,72 @@
         if (Array.isArray(val)) return val.map(v => String(v)).join(', ');
         if (typeof val === 'object') return JSON.stringify(val, null, 2);
         return String(val);
+    }
+
+    /* Edit the default reference range and unit for a whole test group.
+       Stored on the newest row — that is the row the group header derives
+       its default from, so older rows keep their own recorded range. */
+    function editGroupDefaults(head, group) {
+        const latest = group.entries[0];
+        const form = document.createElement('div');
+        form.className = 'dm-edit-form';
+        form.style.width = '100%';
+        const mk = (key, label, val) => {
+            const l = document.createElement('label');
+            l.className = 'dm-edit-label';
+            l.textContent = label;
+            const i = document.createElement('input');
+            i.type = 'text';
+            i.value = val || '';
+            i.dataset.key = key;
+            form.appendChild(l);
+            form.appendChild(i);
+            return i;
+        };
+        const refIn = mk('reference_range', 'Default reference range', group.ref || (latest.item.reference_range || ''));
+        const unitIn = mk('unit', 'Default unit (e.g. mmol/L)', group.unit || (latest.item.unit || ''));
+        const actions = document.createElement('div');
+        actions.className = 'dm-actions';
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'btn-primary';
+        saveBtn.textContent = 'Save';
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'btn-secondary';
+        cancelBtn.textContent = 'Cancel';
+        actions.appendChild(saveBtn);
+        actions.appendChild(cancelBtn);
+        form.appendChild(actions);
+        head.innerHTML = '';
+        head.appendChild(form);
+
+        cancelBtn.addEventListener('click', () => openDataManagerModal());
+        saveBtn.addEventListener('click', async () => {
+            const status = document.getElementById('dm-status');
+            if (status) status.textContent = 'Saving...';
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/item', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        category: 'test_results',
+                        index: latest.idx,
+                        updates: {
+                            reference_range: refIn.value.trim(),
+                            unit: unitIn.value.trim()
+                        }
+                    })
+                });
+                const data = await resp.json();
+                if (resp.ok && data.success !== false) {
+                    renderDataManager(data.profile);
+                    if (status) status.textContent = 'Saved.';
+                } else {
+                    if (status) status.textContent = data.error || 'Save failed.';
+                }
+            } catch (e) {
+                if (status) status.textContent = 'Network error.';
+            }
+        });
     }
 
     function renderItemCard(item, cat) {
@@ -2491,7 +2596,17 @@
                 sortedGroups.forEach(group => {
                     const wrap = document.createElement('div');
                     wrap.className = 'pwa-test-group';
-                    wrap.innerHTML = `<div style="font-weight:600; color:#1565C0; margin-bottom:4px;"><i class="fas fa-vial"></i> ${escapeHtml(group.displayName)} <span style="color:#666; font-weight:400;">${escapeHtml(group.meta)}</span> ${group.spark}</div>`;
+                    const head = document.createElement('div');
+                    head.style.cssText = 'font-weight:600; color:#1565C0; margin-bottom:4px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;';
+                    head.innerHTML = `<i class="fas fa-vial"></i> <span>${escapeHtml(group.displayName)}</span> <span style="color:#666; font-weight:400;">${escapeHtml(group.meta)}</span> ${group.spark}`;
+                    const refBtn = document.createElement('button');
+                    refBtn.type = 'button';
+                    refBtn.className = 'btn-secondary';
+                    refBtn.style.cssText = 'margin-left:auto; padding:2px 8px; font-size:0.7rem;';
+                    refBtn.textContent = 'Edit range';
+                    refBtn.addEventListener('click', () => editGroupDefaults(head, group));
+                    head.appendChild(refBtn);
+                    wrap.appendChild(head);
                     const table = document.createElement('table');
                     table.className = 'dm-test-table';
                     table.innerHTML = '<thead><tr><th>Date</th><th>Value</th><th></th></tr></thead>';

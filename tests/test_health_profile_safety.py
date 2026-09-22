@@ -328,3 +328,76 @@ def test_view_document_serves_own_file_only(tmp_path):
         assert resp.status_code == 404
     finally:
         _cleanup(user_id)
+
+
+def test_list_documents_newest_first():
+    """GET /documents returns newest upload first, while the stored list
+    order is untouched (the index-based delete fallback depends on it)."""
+    import app as app_mod
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        profile.data['uploaded_documents'] = [
+            {'original_name': 'older.pdf', 'stored_name': 's_old',
+             'uploaded_at': '2025-01-01T10:00:00'},
+            {'original_name': 'newest.pdf', 'stored_name': 's_new',
+             'uploaded_at': '2026-09-09T10:00:00'},
+            {'original_name': 'middle.pdf', 'stored_name': 's_mid',
+             'uploaded_at': '2025-06-01T10:00:00'},
+        ]
+        profile.save()
+
+        app_mod.app.config['TESTING'] = True
+        client = app_mod.app.test_client()
+        with client.session_transaction() as sess:
+            sess['user_id'] = user_id
+            sess['username'] = 'safety-test'
+
+        resp = client.get('/api/health-profile/documents')
+        assert resp.status_code == 200
+        names = [d['original_name'] for d in resp.get_json()['documents']]
+        assert names == ['newest.pdf', 'middle.pdf', 'older.pdf']
+        # Stored order unchanged — delete fallback addresses rows by index.
+        stored = [d['stored_name']
+                  for d in HealthProfile(user_id).data['uploaded_documents']]
+        assert stored == ['s_old', 's_new', 's_mid']
+    finally:
+        _cleanup(user_id)
+
+
+def test_update_item_persists_default_range_and_unit():
+    """PUT /item accepts an explicit unit alongside reference_range — this is
+    how the data manager stores a test's default range/unit on the newest
+    row, and both must survive a reload."""
+    import app as app_mod
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        profile.data['test_results'] = [
+            {'test_name': 'Sodium', 'value': '140 mmol/L',
+             'reference_range': '135 - 145', 'date': '2026-01-01'},
+        ]
+        profile.save()
+
+        app_mod.app.config['TESTING'] = True
+        client = app_mod.app.test_client()
+        with client.session_transaction() as sess:
+            sess['user_id'] = user_id
+            sess['username'] = 'safety-test'
+
+        resp = client.put('/api/health-profile/item', json={
+            'category': 'test_results',
+            'index': 0,
+            'updates': {'reference_range': '136 - 146', 'unit': 'mmol/L'}
+        })
+        assert resp.status_code == 200
+        assert resp.get_json()['success'] is True
+
+        row = HealthProfile(user_id).data['test_results'][0]
+        assert row['reference_range'] == '136 - 146'
+        assert row['unit'] == 'mmol/L'
+        # Value and date untouched — defaults never rewrite history.
+        assert row['value'] == '140 mmol/L'
+        assert row['date'] == '2026-01-01'
+    finally:
+        _cleanup(user_id)

@@ -1316,7 +1316,8 @@
             try {
                 const resp = await AuthHelper.authenticatedFetch('/api/health-profile/documents');
                 const data = await resp.json();
-                const docs = (data && Array.isArray(data.documents)) ? data.documents : [];
+                const docs = (data && Array.isArray(data.documents)) ? data.documents.slice() : [];
+                docs.sort((a, b) => new Date(b.uploaded_at || 0) - new Date(a.uploaded_at || 0));
                 if (!docs.length) {
                     el.innerHTML = '<div class="hub-note">No documents stored.</div>';
                     return;
