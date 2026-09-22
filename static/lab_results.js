@@ -201,8 +201,12 @@
 
         Object.values(groups).forEach(g => {
             g.entries.sort((a, b) => parseMedicalDate(b.item.date, b.item.added_at) - parseMedicalDate(a.item.date, a.item.added_at));
-            g.unit = g.entries.map(e => (e.item.unit || '').trim()).find(u => u)
-                || g.entries.map(e => extractTestUnit(e.item.value)).find(u => u) || '';
+            // An explicitly stored unit — even a blank one — wins: 'no unit'
+            // is a deliberate choice (ratios like S CHOL/HDLC), and must not
+            // be overridden by a unit left over in an older row's value text.
+            const explicitUnit = g.entries.map(e => e.item.unit).find(u => u !== undefined);
+            g.unit = explicitUnit !== undefined ? String(explicitUnit).trim()
+                : (g.entries.map(e => extractTestUnit(e.item.value)).find(u => u) || '');
             g.ref = g.entries.map(e => e.item.reference_range || '').find(r => r.trim()) || '';
             const escUnit = g.unit ? g.unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : '';
             if (g.unit) g.displayName = g.displayName.replace(new RegExp('(?:^|\\s)' + escUnit + '(?:\\s|$)', 'ig'), ' ').replace(/\s+/g, ' ').trim();

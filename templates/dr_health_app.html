@@ -1560,7 +1560,23 @@
             }
             const blob = await resp.blob();
             if (frame._url) URL.revokeObjectURL(frame._url);
-            frame._url = URL.createObjectURL(blob);
+            if (frame._innerUrl) { URL.revokeObjectURL(frame._innerUrl); frame._innerUrl = null; }
+            let url = URL.createObjectURL(blob);
+            if (blob.type.indexOf('image/') === 0) {
+                // A raw image blob renders at natural size — far too zoomed on
+                // a phone photo. Wrap it so it fits the page, and keep pinch
+                // zoom enabled for detail.
+                frame._innerUrl = url;
+                const html = '<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes">'
+                    + '<style>html,body{margin:0;background:#fff}img{display:block;width:100%;height:auto}</style></head>'
+                    + '<body><img src="' + url + '"></body></html>';
+                url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+            } else if (blob.type === 'application/pdf') {
+                // Fit the whole page rather than the viewer's default zoom;
+                // the PDF toolbar still allows manual zoom.
+                url += '#view=Fit';
+            }
+            frame._url = url;
             frame.src = frame._url;
             const doc = storedDocsCache.find(d => d.stored_name === storedName);
             if (nameEl) nameEl.textContent = (doc && doc.original_name) || storedName;
@@ -1576,6 +1592,7 @@
         const viewer = document.getElementById('doc-viewer');
         const frame = document.getElementById('doc-viewer-frame');
         if (frame && frame._url) { URL.revokeObjectURL(frame._url); frame._url = null; }
+        if (frame && frame._innerUrl) { URL.revokeObjectURL(frame._innerUrl); frame._innerUrl = null; }
         if (frame) frame.src = 'about:blank';
         if (viewer) viewer.classList.remove('open');
     });
@@ -1607,13 +1624,10 @@
                 });
                 window.__pendingReview = data.pending_review;
                 window.__pendingMeta = { source_file: data.source_file, extracted_text: data.extracted_text, extracted_text_preview: data.extracted_text_preview, stored_document: data.stored_document };
-                const reviewLatestBtn = document.getElementById('review-latest-btn');
-                if (reviewLatestBtn) {
-                    reviewLatestBtn.onclick = () => {
-                        try { openReviewModal(data.pending_review, { source_file: data.source_file, extracted_text: data.extracted_text, extracted_text_preview: data.extracted_text_preview, stored_document: data.stored_document }); }
-                        catch (e) { if (status) status.textContent = 'Review error: ' + (e && e.message || e); }
-                    };
-                }
+                // Do NOT reassign review-latest-btn.onclick here — its
+                // listener already calls openLatestReview(), and a leftover
+                // closure over this `data` would reopen the OLD document's
+                // review after a newer upload.
                 openReviewModal(data.pending_review, {
                     source_file: data.source_file,
                     extracted_text: data.extracted_text,
