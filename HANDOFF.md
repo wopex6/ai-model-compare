@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-22 13:43 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-22 15:18 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-records screen: numbered 3-method add-info card, doc view endpoint+button, fixed lab column alignment. Deployed 3998f3c, SW v97. main now = branch tip.
+records layout per user: checkbox under opt2, Analyze under opt3; apply_extracted now saves 100% of review (extras+unknown keys). Deployed b525d19.
 
 ## Git
 
@@ -14,14 +14,14 @@ records screen: numbered 3-method add-info card, doc view endpoint+button, fixed
 Recent commits:
 
 ```
+b525d19 records: retain checkbox under option 2; Analyze scoped to option 3; save everything the review shows
+24d8c10 handoff: snapshot after records-screen work
 3998f3c records: 3-step add-info layout, document viewing, aligned lab columns
 e5f235d handoff: snapshot after emergency closed-screen removal
 521703c emergency card: drop the fake closed screen; align brief field rows
 3b7c883 handoff: snapshot after visit brief and iOS reopen fix deploy
 3b3c6f6 visit brief: latest result per test only, plus back-in-range list; iOS emergency reopen fix
 a80e70c handoff: snapshot after health-data safety deploy
-bc39efb health data safety: backups, cross-worker merge, retention keep flags, export
-fc773c1 handoff: snapshot after visit brief and lab explain deploy
 ```
 
 ## Production (PythonAnywhere)
@@ -71,7 +71,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-409 passed, 1 warning in 19.74s
+409 passed, 1 warning in 21.65s
 [AutoDoc] Monitoring stopped
 ```
 
