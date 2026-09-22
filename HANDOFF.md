@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-22 19:04 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-22 19:53 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Deployed 3a07353 (SW v99): same-date test dup keeps stored value (backfill only); Edit range form shows+edits test name applied to all group rows; editDataItem always shows standard fields; POST /item carries unit/source/verified_by_user onto test rows.
+Deployed f367461 (SW v100): unit-aware test dedup — same name+date but different units (HbA1c NGSP % vs IFCC mmol/mol) are NOT duplicates; display grouping keeps parenthetical qualifiers.
 
 ## Git
 
@@ -14,14 +14,14 @@ Deployed 3a07353 (SW v99): same-date test dup keeps stored value (backfill only)
 Recent commits:
 
 ```
+f367461 test dedup: unit mismatch means different measurement; keep qualifiers in display key
+f5a0f54 handoff: snapshot after test-dup keep-stored and edit-fields deploy
 3a07353 test results: keep stored value on same-date dup; editable test name; all standard fields shown
 4e3b7e2 handoff: snapshot after review-close, doc viewer, doc ordering and default range/unit deploy
 3eea881 records: Reject All closes review, in-app doc viewer, newest-first docs, editable default range/unit
 5cbcc53 handoff: snapshot after 100%-save and records layout deploy
 b525d19 records: retain checkbox under option 2; Analyze scoped to option 3; save everything the review shows
 24d8c10 handoff: snapshot after records-screen work
-3998f3c records: 3-step add-info layout, document viewing, aligned lab columns
-e5f235d handoff: snapshot after emergency closed-screen removal
 ```
 
 ## Production (PythonAnywhere)
@@ -73,7 +73,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-409 passed, 1 warning in 19.05s
+409 passed, 1 warning in 19.53s
 [AutoDoc] Monitoring stopped
 ```
 
