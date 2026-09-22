@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-21 16:45 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-22 13:43 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-brief field rows now indented; emergency closed-screen removed (Close only shows as Back from inside app). Deployed 521703c, SW v96.
+records screen: numbered 3-method add-info card, doc view endpoint+button, fixed lab column alignment. Deployed 3998f3c, SW v97. main now = branch tip.
 
 ## Git
 
@@ -14,14 +14,14 @@ brief field rows now indented; emergency closed-screen removed (Close only shows
 Recent commits:
 
 ```
+3998f3c records: 3-step add-info layout, document viewing, aligned lab columns
+e5f235d handoff: snapshot after emergency closed-screen removal
 521703c emergency card: drop the fake closed screen; align brief field rows
 3b7c883 handoff: snapshot after visit brief and iOS reopen fix deploy
 3b3c6f6 visit brief: latest result per test only, plus back-in-range list; iOS emergency reopen fix
 a80e70c handoff: snapshot after health-data safety deploy
 bc39efb health data safety: backups, cross-worker merge, retention keep flags, export
 fc773c1 handoff: snapshot after visit brief and lab explain deploy
-46c6990 docs: current Dr. Health open work for the next agent
-4277472 chat and hub: packed context, visit brief, lab explain, and locale replies
 ```
 
 ## Production (PythonAnywhere)
@@ -71,7 +71,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-409 passed, 1 warning in 19.95s
+409 passed, 1 warning in 19.74s
 [AutoDoc] Monitoring stopped
 ```
 
