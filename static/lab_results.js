@@ -108,10 +108,13 @@
 
     function normalizeTestType(testName) {
         if (!testName) return 'Unknown Test';
+        // Parenthetical qualifiers are kept: '(NGSP)' vs '(IFCC)' or
+        // '(fasting)' vs none are different measurements with different
+        // units/ranges, and must not share a group or its reference range.
         return testName
-            .replace(/\(.*?\)/g, '')
             .replace(/historical/ig, '')
             .replace(/\s+/g, ' ')
+            .replace(/\s+\(/g, '(')
             .trim() || testName.trim();
     }
 

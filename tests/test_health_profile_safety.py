@@ -387,6 +387,23 @@ def test_duplicate_same_date_keeps_stored_value():
         _cleanup(user_id)
 
 
+def test_same_date_different_units_are_not_duplicates():
+    """'HbA1c (NGSP)' in % and 'HbA1c (IFCC)' in mmol/mol share the same
+    canonical key (the qualifier is stripped), but they are different
+    measurements — same date must not collapse them."""
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        profile.add_test_result('HbA1c (NGSP)', '6.0 %', '4.0 - 6.0 %', '2026-09-09')
+        profile.add_test_result('HbA1c (IFCC)', '42 mmol/mol', '20 - 42 mmol/mol', '2026-09-09')
+        rows = profile.data['test_results']
+        assert len(rows) == 2
+        units = {r.get('unit') or r['value'] for r in rows}
+        assert any('42' in str(u) for u in units)
+    finally:
+        _cleanup(user_id)
+
+
 def test_update_item_persists_default_range_and_unit():
     """PUT /item accepts an explicit unit alongside reference_range — this is
     how the data manager stores a test's default range/unit on the newest

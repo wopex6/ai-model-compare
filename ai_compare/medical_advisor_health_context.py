@@ -1395,7 +1395,7 @@ class HealthProfile:
         # 'S BICARB' and 'S Bicarbonate' land in the same table.
         test_name = self._resolve_test_name(test_name, reference_range, value, date_val)
         for t in existing:
-            if self._is_duplicate_test_result(t, test_name, value, date_val):
+            if self._is_duplicate_test_result(t, test_name, value, date_val, reference_range):
                 # Same test on the same date: the stored value was already
                 # reviewed/verified, so a differing incoming value is
                 # discarded — only fill in metadata the stored row lacks.
@@ -1436,7 +1436,8 @@ class HealthProfile:
             return f"num:{numeric:.8f}"
         return f"txt:{text}"
 
-    def _is_duplicate_test_result(self, existing_entry: Dict, test_name: str, value: str, date_text: str) -> bool:
+    def _is_duplicate_test_result(self, existing_entry: Dict, test_name: str, value: str,
+                                  date_text: str, reference_range: str = "") -> bool:
         """Return True when the same test (mineral) was performed on the same date."""
         existing_key = self._normalize_test_key(existing_entry.get("test_name", ""))
         incoming_key = self._normalize_test_key(test_name)
@@ -1448,10 +1449,20 @@ class HealthProfile:
         if existing_date and incoming_date and existing_date != incoming_date:
             return False
         if not existing_date and not incoming_date:
-            # Same test with no date on either side counts as a duplicate
-            return True
-        if not existing_date or not incoming_date:
+            pass  # Same test with no date on either side may still be a duplicate
+        elif not existing_date or not incoming_date:
             # One has a date and the other does not: treat as distinct
+            return False
+
+        # The name key strips qualifiers like '(NGSP)'/'(IFCC)', so rows that
+        # are genuinely different measurements can share it. When both sides
+        # carry a determinable unit and the units disagree, they are not the
+        # same measurement — 'HbA1c (IFCC)' in mmol/mol must never dedup onto
+        # 'HbA1c (NGSP)' in %.
+        existing_unit = self._test_unit_hint(
+            existing_entry.get("value", ""), existing_entry.get("reference_range", ""))
+        incoming_unit = self._test_unit_hint(value, reference_range)
+        if not _units_compatible(existing_unit, incoming_unit):
             return False
         return True
 
@@ -1473,7 +1484,8 @@ class HealthProfile:
             row_name = row.get("test_name", "")
 
             for kept in deduped:
-                if self._is_duplicate_test_result(kept, row_name, row_value, normalized_date):
+                if self._is_duplicate_test_result(kept, row_name, row_value, normalized_date,
+                                                  row.get("reference_range", "")):
                     duplicate = kept
                     break
 
