@@ -198,7 +198,8 @@
 
         Object.values(groups).forEach(g => {
             g.entries.sort((a, b) => parseMedicalDate(b.item.date, b.item.added_at) - parseMedicalDate(a.item.date, a.item.added_at));
-            g.unit = g.entries.map(e => extractTestUnit(e.item.value)).find(u => u) || '';
+            g.unit = g.entries.map(e => (e.item.unit || '').trim()).find(u => u)
+                || g.entries.map(e => extractTestUnit(e.item.value)).find(u => u) || '';
             g.ref = g.entries.map(e => e.item.reference_range || '').find(r => r.trim()) || '';
             const escUnit = g.unit ? g.unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : '';
             if (g.unit) g.displayName = g.displayName.replace(new RegExp('(?:^|\\s)' + escUnit + '(?:\\s|$)', 'ig'), ' ').replace(/\s+/g, ' ').trim();
