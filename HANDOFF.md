@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-22 20:33 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-22 21:42 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Deployed 47dc854: merge requires same ref+unit at both dedup and name-canonicalisation (_name_series_accepts). Identical value still dedups. Open item: user's stored HbA1c(NGSP) row on production carries the IFCC ref (25-38) from the old backfill bug — user must fix it via Manage My Data (Edit range/row); cannot be repaired remotely.
+Deployed 67f6b06 (SW v101): removed stale onclick closure that re-opened the previous doc's review after a new photo; doc viewer now fits images to width (pinch zoom on) and PDFs with #view=Fit; explicit blank unit wins over value-text extraction.
 
 ## Git
 
@@ -14,19 +14,19 @@ Deployed 47dc854: merge requires same ref+unit at both dedup and name-canonicali
 Recent commits:
 
 ```
+67f6b06 pwa: fix stale review showing previous doc; doc viewer fit + zoom; blank unit sticks
+79a0173 handoff: snapshot after ref+unit merge-gate deploy
 47dc854 test merge rules: same reference range AND unit required before merging
 2da5613 handoff: snapshot after unit-aware test dedup deploy
 f367461 test dedup: unit mismatch means different measurement; keep qualifiers in display key
 f5a0f54 handoff: snapshot after test-dup keep-stored and edit-fields deploy
 3a07353 test results: keep stored value on same-date dup; editable test name; all standard fields shown
 4e3b7e2 handoff: snapshot after review-close, doc viewer, doc ordering and default range/unit deploy
-3eea881 records: Reject All closes review, in-app doc viewer, newest-first docs, editable default range/unit
-5cbcc53 handoff: snapshot after 100%-save and records layout deploy
 ```
 
 ## Production (PythonAnywhere)
 
-**4 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
+Local and production match.
 
 ```
 ok       tests/test_ui_features.py
@@ -53,10 +53,8 @@ ok       web_enhancement_test_runner.py
 ok       webhook_deploy.py
 ok       wisdom_profiles/23.json
 ok       wisdom_profiles/23_hypotheses.json
-4 file(s) stale. Re-run with --push to upload.
+Everything on the server matches local.
 ```
-
-Reload often returns `409 slow_startup_error` on the first attempt — retry rather than debug it.
 
 ## Tests
 
@@ -73,7 +71,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-409 passed, 1 warning in 19.50s
+409 passed, 1 warning in 20.39s
 [AutoDoc] Monitoring stopped
 ```
 
