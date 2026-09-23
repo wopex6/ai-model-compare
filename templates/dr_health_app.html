@@ -1469,11 +1469,13 @@
                 sortedGroups.forEach(group => {
                     html += `<div class="pwa-test-group">`;
                     html += `<div style="font-weight:600; color:#1565C0; display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:4px;"><i class="fas fa-vial"></i> <span>${escapeHtml(group.displayName)}</span> <span style="color:#666; font-weight:400;">${escapeHtml(group.meta)}</span> ${group.spark}</div>`;
-                    html += `<table><thead><tr><th>Date</th><th>Value</th></tr></thead><tbody>`;
+                    html += `<table><thead><tr><th>Date</th><th>Value</th><th>Ref</th></tr></thead><tbody>`;
                     group.entries.forEach(e => {
                         const flagHtml = e.flag ? `<span style="font-size:0.7rem; color:${e.flag === 'H' ? '#c62828' : '#1565c0'}; font-weight:600; margin-left:4px;">${e.flag}</span>` : '<span style="font-size:0.7rem; color:#999; margin-left:4px;">—</span>';
+                        const rowRef = escapeHtml(e.item.reference_range || group.ref || '');
                         html += `<tr><td style="white-space:nowrap; color:#555;"><span class="pwa-tt-editable" contenteditable="false" data-idx="${e.idx}" data-field="date" ontouchstart="startEditHold(this, event)" ontouchend="cancelEditHold()" ontouchmove="cancelEditHold()" oncontextmenu="return false" onblur="saveTestResult(this)">${escapeHtml(e.item.date || '')}</span></td>`;
-                        html += `<td style="font-weight:500;"><span class="pwa-tt-editable" contenteditable="false" data-idx="${e.idx}" data-field="value" data-unit="${group.unit.replace(/"/g, '&quot;')}" ontouchstart="startEditHold(this, event)" ontouchend="cancelEditHold()" ontouchmove="cancelEditHold()" oncontextmenu="return false" onblur="saveTestResult(this)">${escapeHtml(e.displayVal)}</span> ${flagHtml}</td></tr>`;
+                        html += `<td style="font-weight:500;"><span class="pwa-tt-editable" contenteditable="false" data-idx="${e.idx}" data-field="value" data-unit="${group.unit.replace(/"/g, '&quot;')}" ontouchstart="startEditHold(this, event)" ontouchend="cancelEditHold()" ontouchmove="cancelEditHold()" oncontextmenu="return false" onblur="saveTestResult(this)">${escapeHtml(e.displayVal)}</span> ${flagHtml}</td>`;
+                        html += `<td style="font-size:0.75rem; color:#777;">${rowRef}</td></tr>`;
                     });
                     html += `</tbody></table></div>`;
                 });

@@ -84,16 +84,29 @@
     }
 
     function extractTestFlag(value) {
-        const m = String(value || '').match(/\b(H|L)\b/i);
-        return m ? m[1].toUpperCase() : '';
+        // A flag is a standalone H/L/High/Low token at the start or end of the
+        // value — never the 'L' inside a unit like 'x10^9/L' or 'mg/L'.
+        const t = String(value || '').trim();
+        const m = t.match(/^(H|L|High|Low)\s+/i) || t.match(/\s(H|L|High|Low)\s*$/i);
+        return m ? m[1].toUpperCase().charAt(0) : '';
     }
 
     function testFlag(entry, unit, ref) {
-        const stripped = stripTestUnit(entry.value, unit);
+        // Fall back to the value's own embedded unit so '6.4 H mmol/L' still
+        // strips to '6.4 H' when the group has no unit of its own.
+        const stripped = stripTestUnit(entry.value, unit || extractTestUnit(entry.value));
         const displayVal = stripped.replace(/^(?:H|L|High|Low)\s+/i, '').replace(/\s+(?:H|L|High|Low)$/i, '').trim();
         const num = parseFloat(displayVal);
-        let flag = computeTestFlag(num, ref) || extractTestFlag(stripped);
-        if (!flag && !isNaN(num)) {
+        const [lower, upper] = parseReferenceRange(ref);
+        if (!isNaN(num) && lower !== null && upper !== null) {
+            // When the number and the range both parse, arithmetic is
+            // authoritative — a stale stored 'L' must not flag an in-range
+            // value.
+            const s = testStatus(num, lower, upper);
+            return s === 'high' ? 'H' : s === 'low' ? 'L' : '';
+        }
+        let flag = '';
+        if (!isNaN(num)) {
             // Single-boundary ranges like <4.5 or >2.0 have no
             // two-number range for computeTestFlag to work with
             const m = String(ref).match(/([<>≤≥])\s*(\d+(?:\.\d+)?)/);
@@ -101,9 +114,10 @@
                 const bound = parseFloat(m[2]);
                 if ((m[1] === '<' || m[1] === '≤') && num >= bound) flag = 'H';
                 if ((m[1] === '>' || m[1] === '≥') && num <= bound) flag = 'L';
+                if (!flag) return '';
             }
         }
-        return flag;
+        return flag || extractTestFlag(stripped);
     }
 
     function normalizeTestType(testName) {
@@ -214,7 +228,10 @@
             g.meta = [g.ref, metaUnit].filter(Boolean).join(' ');
             g.spark = buildSparkline(g.entries.slice().reverse().map(e => e.item.value), g.ref);
             g.lastAbnormal = g.entries.reduce((latest, e) => {
-                e.displayVal = stripTestUnit(e.item.value, g.unit)
+                // Fall back to the value's own embedded unit so rows like
+                // '0.5 x10^9/L' and '0.5' display consistently in one group.
+                const rowUnit = g.unit || extractTestUnit(e.item.value);
+                e.displayVal = stripTestUnit(e.item.value, rowUnit)
                     .replace(/^(?:H|L|High|Low)\s+/i, '').replace(/\s+(?:H|L|High|Low)$/i, '').trim();
                 e.flag = testFlag(e.item, g.unit, g.ref);
                 if (!e.flag) return latest;
