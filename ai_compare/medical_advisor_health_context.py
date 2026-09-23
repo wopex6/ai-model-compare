@@ -23,6 +23,7 @@ from ai_compare.health_insights import (
 )
 from ai_compare.health_freshness import (
     STATUS_ACTIVE,
+    audit_test_change,
     backfill_lifecycle,
     is_active,
     merge_incoming,
@@ -1506,12 +1507,21 @@ class HealthProfile:
                 # Same test on the same date: the stored value was already
                 # reviewed/verified, so a differing incoming value is
                 # discarded — only fill in metadata the stored row lacks.
+                filled = {}
                 if not t.get("reference_range") and reference_range:
                     t["reference_range"] = reference_range
+                    filled["reference_range"] = reference_range
                 if not t.get("notes") and notes:
                     t["notes"] = notes
+                    filled["notes"] = notes
                 if not t.get("date") and date_val:
                     t["date"] = date_val
+                    filled["date"] = date_val
+                if filled:
+                    audit_test_change(self.data, "updated", t.get("test_name", test_name),
+                                      {"changes": [{"field": f, "from": "", "to": v}
+                                                   for f, v in filled.items()]},
+                                      self.ingest_source)
                 return True  # Duplicate handled — stored value kept
         entry = {
             "test_name": test_name,
@@ -1522,6 +1532,10 @@ class HealthProfile:
             "added_at": datetime.now().isoformat()
         }
         self.data["test_results"].append(entry)
+        audit_test_change(self.data, "added", test_name,
+                          {"value": value, "date": date_val,
+                           "reference_range": reference_range},
+                          self.ingest_source)
 
         # Auto-refresh critical test interpretation so latest values supersede older analysis.
         self._refresh_auto_test_analysis(test_name)
@@ -1619,6 +1633,8 @@ class HealthProfile:
 
         if removed:
             self.data["test_results"] = deduped
+            audit_test_change(self.data, "merged", "",
+                              {"removed": removed}, self.ingest_source)
 
         return removed
 

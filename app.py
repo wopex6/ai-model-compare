@@ -6653,6 +6653,16 @@ def update_health_profile():
                     category='general'
                 )
 
+        if 'audit_settings' in data and isinstance(data['audit_settings'], dict):
+            if 'days' in data['audit_settings']:
+                try:
+                    days = int(data['audit_settings'].get('days'))
+                except (TypeError, ValueError):
+                    return jsonify({'error': 'audit days must be an integer'}), 400
+                if days < 1 or days > 3650:
+                    return jsonify({'error': 'audit days must be between 1 and 3650'}), 400
+                profile.data.setdefault('audit_settings', {})['days'] = days
+
         profile.save()
         profile.migrate_vitals()
         return jsonify({'success': True, 'profile': profile.to_dict()})
@@ -7861,6 +7871,12 @@ def delete_health_profile_item():
             return jsonify({'error': 'Index out of range'}), 400
 
         removed = items.pop(index)
+        if category == 'test_results' and isinstance(removed, dict):
+            health_freshness.audit_test_change(
+                profile.data, 'deleted', removed.get('test_name', ''),
+                {'value': removed.get('value', ''),
+                 'date': removed.get('date', ''),
+                 'reference_range': removed.get('reference_range', '')})
         profile.save()
         return jsonify({'success': True, 'item': removed, 'profile': profile.to_dict()})
     except Exception as e:
@@ -7886,7 +7902,18 @@ def update_health_profile_item():
         items = profile.data.get(category, [])
         if index >= len(items):
             return jsonify({'error': 'Index out of range'}), 400
-        items[index].update(updates)
+        if category == 'test_results':
+            before = dict(items[index])
+            items[index].update(updates)
+            changes = [{'field': f, 'from': before.get(f, ''), 'to': updates.get(f)}
+                       for f in updates
+                       if str(before.get(f) or '').strip() != str(updates.get(f) or '').strip()]
+            if changes:
+                health_freshness.audit_test_change(
+                    profile.data, 'updated', items[index].get('test_name', ''),
+                    {'changes': changes, 'date': items[index].get('date', '')})
+        else:
+            items[index].update(updates)
         # Editing an item by hand confirms it, even if AI originally suggested
         # it — which also resets its place in the confirmation queue.
         health_freshness.confirm_item(items[index])
@@ -7935,12 +7962,51 @@ def add_health_profile_item():
                     if profile._is_duplicate_test_result(
                             t, item.get('test_name', ''), item.get('value', ''),
                             item.get('date', ''), item.get('reference_range', '')):
+                        before = {k: t.get(k) for k in extras}
                         t.update(extras)
+                        # Filling blanks on the row this request just wrote is
+                        # part of the add, not a separate change — only real
+                        # overwrites belong in the audit.
+                        changes = [{'field': k, 'from': before[k], 'to': v}
+                                   for k, v in extras.items()
+                                   if str(before[k] or '').strip()
+                                   and str(before[k]).strip() != str(v).strip()]
+                        if changes:
+                            health_freshness.audit_test_change(
+                                profile.data, 'updated', t.get('test_name', ''),
+                                {'changes': changes})
                         break
         else:
             profile.data.setdefault(category, []).append(item)
         profile.save()
         return jsonify({'success': True, 'item': item, 'profile': profile.to_dict()})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/health-profile/test-audit', methods=['GET'])
+@require_auth
+def get_test_audit():
+    """Recent changes to test results — added/updated/deleted/merged events.
+
+    The window defaults to the user's audit_settings.days (30 unless changed);
+    ?days= overrides it for one request.
+    """
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        days = request.args.get('days', type=int)
+        if days is None or days < 1 or days > 3650:
+            days = health_freshness.audit_days(profile.data)
+        # _parse_iso_datetime returns naive UTC — compare against naive now.
+        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+        entries = []
+        for e in profile.data.get('test_audit') or []:
+            at = _parse_iso_datetime(e.get('at'))
+            if at is None or at >= cutoff:
+                entries.append(e)
+        entries.reverse()  # newest first
+        return jsonify({'success': True, 'days': days, 'entries': entries})
     except Exception as e:
         return _safe_error(e, 'api')
 

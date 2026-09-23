@@ -594,6 +594,62 @@ def test_uploaded_at_parse_normalizes_to_naive_utc():
     assert naive == aware == offset
 
 
+def test_test_audit_records_add_edit_delete_and_window():
+    """Every test-result mutation lands in test_audit with a timestamp; the
+    endpoint filters by the configured window (default 30 days)."""
+    import app as app_mod
+    user_id = _user()
+    try:
+        HealthProfile(user_id).save()
+        app_mod.app.config['TESTING'] = True
+        client = app_mod.app.test_client()
+        with client.session_transaction() as sess:
+            sess['user_id'] = user_id
+            sess['username'] = 'safety-test'
+
+        assert client.post('/api/health-profile/item', json={
+            'category': 'test_results',
+            'item': {'test_name': 'Sodium', 'value': '140',
+                     'reference_range': '135 - 145', 'date': '2026-09-09'}
+        }).status_code == 200
+        assert client.put('/api/health-profile/item', json={
+            'category': 'test_results', 'index': 0,
+            'updates': {'value': '142'}
+        }).status_code == 200
+        assert client.delete('/api/health-profile/item', json={
+            'category': 'test_results', 'index': 0
+        }).status_code == 200
+
+        audit = HealthProfile(user_id).data.get('test_audit') or []
+        assert [e['action'] for e in audit] == ['added', 'updated', 'deleted']
+        assert all(e.get('at') for e in audit)
+        change = audit[1]['detail']['changes'][0]
+        assert (change['field'], change['from'], change['to']) == ('value', '140', '142')
+
+        resp = client.get('/api/health-profile/test-audit')
+        data = resp.get_json()
+        assert data['days'] == 30
+        assert len(data['entries']) == 3
+        assert data['entries'][0]['action'] == 'deleted'  # newest first
+
+        # An entry older than the window is filtered out.
+        prof = HealthProfile(user_id)
+        prof.data['test_audit'][0]['at'] = (
+            datetime.now() - timedelta(days=100)).isoformat()
+        prof.save()
+        assert len(client.get('/api/health-profile/test-audit').get_json()['entries']) == 2
+        assert len(client.get('/api/health-profile/test-audit?days=400')
+                   .get_json()['entries']) == 3
+
+        # The window is configurable through settings.
+        assert client.put('/api/health-profile', json={
+            'audit_settings': {'days': 7}}).status_code == 200
+        assert HealthProfile(user_id).data['audit_settings']['days'] == 7
+        assert client.get('/api/health-profile/test-audit').get_json()['days'] == 7
+    finally:
+        _cleanup(user_id)
+
+
 def test_dimensionless_test_drops_misattributed_concentration_unit():
     """OCR sometimes puts a neighbouring row's unit on Hct — a ratio test
     that can never carry g/L. The guard strips it; real units stay."""
