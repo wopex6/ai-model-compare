@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-23 11:34 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-23 15:38 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Deployed 949cbfc: stored-doc timestamps; wrapped/transposed lab-table ref+unit recovery. Pending: verify on phone that a re-analysed report now carries reference range and unit.
+Deployed 1c7e3f8: gallery picker button, UTC uploaded_at fix (was showing local-misread times), collapsible Stored Documents card. PA reload was slow (~3min) this time but recovered on its own.
 
 ## Git
 
@@ -14,14 +14,14 @@ Deployed 949cbfc: stored-doc timestamps; wrapped/transposed lab-table ref+unit r
 Recent commits:
 
 ```
+1c7e3f8 records: gallery picker, UTC timestamps, collapsible stored documents
+072358a handoff: snapshot after wrapped-table ref/unit recovery deploy
 949cbfc records: timestamps on stored docs; recover ref/unit from wrapped lab tables
 59d782f handoff: snapshot after stored-review and busy-button deploy
 d178178 records: reopen stored analysis without re-analysing; upload button busy state
 a0da3a3 handoff: snapshot after stale-review, viewer zoom and blank-unit deploy
 67f6b06 pwa: fix stale review showing previous doc; doc viewer fit + zoom; blank unit sticks
 79a0173 handoff: snapshot after ref+unit merge-gate deploy
-47dc854 test merge rules: same reference range AND unit required before merging
-2da5613 handoff: snapshot after unit-aware test dedup deploy
 ```
 
 ## Production (PythonAnywhere)
@@ -73,7 +73,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-409 passed, 1 warning in 41.92s
+409 passed, 1 warning in 42.82s
 [AutoDoc] Monitoring stopped
 ```
 
