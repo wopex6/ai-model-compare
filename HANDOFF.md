@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-23 09:22 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-23 11:34 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Deployed d178178 (SW v102): GET /document-result reopens stored analysis without an AI call; stored docs get a Review button when has_result; Use-this-photo shows busy pulse while uploading.
+Deployed 949cbfc: stored-doc timestamps; wrapped/transposed lab-table ref+unit recovery. Pending: verify on phone that a re-analysed report now carries reference range and unit.
 
 ## Git
 
@@ -14,14 +14,14 @@ Deployed d178178 (SW v102): GET /document-result reopens stored analysis without
 Recent commits:
 
 ```
+949cbfc records: timestamps on stored docs; recover ref/unit from wrapped lab tables
+59d782f handoff: snapshot after stored-review and busy-button deploy
 d178178 records: reopen stored analysis without re-analysing; upload button busy state
 a0da3a3 handoff: snapshot after stale-review, viewer zoom and blank-unit deploy
 67f6b06 pwa: fix stale review showing previous doc; doc viewer fit + zoom; blank unit sticks
 79a0173 handoff: snapshot after ref+unit merge-gate deploy
 47dc854 test merge rules: same reference range AND unit required before merging
 2da5613 handoff: snapshot after unit-aware test dedup deploy
-f367461 test dedup: unit mismatch means different measurement; keep qualifiers in display key
-f5a0f54 handoff: snapshot after test-dup keep-stored and edit-fields deploy
 ```
 
 ## Production (PythonAnywhere)
@@ -63,17 +63,17 @@ Reload often returns `409 slow_startup_error` on the first attempt — retry rat
 All passing.
 
 ```
-automated_greeting_system.py:416
-automated_greeting_system.py:416
-  C:\Users\trabc\CascadeProjects\ai-model-compare - Claude\automated_greeting_system.py:416: DeprecationWarning: The default datetime adapter is deprecated as of Python 3.12; see the sqlite3 documentation for suggested replacement recipes
-    cursor.execute('''
-
+........................................................................ [ 52%]
+........................................................................ [ 70%]
+........................................................................ [ 88%]
+.................................................                        [100%]
+============================== warnings summary ===============================
 ..\..\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37
   C:\Users\trabc\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-409 passed, 5 warnings in 44.17s
+409 passed, 1 warning in 41.92s
 [AutoDoc] Monitoring stopped
 ```
 
