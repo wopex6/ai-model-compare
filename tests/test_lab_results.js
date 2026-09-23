@@ -57,5 +57,17 @@ if (nullUnit[0].unit === 'null' || nullUnit[0].entries[0].displayVal !== '0.1' |
     console.log(`FAIL  unit=${JSON.stringify(nullUnit[0].unit)} displayVal=${JSON.stringify(nullUnit[0].entries[0].displayVal)} flag=${JSON.stringify(nullUnit[0].entries[0].flag)}`);
 }
 
+// Unit glyph variants: 'x10*9/L' and 'x10^9/L' are the same unit — a row
+// written one way must strip under a group unit written the other.
+const mixed = L.groupTestResults([
+    { test_name: 'Monocytes', value: '0.5 x10^9/L', unit: null, reference_range: '(0-1.0)', date: '2026-09-09' },
+    { test_name: 'Monocytes', value: '0.5 x10*9/L', reference_range: '', date: '2026-07-22' },
+], 'recent');
+const mvals = mixed[0].entries.map(e => e.displayVal);
+if (mvals.join(',') !== '0.5,0.5') {
+    failures++;
+    console.log(`FAIL  */^ variant displayVals=${JSON.stringify(mvals)} (want ["0.5","0.5"])`);
+}
+
 console.log(failures ? `${failures} failure(s)` : 'all lab_results checks passed');
 process.exit(failures ? 1 : 0);

@@ -72,15 +72,25 @@
         return m[1].replace(/(?:\s+|^)(H|L|High|Low)$/i, '').trim();
     }
 
+    function normalizePowerOfTen(text) {
+        // 'x10*9', 'x 10^9', '×10*9' and bare '10^9' all denote ×10ⁿ — reports
+        // use both glyphs, so normalise before comparing or stripping units.
+        return String(text || '')
+            .replace(/(x|×)\s*10\s*[\^*]\s*(\d)/gi, 'x10^$2')
+            .replace(/\b10\s*[\^*]\s*(\d)/g, 'x10^$1');
+    }
+
     function stripTestUnit(value, unit) {
         if (!unit) return String(value || '');
+        const normVal = normalizePowerOfTen(value);
+        const normUnit = normalizePowerOfTen(unit);
         // Allow optional whitespace between every character so 'x10^9/L' and
         // 'x 10^9/L' are both removed, instead of leaving some rows with a unit.
-        const esc = unit.replace(/\s+/g, '').split('')
+        const esc = normUnit.replace(/\s+/g, '').split('')
             .map(c => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
             .join('\\s*');
         const re = new RegExp('\\s*' + esc + '(?=\\s+(?:H|L|High|Low)\\b|\\s*$)', 'i');
-        return String(value || '').replace(re, '').trim();
+        return normVal.replace(re, '').trim();
     }
 
     function extractTestFlag(value) {
@@ -223,6 +233,7 @@
             const explicitUnit = g.entries.map(e => e.item.unit).find(u => u !== undefined && u !== null);
             g.unit = explicitUnit !== undefined ? String(explicitUnit).trim()
                 : (g.entries.map(e => extractTestUnit(e.item.value)).find(u => u) || '');
+            g.unit = normalizePowerOfTen(g.unit);
             g.ref = g.entries.map(e => e.item.reference_range || '').find(r => r.trim()) || '';
             const escUnit = g.unit ? g.unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : '';
             if (g.unit) g.displayName = g.displayName.replace(new RegExp('(?:^|\\s)' + escUnit + '(?:\\s|$)', 'ig'), ' ').replace(/\s+/g, ' ').trim();
