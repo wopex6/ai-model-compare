@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-23 17:09 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-23 18:04 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Deployed 26f1f76: unit:null treated as absent so embedded units strip correctly (was literal 'null' group unit). User may still need a hard refresh — cached lab_results.js serves old flag logic.
+unit carry-over fix (Hct g/L guard + row-local OCR prompts + */^ unit normalisation) + Record(s) marker deployed, SW v107
 
 ## Git
 
@@ -14,23 +14,49 @@ Deployed 26f1f76: unit:null treated as absent so embedded units strip correctly 
 Recent commits:
 
 ```
+d7edb27 lab results: stop unit carry-over between rows; Record(s) version marker
+b4cb22d handoff: snapshot after unit-null fix deploy
 26f1f76 lab results: treat unit:null as absent, not an explicit blank unit
 1e53295 handoff: snapshot after false-L-flag fix deploy
 2e127d6 lab results: fix false Low flags from '/L' units; per-row ref in overview
 63e4ff8 handoff: snapshot after gallery/UTC/collapsible-docs deploy
 1c7e3f8 records: gallery picker, UTC timestamps, collapsible stored documents
 072358a handoff: snapshot after wrapped-table ref/unit recovery deploy
-949cbfc records: timestamps on stored docs; recover ref/unit from wrapped lab tables
-59d782f handoff: snapshot after stored-review and busy-button deploy
 ```
 
 ## Production (PythonAnywhere)
 
-Local and production match.
+**4 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
 
 ```
-timed out after 900s
+ok       tests/test_ui_features.py
+ok       tests/test_user_logon_shared_modules.py
+ok       tests/test_web_enhancements.py
+ok       token_test.py
+ok       update_database.py
+ok       update_wk_password.py
+ok       upload_database_to_pythonanywhere.ps1
+ok       uploads/ai_a6043c74-8f82-40d8-863c-971ba0f40619.md
+ok       verbosity_system.py
+ok       verify_database_schema.py
+ok       verify_delete.py
+ok       verify_personality_system.py
+ok       verify_production_ready.py
+ok       verify_shared_processing.py
+ok       verify_table_schemas.py
+ok       verify_timestamp_storage.py
+ok       verify_wai_tse.py
+ok       view_phase3_data.py
+ok       web_enhancement_plan.md
+ok       web_enhancement_test_results.json
+ok       web_enhancement_test_runner.py
+ok       webhook_deploy.py
+ok       wisdom_profiles/23.json
+ok       wisdom_profiles/23_hypotheses.json
+4 file(s) stale. Re-run with --push to upload.
 ```
+
+Reload often returns `409 slow_startup_error` on the first attempt — retry rather than debug it.
 
 ## Tests
 
@@ -47,7 +73,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-409 passed, 1 warning in 42.27s
+409 passed, 1 warning in 41.09s
 [AutoDoc] Monitoring stopped
 ```
 
