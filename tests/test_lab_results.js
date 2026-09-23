@@ -47,5 +47,15 @@ if (vals.join(',') !== '0.5,0.5' || flags.join(',') !== ',') {
     console.log(`FAIL  displayVals=${JSON.stringify(vals)} flags=${JSON.stringify(flags)} (want ["0.5","0.5"] ["",""])`);
 }
 
+// Legacy rows carry unit:null — null is absent data, not an explicit unit.
+// The embedded unit must still be found so values strip and never flag.
+const nullUnit = L.groupTestResults([
+    { test_name: 'Eosinophils', value: '0.1 x10*9/L', unit: null, reference_range: '(0-0.5)', date: '2026-09-09' },
+], 'recent');
+if (nullUnit[0].unit === 'null' || nullUnit[0].entries[0].displayVal !== '0.1' || nullUnit[0].entries[0].flag !== '') {
+    failures++;
+    console.log(`FAIL  unit=${JSON.stringify(nullUnit[0].unit)} displayVal=${JSON.stringify(nullUnit[0].entries[0].displayVal)} flag=${JSON.stringify(nullUnit[0].entries[0].flag)}`);
+}
+
 console.log(failures ? `${failures} failure(s)` : 'all lab_results checks passed');
 process.exit(failures ? 1 : 0);
