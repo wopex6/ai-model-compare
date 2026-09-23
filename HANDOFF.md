@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-23 15:38 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-23 16:35 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Deployed 1c7e3f8: gallery picker button, UTC uploaded_at fix (was showing local-misread times), collapsible Stored Documents card. PA reload was slow (~3min) this time but recovered on its own.
+Deployed 2e127d6: fixed false L flags from /L units in lab_results.js (arithmetic now authoritative when range parses), consistent displayVal when unit embedded, per-row Ref column in Full overview. New node test tests/test_lab_results.js.
 
 ## Git
 
@@ -14,19 +14,19 @@ Deployed 1c7e3f8: gallery picker button, UTC uploaded_at fix (was showing local-
 Recent commits:
 
 ```
+2e127d6 lab results: fix false Low flags from '/L' units; per-row ref in overview
+63e4ff8 handoff: snapshot after gallery/UTC/collapsible-docs deploy
 1c7e3f8 records: gallery picker, UTC timestamps, collapsible stored documents
 072358a handoff: snapshot after wrapped-table ref/unit recovery deploy
 949cbfc records: timestamps on stored docs; recover ref/unit from wrapped lab tables
 59d782f handoff: snapshot after stored-review and busy-button deploy
 d178178 records: reopen stored analysis without re-analysing; upload button busy state
 a0da3a3 handoff: snapshot after stale-review, viewer zoom and blank-unit deploy
-67f6b06 pwa: fix stale review showing previous doc; doc viewer fit + zoom; blank unit sticks
-79a0173 handoff: snapshot after ref+unit merge-gate deploy
 ```
 
 ## Production (PythonAnywhere)
 
-**4 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
+Local and production match.
 
 ```
 ok       tests/test_ui_features.py
@@ -53,10 +53,8 @@ ok       web_enhancement_test_runner.py
 ok       webhook_deploy.py
 ok       wisdom_profiles/23.json
 ok       wisdom_profiles/23_hypotheses.json
-4 file(s) stale. Re-run with --push to upload.
+Everything on the server matches local.
 ```
-
-Reload often returns `409 slow_startup_error` on the first attempt — retry rather than debug it.
 
 ## Tests
 
@@ -73,7 +71,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-409 passed, 1 warning in 42.82s
+409 passed, 1 warning in 47.18s
 [AutoDoc] Monitoring stopped
 ```
 
