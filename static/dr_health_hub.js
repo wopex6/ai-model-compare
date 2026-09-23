@@ -1327,7 +1327,10 @@
                     const d = docs[i];
                     html += '<div class="hub-note' + (d.expiring_soon ? ' warn' : '') + '">';
                     html += '<strong>' + esc(d.original_name || d.stored_name || 'Document') + '</strong>';
-                    const up = d.uploaded_at ? new Date(d.uploaded_at) : null;
+                    const rawTs = d.uploaded_at || '';
+                    const up = rawTs
+                        ? new Date(/Z|[+-]\d{2}:?\d{2}$/.test(rawTs) ? rawTs : rawTs + 'Z')
+                        : null;
                     if (up && !isNaN(up)) {
                         html += '<br>' + esc(up.toLocaleDateString() + ' ' +
                             up.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}));

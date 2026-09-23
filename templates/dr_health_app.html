@@ -845,7 +845,10 @@
                 <div id="upload-trigger-btns">
                     <div class="add-info-method">
                         <span class="add-info-num">1</span>
-                        <button class="action" id="take-photo-btn" type="button"><i class="fas fa-camera"></i> Take a photo</button>
+                        <div style="flex:1;display:flex;flex-direction:column;gap:6px;">
+                            <button class="action" id="take-photo-btn" type="button"><i class="fas fa-camera"></i> Take a photo</button>
+                            <button class="btn-secondary" id="choose-gallery-btn" type="button"><i class="fas fa-images"></i> Choose photo from gallery</button>
+                        </div>
                     </div>
                     <div class="add-info-method">
                         <span class="add-info-num">2</span>
@@ -877,11 +880,13 @@
                     <button class="btn-secondary" id="hard-refresh-btn" type="button" style="padding:6px 12px; font-size:0.85rem; margin-left:6px;">Refresh</button>
                 </div>
             </div>
-            <div class="card">
-                <h3><i class="fas fa-archive"></i> Stored Documents</h3>
-                <p style="font-size:0.85rem;color:#555;">Previously uploaded files you can reuse or delete.</p>
+            <details class="card" id="stored-docs-card">
+                <summary style="font-size:0.95rem;color:#E53935;font-weight:600;cursor:pointer;">
+                    <i class="fas fa-archive"></i> Stored Documents <span id="stored-docs-count" style="color:#999;font-weight:400;"></span>
+                </summary>
+                <p style="font-size:0.85rem;color:#555;margin-top:8px;">Previously uploaded files you can reuse or delete.</p>
                 <div id="stored-documents-list" style="margin-top:10px;"><em style="color:#999;">Loading...</em></div>
-            </div>
+            </details>
             <div class="card">
                 <h3><i class="fas fa-database"></i> Advanced Editor</h3>
                 <p style="font-size:0.85rem;color:#555;">Bulk view and edit every stored row, including uploaded documents.</p>
@@ -1528,11 +1533,18 @@
             // Newest first — the file you just uploaded should be at the top.
             docs.sort((a, b) => new Date(b.uploaded_at || 0) - new Date(a.uploaded_at || 0));
             storedDocsCache = docs;
+            const countEl = document.getElementById('stored-docs-count');
+            if (countEl) countEl.textContent = docs.length ? '(' + docs.length + ')' : '';
             if (!docs.length) { el.innerHTML = '<em style="color:#999;">No stored documents yet.</em>'; return; }
             let html = '';
             docs.forEach((doc, idx) => {
                 const name = escapeHtml(doc.original_name || doc.stored_name || 'Unnamed file');
-                const uploadedDate = doc.uploaded_at ? new Date(doc.uploaded_at) : null;
+                // Older rows are naive UTC strings — append Z so they are not
+                // read as local time (a 9:34am upload was showing as 1:34am).
+                const rawTs = doc.uploaded_at || '';
+                const uploadedDate = rawTs
+                    ? new Date(/Z|[+-]\d{2}:?\d{2}$/.test(rawTs) ? rawTs : rawTs + 'Z')
+                    : null;
                 const uploaded = (uploadedDate && !isNaN(uploadedDate))
                     ? uploadedDate.toLocaleDateString() + ' ' + uploadedDate.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})
                     : '';
@@ -1942,6 +1954,21 @@
         fileInput.setAttribute('capture', 'environment');
         lastPhotoCapture = true;
         sessionStorage.setItem('dh_awaiting_photo', '1');
+        fileInput.click();
+    });
+
+    // Gallery picker — same picker as the camera button but without the
+    // capture attribute, so Android/Samsung offer the photo gallery instead
+    // of opening the camera.
+    document.getElementById('choose-gallery-btn').addEventListener('click', () => {
+        const now = Date.now();
+        if (now - chooserOpenedAt < 500) return;
+        chooserOpenedAt = now;
+        const fileInput = document.getElementById('profile-file');
+        fileInput.value = '';
+        fileInput.accept = 'image/*';
+        fileInput.removeAttribute('capture');
+        lastPhotoCapture = false;
         fileInput.click();
     });
 

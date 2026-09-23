@@ -48,7 +48,7 @@ import hashlib
 import bcrypt
 import jwt
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import uuid as _uuid
 print(f"{_startup_elapsed()} Flask + stdlib loaded")
 from ai_compare.compare import AICompare
@@ -6473,9 +6473,15 @@ def _parse_iso_datetime(iso_text):
     if not iso_text:
         return None
     try:
-        return datetime.fromisoformat(iso_text)
+        dt = datetime.fromisoformat(iso_text)
     except Exception:
         return None
+    # Older rows are naive UTC; newer ones carry an explicit offset. Normalise
+    # to naive UTC so comparisons against datetime.now() (server runs UTC)
+    # never mix aware and naive datetimes.
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
 
 
 def _get_retention_days(profile):
@@ -6567,7 +6573,7 @@ def _store_uploaded_health_document(user_id, file_storage, file_bytes, content_h
         'stored_path': str(target_path),
         'content_hash': content_hash,
         'size_bytes': len(file_bytes),
-        'uploaded_at': datetime.now().isoformat(),
+        'uploaded_at': datetime.now(timezone.utc).isoformat(),
         'mime_type': file_storage.mimetype or '',
         'keep_forever': False,
         'extracted_text_path': '',
