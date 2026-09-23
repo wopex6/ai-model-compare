@@ -218,7 +218,9 @@
             // An explicitly stored unit — even a blank one — wins: 'no unit'
             // is a deliberate choice (ratios like S CHOL/HDLC), and must not
             // be overridden by a unit left over in an older row's value text.
-            const explicitUnit = g.entries.map(e => e.item.unit).find(u => u !== undefined);
+            // A null field is just absent data, not a choice, so it falls
+            // through to the embedded-unit fallback.
+            const explicitUnit = g.entries.map(e => e.item.unit).find(u => u !== undefined && u !== null);
             g.unit = explicitUnit !== undefined ? String(explicitUnit).trim()
                 : (g.entries.map(e => extractTestUnit(e.item.value)).find(u => u) || '');
             g.ref = g.entries.map(e => e.item.reference_range || '').find(r => r.trim()) || '';
