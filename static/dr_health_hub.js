@@ -1255,9 +1255,13 @@
         settingsBody() {
             const settings = (this.profile && this.profile.upload_settings) ? this.profile.upload_settings : {};
             const days = settings.retention_days ? settings.retention_days : 365;
+            const auditDays = (this.profile && this.profile.audit_settings && this.profile.audit_settings.days)
+                ? this.profile.audit_settings.days : 30;
             let html = '<div class="hub-form">';
             html += '<label class="hub-input-label" for="hub-retention">Keep uploaded documents for (days)</label>';
             html += '<input class="hub-input" id="hub-retention" type="number" min="1" max="3650" value="' + esc(days) + '">';
+            html += '<label class="hub-input-label" for="hub-audit-days">Test data audit window (days)</label>';
+            html += '<input class="hub-input" id="hub-audit-days" type="number" min="1" max="3650" value="' + esc(auditDays) + '">';
             html += '<div class="hub-row-actions"><button class="hub-btn primary" id="hub-settings-save"><i class="fas fa-check"></i> Save Settings</button></div>';
             html += '</div>';
 
@@ -2336,6 +2340,7 @@
         async saveSettings() {
             if (this.busy) return;
             const input = this.root.querySelector('#hub-retention');
+            const auditInput = this.root.querySelector('#hub-audit-days');
             if (!input) return;
             this.busy = true;
             this.status('Saving…');
@@ -2343,7 +2348,10 @@
                 const resp = await AuthHelper.authenticatedFetch('/api/health-profile', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ upload_settings: { retention_days: input.value } })
+                    body: JSON.stringify({
+                        upload_settings: { retention_days: input.value },
+                        audit_settings: { days: auditInput ? auditInput.value : 30 }
+                    })
                 });
                 const data = await resp.json();
                 if (!resp.ok || !data.success) {

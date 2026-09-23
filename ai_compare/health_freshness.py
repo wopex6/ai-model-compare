@@ -24,7 +24,7 @@ accurate?" forty times over is precisely the overwhelm this is meant to avoid.
 
 Pure standard library, no model calls: the queue is deterministic and free.
 """
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import Dict, List, Optional
 
 from .health_insights import (
@@ -164,6 +164,51 @@ def record_change(item: Dict, field: str, new_value, source: str = SOURCE_USER,
         })
         del history[:-MAX_HISTORY]
     return True
+
+
+# ------------------------------------------------------------- test audit ---
+# A bounded, append-only log of test-result changes. Unlike the per-item
+# `history` above, this is profile-level: adds, edits, deletions and import
+# merges all land here so the audit view can answer "what changed lately?"
+# without walking every row.
+
+TEST_AUDIT_MAX = 500
+DEFAULT_AUDIT_DAYS = 30
+
+
+def audit_days(data: Dict) -> int:
+    """How many days of test-data changes the audit view shows (default 30)."""
+    try:
+        days = int((data.get('audit_settings') or {}).get('days') or DEFAULT_AUDIT_DAYS)
+    except (TypeError, ValueError):
+        days = DEFAULT_AUDIT_DAYS
+    return min(3650, max(1, days))
+
+
+def audit_test_change(data: Dict, action: str, test_name: str = '',
+                      detail: Optional[Dict] = None,
+                      source: str = SOURCE_USER,
+                      at: Optional[datetime] = None) -> Dict:
+    """Append one test-data event to the audit log.
+
+    `action` is 'added' | 'updated' | 'deleted' | 'merged'. `detail` carries
+    the specifics — value/date for adds and deletes, a changes list for
+    updates, a removed count for merges. Timestamps are tz-aware UTC so the
+    browser renders the user's local time (naive strings were read as local
+    and displayed eight hours off).
+    """
+    entry = {
+        'at': (at or datetime.now(timezone.utc)).isoformat(timespec='seconds'),
+        'action': action,
+        'test': str(test_name or ''),
+        'source': normalize_source(source),
+    }
+    if detail:
+        entry['detail'] = detail
+    log = data.setdefault('test_audit', [])
+    log.append(entry)
+    del log[:-TEST_AUDIT_MAX]
+    return entry
 
 
 def confirm_item(item: Dict, at: Optional[datetime] = None) -> None:

@@ -887,6 +887,13 @@
                 <p style="font-size:0.85rem;color:#555;margin-top:8px;">Previously uploaded files you can reuse or delete.</p>
                 <div id="stored-documents-list" style="margin-top:10px;"><em style="color:#999;">Loading...</em></div>
             </details>
+            <details class="card" id="test-audit-card">
+                <summary style="font-size:0.95rem;color:#E53935;font-weight:600;cursor:pointer;">
+                    <i class="fas fa-clock-rotate-left"></i> Test Data Changes <span id="test-audit-count" style="color:#999;font-weight:400;"></span>
+                </summary>
+                <p style="font-size:0.85rem;color:#555;margin-top:8px;">What was added, edited or deleted, and when.</p>
+                <div id="test-audit-list" style="margin-top:10px;"><em style="color:#999;">Expand to load.</em></div>
+            </details>
             <div class="card">
                 <h3><i class="fas fa-database"></i> Advanced Editor</h3>
                 <p style="font-size:0.85rem;color:#555;">Bulk view and edit every stored row, including uploaded documents.</p>
@@ -1567,6 +1574,64 @@
             el.innerHTML = '<em style="color:#999;">Could not load stored documents.</em>';
         }
     }
+
+    let testAuditLoaded = false;
+    async function loadTestAudit() {
+        const el = document.getElementById('test-audit-list');
+        if (!el) return;
+        el.innerHTML = '<em style="color:#999;"><i class="fas fa-spinner fa-spin"></i> Loading...</em>';
+        try {
+            const resp = await AuthHelper.authenticatedFetch('/api/health-profile/test-audit');
+            if (!resp.ok) { el.innerHTML = '<em style="color:#999;">Could not load the audit.</em>'; return; }
+            const data = await resp.json();
+            const entries = data.entries || [];
+            const countEl = document.getElementById('test-audit-count');
+            if (countEl) countEl.textContent = `(last ${data.days} days)`;
+            if (!entries.length) {
+                el.innerHTML = `<em style="color:#999;">No test-data changes in the last ${data.days} days.</em>`;
+                return;
+            }
+            const actionMeta = {
+                added:   { label: 'Added',   color: '#2e7d32' },
+                updated: { label: 'Edited',  color: '#e6a000' },
+                deleted: { label: 'Deleted', color: '#c62828' },
+                merged:  { label: 'Merged',  color: '#666' },
+            };
+            let html = '';
+            entries.forEach(en => {
+                const meta = actionMeta[en.action] || { label: en.action, color: '#666' };
+                const at = en.at ? new Date(en.at) : null;
+                const when = (at && !isNaN(at))
+                    ? at.toLocaleDateString() + ' ' + at.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})
+                    : '';
+                const d = en.detail || {};
+                let what = '';
+                if (en.action === 'updated' && Array.isArray(d.changes)) {
+                    what = d.changes.map(c =>
+                        `${escapeHtml(c.field)}: ${escapeHtml(String(c.from ?? '')) || '—'} → ${escapeHtml(String(c.to ?? '')) || '—'}`
+                    ).join('; ');
+                } else if (en.action === 'merged') {
+                    what = `${d.removed || 0} duplicate row(s) merged`;
+                } else {
+                    what = [d.value, d.reference_range ? `ref ${d.reference_range}` : '', d.date]
+                        .filter(Boolean).map(escapeHtml).join(' · ');
+                }
+                html += `<div class="dm-item" style="font-size:0.82rem;">` +
+                    `<span style="color:${meta.color};font-weight:600;">${meta.label}</span> ` +
+                    `<strong>${escapeHtml(en.test || 'test results')}</strong>` +
+                    (what ? ` <span style="color:#555;">${what}</span>` : '') +
+                    `<br><span style="color:#999;font-size:0.72rem;">${when}${en.source ? ' · ' + escapeHtml(en.source) : ''}</span>` +
+                    `</div>`;
+            });
+            el.innerHTML = html;
+        } catch (e) {
+            el.innerHTML = '<em style="color:#999;">Could not load the audit.</em>';
+        }
+    }
+    const auditCard = document.getElementById('test-audit-card');
+    if (auditCard) auditCard.addEventListener('toggle', () => {
+        if (auditCard.open && !testAuditLoaded) { testAuditLoaded = true; loadTestAudit(); }
+    });
 
     // Reopen the stored analysis for a document — reads the saved result,
     // no re-analysis (and no AI cost) involved.
