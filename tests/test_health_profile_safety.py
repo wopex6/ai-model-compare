@@ -578,3 +578,17 @@ def test_fill_test_defaults_backfills_blank_ref_and_unit():
     # IFCC must not inherit the NGSP range or % unit
     assert results[3]['reference_range'] == ''
     assert '%' not in results[3]['value']
+
+
+def test_uploaded_at_parse_normalizes_to_naive_utc():
+    """uploaded_at may be naive UTC (old rows) or offset-aware (new rows).
+    _parse_iso_datetime must normalise aware values to naive UTC so internal
+    comparisons against datetime.now() (server TZ is UTC) never mix aware
+    and naive — and so 09:34 +08:00 and 01:34Z are the same instant."""
+    from app import _parse_iso_datetime
+    naive = _parse_iso_datetime('2026-09-23T01:34:00')
+    aware = _parse_iso_datetime('2026-09-23T01:34:00+00:00')
+    offset = _parse_iso_datetime('2026-09-23T09:34:00+08:00')
+    assert naive.tzinfo is None
+    assert aware.tzinfo is None
+    assert naive == aware == offset
