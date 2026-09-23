@@ -69,5 +69,31 @@ if (mvals.join(',') !== '0.5,0.5') {
     console.log(`FAIL  */^ variant displayVals=${JSON.stringify(mvals)} (want ["0.5","0.5"])`);
 }
 
+// Reference ranges display in one canonical form regardless of report style.
+const refCases = [
+    ['(10-45)', '10 - 45'],
+    ['10-45', '10 - 45'],
+    ['10 - 45', '10 - 45'],
+    ['(2.0-3.2)', '2.0 - 3.2'],
+    ['<4.5', '<4.5'],
+    ['(0-1.0)', '0 - 1.0'],
+    ['', ''],
+];
+for (const [raw, want] of refCases) {
+    const got = L.formatRefRange(raw);
+    if (got !== want) {
+        failures++;
+        console.log(`FAIL  formatRefRange(${JSON.stringify(raw)}) = ${JSON.stringify(got)} (want ${JSON.stringify(want)})`);
+    }
+}
+// And groupTestResults exposes the normalised form via g.ref/meta.
+const refGroup = L.groupTestResults([
+    { test_name: 'S Transferrin Saturation', value: '37', reference_range: '(10-45)', date: '2026-09-09' },
+], 'recent');
+if (refGroup[0].ref !== '10 - 45') {
+    failures++;
+    console.log(`FAIL  group ref ${JSON.stringify(refGroup[0].ref)} (want "10 - 45")`);
+}
+
 console.log(failures ? `${failures} failure(s)` : 'all lab_results checks passed');
 process.exit(failures ? 1 : 0);

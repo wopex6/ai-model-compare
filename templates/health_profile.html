@@ -1765,7 +1765,7 @@ Examples:
                     html += `<tr>
                         <td><strong>${escapeHtml(item.test_name)}</strong></td>
                         <td>${escapeHtml(item.value)}</td>
-                        <td>${escapeHtml(item.reference_range || '—')}</td>
+                        <td>${escapeHtml(formatRefRange(item.reference_range) || '—')}</td>
                         <td>${statusPill(item.status)}</td>
                         <td>${escapeHtml(item.date || '—')}</td>
                     </tr>`;
@@ -1781,7 +1781,7 @@ Examples:
                     html += `<tr>
                         <td><strong>${escapeHtml(group.display_name)}</strong></td>
                         <td>${escapeHtml(latest.value || '—')}</td>
-                        <td>${escapeHtml(latest.reference_range || '—')}</td>
+                        <td>${escapeHtml(formatRefRange(latest.reference_range) || '—')}</td>
                         <td>${statusPill(group.status)}</td>
                         <td>${escapeHtml(latest.date || '—')}</td>
                         <td>${trendLabel(group.trend)}</td>
@@ -2025,7 +2025,7 @@ Examples:
                     html += `<h3 style="font-size:11pt;margin:10px 0 6px;color:#1565c0;">${group.name} (${group.entries.length})</h3>`;
                     html += `<table><tr><th>Test</th><th>Value</th><th>Ref Range</th><th>Date</th><th>Notes</th></tr>`;
                     group.entries.forEach(t => {
-                        html += `<tr><td><strong>${t.test_name}</strong></td><td>${t.value}</td><td>${t.reference_range||''}</td><td>${t.date||''}</td><td>${t.notes||''}</td></tr>`;
+                        html += `<tr><td><strong>${t.test_name}</strong></td><td>${t.value}</td><td>${formatRefRange(t.reference_range)}</td><td>${t.date||''}</td><td>${t.notes||''}</td></tr>`;
                     });
                     html += `</table>`;
                 });

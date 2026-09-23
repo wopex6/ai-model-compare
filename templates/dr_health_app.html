@@ -905,7 +905,7 @@
     <div class="bottom-nav">
         <button class="nav-btn active" data-target="chat-screen"><i class="fas fa-comment-medical"></i>Chat</button>
         <button class="nav-btn" data-target="hub-screen"><i class="fas fa-clipboard-list"></i>Health</button>
-        <button class="nav-btn" data-target="profile-screen"><i class="fas fa-folder-plus"></i>Record(s)</button>
+        <button class="nav-btn" data-target="profile-screen"><i class="fas fa-folder-plus"></i>Records</button>
     </div>
 
     <!-- Single dictation pill — dictates into whichever text box has focus;
@@ -1016,7 +1016,7 @@
     const SCREEN_TITLES = {
         'chat-screen': 'Dr. Health',
         'hub-screen': 'My Health',
-        'profile-screen': 'Record(s)'
+        'profile-screen': 'Records'
     };
     const LAST_SCREEN_KEY = 'drHealth.lastScreen';
     function showScreen(id, opts) {
@@ -1472,7 +1472,7 @@
                     html += `<table><thead><tr><th>Date</th><th>Value</th><th>Ref</th></tr></thead><tbody>`;
                     group.entries.forEach(e => {
                         const flagHtml = e.flag ? `<span style="font-size:0.7rem; color:${e.flag === 'H' ? '#c62828' : '#1565c0'}; font-weight:600; margin-left:4px;">${e.flag}</span>` : '<span style="font-size:0.7rem; color:#999; margin-left:4px;">—</span>';
-                        const rowRef = escapeHtml(e.item.reference_range || group.ref || '');
+                        const rowRef = escapeHtml(formatRefRange(e.item.reference_range || group.ref || ''));
                         html += `<tr><td style="white-space:nowrap; color:#555;"><span class="pwa-tt-editable" contenteditable="false" data-idx="${e.idx}" data-field="date" ontouchstart="startEditHold(this, event)" ontouchend="cancelEditHold()" ontouchmove="cancelEditHold()" oncontextmenu="return false" onblur="saveTestResult(this)">${escapeHtml(e.item.date || '')}</span></td>`;
                         html += `<td style="font-weight:500;"><span class="pwa-tt-editable" contenteditable="false" data-idx="${e.idx}" data-field="value" data-unit="${group.unit.replace(/"/g, '&quot;')}" ontouchstart="startEditHold(this, event)" ontouchend="cancelEditHold()" ontouchmove="cancelEditHold()" oncontextmenu="return false" onblur="saveTestResult(this)">${escapeHtml(e.displayVal)}</span> ${flagHtml}</td>`;
                         html += `<td style="font-size:0.75rem; color:#777;">${rowRef}</td></tr>`;
