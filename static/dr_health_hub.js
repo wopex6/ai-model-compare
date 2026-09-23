@@ -1327,6 +1327,11 @@
                     const d = docs[i];
                     html += '<div class="hub-note' + (d.expiring_soon ? ' warn' : '') + '">';
                     html += '<strong>' + esc(d.original_name || d.stored_name || 'Document') + '</strong>';
+                    const up = d.uploaded_at ? new Date(d.uploaded_at) : null;
+                    if (up && !isNaN(up)) {
+                        html += '<br>' + esc(up.toLocaleDateString() + ' ' +
+                            up.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'}));
+                    }
                     if (d.keep_forever) {
                         html += '<br>Kept forever.';
                     } else if (d.expires_at) {

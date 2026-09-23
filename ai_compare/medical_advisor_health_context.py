@@ -154,10 +154,18 @@ def _canonicalize_lab_tables(text):
     and flips it before parsing.
     """
     def _split(line):
-        return [c.strip() for c in line.strip().split('|')[1:-1] if True]
+        parts = line.strip().split('|')
+        if line.strip().startswith('|'):
+            parts = parts[1:]
+        if line.strip().endswith('|'):
+            parts = parts[:-1]
+        return [c.strip() for c in parts]
 
     def _is_separator(row):
         return all(re.match(r'^:?-+:?$', cell) or cell == '' for cell in row)
+
+    def _emit(cells):
+        return '| ' + ' | '.join(cells) + ' |'
 
     lines = text.splitlines()
     out = []
@@ -167,11 +175,26 @@ def _canonicalize_lab_tables(text):
             out.append(lines[i])
             i += 1
             continue
+        # Collect the table. Phone-width OCR wraps wide rows onto a second
+        # line ("(3.6-6.0) |mmol/L |"); absorb a tail into its row while the
+        # row still has fewer cells than the header.
         block = []
-        while i < len(lines) and lines[i].strip().startswith('|'):
-            block.append(lines[i])
+        rows = []
+        while i < len(lines) and lines[i].strip():
+            ln = lines[i]
+            cells = _split(ln)
+            sep = next((k for k in range(1, len(rows)) if _is_separator(rows[k])), None)
+            width = len(rows[sep - 1]) if sep else (len(rows[0]) if rows else 0)
+            if rows and len(rows[-1]) < width and len(cells) <= width - len(rows[-1]):
+                block.append(ln)
+                rows[-1].extend(cells)
+                i += 1
+                continue
+            if not ln.strip().startswith('|'):
+                break
+            block.append(ln)
+            rows.append(cells)
             i += 1
-        rows = [_split(ln) for ln in block]
         if len(rows) < 2:
             out.extend(block)
             continue
@@ -184,7 +207,7 @@ def _canonicalize_lab_tables(text):
             headers = rows[0]
             data_rows = rows[1:]
         if not headers or not data_rows:
-            out.extend(block)
+            out.extend(_emit(r) for r in rows)
             continue
 
         ref_row_idx = unit_row_idx = None
@@ -205,7 +228,7 @@ def _canonicalize_lab_tables(text):
             or (date_count >= 2 and date_count >= len(first_col) / 2 and header_date_count == 0)
         )
         if not is_transposed:
-            out.extend(block)
+            out.extend(_emit(r) for r in rows)
             continue
 
         date_rows = []
@@ -217,29 +240,47 @@ def _canonicalize_lab_tables(text):
                 continue
             date_rows.append((label, row))
         if not date_rows:
-            out.extend(block)
+            out.extend(_emit(r) for r in rows)
             continue
 
-        test_names = [h.strip() for h in headers[1:]]
+        # Classify columns: Reference/Units and other metadata columns (Time,
+        # Lab Id, ...) belong to each date row, not to the test names.
+        ref_col = unit_col = None
+        test_cols = []
+        for c_idx, h in enumerate(headers):
+            if c_idx == 0:
+                continue
+            hl = h.strip().lower()
+            if not hl:
+                continue
+            if hl.startswith('ref') or 'reference' in hl:
+                ref_col = c_idx
+            elif 'unit' in hl:
+                unit_col = c_idx
+            elif _META_LABEL_RE.search(h.strip()):
+                continue
+            else:
+                test_cols.append(c_idx)
+
+        def _col_value(row, idx):
+            return row[idx].strip() if idx is not None and idx < len(row) else ''
+
         new_header = ['Test'] + [d for d, _ in date_rows] + ['Reference', 'Units']
         new_rows = []
-        for c_idx, test_name in enumerate(test_names):
-            if not test_name:
-                continue
-            cells = [test_name]
+        for c_idx in test_cols:
+            cells = [headers[c_idx].strip()]
             for _, row in date_rows:
-                cell = row[c_idx + 1].strip() if c_idx + 1 < len(row) else ''
-                cells.append(cell)
-            ref = (
-                data_rows[ref_row_idx][c_idx + 1].strip()
-                if ref_row_idx is not None and c_idx + 1 < len(data_rows[ref_row_idx])
-                else ''
-            )
-            unit = (
-                data_rows[unit_row_idx][c_idx + 1].strip()
-                if unit_row_idx is not None and c_idx + 1 < len(data_rows[unit_row_idx])
-                else ''
-            )
+                cells.append(_col_value(row, c_idx))
+            if ref_row_idx is not None:
+                ref = _col_value(data_rows[ref_row_idx], c_idx)
+            else:
+                ref = next((_col_value(row, ref_col) for _, row in date_rows
+                            if _col_value(row, ref_col)), '')
+            if unit_row_idx is not None:
+                unit = _col_value(data_rows[unit_row_idx], c_idx)
+            else:
+                unit = next((_col_value(row, unit_col) for _, row in date_rows
+                             if _col_value(row, unit_col)), '')
             cells.extend([ref, unit])
             new_rows.append(cells)
 
@@ -470,6 +511,40 @@ def _extract_unit_text(text):
     if _compact_key(candidate) in ('h', 'l', 'high', 'low'):
         return ''
     return _normalize_unit(candidate)
+
+
+def _fill_test_defaults(results):
+    """Backfill blank reference_range/unit from sibling rows of the same test.
+
+    Lab reports often print the Reference and Units cells only once for a
+    repeated test (or wrap them off the row entirely), so rows for the same
+    measurement can arrive with empty cells.  Grouping uses the
+    qualifier-preserving display name so 'HbA1c (NGSP)' never borrows the
+    '(IFCC)' row's range or unit.
+    """
+    def _group(name):
+        return re.sub(r'\s+', ' ', str(name or '')).strip().lower()
+
+    refs = {}
+    units = {}
+    for t in results:
+        g = _group(t.get('test_name'))
+        if not g:
+            continue
+        if t.get('reference_range') and g not in refs:
+            refs[g] = t['reference_range']
+        unit = (str(t.get('unit') or '') or _extract_unit_text(t.get('value'))
+                or _extract_unit_text(t.get('reference_range')))
+        if unit and g not in units:
+            units[g] = unit
+    for t in results:
+        g = _group(t.get('test_name'))
+        if not g:
+            continue
+        if not t.get('reference_range') and g in refs:
+            t['reference_range'] = refs[g]
+        if not _extract_unit_text(t.get('value')) and units.get(g):
+            t['value'] = (str(t.get('value') or '') + ' ' + units[g]).strip()
 
 
 def _reference_bounds(text):
@@ -3020,6 +3095,7 @@ Rules:
 - For tables with multiple date columns, do not stop at the latest or rightmost date. Create one test_result for every date column, for every test row.
 - Do not combine multiple date values into a single value string such as "v1, v2, v3" or "v1 / v2 / v3".
 - Take each value and unit from that test's own row. Do not swap or shift values between adjacent rows and do not drop the unit.
+- Wide tables may wrap: a Reference or Units fragment on the line AFTER a result row belongs to that row, not a new row. Attach it before extracting.
 - Never collapse multiple date columns into a single object or combined string value."""
 
         user_prompt = f"""EXISTING PATIENT PROFILE:
@@ -3193,6 +3269,10 @@ NEW TEXT TO ANALYZE:
                 # Normalize report dates (e.g. 09/09/2026, 05-Apr-25) to ISO so
                 # review date pickers accept them and storage stays consistent.
                 t['date'] = profile._normalize_test_date(str(t.get('date') or ''))
+
+            # Reports print Reference/Units once per repeated test; rows whose
+            # cells were blank (or wrapped off) inherit the sibling values.
+            _fill_test_defaults(extracted.get('test_results') or [])
 
             if not save:
                 return {"success": True, "extracted": extracted, "pending_review": extracted, "actions": []}

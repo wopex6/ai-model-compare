@@ -14,6 +14,8 @@ from ai_compare.medical_advisor_health_context import (
     HEALTH_DATA_DIR,
     HealthContextManager,
     HealthProfile,
+    _canonicalize_lab_tables,
+    _fill_test_defaults,
     merge_profiles,
 )
 
@@ -529,3 +531,50 @@ def test_post_item_carries_unit_and_provenance():
         assert row['verified_by_user'] is True
     finally:
         _cleanup(user_id)
+
+
+def test_wrapped_transposed_table_keeps_reference_and_unit():
+    """OCR of a phone-width lab table wraps wide rows onto a second line, e.g.
+    the Reference and Units cells land on a continuation line that does not
+    start with '|'.  The canonicalizer must rejoin them and still recognise
+    the transposed layout (dates as rows, test name as a column header)."""
+    text = (
+        '| Date | Time | Lab Id | S GLU (Fast) | Reference | Units |\n'
+        '|---|---|---|---|---|---|\n'
+        '|03-Apr-25 |0956 F |972432598 |5.3 |\n'
+        '(3.6-6.0) |mmol/L |\n'
+        '|03-Oct-25 |0809 |978881054 |5.4 | | |\n'
+        '|20-Jan-26 |0815 F |981726833 |5.3 |\n'
+        '(3.6-6.0) |mmol/L |\n'
+    )
+    out = _canonicalize_lab_tables(text)
+    lines = [ln for ln in out.splitlines() if ln.strip().startswith('|')]
+    # Transposed to: Test | <dates...> | Reference | Units
+    assert 'S GLU (Fast)' in lines[0] or any('S GLU (Fast)' in ln for ln in lines)
+    data = [ln for ln in lines if 'GLU' in ln][0]
+    cells = [c.strip() for c in data.strip().strip('|').split('|')]
+    assert cells[0] == 'S GLU (Fast)'
+    assert cells[1:4] == ['5.3', '5.4', '5.3']
+    assert cells[-2] == '(3.6-6.0)'
+    assert cells[-1] == 'mmol/L'
+
+
+def test_fill_test_defaults_backfills_blank_ref_and_unit():
+    """Sibling rows of the same test inherit the populated Reference/Units;
+    qualifier-distinct tests (NGSP vs IFCC) never borrow from each other."""
+    results = [
+        {'test_name': 'S GLU (Fast)', 'value': '5.3 mmol/L',
+         'reference_range': '(3.6-6.0)', 'date': '2025-04-03'},
+        {'test_name': 'S GLU (Fast)', 'value': '5.4',
+         'reference_range': '', 'date': '2025-10-03'},
+        {'test_name': 'HbA1c (NGSP)', 'value': '6.0 %',
+         'reference_range': '(4-6)', 'date': '2025-04-03'},
+        {'test_name': 'HbA1c (IFCC)', 'value': '42',
+         'reference_range': '', 'date': '2025-04-03'},
+    ]
+    _fill_test_defaults(results)
+    assert results[1]['reference_range'] == '(3.6-6.0)'
+    assert 'mmol/L' in results[1]['value']
+    # IFCC must not inherit the NGSP range or % unit
+    assert results[3]['reference_range'] == ''
+    assert '%' not in results[3]['value']

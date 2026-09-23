@@ -1532,7 +1532,10 @@
             let html = '';
             docs.forEach((doc, idx) => {
                 const name = escapeHtml(doc.original_name || doc.stored_name || 'Unnamed file');
-                const uploaded = doc.uploaded_at ? new Date(doc.uploaded_at).toLocaleDateString() : '';
+                const uploadedDate = doc.uploaded_at ? new Date(doc.uploaded_at) : null;
+                const uploaded = (uploadedDate && !isNaN(uploadedDate))
+                    ? uploadedDate.toLocaleDateString() + ' ' + uploadedDate.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})
+                    : '';
                 const size = doc.size_bytes ? (doc.size_bytes / 1024).toFixed(1) + ' KB' : '';
                 html += `<div class="dm-item" style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;">`;
                 html += `<div style="font-size:0.85rem;word-break:break-word;"><strong>${name}</strong><br><span style="color:#999;font-size:0.75rem;">${uploaded} ${size}</span></div>`;
