@@ -592,3 +592,20 @@ def test_uploaded_at_parse_normalizes_to_naive_utc():
     assert naive.tzinfo is None
     assert aware.tzinfo is None
     assert naive == aware == offset
+
+
+def test_dimensionless_test_drops_misattributed_concentration_unit():
+    """OCR sometimes puts a neighbouring row's unit on Hct — a ratio test
+    that can never carry g/L. The guard strips it; real units stay."""
+    from ai_compare.medical_advisor_health_context import _drop_implausible_test_unit
+    t = {'test_name': 'Haematocrit', 'value': '0.46 g/L'}
+    _drop_implausible_test_unit(t)
+    assert t['value'] == '0.46'
+    # Percent is a legitimate Hct unit — kept
+    t2 = {'test_name': 'Hct', 'value': '46 %'}
+    _drop_implausible_test_unit(t2)
+    assert t2['value'] == '46 %'
+    # A non-dimensionless test keeps its concentration unit
+    t3 = {'test_name': 'Haemoglobin', 'value': '145 g/L'}
+    _drop_implausible_test_unit(t3)
+    assert t3['value'] == '145 g/L'

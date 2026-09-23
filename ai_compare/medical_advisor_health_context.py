@@ -513,6 +513,38 @@ def _extract_unit_text(text):
     return _normalize_unit(candidate)
 
 
+# Tests that are pure ratios/fractions — a mass or molar concentration unit
+# on these is necessarily an OCR misattribution from a neighbouring row
+# (e.g. haemoglobin's 'g/L' landing on the Hct row below it).
+_DIMENSIONLESS_TESTS = {'hct', 'haematocrit', 'packedcellvolume', 'pcv',
+                        'haematocritpcv'}
+# Compact keys (no punctuation) matching _compact_key(_extract_unit_text(...)).
+_CONCENTRATION_UNITS = {'gl', 'gdl', 'mgl', 'mgdl', 'ugl', 'ugdl',
+                        'mmoll', 'umoll', 'nmoll', 'pmoll', 'meql',
+                        'iul', 'uil', 'ul', 'miul'}
+
+
+def _drop_implausible_test_unit(test):
+    """Strip a concentration unit from a test that can only be a ratio."""
+    name = re.sub(r'\(.*?\)', '', str(test.get('test_name', '')))
+    _, base = _split_specimen_prefix(name)
+    if _compact_key(base) not in _DIMENSIONLESS_TESTS:
+        return
+    value = str(test.get('value', ''))
+    if not re.search(
+            r'\s*(g/L|g/dL|mg/L|mg/dL|ug/L|ug/dL|µg/L|µg/dL|μg/L|μg/dL|'
+            r'mmol/L|umol/L|µmol/L|μmol/L|nmol/L|pmol/L|mEq/L|IU/L|uIU/L|U/L|mIU/L)\s*$',
+            value, re.I):
+        return
+    unit = _extract_unit_text(value)
+    if _compact_key(unit) not in _CONCENTRATION_UNITS:
+        return
+    test['value'] = re.sub(
+        r'\s*(g/L|g/dL|mg/L|mg/dL|ug/L|ug/dL|µg/L|µg/dL|μg/L|μg/dL|'
+        r'mmol/L|umol/L|µmol/L|μmol/L|nmol/L|pmol/L|mEq/L|IU/L|uIU/L|U/L|mIU/L)\s*$',
+        '', value, flags=re.I).strip()
+
+
 def _fill_test_defaults(results):
     """Backfill blank reference_range/unit from sibling rows of the same test.
 
@@ -3269,6 +3301,7 @@ NEW TEXT TO ANALYZE:
                 # Normalize report dates (e.g. 09/09/2026, 05-Apr-25) to ISO so
                 # review date pickers accept them and storage stays consistent.
                 t['date'] = profile._normalize_test_date(str(t.get('date') or ''))
+                _drop_implausible_test_unit(t)
 
             # Reports print Reference/Units once per repeated test; rows whose
             # cells were blank (or wrapped off) inherit the sibling values.
