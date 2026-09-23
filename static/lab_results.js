@@ -16,6 +16,13 @@
         return [null, null];
     }
 
+    function formatRefRange(ref) {
+        // Reports write the same range as '(2.0-3.2)', '2.0-3.2' or '10 - 45' —
+        // display them all in one canonical form: 'a - b'.
+        const r = String(ref || '').trim().replace(/^\((.*)\)$/, '$1').trim();
+        return r.replace(/(-?\d+(?:\.\d+)?)\s*[-–—~]\s*(-?\d+(?:\.\d+)?)/, '$1 - $2');
+    }
+
     function testStatus(num, lower, upper) {
         if (lower === null || upper === null) return 'normal';
         if (num > upper) return 'high';
@@ -234,7 +241,7 @@
             g.unit = explicitUnit !== undefined ? String(explicitUnit).trim()
                 : (g.entries.map(e => extractTestUnit(e.item.value)).find(u => u) || '');
             g.unit = normalizePowerOfTen(g.unit);
-            g.ref = g.entries.map(e => e.item.reference_range || '').find(r => r.trim()) || '';
+            g.ref = formatRefRange(g.entries.map(e => e.item.reference_range || '').find(r => r.trim()) || '');
             const escUnit = g.unit ? g.unit.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : '';
             if (g.unit) g.displayName = g.displayName.replace(new RegExp('(?:^|\\s)' + escUnit + '(?:\\s|$)', 'ig'), ' ').replace(/\s+/g, ' ').trim();
             const metaUnit = g.unit && !g.ref.toLowerCase().includes(g.unit.toLowerCase()) ? g.unit : '';
@@ -271,14 +278,15 @@
     }
 
     window.LabUtils = {
-        parseReferenceRange, testStatus, statusColor, computeTestFlag,
-        buildSparkline, extractTestUnit, stripTestUnit, extractTestFlag,
-        testFlag, normalizeTestType, parseMedicalDate, normalizeDateInput,
-        groupTestResults
+        parseReferenceRange, formatRefRange, testStatus, statusColor,
+        computeTestFlag, buildSparkline, extractTestUnit, stripTestUnit,
+        extractTestFlag, testFlag, normalizeTestType, parseMedicalDate,
+        normalizeDateInput, groupTestResults
     };
 
     // Flat globals matching the names the templates already call.
     window.parseReferenceRange = parseReferenceRange;
+    window.formatRefRange = formatRefRange;
     window.testStatus = testStatus;
     window.statusColor = statusColor;
     window.computeTestFlag = computeTestFlag;

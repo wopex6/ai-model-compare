@@ -843,7 +843,7 @@
             if (compact) {
                 html += '<span class="hub-row-title">' + esc(toText(item.date) || 'No date') + '</span>';
                 html += '<span class="hub-row-sub">' + esc(toText(item.value)) +
-                    (item.reference_range ? ' · ref ' + esc(toText(item.reference_range)) : '') + '</span>';
+                    (item.reference_range ? ' · ref ' + esc(formatRefRange(toText(item.reference_range))) : '') + '</span>';
             } else {
                 html += '<span class="hub-row-title">' + esc(itemTitle(id, item)) + '</span>';
                 if (id === 'medications' || id === 'supplements') {
@@ -1744,7 +1744,7 @@
                 for (let i = 0; i < tests.length; i++) {
                     const t = tests[i];
                     lines.push('  - ' + t.test_name + ': ' + t.value +
-                        (t.reference_range ? ' (ref ' + t.reference_range + ')' : '') +
+                        (t.reference_range ? ' (ref ' + formatRefRange(t.reference_range) + ')' : '') +
                         (t.flag ? ' [' + t.flag + ']' : '') +
                         (t.date ? ' ' + t.date : ''));
                 }
@@ -1755,7 +1755,7 @@
                 for (let i = 0; i < back.length; i++) {
                     const t = back[i];
                     lines.push('  - ' + t.test_name + ': ' + t.value +
-                        (t.reference_range ? ' (ref ' + t.reference_range + ')' : '') +
+                        (t.reference_range ? ' (ref ' + formatRefRange(t.reference_range) + ')' : '') +
                         (t.date ? ' ' + t.date : ''));
                 }
             }
@@ -1830,7 +1830,7 @@
                         const t = tests[i];
                         html += '<div class="hub-note"><strong>' + esc(t.test_name) + '</strong> ' +
                             esc(t.value || '') +
-                            (t.reference_range ? ' · ref ' + esc(t.reference_range) : '') +
+                            (t.reference_range ? ' · ref ' + esc(formatRefRange(t.reference_range)) : '') +
                             (t.flag ? ' · ' + esc(t.flag) : '') +
                             (t.date ? '<br><span class="hub-when">' + esc(t.date) + '</span>' : '') +
                             '</div>';
@@ -1843,7 +1843,7 @@
                         const t = back[i];
                         html += '<div class="hub-note ok"><strong>' + esc(t.test_name) + '</strong> ' +
                             esc(t.value || '') +
-                            (t.reference_range ? ' · ref ' + esc(t.reference_range) : '') +
+                            (t.reference_range ? ' · ref ' + esc(formatRefRange(t.reference_range)) : '') +
                             ' — normal now (was out of range before)' +
                             (t.date ? '<br><span class="hub-when">' + esc(t.date) + '</span>' : '') +
                             '</div>';
