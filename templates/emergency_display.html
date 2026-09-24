@@ -92,6 +92,12 @@ html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Segoe UI', s
             <div class="emergency-pair-status" id="emergency-pair-status"></div>
         </form>
         <div id="emergency-view"></div>
+        <details class="emergency-local-edit" id="emergency-local-edit" style="margin-top:14px;">
+            <summary>Private details — this phone only</summary>
+            <p style="font-size:0.8rem;color:#888;">Stored only on this phone and never uploaded. Lost if this phone's storage is cleared.</p>
+            <div id="emergency-local-fields"></div>
+            <button type="button" id="emergency-local-save" style="margin-top:10px;width:100%;padding:10px;border:none;border-radius:10px;background:#c62828;color:#fff;font-weight:700;">Save on this phone</button>
+        </details>
     </div>
 </div>
 <script src="{{ url_for('static', filename='emergency_card.js') }}"></script>
@@ -174,6 +180,39 @@ html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Segoe UI', s
             closeBtn.style.display = 'none';
         }
     }
+
+    // Private details are entered here because a home-screen icon keeps its
+    // own storage — they never leave this phone.
+    (function initLocalEditor() {
+        const box = document.getElementById('emergency-local-fields');
+        const saveBtn = document.getElementById('emergency-local-save');
+        if (!box || !saveBtn || !window.EmergencyCard || !EmergencyCard.saveLocal) return;
+        const labels = {
+            full_name: 'Full name', address: 'Address',
+            phone: 'Phone', medicare: 'Medicare number'
+        };
+        const local = EmergencyCard.loadLocal();
+        EmergencyCard.LOCAL_FIELDS.forEach(function (f) {
+            const lab = document.createElement('label');
+            lab.style.cssText = 'display:block;font-size:0.8rem;color:#666;margin-top:8px;';
+            lab.textContent = labels[f];
+            const inp = document.createElement('input');
+            inp.type = 'text';
+            inp.setAttribute('data-lf', f);
+            inp.value = local[f] || '';
+            inp.style.cssText = 'display:block;width:100%;margin-top:2px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:0.95rem;';
+            lab.appendChild(inp);
+            box.appendChild(lab);
+        });
+        saveBtn.addEventListener('click', function () {
+            const fields = {};
+            box.querySelectorAll('input[data-lf]').forEach(function (inp) {
+                fields[inp.getAttribute('data-lf')] = inp.value;
+            });
+            EmergencyCard.saveLocal(fields);
+            showCard(window.EmergencyCard.load());
+        });
+    }());
 
     showCard(window.EmergencyCard.load());
     autoRefresh();
