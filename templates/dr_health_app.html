@@ -876,7 +876,7 @@
                     <div id="photo-preview-name" style="font-size:0.85rem; color:#555; word-break:break-word;"></div>
                     <div style="margin-top:10px; display:flex; gap:8px; justify-content:center; flex-wrap:wrap;">
                         <button class="action" id="accept-photo-btn" style="margin:0;" type="button">Use this photo</button>
-                        <button class="btn-secondary" id="retake-photo-btn" style="margin:0;" type="button">Retake</button>
+                        <button class="btn-secondary" id="cancel-photo-btn" style="margin:0;" type="button" title="Clear selection"><i class="fas fa-xmark"></i></button>
                     </div>
                 </div>
                 <div class="add-info-method" style="margin-bottom:0;">
@@ -888,10 +888,6 @@
                     </div>
                 </div>
                 <div id="profile-status"></div>
-                <div id="review-action" style="display:none; margin-top:8px;">
-                    <button class="btn-secondary" id="review-latest-btn" type="button" style="padding:6px 12px; font-size:0.85rem;">Review</button>
-                    <button class="btn-secondary" id="hard-refresh-btn" type="button" style="padding:6px 12px; font-size:0.85rem; margin-left:6px;">Refresh</button>
-                </div>
                 <div id="import-undo" style="display:none; margin-top:8px;">
                     <button class="btn-secondary" id="undo-import-btn" type="button" style="padding:6px 12px; font-size:0.8rem;"><i class="fas fa-rotate-left"></i> Undo last import</button>
                 </div>
@@ -1832,8 +1828,6 @@
                 return;
             }
             if (data.pending_review) {
-                const reviewAction = document.getElementById('review-action');
-                if (reviewAction) reviewAction.style.display = 'block';
                 setReviewState(data.pending_review, {
                     source_file: data.source_file,
                     extracted_text: data.extracted_text,
@@ -1842,10 +1836,6 @@
                 });
                 window.__pendingReview = data.pending_review;
                 window.__pendingMeta = { source_file: data.source_file, extracted_text: data.extracted_text, extracted_text_preview: data.extracted_text_preview, stored_document: data.stored_document };
-                // Do NOT reassign review-latest-btn.onclick here — its
-                // listener already calls openLatestReview(), and a leftover
-                // closure over this `data` would reopen the OLD document's
-                // review after a newer upload.
                 openReviewModal(data.pending_review, {
                     source_file: data.source_file,
                     extracted_text: data.extracted_text,
@@ -1991,8 +1981,6 @@
             const data = await resp.json();
             if (resp.ok && data.success !== false && data.pending_review) {
                 status.textContent = 'Review the extracted data before saving.';
-                const reviewAction = document.getElementById('review-action');
-                if (reviewAction) reviewAction.style.display = 'block';
                 openReviewModal(data.pending_review);
             } else {
                 status.textContent = data.error || 'Nothing to review or analysis failed.';
@@ -2015,7 +2003,6 @@
         const retainEl = document.getElementById('retain-photo');
         const retain = (retainEl && retainEl.checked != null) ? retainEl.checked : false;
         for (let i = 0; i < files.length; i++) {
-            status.textContent = `Uploading & analyzing file ${i + 1} of ${files.length}...`;
             const formData = new FormData();
             formData.append('file', files[i]);
             formData.append('retain', String(retain));
@@ -2043,18 +2030,16 @@
                 lastError = 'Network error.';
             }
         }
-        const reviewAction = document.getElementById('review-action');
         if (lastPending) {
             status.textContent = `✓ ${ok} file(s) ready for review.`;
-            if (reviewAction) reviewAction.style.display = 'block';
             setReviewState(lastPending, lastMeta);
             window.__pendingReview = lastPending;
             window.__pendingMeta = lastMeta;
             loadStoredDocuments();
             playNotificationSound();
+            openReviewModal(lastPending, lastMeta);
         } else {
             status.textContent = (failed === 0 ? 'No structured data found.' : `Failed: ${lastError}`);
-            if (reviewAction) reviewAction.style.display = 'none';
         }
         fileInput.value = '';
         btn.classList.remove('busy');
@@ -2074,7 +2059,6 @@
         const name = document.getElementById('photo-preview-name');
         const triggers = document.getElementById('upload-trigger-btns');
         const acceptBtn = document.getElementById('accept-photo-btn');
-        const retakeBtn = document.getElementById('retake-photo-btn');
         if (!preview || !fileInput) return;
         if (fileInput.files && fileInput.files.length) {
             const files = Array.from(fileInput.files);
@@ -2086,7 +2070,6 @@
             name.textContent = (file.type === 'application/pdf' ? 'PDF document: ' : '') + file.name + (files.length > 1 ? ' and ' + (files.length - 1) + ' more' : '');
             const isImage = file.type.indexOf('image/') === 0;
             if (acceptBtn) acceptBtn.textContent = isImage ? 'Use this photo' : 'Use this document';
-            if (retakeBtn) retakeBtn.textContent = lastPhotoCapture ? 'Retake' : 'Choose different file';
             if (isImage) {
                 if (img._revoke) URL.revokeObjectURL(img._revoke);
                 img.style.display = 'block';
@@ -2103,7 +2086,6 @@
             img.style.display = 'none';
             img.src = '';
             if (acceptBtn) acceptBtn.textContent = 'Use this photo';
-            if (retakeBtn) retakeBtn.textContent = 'Retake';
         }
     }
 
@@ -2147,22 +2129,14 @@
         fileInput.click();
     });
 
-    document.getElementById('retake-photo-btn').addEventListener('click', () => {
+    document.getElementById('cancel-photo-btn').addEventListener('click', () => {
         // The touch released on the camera's confirm button can leak into the
         // page as a ghost click on this button when the preview appears under
-        // it, instantly reopening the camera. Ignore impossible-fast clicks.
+        // it, instantly discarding the photo. Ignore impossible-fast clicks.
         if (Date.now() - previewShownAt < 800) return;
         const fileInput = document.getElementById('profile-file');
         fileInput.value = '';
         updatePhotoPreview();
-        if (lastPhotoCapture) {
-            fileInput.accept = 'image/*';
-            fileInput.setAttribute('capture', 'environment');
-        } else {
-            fileInput.accept = '.pdf,image/*';
-            fileInput.removeAttribute('capture');
-        }
-        fileInput.click();
     });
 
     document.getElementById('profile-file').addEventListener('change', () => {
@@ -2610,8 +2584,6 @@
             status.textContent = 'Nothing selected — review discarded.';
             currentReviewPending = null;
             currentReviewMeta = {};
-            const reviewAction = document.getElementById('review-action');
-            if (reviewAction) reviewAction.style.display = 'none';
             setTimeout(() => closeReviewModal(), 600);
             return;
         }
@@ -2631,8 +2603,6 @@
                     ? `Saved — ${added} record${added === 1 ? '' : 's'} added.`
                     : 'Saved — no new records added.';
                 setTimeout(() => { closeReviewModal(); loadHealthProfile(); }, 600);
-                const reviewAction = document.getElementById('review-action');
-                if (reviewAction) reviewAction.style.display = 'none';
                 currentReviewPending = null;
                 currentReviewMeta = {};
             } else {
@@ -2696,19 +2666,6 @@
             status.textContent = 'Network error.';
         }
     });
-    const reviewLatestBtn = document.getElementById('review-latest-btn');
-    if (reviewLatestBtn) {
-        reviewLatestBtn.addEventListener('click', () => {
-            const status = document.getElementById('profile-status');
-            if (status) status.textContent = 'Review clicked…';
-            try { openLatestReview(); } catch (e) {
-                if (status) status.textContent = 'Review click error: ' + (e && e.message || e);
-            }
-        });
-    }
-    const hardRefreshBtn = document.getElementById('hard-refresh-btn');
-    if (hardRefreshBtn) hardRefreshBtn.onclick = () => { window.location.reload(true); };
-
     // Data Manager
     let dmHistoryPushed = false;
     function closeDataManager() {
