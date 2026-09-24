@@ -398,17 +398,21 @@
     .btn-primary { background: #2a7de1; color: #fff; }
     .btn-danger { background: #c62828; color: #fff; }
     .btn-secondary { background: #e0e0e0; color: #333; }
-    .dm-index {
-        display: none;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin: -4px 0 12px 0;
-        padding: 6px 0;
-        border-bottom: 1px solid #eee;
+    .dm-bar {
         position: sticky;
         top: 0;
         background: #fff;
         z-index: 10;
+        border-bottom: 1px solid #eee;
+        padding-bottom: 6px;
+        margin-bottom: 6px;
+    }
+    .dm-index {
+        display: none;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 0;
+        padding: 6px 0 0 0;
     }
     .dm-index a {
         font-size: 0.75rem;
@@ -888,13 +892,13 @@
                     <i class="fas fa-archive"></i> Stored Documents <span id="stored-docs-count" style="color:#999;font-weight:400;"></span>
                 </summary>
                 <p style="font-size:0.85rem;color:#555;margin-top:8px;">Previously uploaded files you can reuse or delete.</p>
-                <div id="stored-documents-list" style="margin-top:10px;"><em style="color:#999;">Loading...</em></div>
-                <div id="docs-bulk-bar" style="margin-top:10px; display:none; gap:10px; align-items:center;">
+                <div id="docs-bulk-bar" style="margin:8px 0 4px; display:none; gap:10px; align-items:center;">
                     <label style="font-size:0.8rem; color:#555; cursor:pointer;">
                         <input type="checkbox" id="docs-select-all"> Select all
                     </label>
                     <button class="btn-secondary" id="docs-delete-selected" type="button" style="font-size:0.75rem;">Delete selected</button>
                 </div>
+                <div id="stored-documents-list" style="margin-top:10px;"><em style="color:#999;">Loading...</em></div>
             </details>
             <details class="card" id="test-audit-card">
                 <summary style="font-size:0.95rem;color:#E53935;font-weight:600;cursor:pointer;">
@@ -979,7 +983,7 @@
             <h2><i class="fas fa-database"></i> Manage My Data</h2>
             <button class="modal-close" id="dm-close" title="Close"><i class="fas fa-times"></i></button>
         </div>
-        <div class="modal-content"><input id="dm-search" type="text" placeholder="Filter e.g. S. IRON" style="width:100%;padding:8px 10px;margin-bottom:12px;border-radius:6px;border:1px solid #ccc;box-sizing:border-box;"><div id="dm-index" class="dm-index"></div><div id="dm-content"></div></div>
+        <div class="modal-content"><div class="dm-bar"><div id="dm-index" class="dm-index"></div><input id="dm-search" type="text" placeholder="Search test names…" style="width:100%;padding:8px 10px;margin:6px 0 4px;border-radius:6px;border:1px solid #ccc;box-sizing:border-box;"></div><div id="dm-content"></div></div>
         <div class="modal-footer">
             <span class="dm-status" id="dm-status"></span>
         </div>
@@ -2726,6 +2730,20 @@
 
     function formatFieldValue(key, val) {
         if (val === null || val === undefined) return '';
+        // Lifecycle history entries are objects — render them readably instead
+        // of '[object Object]'.
+        if (key === 'history' && Array.isArray(val)) {
+            return val.map(h => {
+                if (h && typeof h === 'object') {
+                    const when = String(h.at || '').slice(0, 10);
+                    const change = h.field
+                        ? `${h.field}: ${h.from || '—'} → ${h.to || '—'}`
+                        : JSON.stringify(h);
+                    return (when ? when + '  ' : '') + change;
+                }
+                return String(h);
+            }).join('\n');
+        }
         if (Array.isArray(val)) return val.map(v => String(v)).join(', ');
         if (typeof val === 'object') return JSON.stringify(val, null, 2);
         return String(val);
@@ -2969,7 +2987,7 @@
                     e.preventDefault();
                     const target = document.getElementById('dm-cat-' + a.dataset.cat);
                     if (target && container) {
-                        const offset = index.offsetHeight + 16;
+                        const offset = (index.parentElement ? index.parentElement.offsetHeight : index.offsetHeight) + 16;
                         const targetPos = target.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop;
                         container.scrollTo({ top: targetPos - offset, behavior: 'auto' });
                     }
