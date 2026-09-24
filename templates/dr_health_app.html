@@ -1624,6 +1624,8 @@
                 html += `</div></div>`;
             });
             el.innerHTML = html;
+            // Re-attach saved review outcomes — the re-render wiped them.
+            Object.keys(docOutcomeNotes).forEach(sn => _placeDocOutcome(sn, docOutcomeNotes[sn]));
             const bulkBar = document.getElementById('docs-bulk-bar');
             if (bulkBar) bulkBar.style.display = docs.length ? 'flex' : 'none';
             const selectAll = document.getElementById('docs-select-all');
@@ -2209,25 +2211,42 @@
         }
     }
 
+    // Review results remembered per stored file, so they survive the list
+    // being re-rendered when the user leaves and returns to this screen.
+    const docOutcomeNotes = {};
+
+    function _docOutcomeRow(stored) {
+        return Array.from(document.querySelectorAll(
+            '#stored-documents-list .dm-item[data-stored]'))
+            .find(r => r.dataset.stored === stored) || null;
+    }
+
+    function _placeDocOutcome(stored, msg) {
+        const row = _docOutcomeRow(stored);
+        if (!row) return false;
+        let note = row.querySelector('.doc-result-msg');
+        if (!note) {
+            note = document.createElement('div');
+            note.className = 'doc-result-msg';
+            note.style.cssText = 'flex-basis:100%; font-size:0.8rem; color:#2e7d32; margin-top:4px;';
+            row.appendChild(note);
+        }
+        note.textContent = msg;
+        return true;
+    }
+
     function reportReviewOutcome(msg) {
         // When the review came from a stored document, the result belongs
         // under that file's row — not up in the Add Health Info section.
         const meta = currentReviewMeta || currentMeta || {};
         const stored = meta.stored_document && meta.stored_document.stored_name;
-        const row = stored && document.querySelector(
-            '#stored-documents-list .dm-item[data-stored="' + CSS.escape(stored) + '"]');
-        if (row) {
-            let note = row.querySelector('.doc-result-msg');
-            if (!note) {
-                note = document.createElement('div');
-                note.className = 'doc-result-msg';
-                note.style.cssText = 'flex-basis:100%; font-size:0.8rem; color:#2e7d32; margin-top:4px;';
-                row.appendChild(note);
+        if (stored) {
+            docOutcomeNotes[stored] = msg;
+            if (_placeDocOutcome(stored, msg)) {
+                const card = document.getElementById('stored-docs-card');
+                if (card) card.open = true;
+                return;
             }
-            note.textContent = msg;
-            const card = document.getElementById('stored-docs-card');
-            if (card) card.open = true;
-            return;
         }
         const pstat = document.getElementById('profile-status');
         if (pstat) pstat.textContent = msg;
