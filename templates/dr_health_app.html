@@ -879,6 +879,9 @@
                     <button class="btn-secondary" id="review-latest-btn" type="button" style="padding:6px 12px; font-size:0.85rem;">Review</button>
                     <button class="btn-secondary" id="hard-refresh-btn" type="button" style="padding:6px 12px; font-size:0.85rem; margin-left:6px;">Refresh</button>
                 </div>
+                <div id="import-undo" style="display:none; margin-top:8px;">
+                    <button class="btn-secondary" id="undo-import-btn" type="button" style="padding:6px 12px; font-size:0.8rem;"><i class="fas fa-rotate-left"></i> Undo last import</button>
+                </div>
             </div>
             <details class="card" id="stored-docs-card">
                 <summary style="font-size:0.95rem;color:#E53935;font-weight:600;cursor:pointer;">
@@ -886,6 +889,12 @@
                 </summary>
                 <p style="font-size:0.85rem;color:#555;margin-top:8px;">Previously uploaded files you can reuse or delete.</p>
                 <div id="stored-documents-list" style="margin-top:10px;"><em style="color:#999;">Loading...</em></div>
+                <div id="docs-bulk-bar" style="margin-top:10px; display:none; gap:10px; align-items:center;">
+                    <label style="font-size:0.8rem; color:#555; cursor:pointer;">
+                        <input type="checkbox" id="docs-select-all"> Select all
+                    </label>
+                    <button class="btn-secondary" id="docs-delete-selected" type="button" style="font-size:0.75rem;">Delete selected</button>
+                </div>
             </details>
             <details class="card" id="test-audit-card">
                 <summary style="font-size:0.95rem;color:#E53935;font-weight:600;cursor:pointer;">
@@ -1463,6 +1472,13 @@
             const p = d.profile;
             currentProfile = p;
             if (typeof DrHealthHub !== 'undefined' && DrHealthHub.root) DrHealthHub.setProfile(p);
+            const undoWrap = document.getElementById('import-undo');
+            const undoBtn = document.getElementById('undo-import-btn');
+            if (undoWrap && undoBtn) {
+                const n = (p.last_import && p.last_import.count) ? p.last_import.count : 0;
+                undoWrap.style.display = n ? 'block' : 'none';
+                if (n) undoBtn.innerHTML = `<i class="fas fa-rotate-left"></i> Undo last import (${n} record${n === 1 ? '' : 's'})`;
+            }
             let html = '';
             if (p.name) html += `<div style="margin-bottom:8px;"><strong>${p.name}</strong></div>`;
             if (p.conditions && p.conditions.length) {
@@ -1559,7 +1575,8 @@
                     : '';
                 const size = doc.size_bytes ? (doc.size_bytes / 1024).toFixed(1) + ' KB' : '';
                 html += `<div class="dm-item" style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;">`;
-                html += `<div style="font-size:0.85rem;word-break:break-word;"><strong>${name}</strong><br><span style="color:#999;font-size:0.75rem;">${uploaded} ${size}</span></div>`;
+                html += `<input type="checkbox" class="doc-cb" data-name="${escapeHtml(doc.stored_name)}" style="flex:none;" title="Select for deletion">`;
+                html += `<div style="font-size:0.85rem;word-break:break-word;flex:1;"><strong>${name}</strong><br><span style="color:#999;font-size:0.75rem;">${uploaded} ${size}</span></div>`;
                 html += `<div style="display:flex;gap:6px;">`;
                 html += `<button class="btn-secondary" type="button" onclick="viewStoredDocument('${escapeHtml(doc.stored_name)}')" style="font-size:0.75rem;">View</button>`;
                 if (doc.has_result) {
@@ -1570,10 +1587,46 @@
                 html += `</div></div>`;
             });
             el.innerHTML = html;
+            const bulkBar = document.getElementById('docs-bulk-bar');
+            if (bulkBar) bulkBar.style.display = docs.length ? 'flex' : 'none';
+            const selectAll = document.getElementById('docs-select-all');
+            if (selectAll) selectAll.checked = false;
         } catch (e) {
             el.innerHTML = '<em style="color:#999;">Could not load stored documents.</em>';
         }
     }
+
+    async function deleteSelectedDocuments() {
+        const status = document.getElementById('profile-status');
+        const names = Array.from(document.querySelectorAll('#stored-documents-list .doc-cb:checked'))
+            .map(cb => cb.dataset.name);
+        if (!names.length) {
+            if (status) status.textContent = 'Tick the documents to delete first.';
+            return;
+        }
+        if (!confirm(`Delete ${names.length} stored document(s)?`)) return;
+        try {
+            const resp = await AuthHelper.authenticatedFetch('/api/health-profile/documents', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ stored_names: names })
+            });
+            const data = await resp.json();
+            if (status) status.textContent = (resp.ok && data.success)
+                ? `Deleted ${data.deleted || names.length} document(s).`
+                : (data.error || 'Delete failed.');
+            loadStoredDocuments();
+        } catch (e) {
+            if (status) status.textContent = 'Delete error: ' + (e && e.message || e);
+        }
+    }
+    const docsDeleteBtn = document.getElementById('docs-delete-selected');
+    if (docsDeleteBtn) docsDeleteBtn.addEventListener('click', deleteSelectedDocuments);
+    const docsSelectAll = document.getElementById('docs-select-all');
+    if (docsSelectAll) docsSelectAll.addEventListener('change', () => {
+        document.querySelectorAll('#stored-documents-list .doc-cb')
+            .forEach(cb => { cb.checked = docsSelectAll.checked; });
+    });
 
     let testAuditLoaded = false;
     async function loadTestAudit() {
@@ -1613,7 +1666,8 @@
                 } else if (en.action === 'merged') {
                     what = `${d.removed || 0} duplicate row(s) merged`;
                 } else {
-                    what = [d.value, d.reference_range ? `ref ${d.reference_range}` : '', d.date]
+                    what = [d.value, d.reference_range ? `ref ${d.reference_range}` : '', d.date,
+                            d.undo ? 'undo of last import' : '']
                         .filter(Boolean).map(escapeHtml).join(' · ');
                 }
                 html += `<div class="dm-item" style="font-size:0.82rem;">` +
@@ -2352,6 +2406,8 @@
         }
         try {
             openReviewModal(pending, meta);
+            // Modal is up — the 'Opening review…' status has served its purpose.
+            if (status) status.textContent = '';
         } catch (e) {
             console.error('openLatestReview error', e);
             if (status) status.textContent = 'Review error: ' + (e && e.message || e);
@@ -2507,7 +2563,11 @@
             });
             const data = await resp.json();
             if (resp.ok && data.success !== false) {
-                status.textContent = 'Saved.';
+                const added = (data.added_count != null) ? data.added_count
+                    : (data.actions || []).filter(a => String(a).startsWith('Added')).length;
+                status.textContent = added
+                    ? `Saved — ${added} record${added === 1 ? '' : 's'} added.`
+                    : 'Saved — no new records added.';
                 setTimeout(() => { closeReviewModal(); loadHealthProfile(); }, 600);
                 const reviewAction = document.getElementById('review-action');
                 if (reviewAction) reviewAction.style.display = 'none';
@@ -2555,6 +2615,25 @@
     // user staring at unchecked boxes.
     document.getElementById('review-reject-all').addEventListener('click', closeReviewModal);
     document.getElementById('review-save').addEventListener('click', saveReview);
+    const undoImportBtn = document.getElementById('undo-import-btn');
+    if (undoImportBtn) undoImportBtn.addEventListener('click', async () => {
+        const status = document.getElementById('profile-status');
+        if (!confirm('Remove all records added by the last import?')) return;
+        try {
+            const resp = await AuthHelper.authenticatedFetch('/api/health-profile/undo-import', { method: 'POST' });
+            const data = await resp.json();
+            if (resp.ok && data.success) {
+                status.textContent = `Undone — ${data.removed} record${data.removed === 1 ? '' : 's'} removed.`;
+                const wrap = document.getElementById('import-undo');
+                if (wrap) wrap.style.display = 'none';
+                loadHealthProfile();
+            } else {
+                status.textContent = data.error || 'Undo failed.';
+            }
+        } catch (e) {
+            status.textContent = 'Network error.';
+        }
+    });
     const reviewLatestBtn = document.getElementById('review-latest-btn');
     if (reviewLatestBtn) {
         reviewLatestBtn.addEventListener('click', () => {

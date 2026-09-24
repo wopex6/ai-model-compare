@@ -6586,6 +6586,17 @@ HEALTH_ITEM_CATEGORIES = [
     'questions_for_doctor', 'provider_notes', 'diary'
 ]
 
+# Categories an apply-review can append to. Dict rows are tagged with a batch
+# id; provider_notes holds bare strings, so the added texts are recorded
+# verbatim instead. The undo endpoint removes exactly what the last apply
+# added — edits to pre-existing rows are never part of it.
+_IMPORT_LISTS = (
+    'conditions', 'medications', 'supplements', 'symptoms', 'test_results',
+    'action_plans', 'conversation_insights', 'follow_ups',
+    'questions_for_doctor',
+)
+_IMPORT_TEXT_LISTS = ('provider_notes',)
+
 
 @app.route('/api/health-profile', methods=['GET'])
 @require_auth
@@ -7573,10 +7584,98 @@ def apply_health_review():
         # The user reviewed and edited this on screen before applying it, so it
         # counts as report-derived data they have already confirmed.
         profile.ingest_source = health_insights.SOURCE_DOCUMENT
+        # Snapshot row identities before applying so only genuinely new rows
+        # get the batch tag — the undo must never remove a pre-existing row
+        # that merely had a field updated by the merge.
+        before_ids = {c: {id(i) for i in profile.data.get(c, [])
+                          if isinstance(i, dict)}
+                      for c in _IMPORT_LISTS}
+        before_texts = {c: set(profile.data.get(c) or [])
+                        for c in _IMPORT_TEXT_LISTS}
         actions = profile.apply_extracted_data(extracted)
         health_insights.apply_provenance_defaults(profile.data, health_insights.SOURCE_DOCUMENT)
+        batch_id = uuid.uuid4().hex[:12]
+        added = 0
+        for c in _IMPORT_LISTS:
+            rows = profile.data.get(c)
+            if not isinstance(rows, list):
+                continue
+            for item in rows:
+                if isinstance(item, dict) and id(item) not in before_ids[c]:
+                    item['_import_batch'] = batch_id
+                    added += 1
+        texts_added = {c: [t for t in (profile.data.get(c) or [])
+                           if t not in before_texts[c]]
+                       for c in _IMPORT_TEXT_LISTS}
+        added += sum(len(v) for v in texts_added.values())
+        profile.data['last_import'] = {
+            'batch': batch_id,
+            'at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+            'count': added,
+            'texts': texts_added,
+        }
         profile.save()
-        return jsonify({'success': True, 'actions': actions, 'extracted': extracted})
+        return jsonify({'success': True, 'actions': actions,
+                        'added_count': added,
+                        'last_import': profile.data['last_import'],
+                        'extracted': extracted})
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/health-profile/undo-import', methods=['POST'])
+@require_auth
+def undo_health_import():
+    """Remove every record the most recent apply-review added.
+
+    Only rows carrying that batch's tag go — field edits the merge made to
+    pre-existing rows stay, as does anything added since.
+    """
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        info = profile.data.get('last_import') or {}
+        batch_id = info.get('batch')
+        texts = info.get('texts') or {}
+        if not batch_id and not texts:
+            return jsonify({'error': 'Nothing to undo'}), 400
+
+        removed = 0
+        for c in _IMPORT_LISTS:
+            rows = profile.data.get(c)
+            if not isinstance(rows, list):
+                continue
+            kept = []
+            for row in rows:
+                if isinstance(row, dict) and row.get('_import_batch') == batch_id:
+                    removed += 1
+                    if c == 'test_results':
+                        health_freshness.audit_test_change(
+                            profile.data, 'deleted', row.get('test_name', ''),
+                            {'value': row.get('value', ''),
+                             'date': row.get('date', ''),
+                             'reference_range': row.get('reference_range', ''),
+                             'undo': True})
+                else:
+                    kept.append(row)
+            profile.data[c] = kept
+        for c, vals in texts.items():
+            rows = profile.data.get(c)
+            if not isinstance(rows, list):
+                continue
+            remaining = list(vals)
+            kept = []
+            for row in rows:
+                if row in remaining:
+                    remaining.remove(row)
+                    removed += 1
+                else:
+                    kept.append(row)
+            profile.data[c] = kept
+
+        profile.data.pop('last_import', None)
+        profile.save()
+        return jsonify({'success': True, 'removed': removed})
     except Exception as e:
         return _safe_error(e, 'api')
 
@@ -7749,40 +7848,50 @@ def update_health_document():
 @app.route('/api/health-profile/documents', methods=['DELETE'])
 @require_auth
 def delete_health_document():
-    """Delete a stored uploaded document by stored_name or index."""
+    """Delete stored uploaded documents — one by stored_name/index, or several
+    at once via a stored_names list."""
     try:
         user_id = str(request.current_user['user_id'])
         profile = HealthContextManager.get_profile(user_id)
         data = request.get_json() or {}
+        stored_names = data.get('stored_names')
         stored_name = data.get('stored_name')
         index = data.get('index')
 
         uploaded = profile.data.get('uploaded_documents', [])
-        doc = None
-        if stored_name:
-            doc = next((d for d in uploaded if d.get('stored_name') == stored_name), None)
-        elif isinstance(index, int) and 0 <= index < len(uploaded):
-            doc = uploaded[index]
+        targets = []
+        if isinstance(stored_names, list) and stored_names:
+            wanted = {str(n) for n in stored_names}
+            targets = [d for d in uploaded if d.get('stored_name') in wanted]
+        else:
+            doc = None
+            if stored_name:
+                doc = next((d for d in uploaded if d.get('stored_name') == stored_name), None)
+            elif isinstance(index, int) and 0 <= index < len(uploaded):
+                doc = uploaded[index]
+            if doc:
+                targets = [doc]
 
-        if not doc:
+        if not targets:
             return jsonify({'error': 'Document not found'}), 404
 
-        try:
-            target_path = Path(doc.get('stored_path') or '')
-            if target_path.exists():
-                target_path.unlink()
-            extracted_text_path = Path(str(doc.get('extracted_text_path') or ''))
-            if extracted_text_path.exists():
-                extracted_text_path.unlink()
-            result_path = Path(str(doc.get('result_path') or ''))
-            if result_path.exists():
-                result_path.unlink()
-        except Exception:
-            pass
+        for doc in targets:
+            try:
+                target_path = Path(doc.get('stored_path') or '')
+                if target_path.exists():
+                    target_path.unlink()
+                extracted_text_path = Path(str(doc.get('extracted_text_path') or ''))
+                if extracted_text_path.exists():
+                    extracted_text_path.unlink()
+                result_path = Path(str(doc.get('result_path') or ''))
+                if result_path.exists():
+                    result_path.unlink()
+            except Exception:
+                pass
+            uploaded.remove(doc)
 
-        uploaded.remove(doc)
         profile.save()
-        return jsonify({'success': True})
+        return jsonify({'success': True, 'deleted': len(targets)})
     except Exception as e:
         return _safe_error(e, 'api')
 
