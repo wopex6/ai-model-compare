@@ -912,6 +912,7 @@
                 <summary style="font-size:0.95rem;color:#E53935;font-weight:600;cursor:pointer;">
                     <i class="fas fa-user"></i> Full overview
                 </summary>
+                <input id="overview-search" type="text" placeholder="Search test names…" style="width:100%;padding:8px 10px;margin:8px 0;border-radius:6px;border:1px solid #ccc;box-sizing:border-box;">
                 <div id="profile-summary" style="margin-top:10px;"><em style="color:#999;">Loading...</em></div>
             </details>
         </div>
@@ -1461,6 +1462,34 @@
     }
 
     // ---------- Health profile ----------
+    function overviewTestsHtml(p, filter) {
+        if (!p.test_results || !p.test_results.length) return '';
+        const q = String(filter || '').trim().toLowerCase();
+        const sortedGroups = LabUtils.groupTestResults(p.test_results, 'recent',
+            q ? (item => String(item.test_name || '').toLowerCase().includes(q)) : null);
+        if (!sortedGroups.length) return '<em style="color:#999;">No matching tests.</em>';
+        let html = '<strong style="color:#1565C0;">Test Results:</strong>';
+        sortedGroups.forEach(group => {
+            html += `<div class="pwa-test-group">`;
+            html += `<div style="font-weight:600; color:#1565C0; display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:4px;"><i class="fas fa-vial"></i> <span>${escapeHtml(group.displayName)}</span> <span style="color:#666; font-weight:400;">${escapeHtml(group.meta)}</span> ${group.spark}</div>`;
+            html += `<table><thead><tr><th>Date</th><th>Value</th><th>Ref</th></tr></thead><tbody>`;
+            group.entries.forEach(e => {
+                const flagHtml = e.flag ? `<span style="font-size:0.7rem; color:${e.flag === 'H' ? '#c62828' : '#1565c0'}; font-weight:600; margin-left:4px;">${e.flag}</span>` : '<span style="font-size:0.7rem; color:#999; margin-left:4px;">—</span>';
+                const rowRef = escapeHtml(formatRefRange(e.item.reference_range || group.ref || ''));
+                html += `<tr><td style="white-space:nowrap; color:#555;"><span class="pwa-tt-editable" contenteditable="false" data-idx="${e.idx}" data-field="date" ontouchstart="startEditHold(this, event)" ontouchend="cancelEditHold()" ontouchmove="cancelEditHold()" oncontextmenu="return false" onblur="saveTestResult(this)">${escapeHtml(e.item.date || '')}</span></td>`;
+                html += `<td style="font-weight:500;"><span class="pwa-tt-editable" contenteditable="false" data-idx="${e.idx}" data-field="value" data-unit="${group.unit.replace(/"/g, '&quot;')}" ontouchstart="startEditHold(this, event)" ontouchend="cancelEditHold()" ontouchmove="cancelEditHold()" oncontextmenu="return false" onblur="saveTestResult(this)">${escapeHtml(e.displayVal)}</span> ${flagHtml}</td>`;
+                html += `<td style="font-size:0.75rem; color:#777;">${rowRef}</td></tr>`;
+            });
+            html += `</tbody></table></div>`;
+        });
+        return html;
+    }
+    const overviewSearch = document.getElementById('overview-search');
+    if (overviewSearch) overviewSearch.addEventListener('input', () => {
+        const box = document.getElementById('overview-tests');
+        if (box && currentProfile) box.innerHTML = overviewTestsHtml(currentProfile, overviewSearch.value);
+    });
+
     async function loadHealthProfile() {
         const el = document.getElementById('profile-summary');
         el.innerHTML = '<em style="color:#999;"><i class="fas fa-spinner fa-spin"></i> Loading...</em>';
@@ -1486,23 +1515,7 @@
                 p.conditions.forEach(c => { if (c.status === 'active' || c.status === 'investigating') html += `<li>${c.name}</li>`; });
                 html += '</ul>';
             }
-            if (p.test_results && p.test_results.length) {
-                const sortedGroups = LabUtils.groupTestResults(p.test_results, 'recent');
-                html += '<strong style="color:#1565C0;">Test Results:</strong>';
-                sortedGroups.forEach(group => {
-                    html += `<div class="pwa-test-group">`;
-                    html += `<div style="font-weight:600; color:#1565C0; display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:4px;"><i class="fas fa-vial"></i> <span>${escapeHtml(group.displayName)}</span> <span style="color:#666; font-weight:400;">${escapeHtml(group.meta)}</span> ${group.spark}</div>`;
-                    html += `<table><thead><tr><th>Date</th><th>Value</th><th>Ref</th></tr></thead><tbody>`;
-                    group.entries.forEach(e => {
-                        const flagHtml = e.flag ? `<span style="font-size:0.7rem; color:${e.flag === 'H' ? '#c62828' : '#1565c0'}; font-weight:600; margin-left:4px;">${e.flag}</span>` : '<span style="font-size:0.7rem; color:#999; margin-left:4px;">—</span>';
-                        const rowRef = escapeHtml(formatRefRange(e.item.reference_range || group.ref || ''));
-                        html += `<tr><td style="white-space:nowrap; color:#555;"><span class="pwa-tt-editable" contenteditable="false" data-idx="${e.idx}" data-field="date" ontouchstart="startEditHold(this, event)" ontouchend="cancelEditHold()" ontouchmove="cancelEditHold()" oncontextmenu="return false" onblur="saveTestResult(this)">${escapeHtml(e.item.date || '')}</span></td>`;
-                        html += `<td style="font-weight:500;"><span class="pwa-tt-editable" contenteditable="false" data-idx="${e.idx}" data-field="value" data-unit="${group.unit.replace(/"/g, '&quot;')}" ontouchstart="startEditHold(this, event)" ontouchend="cancelEditHold()" ontouchmove="cancelEditHold()" oncontextmenu="return false" onblur="saveTestResult(this)">${escapeHtml(e.displayVal)}</span> ${flagHtml}</td>`;
-                        html += `<td style="font-size:0.75rem; color:#777;">${rowRef}</td></tr>`;
-                    });
-                    html += `</tbody></table></div>`;
-                });
-            }
+            html += `<div id="overview-tests">${overviewTestsHtml(p, '')}</div>`;
             if (p.action_plans && p.action_plans.length) {
                 const active = p.action_plans.filter(a => a.status === 'active');
                 if (active.length) {
@@ -2248,6 +2261,26 @@
             title.textContent = key.replace(/_/g, ' ');
             section.appendChild(title);
 
+            // Long lab lists need a fast select-all rather than ticking
+            // forty rows one at a time.
+            if (key === 'test_results' && Array.isArray(val) && val.length) {
+                const selBar = document.createElement('div');
+                selBar.style.cssText = 'display:flex; gap:8px; margin-bottom:8px;';
+                [['Check all', true], ['Uncheck all', false]].forEach(([label, on]) => {
+                    const b = document.createElement('button');
+                    b.type = 'button';
+                    b.className = 'btn-secondary';
+                    b.style.cssText = 'padding:3px 10px; font-size:0.75rem;';
+                    b.textContent = label;
+                    b.addEventListener('click', () => {
+                        document.querySelectorAll('#review-content input[type="checkbox"][data-category="test_results"]')
+                            .forEach(cb => { cb.checked = on; });
+                    });
+                    selBar.appendChild(b);
+                });
+                section.appendChild(selBar);
+            }
+
             if (Array.isArray(val)) {
                 const list = document.createElement('div');
                 let items = val;
@@ -2847,7 +2880,7 @@
                 section.appendChild(sortSel);
 
                 const sortedGroups = LabUtils.groupTestResults(items, sortSel.value,
-                    item => !filter || JSON.stringify(item).toLowerCase().includes(filter.toLowerCase()));
+                    item => !filter || String(item.test_name || '').toLowerCase().includes(filter.toLowerCase()));
                 sortedGroups.forEach(group => {
                     const wrap = document.createElement('div');
                     wrap.className = 'pwa-test-group';
