@@ -892,6 +892,11 @@
                     <button class="btn-secondary" id="undo-import-btn" type="button" style="padding:6px 12px; font-size:0.8rem;"><i class="fas fa-rotate-left"></i> Undo last import</button>
                 </div>
             </div>
+            <div class="card">
+                <h3><i class="fas fa-database"></i> Advanced Editor</h3>
+                <p style="font-size:0.85rem;color:#555;">Bulk view and edit every stored row, including uploaded documents.</p>
+                <button class="action" id="data-manager-btn" style="width:100%;"><i class="fas fa-edit"></i> Manage / Edit My Data</button>
+            </div>
             <details class="card" id="stored-docs-card">
                 <summary style="font-size:0.95rem;color:#E53935;font-weight:600;cursor:pointer;">
                     <i class="fas fa-archive"></i> Stored Documents <span id="stored-docs-count" style="color:#999;font-weight:400;"></span>
@@ -912,11 +917,6 @@
                 <p style="font-size:0.85rem;color:#555;margin-top:8px;">What was added, edited or deleted, and when.</p>
                 <div id="test-audit-list" style="margin-top:10px;"><em style="color:#999;">Expand to load.</em></div>
             </details>
-            <div class="card">
-                <h3><i class="fas fa-database"></i> Advanced Editor</h3>
-                <p style="font-size:0.85rem;color:#555;">Bulk view and edit every stored row, including uploaded documents.</p>
-                <button class="action" id="data-manager-btn" style="width:100%;"><i class="fas fa-edit"></i> Manage / Edit My Data</button>
-            </div>
             <details class="card" id="overview-card">
                 <summary style="font-size:0.95rem;color:#E53935;font-weight:600;cursor:pointer;">
                     <i class="fas fa-user"></i> Full overview
@@ -1133,7 +1133,7 @@
         const p = (password !== undefined) ? password : document.getElementById('login-password').value;
         const errEl = document.getElementById('login-error');
         const btn = document.getElementById('login-btn');
-        errEl.textContent = 'Logging in...';
+        errEl.textContent = '';
         errEl.style.color = '#333';
         if (btn) { btn.disabled = true; btn.textContent = 'Logging in...'; }
         if (typeof u !== 'string' || typeof p !== 'string') {
@@ -2192,6 +2192,12 @@
         modal.classList.remove('active');
         currentPending = null;
         currentMeta = {};
+        // A close without saving (X or Reject All) ends the review — the
+        // 'go review it' prompt must not linger after it.
+        const pstat = document.getElementById('profile-status');
+        if (pstat && /ready for review|Review the extracted data|Re-analysed\. Review the data/i.test(pstat.textContent)) {
+            pstat.textContent = '';
+        }
         if (reviewHistoryPushed && history.state && history.state.modal === 'review') {
             reviewHistoryPushed = false;
             history.back();
@@ -2582,6 +2588,8 @@
         if (!Object.keys(extracted).length) {
             // Everything was rejected: nothing to save, just drop the review.
             status.textContent = 'Nothing selected — review discarded.';
+            const pstat = document.getElementById('profile-status');
+            if (pstat) pstat.textContent = 'Nothing selected — review discarded.';
             currentReviewPending = null;
             currentReviewMeta = {};
             setTimeout(() => closeReviewModal(), 600);
@@ -2599,9 +2607,12 @@
             if (resp.ok && data.success !== false) {
                 const added = (data.added_count != null) ? data.added_count
                     : (data.actions || []).filter(a => String(a).startsWith('Added')).length;
-                status.textContent = added
+                const msg = added
                     ? `Saved — ${added} record${added === 1 ? '' : 's'} added.`
                     : 'Saved — no new records added.';
+                status.textContent = msg;
+                const pstat = document.getElementById('profile-status');
+                if (pstat) pstat.textContent = msg;
                 setTimeout(() => { closeReviewModal(); loadHealthProfile(); }, 600);
                 currentReviewPending = null;
                 currentReviewMeta = {};
