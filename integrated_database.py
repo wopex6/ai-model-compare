@@ -389,10 +389,10 @@ class IntegratedDatabase:
         conn.close()
     
     def create_default_user(self):
-        """Create the default user 'Wai Tse' with password './/.'"""
+        """Create the default user 'Wai Tse' when DEFAULT_USER_PASSWORD is set."""
         conn = self.get_connection()
         cursor = conn.cursor()
-        
+
         # Check if user already exists and ensure default user is an administrator
         cursor.execute('SELECT id, user_role FROM users WHERE username = ?', ('Wai Tse',))
         row = cursor.fetchone()
@@ -402,9 +402,13 @@ class IntegratedDatabase:
                 conn.commit()
             conn.close()
             return
-        
-        # Create user
-        password_hash = bcrypt.hashpw('.//'.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+        # Create user — the seed password must come from the environment
+        seed_password = os.environ.get('DEFAULT_USER_PASSWORD')
+        if not seed_password:
+            conn.close()
+            return
+        password_hash = bcrypt.hashpw(seed_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
         cursor.execute('''
             INSERT INTO users (username, email, password_hash, user_role)
             VALUES (?, ?, ?, ?)

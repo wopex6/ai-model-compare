@@ -45,6 +45,9 @@ companion_notes/
 # removed without rewriting history.
 health_uploaded_documents/
 
+# OCR extraction artefacts from real medical reports (were once committed)
+5060_*
+
 # Stray artefact from a Windows `> nul` redirect (nul is a reserved device name)
 nul
 

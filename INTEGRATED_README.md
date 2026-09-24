@@ -102,7 +102,7 @@ The system comes pre-configured with a test user:
 
 ### Getting Started
 1. **Access the Multi-User Interface**: Navigate to `http://localhost:5000/multi-user`
-2. **Login**: Use "Wai Tse" / ".//." or create a new account
+2. **Login**: Use "Wai Tse" / "<password>" or create a new account
 3. **Explore Features**: Navigate through the different tabs
 
 ### Main Features

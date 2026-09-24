@@ -9,7 +9,7 @@ Your AI chatbot system has been **fully integrated** with multi-user capabilitie
 - ✅ **Personalized responses** based on user profiles and psychology traits
 - ✅ **Persistent conversations** that survive browser restarts
 - ✅ **Modern web interface** with beautiful UI
-- ✅ **Pre-configured user "Wai Tse"** with password ".//."
+- ✅ **Pre-configured user "Wai Tse"** with password "<password>"
 
 ## 🏃‍♂️ Quick Start (3 Steps)
 
