@@ -13,6 +13,10 @@
 
     const KEY = 'drHealth.emergencyCard.v1';
     const PAIR_KEY = 'drHealth.emergencyPair.v1';
+    // Fields kept on this phone only — never sent to the server. Stored under
+    // a separate key so a server refresh can neither read nor wipe them.
+    const LOCAL_KEY = 'drHealth.emergencyLocal.v1';
+    const LOCAL_FIELDS = ['full_name', 'address', 'phone', 'medicare'];
 
     function esc(s) {
         return (s == null ? '' : String(s))
@@ -48,6 +52,38 @@
         stamped.cached_at = new Date().toISOString();
         try { localStorage.setItem(KEY, JSON.stringify(stamped)); } catch (e) {}
         return stamped;
+    }
+
+    function loadLocal() {
+        try { return JSON.parse(localStorage.getItem(LOCAL_KEY) || 'null') || {}; }
+        catch (e) { return {}; }
+    }
+
+    function saveLocal(fields) {
+        const clean = {};
+        for (let i = 0; i < LOCAL_FIELDS.length; i++) {
+            const v = String((fields && fields[LOCAL_FIELDS[i]]) || '').trim();
+            if (v) clean[LOCAL_FIELDS[i]] = v;
+        }
+        try {
+            if (Object.keys(clean).length) localStorage.setItem(LOCAL_KEY, JSON.stringify(clean));
+            else localStorage.removeItem(LOCAL_KEY);
+        } catch (e) {}
+        return clean;
+    }
+
+    // Overlay phone-only fields onto whatever card is being shown. Legal name
+    // replaces the display name on the card when one is stored.
+    function mergeLocal(card) {
+        const v = {};
+        const keys = Object.keys(card || {});
+        for (let i = 0; i < keys.length; i++) v[keys[i]] = card[keys[i]];
+        const l = loadLocal();
+        for (let i = 0; i < LOCAL_FIELDS.length; i++) {
+            if (l[LOCAL_FIELDS[i]]) v[LOCAL_FIELDS[i]] = l[LOCAL_FIELDS[i]];
+        }
+        if (l.full_name) v.name = l.full_name;
+        return v;
     }
 
     function pairToken() {
@@ -111,14 +147,14 @@
     }
 
     function hasData(card) {
-        const v = card || {};
+        const v = mergeLocal(card);
         return !!(v.name || v.date_of_birth || v.age || v.blood || v.weight ||
             v.gender || v.language || v.advance_care || v.anaphylaxis || v.pregnancy ||
             listOf(v.conditions).length || listOf(v.medications).length ||
             listOf(v.allergies).length || listOf(v.implants).length ||
             listOf(v.anticoagulants).length ||
             v.history || v.doctors || v.gp_name || v.gp_phone ||
-            v.ec_name || v.ec_phone);
+            v.ec_name || v.ec_phone || v.address || v.phone || v.medicare);
     }
 
     function section(title, text, extraClass) {
@@ -177,7 +213,7 @@
 
     function html(card, opts) {
         const o = opts || {};
-        const v = card || {};
+        const v = mergeLocal(card);
         let out = '';
         if (o.sourceNote === false) {
             /* caller supplies its own */
@@ -214,6 +250,9 @@
         out += phoneBlock('Emergency contact', v.ec_name, v.ec_rel, v.ec_phone);
         out += section('Other doctors', v.doctors);
         out += section('Other medical history', v.history);
+        out += phoneBlock('Phone', '', '', v.phone);
+        out += section('Address', v.address);
+        out += section('Medicare', v.medicare);
         out += section('Suburb / area', v.location);
         return out;
     }
@@ -226,6 +265,11 @@
     root.EmergencyCard = {
         KEY: KEY,
         PAIR_KEY: PAIR_KEY,
+        LOCAL_KEY: LOCAL_KEY,
+        LOCAL_FIELDS: LOCAL_FIELDS,
+        loadLocal: loadLocal,
+        saveLocal: saveLocal,
+        mergeLocal: mergeLocal,
         load: load,
         save: save,
         pairToken: pairToken,

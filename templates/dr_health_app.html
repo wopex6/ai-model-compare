@@ -318,6 +318,23 @@
         border-radius: 0 8px 8px 0;
     }
     .emergency-empty { color: #999; font-style: italic; }
+    .emergency-local-edit {
+        margin-top: 14px; border-top: 1px dashed #e0e0e0; padding-top: 10px;
+    }
+    .emergency-local-edit summary {
+        cursor: pointer; color: #c62828; font-weight: 600; font-size: 0.9rem;
+    }
+    .emergency-local-edit label {
+        display: block; font-size: 0.8rem; color: #666; margin-top: 8px;
+    }
+    .emergency-local-edit input {
+        display: block; width: 100%; margin-top: 2px; padding: 8px 10px;
+        border: 1px solid #ddd; border-radius: 8px; font-size: 0.95rem;
+    }
+    .emergency-local-edit .emergency-local-save {
+        margin-top: 10px; width: 100%; padding: 10px; border: none; border-radius: 10px;
+        background: #c62828; color: #fff; font-size: 0.95rem; font-weight: 700;
+    }
     .emergency-cache-note {
         background: #fff3cd; border: 1px solid #f0ad4e; color: #856404;
         padding: 10px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px;
@@ -3558,7 +3575,8 @@
         return m.label || [m.name, m.dose || m.dosage, m.frequency].filter(Boolean).join(' ');
     }
     function emergencySummaryHtml(card) {
-        const v = card || {};
+        const v = (typeof EmergencyCard !== 'undefined' && EmergencyCard.mergeLocal)
+            ? EmergencyCard.mergeLocal(card) : (card || {});
         const listOf = (x) => Array.isArray(x) ? x.join(', ') : (x || '');
         if (!emergencyCardHasData(v)) return '';
         const meds = (v.medications || []).map(medLabel).filter(Boolean).join(', ');
@@ -3784,6 +3802,36 @@
         if (showPair && pairCode) {
             showPair.addEventListener('click', function () {
                 pairCode.hidden = !pairCode.hidden;
+            });
+        }
+        // Private details live only in this phone's storage — never uploaded.
+        // The home-screen icon keeps its own copy on iOS, so it offers the
+        // same editor on its own page.
+        if (EmergencyCard.LOCAL_FIELDS && EmergencyCard.saveLocal) {
+            const labels = {
+                full_name: 'Full name', address: 'Address',
+                phone: 'Phone', medicare: 'Medicare number'
+            };
+            const local = EmergencyCard.loadLocal();
+            const wrap = document.createElement('details');
+            wrap.className = 'emergency-local-edit';
+            let inner = '<summary>Private details — this phone only</summary>' +
+                '<p class="emergency-cache-note">Stored only on this phone and never uploaded. ' +
+                'Lost if this phone’s storage is cleared.</p>';
+            for (const f of EmergencyCard.LOCAL_FIELDS) {
+                inner += '<label>' + labels[f] +
+                    '<input type="text" data-lf="' + f + '" value="' + escCard(local[f] || '') + '"></label>';
+            }
+            inner += '<button type="button" class="emergency-local-save">Save on this phone</button>';
+            wrap.innerHTML = inner;
+            view.appendChild(wrap);
+            wrap.querySelector('.emergency-local-save').addEventListener('click', function () {
+                const fields = {};
+                wrap.querySelectorAll('input[data-lf]').forEach(function (inp) {
+                    fields[inp.getAttribute('data-lf')] = inp.value;
+                });
+                EmergencyCard.saveLocal(fields);
+                renderEmergency(loadEmergencyCache());
             });
         }
     }
