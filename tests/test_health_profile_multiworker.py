@@ -18,6 +18,7 @@ sys.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parent.par
 from ai_compare.medical_advisor_health_context import (  # noqa: E402
     HealthContextManager,
     HealthProfile,
+    merge_profiles,
 )
 
 
@@ -79,6 +80,41 @@ def run():
 
     refreshed.file_path.unlink(missing_ok=True)
     HealthContextManager._profiles.pop(user_id, None)
+
+    # Rapid deletes race across workers: each request passes the staleness
+    # check, then the loser's save() merges its stale copy against the file.
+    # The old union merge put every deleted row straight back — the PWA
+    # symptom was rows reappearing after deleting them all.
+    user_id2 = f'multiworker_del_{uuid.uuid4().hex[:8]}'
+    wa = HealthProfile(user_id2)
+    wa.data['test_results'] = [
+        {'test_name': 'eAGh', 'value': '1', 'date': '2026-01-01'},
+        {'test_name': 'eAGh', 'value': '2', 'date': '2026-01-02'},
+    ]
+    wa.save()
+    wb = HealthProfile(user_id2)  # second worker, same v0 snapshot
+    wb.data['test_results'].pop(0)
+    wb.save()                      # disk now holds only the 2026-01-02 row
+    wa.data['test_results'].pop(1)  # A deletes the other row from stale v0
+    wa.save()                      # merge must keep BOTH deletions
+    on_disk = json.loads(wa.file_path.read_text(encoding='utf-8'))
+    results.append(check('racing deletes do not resurrect rows',
+                         len(on_disk['test_results']) == 0,
+                         str(on_disk['test_results'])))
+    wa.file_path.unlink(missing_ok=True)
+    HealthContextManager._profiles.pop(user_id2, None)
+
+    base_l = [{'test_name': 'A', 'date': '1'}, {'test_name': 'B', 'date': '1'}]
+    m = merge_profiles({'l': base_l},
+                       {'l': base_l[:1]},   # we deleted B
+                       {'l': base_l[1:]})   # remote deleted A
+    results.append(check('merge keeps both sides\' deletions',
+                         m['l'] == [], str(m['l'])))
+    m = merge_profiles({'l': []},
+                       {'l': [{'test_name': 'X'}]},
+                       {'l': [{'test_name': 'Y'}]})
+    results.append(check('merge still unions both sides\' additions',
+                         len(m['l']) == 2, str(m['l'])))
 
     passed = sum(1 for r in results if r)
     print(f'\nTOTAL {len(results)}   PASSED {passed}   FAILED {len(results) - passed}')

@@ -5,6 +5,7 @@ Each user has a persistent health profile that accumulates over conversations.
 """
 import copy
 import json
+from collections import Counter
 from decimal import Decimal
 import os
 import re
@@ -84,8 +85,11 @@ def _merge_value(base, ours, remote):
 
     - Only one side changed -> take that side.
     - Both changed a dict -> merge field by field.
-    - Both changed a list -> union by _item_key; same-key conflicts go to the
-      item with the later timestamp (tie -> ours, the request in flight).
+    - Both changed a list -> apply both sides' deltas to base per _item_key,
+      so additions from either side are kept AND deletions by either side
+      stick. A plain union silently resurrected deleted rows whenever two
+      workers raced. Same-key content conflicts go to the item with the
+      later timestamp (tie -> ours, the request in flight).
     - Both changed a scalar -> ours wins: it is the user's most recent action.
     """
     if ours == remote:
@@ -113,16 +117,33 @@ def _merge_value(base, ours, remote):
         return out
 
     if isinstance(ours, list) and isinstance(remote, list):
-        result = list(remote)
-        index = {_item_key(i): pos for pos, i in enumerate(result)}
-        for item in ours:
+        # Delta merge by key count: each side's add/remove counts are applied
+        # to base. Deleting a row on either side must reduce the result —
+        # union semantics (remote + ours' extras) brought deleted rows back.
+        base_n = Counter(_item_key(i) for i in base) if isinstance(base, list) else Counter()
+        ours_by_key = {}
+        for i in ours:
+            ours_by_key.setdefault(_item_key(i), []).append(i)
+        remote_by_key = {}
+        for i in remote:
+            remote_by_key.setdefault(_item_key(i), []).append(i)
+
+        result = []
+        seen = set()
+        for item in list(remote) + list(ours):
             key = _item_key(item)
-            pos = index.get(key)
-            if pos is None:
-                index[key] = len(result)
-                result.append(item)
-            elif _item_ts(item) >= _item_ts(result[pos]):
-                result[pos] = item
+            if key in seen:
+                continue
+            seen.add(key)
+            keep = (len(ours_by_key.get(key, ()))
+                    + len(remote_by_key.get(key, ()))
+                    - base_n.get(key, 0))
+            if keep <= 0:
+                continue
+            pool = list(ours_by_key.get(key, ()))
+            pool += [i for i in remote_by_key.get(key, ()) if i not in pool]
+            pool.sort(key=_item_ts, reverse=True)
+            result.extend(pool[:keep])
         return result
 
     return ours
