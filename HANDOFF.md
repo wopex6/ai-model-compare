@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-23 18:04 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-24 11:57 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-unit carry-over fix (Hct g/L guard + row-local OCR prompts + */^ unit normalisation) + Record(s) marker deployed, SW v107
+bulk doc delete + import undo + audit trail + ref-range unification deployed, SW v110
 
 ## Git
 
@@ -14,14 +14,14 @@ unit carry-over fix (Hct g/L guard + row-local OCR prompts + */^ unit normalisat
 Recent commits:
 
 ```
+793c969 records: bulk doc delete, import undo, added-count, drop stale status
+7c42aa0 test data: append-only audit log of changes, 30-day window (configurable)
+5c47839 lab results: unify reference-range display; revert Record(s) marker
+aba948e handoff: snapshot after unit carry-over fix deploy
 d7edb27 lab results: stop unit carry-over between rows; Record(s) version marker
 b4cb22d handoff: snapshot after unit-null fix deploy
 26f1f76 lab results: treat unit:null as absent, not an explicit blank unit
 1e53295 handoff: snapshot after false-L-flag fix deploy
-2e127d6 lab results: fix false Low flags from '/L' units; per-row ref in overview
-63e4ff8 handoff: snapshot after gallery/UTC/collapsible-docs deploy
-1c7e3f8 records: gallery picker, UTC timestamps, collapsible stored documents
-072358a handoff: snapshot after wrapped-table ref/unit recovery deploy
 ```
 
 ## Production (PythonAnywhere)
@@ -73,7 +73,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-409 passed, 1 warning in 41.09s
+409 passed, 1 warning in 43.38s
 [AutoDoc] Monitoring stopped
 ```
 
