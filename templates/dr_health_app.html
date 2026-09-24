@@ -1488,7 +1488,9 @@
             html += `<table><thead><tr><th>Date</th><th>Value</th><th>Ref</th></tr></thead><tbody>`;
             group.entries.forEach(e => {
                 const flagHtml = e.flag ? `<span style="font-size:0.7rem; color:${e.flag === 'H' ? '#c62828' : '#1565c0'}; font-weight:600; margin-left:4px;">${e.flag}</span>` : '<span style="font-size:0.7rem; color:#999; margin-left:4px;">—</span>';
-                const rowRef = escapeHtml(formatRefRange(e.item.reference_range || group.ref || ''));
+                const rowRef = escapeHtml(e.displayRef !== undefined
+                    ? e.displayRef
+                    : formatRefRange(e.item.reference_range || group.ref || ''));
                 html += `<tr><td style="white-space:nowrap; color:#555;"><span class="pwa-tt-editable" contenteditable="false" data-idx="${e.idx}" data-field="date" ontouchstart="startEditHold(this, event)" ontouchend="cancelEditHold()" ontouchmove="cancelEditHold()" oncontextmenu="return false" onblur="saveTestResult(this)">${escapeHtml(e.item.date || '')}</span></td>`;
                 html += `<td style="font-weight:500;"><span class="pwa-tt-editable" contenteditable="false" data-idx="${e.idx}" data-field="value" data-unit="${group.unit.replace(/"/g, '&quot;')}" ontouchstart="startEditHold(this, event)" ontouchend="cancelEditHold()" ontouchmove="cancelEditHold()" oncontextmenu="return false" onblur="saveTestResult(this)">${escapeHtml(e.displayVal)}</span> ${flagHtml}</td>`;
                 html += `<td style="font-size:0.75rem; color:#777;">${rowRef}</td></tr>`;
@@ -1506,8 +1508,11 @@
     async function loadHealthProfile() {
         const el = document.getElementById('profile-summary');
         el.innerHTML = '<em style="color:#999;"><i class="fas fa-spinner fa-spin"></i> Loading...</em>';
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 25000);
         try {
-            const resp = await AuthHelper.authenticatedFetch('/api/health-profile');
+            const resp = await AuthHelper.authenticatedFetch('/api/health-profile', { signal: ctrl.signal });
+            clearTimeout(timer);
             if (!resp.ok) { el.innerHTML = '<em style="color:#999;">No profile yet. Chat or add info to start building yours.</em>'; return; }
             const d = await resp.json();
             if (!d.success || !d.profile) { el.innerHTML = '<em style="color:#999;">No profile yet.</em>'; return; }
@@ -1566,7 +1571,11 @@
             });
             el.innerHTML = html || '<em style="color:#999;">No data yet. Chat or add info to build your profile.</em>';
         } catch (e) {
-            el.innerHTML = '<em style="color:#999;">Sign in to see your health profile.</em>';
+            clearTimeout(timer);
+            el.innerHTML = '<em style="color:#999;">' +
+                (e && e.name === 'AbortError'
+                    ? 'The server is taking too long — it may be restarting. Pull to refresh in a moment.'
+                    : 'Sign in to see your health profile.') + '</em>';
         }
     }
 
@@ -1576,8 +1585,11 @@
         const el = document.getElementById('stored-documents-list');
         if (!el) return;
         el.innerHTML = '<em style="color:#999;"><i class="fas fa-spinner fa-spin"></i> Loading...</em>';
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 25000);
         try {
-            const resp = await AuthHelper.authenticatedFetch('/api/health-profile/documents');
+            const resp = await AuthHelper.authenticatedFetch('/api/health-profile/documents', { signal: ctrl.signal });
+            clearTimeout(timer);
             if (!resp.ok) { el.innerHTML = '<em style="color:#999;">Could not load stored documents.</em>'; return; }
             const data = await resp.json();
             const docs = (data.documents || []).slice();
@@ -1618,7 +1630,11 @@
             const selectAll = document.getElementById('docs-select-all');
             if (selectAll) selectAll.checked = false;
         } catch (e) {
-            el.innerHTML = '<em style="color:#999;">Could not load stored documents.</em>';
+            clearTimeout(timer);
+            el.innerHTML = '<em style="color:#999;">' +
+                (e && e.name === 'AbortError'
+                    ? 'The server is taking too long — it may be restarting. Try again in a moment.'
+                    : 'Could not load stored documents.') + '</em>';
         }
     }
 
@@ -2717,8 +2733,13 @@
         }
         const status = document.getElementById('dm-status');
         status.textContent = 'Loading...';
+        // A reload can queue requests for minutes — surface it instead of
+        // hanging on 'Loading...' forever.
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), 25000);
         try {
-            const resp = await AuthHelper.authenticatedFetch('/api/health-profile');
+            const resp = await AuthHelper.authenticatedFetch('/api/health-profile', { signal: ctrl.signal });
+            clearTimeout(timer);
             const data = await resp.json();
             if (!resp.ok || !data.profile) {
                 status.textContent = data.error || 'Failed to load profile.';
@@ -2733,7 +2754,10 @@
                 dmSearch.oninput = (e) => renderDataManager(dmCurrentProfile, e.target.value);
             }
         } catch (e) {
-            status.textContent = 'Network error.';
+            clearTimeout(timer);
+            status.textContent = (e && e.name === 'AbortError')
+                ? 'The server is taking too long — it may be restarting. Close and try again.'
+                : 'Could not load the data manager: ' + (e && e.message || e);
         }
     }
 

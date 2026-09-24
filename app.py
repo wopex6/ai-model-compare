@@ -8014,6 +8014,14 @@ def update_health_profile_item():
         if category == 'test_results':
             before = dict(items[index])
             items[index].update(updates)
+            # A user-edited blank is deliberate: mark it so the UI keeps it
+            # blank instead of substituting the group default back in. A
+            # real value clears the mark. Import paths never set these, so a
+            # blank that came from document analysis still inherits defaults.
+            for field, lock in (('reference_range', 'ref_locked'),
+                                ('unit', 'unit_locked')):
+                if field in updates:
+                    items[index][lock] = not str(updates.get(field) or '').strip()
             changes = [{'field': f, 'from': before.get(f, ''), 'to': updates.get(f)}
                        for f in updates
                        if str(before.get(f) or '').strip() != str(updates.get(f) or '').strip()]

@@ -95,5 +95,32 @@ if (refGroup[0].ref !== '10 - 45') {
     console.log(`FAIL  group ref ${JSON.stringify(refGroup[0].ref)} (want "10 - 45")`);
 }
 
+// Blank semantics: an unmarked blank unit/ref is absent import data and
+// inherits the group default; a user-locked blank stays blank.
+const unlocked = L.groupTestResults([
+    { test_name: 'Glucose', value: '5.4', unit: '', reference_range: '', date: '2026-09-09' },
+    { test_name: 'Glucose', value: '5.0', unit: 'mmol/L', reference_range: '3.6 - 6.0', date: '2026-03-01' },
+], 'recent');
+if (unlocked[0].entries[0].displayRef !== '3.6 - 6.0' || unlocked[0].unit !== 'mmol/L') {
+    failures++;
+    console.log(`FAIL  unlocked blank row: displayRef=${JSON.stringify(unlocked[0].entries[0].displayRef)} unit=${JSON.stringify(unlocked[0].unit)} (want '3.6 - 6.0'/'mmol/L')`);
+}
+const locked = L.groupTestResults([
+    { test_name: 'HbA1c', value: '42', unit: '', unit_locked: true, reference_range: '', ref_locked: true, date: '2026-09-09' },
+    { test_name: 'HbA1c', value: '40 mmol/mol', reference_range: '20 - 42', date: '2026-03-01' },
+], 'recent');
+if (locked[0].unit !== '' || locked[0].entries[0].displayRef !== '' || locked[0].entries[1].displayRef !== '20 - 42') {
+    failures++;
+    console.log(`FAIL  locked blank row: unit=${JSON.stringify(locked[0].unit)} refs=${JSON.stringify(locked[0].entries.map(e => e.displayRef))} (want ''/['','20 - 42'])`);
+}
+// An unlocked '' unit is absent data — embedded units still resolve.
+const blankUnit = L.groupTestResults([
+    { test_name: 'Sodium', value: '140 mmol/L', unit: '', reference_range: '135 - 145', date: '2026-09-09' },
+], 'recent');
+if (blankUnit[0].unit !== 'mmol/L' || blankUnit[0].entries[0].displayVal !== '140') {
+    failures++;
+    console.log(`FAIL  unlocked '' unit: unit=${JSON.stringify(blankUnit[0].unit)} displayVal=${JSON.stringify(blankUnit[0].entries[0].displayVal)} (want 'mmol/L'/'140')`);
+}
+
 console.log(failures ? `${failures} failure(s)` : 'all lab_results checks passed');
 process.exit(failures ? 1 : 0);

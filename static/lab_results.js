@@ -232,13 +232,14 @@
 
         Object.values(groups).forEach(g => {
             g.entries.sort((a, b) => parseMedicalDate(b.item.date, b.item.added_at) - parseMedicalDate(a.item.date, a.item.added_at));
-            // An explicitly stored unit — even a blank one — wins: 'no unit'
-            // is a deliberate choice (ratios like S CHOL/HDLC), and must not
-            // be overridden by a unit left over in an older row's value text.
-            // A null field is just absent data, not a choice, so it falls
-            // through to the embedded-unit fallback.
-            const explicitUnit = g.entries.map(e => e.item.unit).find(u => u !== undefined && u !== null);
-            g.unit = explicitUnit !== undefined ? String(explicitUnit).trim()
+            // Blank means two different things. unit_locked/ref_locked mark a
+            // deliberate user blank — it stays blank. An unmarked blank (or
+            // null) is just absent data from an import, so it falls back to
+            // the group's default instead of blanking it out.
+            const explicitUnit = g.entries.find(e =>
+                (e.item.unit !== undefined && e.item.unit !== null && String(e.item.unit).trim() !== '')
+                || e.item.unit_locked);
+            g.unit = explicitUnit ? String(explicitUnit.item.unit || '').trim()
                 : (g.entries.map(e => extractTestUnit(e.item.value)).find(u => u) || '');
             g.unit = normalizePowerOfTen(g.unit);
             g.ref = formatRefRange(g.entries.map(e => e.item.reference_range || '').find(r => r.trim()) || '');
@@ -253,7 +254,12 @@
                 const rowUnit = g.unit || extractTestUnit(e.item.value);
                 e.displayVal = stripTestUnit(e.item.value, rowUnit)
                     .replace(/^(?:H|L|High|Low)\s+/i, '').replace(/\s+(?:H|L|High|Low)$/i, '').trim();
-                e.flag = testFlag(e.item, g.unit, g.ref);
+                // Per-row reference: a deliberately blanked row keeps its
+                // blank; an import-blank row inherits the group default.
+                e.displayRef = e.item.ref_locked
+                    ? ''
+                    : (formatRefRange(e.item.reference_range || '') || g.ref);
+                e.flag = testFlag(e.item, g.unit, e.displayRef);
                 if (!e.flag) return latest;
                 const d = parseMedicalDate(e.item.date, e.item.added_at);
                 return d > latest ? d : latest;
