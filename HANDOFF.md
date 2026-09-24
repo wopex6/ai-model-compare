@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-24 19:27 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-24 20:13 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Fixed doc result message persistence across list re-renders (deployed, v118). Next: user wants to copy missing health sections from profile 23 (Wai Tse) to profile 21 (Wai T) — comparison done, awaiting their go-ahead.
+Copied missing health sections from profile 23 to profile 21 on production (conditions+9, meds+2, supps+5, symptoms+2, plans+4, insights+166 filtered of OCR dumps, diet+lifestyle dicts, location). App reloaded, verified. Open question: near-duplicate conditions now exist (Haemochromatosis vs carrier, Dyslipidaemia vs Hyperlipidaemia). Possible improvement: filter raw OCR dumps out of conversation_insights at ingest.
 
 ## Git
 
@@ -14,6 +14,7 @@ Fixed doc result message persistence across list re-renders (deployed, v118). Ne
 Recent commits:
 
 ```
+dee3d68 handoff: snapshot after doc-outcome persistence deploy
 3568290 Persist per-document review outcome across list re-renders
 ce6776d handoff: snapshot after scroll-box deploy
 aa93e11 records: scrollable list boxes, per-file review outcome, Full Overview
@@ -21,12 +22,11 @@ fa55cbc handoff: snapshot after records polish deploy
 d52bc8c records: tidy status messages, auto-review flow, move editor card up
 394f716 handoff: snapshot after auto-review + rename pin deploy
 aa42ae9 records: auto-open review, drop retake/review/refresh buttons, pin renamed tests
-f45b436 handoff: snapshot after delete-resurrection merge fix
 ```
 
 ## Production (PythonAnywhere)
 
-Local and production match.
+**1 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
 
 ```
 ok       tests/test_ui_features.py
@@ -53,8 +53,10 @@ ok       web_enhancement_test_runner.py
 ok       webhook_deploy.py
 ok       wisdom_profiles/23.json
 ok       wisdom_profiles/23_hypotheses.json
-Everything on the server matches local.
+1 file(s) stale. Re-run with --push to upload.
 ```
+
+Reload often returns `409 slow_startup_error` on the first attempt — retry rather than debug it.
 
 ## Tests
 
@@ -71,7 +73,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-409 passed, 1 warning in 24.64s
+409 passed, 1 warning in 25.12s
 [AutoDoc] Monitoring stopped
 ```
 
