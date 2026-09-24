@@ -8012,8 +8012,16 @@ def update_health_profile_item():
         if index >= len(items):
             return jsonify({'error': 'Index out of range'}), 400
         if category == 'test_results':
+            if 'test_name' in updates and not str(updates.get('test_name') or '').strip():
+                return jsonify({'error': 'Test name cannot be blank.'}), 400
             before = dict(items[index])
             items[index].update(updates)
+            # A user rename is authoritative: pin it in the alias map or the
+            # load-time canonicalizer folds the shorter name straight back
+            # onto whatever the other rows in the series are still called.
+            if 'test_name' in updates:
+                profile.pin_test_name(items[index].get('test_name', ''),
+                                      before.get('test_name', ''))
             # A user-edited blank is deliberate: mark it so the UI keeps it
             # blank instead of substituting the group default back in. A
             # real value clears the mark. Import paths never set these, so a

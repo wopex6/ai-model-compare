@@ -2196,6 +2196,24 @@ class HealthProfile:
                 row["test_name"] = preferred
         return preferred
 
+    def pin_test_name(self, chosen_name: str, previous_name: str = ""):
+        """Pin a user-chosen test name so canonicalization keeps it.
+
+        The alias map folds abbreviations onto a preferred name, preferring the
+        longer stored form — so without an entry a user's rename ('eAGh' ->
+        'eAG') silently reverts on the next load the moment any row still
+        carries the old label. Recording the choice both ways keeps the rename
+        and files future imports of the old label under the chosen name.
+        """
+        chosen = str(chosen_name or '').strip()
+        if not chosen:
+            return
+        aliases = self.data.setdefault("test_name_aliases", {})
+        aliases[_canonical_test_key(chosen)] = chosen
+        prev = str(previous_name or '').strip()
+        if prev and _compact_key(prev) != _compact_key(chosen):
+            aliases[_canonical_test_key(prev)] = chosen
+
     def canonicalize_test_names(self) -> int:
         """Apply name canonicalization to every stored result. Returns rows renamed."""
         renamed = 0

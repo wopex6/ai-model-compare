@@ -551,6 +551,50 @@ def test_update_item_blank_ref_marks_user_lock():
         _cleanup(user_id)
 
 
+def test_rename_test_name_sticks_across_reload():
+    """Renaming a test (eAGh -> eAG) must survive the load-time canonicalizer,
+    which otherwise prefers the longer stored name and learns an alias that
+    flips the user's choice back. The pin also converges the rest of the
+    series onto the chosen name."""
+    import app as app_mod
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        profile.data['test_results'] = [
+            {'test_name': 'eAGh', 'value': '5.4', 'reference_range': '4 - 6',
+             'date': '2026-09-20'},
+            {'test_name': 'eAGh', 'value': '5.1', 'reference_range': '4 - 6',
+             'date': '2026-08-01'},
+        ]
+        profile.save()
+
+        app_mod.app.config['TESTING'] = True
+        client = app_mod.app.test_client()
+        with client.session_transaction() as sess:
+            sess['user_id'] = user_id
+            sess['username'] = 'safety-test'
+
+        resp = client.put('/api/health-profile/item', json={
+            'category': 'test_results', 'index': 0,
+            'updates': {'test_name': 'eAG'}
+        })
+        assert resp.status_code == 200
+
+        # A fresh load runs canonicalize_test_names() — the rename must hold,
+        # and the pinned alias pulls the rest of the series along.
+        rows = HealthProfile(user_id).data['test_results']
+        assert [r['test_name'] for r in rows] == ['eAG', 'eAG']
+
+        # A blank test name is rejected, not silently stored.
+        resp = client.put('/api/health-profile/item', json={
+            'category': 'test_results', 'index': 0,
+            'updates': {'test_name': '   '}
+        })
+        assert resp.status_code == 400
+    finally:
+        _cleanup(user_id)
+
+
 def test_post_item_carries_unit_and_provenance():
     """POST /item for a test result must not silently drop fields beyond the
     five add_test_result arguments — a hand-entered unit, the user_entered
