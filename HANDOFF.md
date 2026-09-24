@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-24 21:14 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-24 21:45 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Shipped phone-only emergency fields (full name/address/phone/Medicare in drHealth.emergencyLocal.v1, merged at render, editable in PWA modal + standalone icon page; deployed v119). OPEN for user: (a) retire vs erase - retired profiles 1/23 still exist as *_retired.json + docs dir on PA; (b) git history still contains the sensitive files - needs filter-repo+force-push; (c) Wai T password was public - should be changed.
+Shipped emergency-card suggestions: /emergency-card/suggest mines stored doc text for Medicare/insurance/phone/address/name candidates; phone-only editor grew insurer + Medicare expiry fields (deployed v120). Still open: erase-vs-retire decision for profiles 1/23, git-history purge, password change.
 
 ## Git
 
@@ -41,19 +41,19 @@ Shipped phone-only emergency fields (full name/address/phone/Medicare in drHealt
 Recent commits:
 
 ```
+36d068a emergency card: suggest private details from stored documents
+1d28b79 handoff: snapshot after phone-only emergency fields deploy
 bedae29 emergency card: phone-only private details
 69b5ca6 handoff: snapshot after profile retirement and sensitive-data removal
 1a8002d Remove leaked patient data and credentials from tracked files
 e8862ed handoff: snapshot after profile 23-to-21 data copy
 dee3d68 handoff: snapshot after doc-outcome persistence deploy
 3568290 Persist per-document review outcome across list re-renders
-ce6776d handoff: snapshot after scroll-box deploy
-aa93e11 records: scrollable list boxes, per-file review outcome, Full Overview
 ```
 
 ## Production (PythonAnywhere)
 
-Local and production match.
+**4 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
 
 ```
 ok       tests/test_review_flow.py
@@ -80,8 +80,10 @@ ok       web_enhancement_test_runner.py
 ok       webhook_deploy.py
 ok       wisdom_profiles/23.json
 ok       wisdom_profiles/23_hypotheses.json
-Everything on the server matches local.
+4 file(s) stale. Re-run with --push to upload.
 ```
+
+Reload often returns `409 slow_startup_error` on the first attempt — retry rather than debug it.
 
 ## Tests
 
@@ -98,7 +100,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-409 passed, 1 warning in 23.48s
+409 passed, 1 warning in 23.44s
 [AutoDoc] Monitoring stopped
 ```
 
