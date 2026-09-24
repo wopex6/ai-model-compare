@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-24 14:39 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-24 15:55 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Blank ref/unit: user-edit locks (ref_locked/unit_locked) vs absent import blanks; lock-aware backfill in dedupe/merge; displayRef fallback in groupTestResults; fetch timeouts on dm/profile/docs loads (fixes 'Loading...' hang). Browser-verified. SW v114.
+Fixed deleted rows reappearing: _merge_value list branch was union-only, so a racing save resurrected deleted rows. Now delta merge per _item_key — deletions by either side stick. Commit 26f2802 deployed.
 
 ## Git
 
@@ -14,14 +14,14 @@ Blank ref/unit: user-edit locks (ref_locked/unit_locked) vs absent import blanks
 Recent commits:
 
 ```
+26f2802 profile merge: honor deletions in 3-way list merge
+e89f6f7 handoff: snapshot after blank-lock/data-manager timeout deploy
 1d83900 data manager: deliberate blank ref/unit vs absent import blank; fetch timeouts
 8bbccc1 handoff: snapshot after data-manager reliability deploy
 efc6d8f data manager: reliable saves, inline sticky search, blank ref/unit, keep scroll
 9a96385 records: bulk bar on top, sticky dm search, readable history entries
 fb56c9b records: test-name search in overview + data manager; review check-all
 c85b41d handoff: snapshot after bulk-delete/undo/audit deploy
-793c969 records: bulk doc delete, import undo, added-count, drop stale status
-7c42aa0 test data: append-only audit log of changes, 30-day window (configurable)
 ```
 
 ## Production (PythonAnywhere)
@@ -73,7 +73,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-409 passed, 1 warning in 16.76s
+409 passed, 1 warning in 21.01s
 [AutoDoc] Monitoring stopped
 ```
 
