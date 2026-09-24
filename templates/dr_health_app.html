@@ -399,20 +399,29 @@
     .btn-danger { background: #c62828; color: #fff; }
     .btn-secondary { background: #e0e0e0; color: #333; }
     .dm-bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
         position: sticky;
         top: 0;
         background: #fff;
         z-index: 10;
         border-bottom: 1px solid #eee;
-        padding-bottom: 6px;
+        padding: 6px 0;
         margin-bottom: 6px;
     }
-    .dm-index {
-        display: none;
-        flex-wrap: wrap;
-        gap: 6px;
-        margin: 0;
-        padding: 6px 0 0 0;
+    /* display:contents lets the index links flow inline with the search box,
+       so the box fills whatever space is left after the last link. */
+    .dm-index { display: contents; }
+    .dm-index a { flex: none; }
+    #dm-search {
+        flex: 1;
+        min-width: 130px;
+        padding: 6px 8px;
+        border-radius: 6px;
+        border: 1px solid #ccc;
+        box-sizing: border-box;
     }
     .dm-index a {
         font-size: 0.75rem;
@@ -983,7 +992,7 @@
             <h2><i class="fas fa-database"></i> Manage My Data</h2>
             <button class="modal-close" id="dm-close" title="Close"><i class="fas fa-times"></i></button>
         </div>
-        <div class="modal-content"><div class="dm-bar"><div id="dm-index" class="dm-index"></div><input id="dm-search" type="text" placeholder="Search test names…" style="width:100%;padding:8px 10px;margin:6px 0 4px;border-radius:6px;border:1px solid #ccc;box-sizing:border-box;"></div><div id="dm-content"></div></div>
+        <div class="modal-content"><div class="dm-bar"><div id="dm-index" class="dm-index"></div><input id="dm-search" type="text" placeholder="Search test names…"></div><div id="dm-content"></div></div>
         <div class="modal-footer">
             <span class="dm-status" id="dm-status"></span>
         </div>
@@ -2750,8 +2759,10 @@
     }
 
     /* Edit the default reference range and unit for a whole test group.
-       Stored on the newest row — that is the row the group header derives
-       its default from, so older rows keep their own recorded range. */
+       A new value is stored on the newest row — that is the row the group
+       header derives its default from, so older rows keep their own
+       recorded range. A deliberate blank clears every row, or an older
+       row's value would resurrect it through the fallback. */
     function editGroupDefaults(head, group) {
         const latest = group.entries[0];
         const form = document.createElement('div');
@@ -2786,7 +2797,10 @@
         head.innerHTML = '';
         head.appendChild(form);
 
-        cancelBtn.addEventListener('click', () => openDataManagerModal());
+        cancelBtn.addEventListener('click', () => {
+            const dmSearch = document.getElementById('dm-search');
+            renderDataManager(dmCurrentProfile, dmSearch ? dmSearch.value : '');
+        });
         saveBtn.addEventListener('click', async () => {
             const status = document.getElementById('dm-status');
             const newName = nameIn.value.trim();
@@ -2798,15 +2812,16 @@
             if (status) status.textContent = 'Saving...';
             try {
                 // The name defines the group, so a rename applies to every
-                // row in it; range/unit are the group default and live on
-                // the newest row only.
+                // row in it. Range/unit are the group default: a real value
+                // lives on the newest row only, but a deliberate blank must
+                // clear every row or an older row's value resurrects it.
+                const newRef = refIn.value.trim();
+                const newUnit = unitIn.value.trim();
                 const jobs = group.entries.map(e => {
                     const updates = {};
                     if ((e.item.test_name || '') !== newName) updates.test_name = newName;
-                    if (e === latest) {
-                        updates.reference_range = refIn.value.trim();
-                        updates.unit = unitIn.value.trim();
-                    }
+                    if (e === latest || newRef === '') updates.reference_range = newRef;
+                    if (e === latest || newUnit === '') updates.unit = newUnit;
                     return Object.keys(updates).length ? { index: e.idx, updates } : null;
                 }).filter(Boolean);
                 let profile = null;
@@ -2823,7 +2838,14 @@
                     }
                     profile = data.profile;
                 }
-                if (profile) renderDataManager(profile); else openDataManagerModal();
+                if (profile) {
+                    dmCurrentProfile = profile;
+                    currentProfile = profile;
+                    const dmSearch = document.getElementById('dm-search');
+                    renderDataManager(profile, dmSearch ? dmSearch.value : '');
+                } else {
+                    openDataManagerModal();
+                }
                 if (status) status.textContent = 'Saved.';
             } catch (e) {
                 if (status) status.textContent = 'Network error.';
@@ -2860,6 +2882,10 @@
     function renderDataManager(profile, filter = '') {
         const content = document.getElementById('dm-content');
         const index = document.getElementById('dm-index');
+        // Re-rendering rebuilds the whole list; keep the user's scroll spot
+        // so a save doesn't bounce them back to the top.
+        const scrollBox = content ? content.parentElement : null;
+        const keepScroll = scrollBox ? scrollBox.scrollTop : 0;
         content.innerHTML = '';
         if (index) index.innerHTML = '';
         const categories = ['conditions', 'medications', 'supplements', 'symptoms', 'test_results', 'action_plans', 'conversation_insights'];
@@ -2976,7 +3002,7 @@
         });
 
         if (any) {
-            index.style.display = 'flex';
+            index.style.display = 'contents';
             index.innerHTML = categories
                 .filter(cat => (profile[cat] || []).length)
                 .map(cat => `<a class="dm-index-link" data-cat="${cat}">${cat.replace(/_/g,' ')}</a>`)
@@ -3018,6 +3044,7 @@
                 ? 'active' : HealthReview.endStatusFor(cat);
             btn.addEventListener('click', () => setDataItemStatus(cat, idx, status));
         });
+        if (scrollBox) scrollBox.scrollTop = keepScroll;
     }
 
     /* Retire or revive an item. Not a delete: keeping the row is what makes
@@ -3036,6 +3063,7 @@
                 ? 'Moved back to current.' : 'Moved to past — the record is kept.';
             if (data.profile) {
                 dmCurrentProfile = data.profile;
+                currentProfile = data.profile;
                 const dmSearch = document.getElementById('dm-search');
                 renderDataManager(dmCurrentProfile, dmSearch ? dmSearch.value : '');
             }
@@ -3075,8 +3103,10 @@
         // Always offer the standard fields for the category, even when the
         // row lacks the key — otherwise a missing reference_range/unit/notes
         // can never be typed in, and the edit silently can't be saved.
+        // 'history' is server-owned: editing it as text would overwrite the
+        // structured array with a '[object Object]' string.
         const fields = [...new Set([...(DM_PREFERRED[cat] || []), ...Object.keys(item)])]
-            .filter(k => !hidden.has(k));
+            .filter(k => !hidden.has(k) && k !== 'history');
         const inputs = {};
 
         fields.forEach(k => {
@@ -3097,7 +3127,7 @@
                 el.value = rawVal;
             }
             el.dataset.key = k;
-            if (cat === 'test_results' && k === 'reference_range') el.placeholder = 'Use Default';
+            if (cat === 'test_results' && k === 'reference_range') el.placeholder = 'e.g. 10 - 45 (blank allowed)';
             form.appendChild(label);
             form.appendChild(el);
             inputs[k] = el;
@@ -3126,27 +3156,9 @@
 
         saveBtn.addEventListener('click', async () => {
             const status = document.getElementById('dm-status');
-            if (cat === 'test_results') {
-                const testName = (inputs['test_name'] && inputs['test_name'].value || '').trim();
-                const testValue = (inputs['value'] && inputs['value'].value || '').trim();
-                const refEl = inputs['reference_range'];
-                let reference_range = (refEl && refEl.value || '').trim();
-                if (!reference_range && currentProfile && currentProfile.test_results) {
-                    const key = normalizeTestType(testName).toLowerCase();
-                    const existing = currentProfile.test_results.find(t => normalizeTestType(t.test_name).toLowerCase() === key && (t.reference_range || '').trim());
-                    if (existing) reference_range = existing.reference_range.trim();
-                }
-                if (!reference_range) {
-                    if (refEl) {
-                        refEl.placeholder = 'Reference range';
-                        refEl.focus();
-                    }
-                    status.textContent = 'Reference range is required when no default is available.';
-                    return;
-                }
-                if (refEl) refEl.value = reference_range;
-            }
-            const updates = { ...item };
+            // Send only the fields the form shows — echoing back the whole
+            // stored row would clobber server-owned fields like history.
+            const updates = {};
             Object.keys(inputs).forEach(k => updates[k] = inputs[k].value);
             status.textContent = 'Saving...';
             const isNew = idx === -1;
@@ -3160,7 +3172,12 @@
                 });
                 const data = await resp.json();
                 if (resp.ok && data.success !== false) {
-                    renderDataManager(data.profile);
+                    if (data.profile) {
+                        dmCurrentProfile = data.profile;
+                        currentProfile = data.profile;
+                    }
+                    const dmSearch = document.getElementById('dm-search');
+                    renderDataManager(dmCurrentProfile, dmSearch ? dmSearch.value : '');
                     status.textContent = 'Saved.';
                 } else {
                     status.textContent = data.error || 'Save failed.';
@@ -3168,7 +3185,10 @@
             } catch (e) { status.textContent = 'Network error.'; }
         });
 
-        cancelBtn.addEventListener('click', () => openDataManagerModal());
+        cancelBtn.addEventListener('click', () => {
+            const dmSearch = document.getElementById('dm-search');
+            renderDataManager(dmCurrentProfile, dmSearch ? dmSearch.value : '');
+        });
     }
 
     async function deleteDataItem(div) {
@@ -3184,7 +3204,12 @@
             });
             const data = await resp.json();
             if (resp.ok && data.success !== false) {
-                openDataManagerModal();
+                if (data.profile) {
+                    dmCurrentProfile = data.profile;
+                    currentProfile = data.profile;
+                }
+                const dmSearch = document.getElementById('dm-search');
+                renderDataManager(dmCurrentProfile, dmSearch ? dmSearch.value : '');
                 status.textContent = 'Deleted.';
             } else {
                 status.textContent = data.error || 'Delete failed.';
