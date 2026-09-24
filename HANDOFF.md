@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-24 18:44 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-24 19:27 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Scrollable 45vh list boxes for Stored Documents/Test Data Changes/Full Overview; review outcome lands under the source file row; heading capitalised. SW v117.
+Fixed doc result message persistence across list re-renders (deployed, v118). Next: user wants to copy missing health sections from profile 23 (Wai Tse) to profile 21 (Wai T) — comparison done, awaiting their go-ahead.
 
 ## Git
 
@@ -14,14 +14,14 @@ Scrollable 45vh list boxes for Stored Documents/Test Data Changes/Full Overview;
 Recent commits:
 
 ```
+3568290 Persist per-document review outcome across list re-renders
+ce6776d handoff: snapshot after scroll-box deploy
 aa93e11 records: scrollable list boxes, per-file review outcome, Full Overview
 fa55cbc handoff: snapshot after records polish deploy
 d52bc8c records: tidy status messages, auto-review flow, move editor card up
 394f716 handoff: snapshot after auto-review + rename pin deploy
 aa42ae9 records: auto-open review, drop retake/review/refresh buttons, pin renamed tests
 f45b436 handoff: snapshot after delete-resurrection merge fix
-26f2802 profile merge: honor deletions in 3-way list merge
-e89f6f7 handoff: snapshot after blank-lock/data-manager timeout deploy
 ```
 
 ## Production (PythonAnywhere)
@@ -71,7 +71,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-409 passed, 1 warning in 26.10s
+409 passed, 1 warning in 24.64s
 [AutoDoc] Monitoring stopped
 ```
 
