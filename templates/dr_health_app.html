@@ -3639,6 +3639,20 @@
             }
             const data = await resp.json();
             if (data.success && data.card) {
+                // A DOB stored in the server profile predates the phone-only
+                // store — copy it down once, then clear it server-side.
+                if (data.card.date_of_birth && typeof EmergencyCard !== 'undefined' && EmergencyCard.saveLocal) {
+                    const l = EmergencyCard.loadLocal();
+                    if (!l.date_of_birth) {
+                        l.date_of_birth = data.card.date_of_birth;
+                        EmergencyCard.saveLocal(l);
+                    }
+                    AuthHelper.authenticatedFetch('/api/health-profile', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ personal: { date_of_birth: '' } })
+                    }).catch(function () {});
+                }
                 saveEmergencyCache(data.card);
                 if (data.pair_code) {
                     lastPairCode = data.pair_code;
@@ -3817,7 +3831,8 @@
         // same editor on its own page.
         if (EmergencyCard.LOCAL_FIELDS && EmergencyCard.saveLocal) {
             const labels = {
-                full_name: 'Full name', address: 'Address',
+                full_name: 'Full name', date_of_birth: 'Date of birth',
+                address: 'Address',
                 phone: 'Phone', medicare: 'Medicare number',
                 medicare_expiry: 'Medicare valid to (MM/YYYY)',
                 insurer: 'Private health insurer',

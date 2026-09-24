@@ -16,8 +16,31 @@
     // Fields kept on this phone only — never sent to the server. Stored under
     // a separate key so a server refresh can neither read nor wipe them.
     const LOCAL_KEY = 'drHealth.emergencyLocal.v1';
-    const LOCAL_FIELDS = ['full_name', 'address', 'phone', 'medicare',
-        'medicare_expiry', 'insurer', 'insurance_member'];
+    const LOCAL_FIELDS = ['full_name', 'date_of_birth', 'address', 'phone',
+        'medicare', 'medicare_expiry', 'insurer', 'insurance_member'];
+
+    // Accepts 1962-06-12, 12/06/1962 or 12 Jun 1962; returns '' when the
+    // string cannot be read as a plausible date of birth.
+    function ageFromDob(dob) {
+        const s = String(dob || '').trim();
+        if (!s) return '';
+        let y = 0, mo = 0, d = 0, m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+        if (m) { y = +m[1]; mo = +m[2]; d = +m[3]; }
+        else if ((m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/))) {
+            d = +m[1]; mo = +m[2]; y = +m[3];
+            if (y < 100) y += (y > 30 ? 1900 : 2000);
+        } else if ((m = s.match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/))) {
+            const months = ['jan', 'feb', 'mar', 'apr', 'may', 'jun',
+                            'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+            const mi = months.indexOf(m[2].slice(0, 3).toLowerCase());
+            if (mi < 0) return '';
+            d = +m[1]; mo = mi + 1; y = +m[3];
+        } else return '';
+        const now = new Date();
+        let age = now.getFullYear() - y;
+        if (now.getMonth() < mo - 1 || (now.getMonth() === mo - 1 && now.getDate() < d)) age--;
+        return (age >= 0 && age < 130) ? String(age) : '';
+    }
 
     function esc(s) {
         return (s == null ? '' : String(s))
@@ -84,6 +107,9 @@
             if (l[LOCAL_FIELDS[i]]) v[LOCAL_FIELDS[i]] = l[LOCAL_FIELDS[i]];
         }
         if (l.full_name) v.name = l.full_name;
+        // A stored date of birth wins over the optional typed-in age.
+        const derived = ageFromDob(v.date_of_birth);
+        if (derived) v.age = derived;
         return v;
     }
 

@@ -158,9 +158,8 @@
             fields: [
                 { heading: 'Who you are' },
                 { key: 'name', label: 'Full name', type: 'text' },
-                { key: 'date_of_birth', label: 'Date of birth', type: 'dob',
-                  hint: 'Type it (15/3/1954 or 15 Mar 1954) or open the calendar and pick year, month and day separately.' },
-                { key: 'age', label: 'Age (if no date of birth)', type: 'text' },
+                { key: 'age', label: 'Age', type: 'text',
+                  hint: 'Optional — the emergency card shows the age worked out from the date of birth kept in Private details on this phone.' },
                 { key: 'gender', label: 'Sex / gender', type: 'text' },
                 { key: 'weight', label: 'Weight', type: 'text', hint: 'Include the unit, e.g. 72 kg. Used for drug doses on scene.' },
                 { key: 'height', label: 'Height', type: 'text' },
@@ -1717,6 +1716,12 @@
                 if (!brief) {
                     el.innerHTML = '<div class="hub-note error">Could not build a visit brief.</div>';
                     return;
+                }
+                // The date of birth is kept phone-only — show the local copy
+                // on this brief when the server no longer holds one.
+                if (!brief.date_of_birth && window.EmergencyCard && EmergencyCard.loadLocal) {
+                    const localDob = EmergencyCard.loadLocal().date_of_birth;
+                    if (localDob) brief.date_of_birth = localDob;
                 }
                 let html = '<div class="hub-note">Show or copy this at your appointment. It is assembled from current medications, conditions and recent labs — not a second record.</div>';
                 html += this.visitLine('Name', brief.name);

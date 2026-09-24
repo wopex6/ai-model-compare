@@ -6767,14 +6767,20 @@ def _emergency_field_candidates(texts):
 
     texts: [(source_name, text)]. Returns {field: [unique candidate strings]}.
     """
-    out = {f: [] for f in ('full_name', 'address', 'phone', 'medicare',
-                           'medicare_expiry', 'insurer', 'insurance_member')}
+    out = {f: [] for f in ('full_name', 'date_of_birth', 'address', 'phone',
+                           'medicare', 'medicare_expiry', 'insurer',
+                           'insurance_member')}
     def add(field, value):
         value = re.sub(r'\s+', ' ', str(value or '')).strip(' ,.;:-')
         if value and value not in out[field] and len(out[field]) < 4:
             out[field].append(value)
 
     name_pat = re.compile(r'\b([A-Z]{2,}),\s*([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)?)\b')
+    dob_pat = re.compile(
+        r'(?:Birth\s*date|D\.?O\.?B\.?|Date of Birth)\s*[:\-]?\s*'
+        r'([0-9]{1,2}[\/\-. ][0-9]{1,2}[\/\-. ][0-9]{2,4}'
+        r'|[0-9]{4}-[0-9]{2}-[0-9]{2}'
+        r'|[0-9]{1,2}\s+[A-Za-z]{3,9}\s+[0-9]{4})', re.I)
     addr_pat = re.compile(
         r'^(?:Address[:\s]*)?(\d+\s+[A-Z][A-Za-z0-9 ]*?'
         r'(?:CRES(?:CENT)?|ST(?:REET)?|RD|ROAD|AVE(?:NUE)?|DR(?:IVE)?|CT|CRT|COURT|'
@@ -6793,6 +6799,8 @@ def _emergency_field_candidates(texts):
             surname, given = m.group(1), m.group(2)
             if surname not in ('DR', 'MR', 'MRS', 'MS', 'MISS', 'LAB', 'NATA'):
                 add('full_name', f'{given.title()} {surname.title()}')
+        for m in dob_pat.finditer(text):
+            add('date_of_birth', m.group(1))
         for m in addr_pat.finditer(text):
             add('address', m.group(1))
         for m in phone_pat.finditer(text):
