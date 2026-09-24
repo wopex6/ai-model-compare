@@ -13,7 +13,7 @@
 //   2. Cached assets are revalidated in the background every time they are
 //      used, so a stale copy survives at most one launch. Bumping CACHE_NAME
 //      forces it sooner, but forgetting to no longer strands users.
-const CACHE_NAME = 'dr-health-shell-v109';
+const CACHE_NAME = 'dr-health-shell-v110';
 const APP_SHELL = '/dr-health';
 const EMERGENCY_SHELL = '/dr-health/emergency';
 const SHELL_ASSETS = [

@@ -650,6 +650,84 @@ def test_test_audit_records_add_edit_delete_and_window():
         _cleanup(user_id)
 
 
+def test_bulk_delete_documents():
+    """DELETE /documents accepts a stored_names list and removes them all."""
+    import app as app_mod
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        profile.data['uploaded_documents'] = [
+            {'stored_name': 'a.pdf', 'original_name': 'a.pdf',
+             'stored_path': '/nonexistent/a.pdf'},
+            {'stored_name': 'b.pdf', 'original_name': 'b.pdf',
+             'stored_path': '/nonexistent/b.pdf'},
+            {'stored_name': 'c.pdf', 'original_name': 'c.pdf',
+             'stored_path': '/nonexistent/c.pdf'},
+        ]
+        profile.save()
+        app_mod.app.config['TESTING'] = True
+        client = app_mod.app.test_client()
+        with client.session_transaction() as sess:
+            sess['user_id'] = user_id
+            sess['username'] = 'safety-test'
+
+        resp = client.delete('/api/health-profile/documents', json={
+            'stored_names': ['a.pdf', 'b.pdf']})
+        data = resp.get_json()
+        assert resp.status_code == 200 and data['deleted'] == 2
+        remaining = [d['stored_name']
+                     for d in HealthProfile(user_id).data['uploaded_documents']]
+        assert remaining == ['c.pdf']
+    finally:
+        _cleanup(user_id)
+
+
+def test_apply_review_then_undo_removes_only_imported_rows():
+    """Apply tags new rows with a batch id; undo removes exactly those and
+    leaves pre-existing rows — even ones the merge edited — alone."""
+    import app as app_mod
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        profile.data['test_results'] = [
+            {'test_name': 'Sodium', 'value': '140',
+             'reference_range': '135 - 145', 'date': '2026-01-01'},
+        ]
+        profile.save()
+        app_mod.app.config['TESTING'] = True
+        client = app_mod.app.test_client()
+        with client.session_transaction() as sess:
+            sess['user_id'] = user_id
+            sess['username'] = 'safety-test'
+
+        resp = client.post('/api/health-profile/apply-review', json={
+            'extracted': {'test_results': [
+                {'test_name': 'Potassium', 'value': '4.5', 'date': '2026-09-09'},
+                {'test_name': 'Chloride', 'value': '102', 'date': '2026-09-09'},
+            ]}
+        })
+        data = resp.get_json()
+        assert resp.status_code == 200 and data['added_count'] == 2
+        assert data['last_import']['batch']
+
+        rows = HealthProfile(user_id).data['test_results']
+        assert len(rows) == 3
+        # Pre-existing row must NOT carry the batch tag.
+        assert [r['test_name'] for r in rows if '_import_batch' not in r] == ['Sodium']
+
+        resp = client.post('/api/health-profile/undo-import')
+        data = resp.get_json()
+        assert resp.status_code == 200 and data['removed'] == 2
+        rows = HealthProfile(user_id).data['test_results']
+        assert [r['test_name'] for r in rows] == ['Sodium']
+        assert 'last_import' not in HealthProfile(user_id).data
+
+        # Second undo is a clean no-op.
+        assert client.post('/api/health-profile/undo-import').status_code == 400
+    finally:
+        _cleanup(user_id)
+
+
 def test_dimensionless_test_drops_misattributed_concentration_unit():
     """OCR sometimes puts a neighbouring row's unit on Hct — a ratio test
     that can never carry g/L. The guard strips it; real units stay."""
