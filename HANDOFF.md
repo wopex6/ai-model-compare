@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-24 17:05 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-24 18:08 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Auto-open review after upload, removed per-file status + Review/Refresh buttons, Retake replaced with cancel-x. Fixed user test renames reverting: pin_test_name() writes test_name_aliases on PUT so canonicalize keeps the chosen name. SW v115.
+Records polish: removed duplicate 'Logging in' status, 'ready for review' clears on modal close, added-count lands on page status even at 0, Advanced Editor above Stored Documents. SW v116.
 
 ## Git
 
@@ -14,19 +14,19 @@ Auto-open review after upload, removed per-file status + Review/Refresh buttons,
 Recent commits:
 
 ```
+d52bc8c records: tidy status messages, auto-review flow, move editor card up
+394f716 handoff: snapshot after auto-review + rename pin deploy
 aa42ae9 records: auto-open review, drop retake/review/refresh buttons, pin renamed tests
 f45b436 handoff: snapshot after delete-resurrection merge fix
 26f2802 profile merge: honor deletions in 3-way list merge
 e89f6f7 handoff: snapshot after blank-lock/data-manager timeout deploy
 1d83900 data manager: deliberate blank ref/unit vs absent import blank; fetch timeouts
 8bbccc1 handoff: snapshot after data-manager reliability deploy
-efc6d8f data manager: reliable saves, inline sticky search, blank ref/unit, keep scroll
-9a96385 records: bulk bar on top, sticky dm search, readable history entries
 ```
 
 ## Production (PythonAnywhere)
 
-**4 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
+Local and production match.
 
 ```
 ok       tests/test_ui_features.py
@@ -53,10 +53,8 @@ ok       web_enhancement_test_runner.py
 ok       webhook_deploy.py
 ok       wisdom_profiles/23.json
 ok       wisdom_profiles/23_hypotheses.json
-4 file(s) stale. Re-run with --push to upload.
+Everything on the server matches local.
 ```
-
-Reload often returns `409 slow_startup_error` on the first attempt — retry rather than debug it.
 
 ## Tests
 
@@ -73,7 +71,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-409 passed, 1 warning in 21.47s
+409 passed, 1 warning in 21.34s
 [AutoDoc] Monitoring stopped
 ```
 
