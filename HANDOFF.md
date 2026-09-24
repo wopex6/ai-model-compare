@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-24 15:55 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-24 17:05 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Fixed deleted rows reappearing: _merge_value list branch was union-only, so a racing save resurrected deleted rows. Now delta merge per _item_key — deletions by either side stick. Commit 26f2802 deployed.
+Auto-open review after upload, removed per-file status + Review/Refresh buttons, Retake replaced with cancel-x. Fixed user test renames reverting: pin_test_name() writes test_name_aliases on PUT so canonicalize keeps the chosen name. SW v115.
 
 ## Git
 
@@ -14,14 +14,14 @@ Fixed deleted rows reappearing: _merge_value list branch was union-only, so a ra
 Recent commits:
 
 ```
+aa42ae9 records: auto-open review, drop retake/review/refresh buttons, pin renamed tests
+f45b436 handoff: snapshot after delete-resurrection merge fix
 26f2802 profile merge: honor deletions in 3-way list merge
 e89f6f7 handoff: snapshot after blank-lock/data-manager timeout deploy
 1d83900 data manager: deliberate blank ref/unit vs absent import blank; fetch timeouts
 8bbccc1 handoff: snapshot after data-manager reliability deploy
 efc6d8f data manager: reliable saves, inline sticky search, blank ref/unit, keep scroll
 9a96385 records: bulk bar on top, sticky dm search, readable history entries
-fb56c9b records: test-name search in overview + data manager; review check-all
-c85b41d handoff: snapshot after bulk-delete/undo/audit deploy
 ```
 
 ## Production (PythonAnywhere)
@@ -73,7 +73,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-409 passed, 1 warning in 21.01s
+409 passed, 1 warning in 21.47s
 [AutoDoc] Monitoring stopped
 ```
 
