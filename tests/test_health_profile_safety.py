@@ -503,6 +503,54 @@ def test_update_item_persists_default_range_and_unit():
         _cleanup(user_id)
 
 
+def test_update_item_blank_ref_marks_user_lock():
+    """Blanking reference_range or unit through PUT /item is a deliberate
+    user choice — the row gets ref_locked/unit_locked so the UI keeps it
+    blank rather than substituting the group default. Import-produced
+    blanks carry no lock and still inherit the default."""
+    import app as app_mod
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        profile.data['test_results'] = [
+            {'test_name': 'Sodium', 'value': '140 mmol/L',
+             'reference_range': '135 - 145', 'unit': 'mmol/L',
+             'date': '2026-01-01'},
+        ]
+        profile.save()
+
+        app_mod.app.config['TESTING'] = True
+        client = app_mod.app.test_client()
+        with client.session_transaction() as sess:
+            sess['user_id'] = user_id
+            sess['username'] = 'safety-test'
+
+        resp = client.put('/api/health-profile/item', json={
+            'category': 'test_results', 'index': 0,
+            'updates': {'reference_range': '', 'unit': ''}
+        })
+        assert resp.status_code == 200
+        row = HealthProfile(user_id).data['test_results'][0]
+        assert row['reference_range'] == ''
+        assert row['unit'] == ''
+        assert row['ref_locked'] is True
+        assert row['unit_locked'] is True
+
+        # A real value clears the lock again.
+        resp = client.put('/api/health-profile/item', json={
+            'category': 'test_results', 'index': 0,
+            'updates': {'reference_range': '135 - 145'}
+        })
+        assert resp.status_code == 200
+        row = HealthProfile(user_id).data['test_results'][0]
+        assert row['reference_range'] == '135 - 145'
+        assert row['ref_locked'] is False
+        # unit untouched this round — lock stays
+        assert row['unit_locked'] is True
+    finally:
+        _cleanup(user_id)
+
+
 def test_post_item_carries_unit_and_provenance():
     """POST /item for a test result must not silently drop fields beyond the
     five add_test_result arguments — a hand-entered unit, the user_entered

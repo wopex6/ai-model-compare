@@ -574,9 +574,12 @@ def _fill_test_defaults(results):
         g = _group(t.get('test_name'))
         if not g:
             continue
-        if not t.get('reference_range') and g in refs:
+        # Locked blanks are deliberate user edits — imports must not
+        # resurrect a default over them.
+        if not t.get('reference_range') and g in refs and not t.get('ref_locked'):
             t['reference_range'] = refs[g]
-        if not _extract_unit_text(t.get('value')) and units.get(g):
+        if (not _extract_unit_text(t.get('value')) and units.get(g)
+                and not t.get('unit_locked')):
             t['value'] = (str(t.get('value') or '') + ' ' + units[g]).strip()
 
 
@@ -1508,7 +1511,8 @@ class HealthProfile:
                 # reviewed/verified, so a differing incoming value is
                 # discarded — only fill in metadata the stored row lacks.
                 filled = {}
-                if not t.get("reference_range") and reference_range:
+                if (not t.get("reference_range") and reference_range
+                        and not t.get("ref_locked")):
                     t["reference_range"] = reference_range
                     filled["reference_range"] = reference_range
                 if not t.get("notes") and notes:
@@ -1626,7 +1630,8 @@ class HealthProfile:
 
             removed += 1
             # Keep the first/earlier row's value; backfill missing metadata from the later row
-            if not duplicate.get("reference_range") and row.get("reference_range"):
+            if (not duplicate.get("reference_range") and row.get("reference_range")
+                    and not duplicate.get("ref_locked")):
                 duplicate["reference_range"] = row["reference_range"]
             if not duplicate.get("notes") and row.get("notes"):
                 duplicate["notes"] = row["notes"]
