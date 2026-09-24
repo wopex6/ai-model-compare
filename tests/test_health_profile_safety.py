@@ -851,6 +851,7 @@ def test_emergency_field_candidates_from_document_text():
     )
     out = app_mod._emergency_field_candidates([('report.pdf', sample)])
     assert 'Wai Tse' in out['full_name']
+    assert out['date_of_birth'] == ['12/06/1962']
     assert any('HIGHVALE' in a for a in out['address'])
     assert '0415151791' in out['phone']
     assert out['medicare'] == ['2297496521']

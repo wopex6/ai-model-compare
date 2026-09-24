@@ -190,7 +190,8 @@ html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Segoe UI', s
         const saveBtn = document.getElementById('emergency-local-save');
         if (!box || !saveBtn || !window.EmergencyCard || !EmergencyCard.saveLocal) return;
         const labels = {
-            full_name: 'Full name', address: 'Address',
+            full_name: 'Full name', date_of_birth: 'Date of birth',
+            address: 'Address',
             phone: 'Phone', medicare: 'Medicare number',
             medicare_expiry: 'Medicare valid to (MM/YYYY)',
             insurer: 'Private health insurer',
