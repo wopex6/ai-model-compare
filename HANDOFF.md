@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-24 18:08 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-24 18:44 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Records polish: removed duplicate 'Logging in' status, 'ready for review' clears on modal close, added-count lands on page status even at 0, Advanced Editor above Stored Documents. SW v116.
+Scrollable 45vh list boxes for Stored Documents/Test Data Changes/Full Overview; review outcome lands under the source file row; heading capitalised. SW v117.
 
 ## Git
 
@@ -14,14 +14,14 @@ Records polish: removed duplicate 'Logging in' status, 'ready for review' clears
 Recent commits:
 
 ```
+aa93e11 records: scrollable list boxes, per-file review outcome, Full Overview
+fa55cbc handoff: snapshot after records polish deploy
 d52bc8c records: tidy status messages, auto-review flow, move editor card up
 394f716 handoff: snapshot after auto-review + rename pin deploy
 aa42ae9 records: auto-open review, drop retake/review/refresh buttons, pin renamed tests
 f45b436 handoff: snapshot after delete-resurrection merge fix
 26f2802 profile merge: honor deletions in 3-way list merge
 e89f6f7 handoff: snapshot after blank-lock/data-manager timeout deploy
-1d83900 data manager: deliberate blank ref/unit vs absent import blank; fetch timeouts
-8bbccc1 handoff: snapshot after data-manager reliability deploy
 ```
 
 ## Production (PythonAnywhere)
@@ -71,7 +71,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-409 passed, 1 warning in 21.34s
+409 passed, 1 warning in 26.10s
 [AutoDoc] Monitoring stopped
 ```
 
