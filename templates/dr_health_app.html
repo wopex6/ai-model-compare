@@ -188,6 +188,9 @@
     /* Profile screen */
     #profile-screen-content { flex: 1; overflow-y: auto; padding: 16px; -webkit-overflow-scrolling: touch; }
     .card { background: white; border-radius: 14px; padding: 16px; margin-bottom: 14px; box-shadow: 0 1px 6px rgba(0,0,0,0.05); border: 1px solid #f0f0f0; }
+    /* Long lists scroll inside their own box so the next section stays within
+       reach without a long page scroll. */
+    .scroll-list { max-height: 45vh; overflow-y: auto; }
     .card h3 { margin: 0 0 10px; font-size: 0.95rem; color: #E53935; display: flex; align-items: center; gap: 8px; }
     .card ul { margin: 4px 0; padding-left: 18px; font-size: 0.88rem; color: #444; }
     .card textarea {
@@ -908,21 +911,21 @@
                     </label>
                     <button class="btn-secondary" id="docs-delete-selected" type="button" style="font-size:0.75rem;">Delete selected</button>
                 </div>
-                <div id="stored-documents-list" style="margin-top:10px;"><em style="color:#999;">Loading...</em></div>
+                <div id="stored-documents-list" class="scroll-list" style="margin-top:10px;"><em style="color:#999;">Loading...</em></div>
             </details>
             <details class="card" id="test-audit-card">
                 <summary style="font-size:0.95rem;color:#E53935;font-weight:600;cursor:pointer;">
                     <i class="fas fa-clock-rotate-left"></i> Test Data Changes <span id="test-audit-count" style="color:#999;font-weight:400;"></span>
                 </summary>
                 <p style="font-size:0.85rem;color:#555;margin-top:8px;">What was added, edited or deleted, and when.</p>
-                <div id="test-audit-list" style="margin-top:10px;"><em style="color:#999;">Expand to load.</em></div>
+                <div id="test-audit-list" class="scroll-list" style="margin-top:10px;"><em style="color:#999;">Expand to load.</em></div>
             </details>
             <details class="card" id="overview-card">
                 <summary style="font-size:0.95rem;color:#E53935;font-weight:600;cursor:pointer;">
-                    <i class="fas fa-user"></i> Full overview
+                    <i class="fas fa-user"></i> Full Overview
                 </summary>
                 <input id="overview-search" type="text" placeholder="Search test names…" style="width:100%;padding:8px 10px;margin:8px 0;border-radius:6px;border:1px solid #ccc;box-sizing:border-box;">
-                <div id="profile-summary" style="margin-top:10px;"><em style="color:#999;">Loading...</em></div>
+                <div id="profile-summary" class="scroll-list" style="margin-top:10px;"><em style="color:#999;">Loading...</em></div>
             </details>
         </div>
     </div>
@@ -1608,7 +1611,7 @@
                     ? uploadedDate.toLocaleDateString() + ' ' + uploadedDate.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})
                     : '';
                 const size = doc.size_bytes ? (doc.size_bytes / 1024).toFixed(1) + ' KB' : '';
-                html += `<div class="dm-item" style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;">`;
+                html += `<div class="dm-item" data-stored="${escapeHtml(doc.stored_name)}" style="display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;">`;
                 html += `<input type="checkbox" class="doc-cb" data-name="${escapeHtml(doc.stored_name)}" style="flex:none;" title="Select for deletion">`;
                 html += `<div style="font-size:0.85rem;word-break:break-word;flex:1;"><strong>${name}</strong><br><span style="color:#999;font-size:0.75rem;">${uploaded} ${size}</span></div>`;
                 html += `<div style="display:flex;gap:6px;">`;
@@ -2206,6 +2209,30 @@
         }
     }
 
+    function reportReviewOutcome(msg) {
+        // When the review came from a stored document, the result belongs
+        // under that file's row — not up in the Add Health Info section.
+        const meta = currentReviewMeta || currentMeta || {};
+        const stored = meta.stored_document && meta.stored_document.stored_name;
+        const row = stored && document.querySelector(
+            '#stored-documents-list .dm-item[data-stored="' + CSS.escape(stored) + '"]');
+        if (row) {
+            let note = row.querySelector('.doc-result-msg');
+            if (!note) {
+                note = document.createElement('div');
+                note.className = 'doc-result-msg';
+                note.style.cssText = 'flex-basis:100%; font-size:0.8rem; color:#2e7d32; margin-top:4px;';
+                row.appendChild(note);
+            }
+            note.textContent = msg;
+            const card = document.getElementById('stored-docs-card');
+            if (card) card.open = true;
+            return;
+        }
+        const pstat = document.getElementById('profile-status');
+        if (pstat) pstat.textContent = msg;
+    }
+
     function setReviewState(extracted, meta = {}) {
         currentPending = extracted;
         currentMeta = meta || {};
@@ -2588,8 +2615,7 @@
         if (!Object.keys(extracted).length) {
             // Everything was rejected: nothing to save, just drop the review.
             status.textContent = 'Nothing selected — review discarded.';
-            const pstat = document.getElementById('profile-status');
-            if (pstat) pstat.textContent = 'Nothing selected — review discarded.';
+            reportReviewOutcome('Nothing selected — review discarded.');
             currentReviewPending = null;
             currentReviewMeta = {};
             setTimeout(() => closeReviewModal(), 600);
@@ -2611,8 +2637,7 @@
                     ? `Saved — ${added} record${added === 1 ? '' : 's'} added.`
                     : 'Saved — no new records added.';
                 status.textContent = msg;
-                const pstat = document.getElementById('profile-status');
-                if (pstat) pstat.textContent = msg;
+                reportReviewOutcome(msg);
                 setTimeout(() => { closeReviewModal(); loadHealthProfile(); }, 600);
                 currentReviewPending = null;
                 currentReviewMeta = {};
