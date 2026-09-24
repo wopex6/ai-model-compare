@@ -835,3 +835,33 @@ def test_dimensionless_test_drops_misattributed_concentration_unit():
     t3 = {'test_name': 'Haemoglobin', 'value': '145 g/L'}
     _drop_implausible_test_unit(t3)
     assert t3['value'] == '145 g/L'
+
+
+def test_emergency_field_candidates_from_document_text():
+    """Phone-only emergency fields are suggested from stored document text —
+    names, addresses, Medicare numbers, insurers and member numbers."""
+    import app as app_mod
+    sample = (
+        'TSE, WAI\n'
+        '4 HIGHVALE CRES, BERWICK. 3806\n'
+        'Phone: 0415151791\n'
+        'Birthdate: 12/06/1962  Sex: M  Medicare Number: 2297496521\n'
+        'Health Insurance: MEDIBANK  Member No: AB123456\n'
+        'Medicare valid to: 05/2030\n'
+    )
+    out = app_mod._emergency_field_candidates([('report.pdf', sample)])
+    assert 'Wai Tse' in out['full_name']
+    assert any('HIGHVALE' in a for a in out['address'])
+    assert '0415151791' in out['phone']
+    assert out['medicare'] == ['2297496521']
+    assert out['medicare_expiry'] == ['05/2030']
+    assert 'Medibank' in out['insurer']
+    assert 'AB123456' in out['insurance_member']
+
+
+def test_emergency_field_candidates_empty_and_safe():
+    import app as app_mod
+    out = app_mod._emergency_field_candidates([('doc.txt', 'no identifiers here')])
+    assert all(v == [] for v in out.values())
+    out2 = app_mod._emergency_field_candidates([])
+    assert all(v == [] for v in out2.values())
