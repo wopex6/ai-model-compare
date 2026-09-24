@@ -44,6 +44,7 @@ from werkzeug.utils import secure_filename
 import asyncio
 import os
 import json
+import re
 import hashlib
 import bcrypt
 import jwt
@@ -6747,6 +6748,91 @@ def get_emergency_card():
         })
     except Exception as e:
         return _safe_error(e, 'get_emergency_card')
+
+
+# Field candidates for the phone-only emergency details, mined from stored
+# document text. Suggestions are shown to the user and saved locally only —
+# they are never written back to the profile.
+_INSURER_NAMES = (
+    'BUPA', 'MEDIBANK', 'HCF', 'NIB', 'AHM', 'AUSTRALIAN UNITY', 'HBF',
+    'DEFENCE HEALTH', 'TEACHERS HEALTH', 'GMHBA', 'PEOPLECARE', 'CBHS',
+    'NAVY HEALTH', 'POLICE HEALTH', 'EMERGENCY SERVICES HEALTH', 'RT HEALTH',
+    'WESTFUND', 'ST. ?LUKES?', 'ST LUKE', 'HEALTH PARTNERS', 'HIF',
+    'ONEMEDIFUND', 'TUH', 'QUEENSLAND COUNTRY', 'FRANK', 'BUDGET DIRECT',
+    'HOSPITAL CONTRIBUTION FUND', 'ACA HEALTH'
+)
+
+def _emergency_field_candidates(texts):
+    """Scan extracted document text for phone-only emergency-card fields.
+
+    texts: [(source_name, text)]. Returns {field: [unique candidate strings]}.
+    """
+    out = {f: [] for f in ('full_name', 'address', 'phone', 'medicare',
+                           'medicare_expiry', 'insurer', 'insurance_member')}
+    def add(field, value):
+        value = re.sub(r'\s+', ' ', str(value or '')).strip(' ,.;:-')
+        if value and value not in out[field] and len(out[field]) < 4:
+            out[field].append(value)
+
+    name_pat = re.compile(r'\b([A-Z]{2,}),\s*([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)?)\b')
+    addr_pat = re.compile(
+        r'^(?:Address[:\s]*)?(\d+\s+[A-Z][A-Za-z0-9 ]*?'
+        r'(?:CRES(?:CENT)?|ST(?:REET)?|RD|ROAD|AVE(?:NUE)?|DR(?:IVE)?|CT|CRT|COURT|'
+        r'PL(?:ACE)?|LANE|LN|WAY|PDE|PARADE|BLVD|HWY|TCE|TERRACE|CL|CLOSE|GR|GROVE)'
+        r'\b[^\n]{0,60})$', re.I | re.M)
+    phone_pat = re.compile(r'\bPhone[:\s]*([0-9 +()]{8,16})', re.I)
+    mobile_pat = re.compile(r'\b(04\d{2}[\s-]?\d{3}[\s-]?\d{3})\b')
+    medicare_pat = re.compile(r'Medicare\s*(?:Number|No\.?|#)?\s*[:\-]?\s*([0-9][0-9 ]{8,12})', re.I)
+    expiry_pat = re.compile(r'(?:Valid\s+to|Expir\w+|Expires)\s*[:\-]?\s*([0-9]{2}/[0-9]{4})', re.I)
+    insurer_pat = re.compile(r'\b(' + '|'.join(_INSURER_NAMES) + r')\b', re.I)
+    member_pat = re.compile(
+        r'(?:Member(?:ship)?|Policy)\s*(?:No\.?|Number|ID)?\s*[:\-]?\s*([A-Z0-9]{6,20})', re.I)
+
+    for _src, text in texts:
+        for m in name_pat.finditer(text):
+            surname, given = m.group(1), m.group(2)
+            if surname not in ('DR', 'MR', 'MRS', 'MS', 'MISS', 'LAB', 'NATA'):
+                add('full_name', f'{given.title()} {surname.title()}')
+        for m in addr_pat.finditer(text):
+            add('address', m.group(1))
+        for m in phone_pat.finditer(text):
+            add('phone', m.group(1))
+        for m in mobile_pat.finditer(text):
+            add('phone', m.group(1))
+        for m in medicare_pat.finditer(text):
+            digits = re.sub(r'\D', '', m.group(1))
+            if 10 <= len(digits) <= 11:
+                add('medicare', digits)
+        for m in expiry_pat.finditer(text):
+            add('medicare_expiry', m.group(1))
+        for m in insurer_pat.finditer(text):
+            add('insurer', m.group(1).title())
+        for m in member_pat.finditer(text):
+            add('insurance_member', m.group(1))
+    return out
+
+
+@app.route('/api/health-profile/emergency-card/suggest', methods=['GET'])
+@require_auth
+def suggest_emergency_locals():
+    """Candidates for phone-only emergency fields, mined from stored docs."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        texts = []
+        for doc in (profile.data.get('uploaded_documents') or []):
+            p = doc.get('extracted_text_path') or ''
+            if p and os.path.exists(p):
+                try:
+                    with open(p, encoding='utf-8', errors='replace') as f:
+                        texts.append((doc.get('original_name') or 'document',
+                                      f.read()[:20000]))
+                except OSError:
+                    continue
+        return jsonify({'success': True,
+                        'suggestions': _emergency_field_candidates(texts)})
+    except Exception as e:
+        return _safe_error(e, 'suggest_emergency_locals')
 
 
 @app.route('/api/health-profile/emergency-card/pair', methods=['POST'])

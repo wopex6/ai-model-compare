@@ -16,7 +16,8 @@
     // Fields kept on this phone only — never sent to the server. Stored under
     // a separate key so a server refresh can neither read nor wipe them.
     const LOCAL_KEY = 'drHealth.emergencyLocal.v1';
-    const LOCAL_FIELDS = ['full_name', 'address', 'phone', 'medicare'];
+    const LOCAL_FIELDS = ['full_name', 'address', 'phone', 'medicare',
+        'medicare_expiry', 'insurer', 'insurance_member'];
 
     function esc(s) {
         return (s == null ? '' : String(s))
@@ -154,7 +155,8 @@
             listOf(v.allergies).length || listOf(v.implants).length ||
             listOf(v.anticoagulants).length ||
             v.history || v.doctors || v.gp_name || v.gp_phone ||
-            v.ec_name || v.ec_phone || v.address || v.phone || v.medicare);
+            v.ec_name || v.ec_phone || v.address || v.phone || v.medicare ||
+            v.insurer || v.insurance_member);
     }
 
     function section(title, text, extraClass) {
@@ -252,7 +254,12 @@
         out += section('Other medical history', v.history);
         out += phoneBlock('Phone', '', '', v.phone);
         out += section('Address', v.address);
-        out += section('Medicare', v.medicare);
+        out += section('Medicare', [v.medicare,
+            v.medicare_expiry ? ('valid to ' + v.medicare_expiry) : '']
+            .filter(Boolean).join(' · '));
+        out += section('Private health insurance', [v.insurer,
+            v.insurance_member ? ('member ' + v.insurance_member) : '']
+            .filter(Boolean).join(' — '));
         out += section('Suburb / area', v.location);
         return out;
     }

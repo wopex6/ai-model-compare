@@ -331,6 +331,14 @@
         display: block; width: 100%; margin-top: 2px; padding: 8px 10px;
         border: 1px solid #ddd; border-radius: 8px; font-size: 0.95rem;
     }
+    .emergency-local-edit .emergency-local-status {
+        margin-top: 8px; font-size: 0.8rem; color: #607d8b; min-height: 1em;
+    }
+    .emergency-local-edit .emergency-local-suggest {
+        margin-top: 8px; width: 100%; padding: 9px; border-radius: 10px;
+        border: 1px solid #c62828; background: #fff; color: #c62828;
+        font-size: 0.9rem; font-weight: 600;
+    }
     .emergency-local-edit .emergency-local-save {
         margin-top: 10px; width: 100%; padding: 10px; border: none; border-radius: 10px;
         background: #c62828; color: #fff; font-size: 0.95rem; font-weight: 700;
@@ -3810,7 +3818,10 @@
         if (EmergencyCard.LOCAL_FIELDS && EmergencyCard.saveLocal) {
             const labels = {
                 full_name: 'Full name', address: 'Address',
-                phone: 'Phone', medicare: 'Medicare number'
+                phone: 'Phone', medicare: 'Medicare number',
+                medicare_expiry: 'Medicare valid to (MM/YYYY)',
+                insurer: 'Private health insurer',
+                insurance_member: 'Insurance member / policy no.'
             };
             const local = EmergencyCard.loadLocal();
             const wrap = document.createElement('details');
@@ -3822,9 +3833,34 @@
                 inner += '<label>' + labels[f] +
                     '<input type="text" data-lf="' + f + '" value="' + escCard(local[f] || '') + '"></label>';
             }
-            inner += '<button type="button" class="emergency-local-save">Save on this phone</button>';
+            inner += '<div class="emergency-local-status"></div>' +
+                '<button type="button" class="emergency-local-suggest">Suggest from my documents</button>' +
+                '<button type="button" class="emergency-local-save">Save on this phone</button>';
             wrap.innerHTML = inner;
             view.appendChild(wrap);
+            const statusEl = wrap.querySelector('.emergency-local-status');
+            wrap.querySelector('.emergency-local-suggest').addEventListener('click', async function () {
+                statusEl.textContent = 'Looking through stored documents…';
+                try {
+                    const resp = await AuthHelper.authenticatedFetch('/api/health-profile/emergency-card/suggest');
+                    const data = resp.ok ? await resp.json() : {};
+                    const sugg = (data && data.suggestions) || {};
+                    const found = [];
+                    wrap.querySelectorAll('input[data-lf]').forEach(function (inp) {
+                        const f = inp.getAttribute('data-lf');
+                        const cands = sugg[f] || [];
+                        if (cands.length && !inp.value.trim()) {
+                            inp.value = cands[0];
+                            found.push(labels[f] || f);
+                        }
+                    });
+                    statusEl.textContent = found.length
+                        ? 'Filled: ' + found.join(', ') + '. Check them, then save.'
+                        : 'Nothing found in stored documents — type the details in.';
+                } catch (e) {
+                    statusEl.textContent = 'Could not check documents. You can still type the details in.';
+                }
+            });
             wrap.querySelector('.emergency-local-save').addEventListener('click', function () {
                 const fields = {};
                 wrap.querySelectorAll('input[data-lf]').forEach(function (inp) {
