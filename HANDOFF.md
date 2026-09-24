@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-24 11:57 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-24 13:58 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-bulk doc delete + import undo + audit trail + ref-range unification deployed, SW v110
+data manager fixes: profile snapshots now sync after save/delete (stale-index bug), history field excluded from edit form, blank ref/unit allowed and propagate to whole group, scroll position preserved, search box inline in sticky index bar. Deployed SW v113.
 
 ## Git
 
@@ -14,19 +14,19 @@ bulk doc delete + import undo + audit trail + ref-range unification deployed, SW
 Recent commits:
 
 ```
+efc6d8f data manager: reliable saves, inline sticky search, blank ref/unit, keep scroll
+9a96385 records: bulk bar on top, sticky dm search, readable history entries
+fb56c9b records: test-name search in overview + data manager; review check-all
+c85b41d handoff: snapshot after bulk-delete/undo/audit deploy
 793c969 records: bulk doc delete, import undo, added-count, drop stale status
 7c42aa0 test data: append-only audit log of changes, 30-day window (configurable)
 5c47839 lab results: unify reference-range display; revert Record(s) marker
 aba948e handoff: snapshot after unit carry-over fix deploy
-d7edb27 lab results: stop unit carry-over between rows; Record(s) version marker
-b4cb22d handoff: snapshot after unit-null fix deploy
-26f1f76 lab results: treat unit:null as absent, not an explicit blank unit
-1e53295 handoff: snapshot after false-L-flag fix deploy
 ```
 
 ## Production (PythonAnywhere)
 
-**4 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
+Local and production match.
 
 ```
 ok       tests/test_ui_features.py
@@ -53,10 +53,8 @@ ok       web_enhancement_test_runner.py
 ok       webhook_deploy.py
 ok       wisdom_profiles/23.json
 ok       wisdom_profiles/23_hypotheses.json
-4 file(s) stale. Re-run with --push to upload.
+Everything on the server matches local.
 ```
-
-Reload often returns `409 slow_startup_error` on the first attempt — retry rather than debug it.
 
 ## Tests
 
@@ -73,7 +71,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-409 passed, 1 warning in 43.38s
+409 passed, 1 warning in 45.68s
 [AutoDoc] Monitoring stopped
 ```
 
