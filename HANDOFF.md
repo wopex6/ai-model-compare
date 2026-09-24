@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-24 20:48 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-24 21:14 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Retired profiles 1 and 23 (scrubbed, renamed *_retired.json, originals deleted). Deleted 4 obsolete 23 backups + remote OCR artifacts + remote password-script copies. Untracked 63 files with leaked patient data/credentials from git (commit 1a8002d). Scrubbed password literal from integrated_database.py (now env DEFAULT_USER_PASSWORD), login_test.html, docs. REMAINING: git history still contains everything - needs force-push rewrite if user wants full purge. Remote health_uploaded_documents/23/ runtime files still exist (user's docs - ask before deleting). Wai T password './/.' was public on GitHub - user should change it.
+Shipped phone-only emergency fields (full name/address/phone/Medicare in drHealth.emergencyLocal.v1, merged at render, editable in PWA modal + standalone icon page; deployed v119). OPEN for user: (a) retire vs erase - retired profiles 1/23 still exist as *_retired.json + docs dir on PA; (b) git history still contains the sensitive files - needs filter-repo+force-push; (c) Wai T password was public - should be changed.
 
 ## Git
 
@@ -41,14 +41,14 @@ Retired profiles 1 and 23 (scrubbed, renamed *_retired.json, originals deleted).
 Recent commits:
 
 ```
+bedae29 emergency card: phone-only private details
+69b5ca6 handoff: snapshot after profile retirement and sensitive-data removal
 1a8002d Remove leaked patient data and credentials from tracked files
 e8862ed handoff: snapshot after profile 23-to-21 data copy
 dee3d68 handoff: snapshot after doc-outcome persistence deploy
 3568290 Persist per-document review outcome across list re-renders
 ce6776d handoff: snapshot after scroll-box deploy
 aa93e11 records: scrollable list boxes, per-file review outcome, Full Overview
-fa55cbc handoff: snapshot after records polish deploy
-d52bc8c records: tidy status messages, auto-review flow, move editor card up
 ```
 
 ## Production (PythonAnywhere)
@@ -98,7 +98,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-409 passed, 1 warning in 23.20s
+409 passed, 1 warning in 23.48s
 [AutoDoc] Monitoring stopped
 ```
 
