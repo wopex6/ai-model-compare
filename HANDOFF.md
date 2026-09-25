@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-25 20:10 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-25 21:10 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Emergency icon now read-only mirror w/ #ec= private-field seeding; bilingual (zh/Cantonese) crisis keywords; hub index smoke test; PA .env now has real JWT_SECRET+SECRET_KEY+FLASK_ENV=production (old sessions invalidated, forged tokens verified dead); weak '123' passwords rotated on users 1,6,8,21,22 — new pw given to user in chat. Backlog: backup rotation, 3-way merge, rate limits, magic bytes, retention flag, docs cleanup persist, recent-changes endpoint, Chinese drug-name aliases.
+Report-table parser now classifies column roles (actual/predicted/%pred/%change vs dates) so spirometry-style reports extract correctly — verified on the user's PFT screenshot. Earlier this session: read-only emergency icon w/ #ec= seeding, bilingual crisis keywords, auto reply-language, real PA secrets + rotated '123' passwords. Backlog: backup rotation, 3-way merge done? (partial), rate limits, magic bytes, retention flag, docs cleanup persist, recent-changes endpoint, Chinese drug-name aliases.
 
 ## Git
 
@@ -41,19 +41,19 @@ Emergency icon now read-only mirror w/ #ec= private-field seeding; bilingual (zh
 Recent commits:
 
 ```
+ca3e72a Classify report-table column roles before extracting test results
+f7df04e Handoff: read-only emergency icon + security hardening (SW v124)
 1a7c641 Make emergency icon read-only mirror; bilingual crisis signals
 3a2331e Handoff: auto reply-language deployed (SW v123)
 46c64e7 Add 'auto' reply-language mode that mirrors the question's language
 454519c push: send at high urgency so Doze doesn't defer reminders
 2945a3d settings: save preferences even when notification permission is blocked
 f0a346a settings: distinguish unsupported vs denied notification error
-1584572 handoff: snapshot after private-details + web push deploy
-e03bb05 private details in Personal Details + web push for reminders
 ```
 
 ## Production (PythonAnywhere)
 
-**25 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
+**4 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
 
 ```
 ok       tests/test_review_flow.py
@@ -80,7 +80,7 @@ ok       web_enhancement_test_runner.py
 ok       webhook_deploy.py
 ok       wisdom_profiles/23.json
 ok       wisdom_profiles/23_hypotheses.json
-25 file(s) stale. Re-run with --push to upload.
+4 file(s) stale. Re-run with --push to upload.
 ```
 
 Reload often returns `409 slow_startup_error` on the first attempt — retry rather than debug it.
@@ -100,7 +100,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-409 passed, 1 warning in 21.02s
+409 passed, 1 warning in 21.80s
 [AutoDoc] Monitoring stopped
 ```
 
