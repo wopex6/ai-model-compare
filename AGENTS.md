@@ -116,6 +116,21 @@ cached. Pair them with `emergency_pair_token` / `POST /api/health-profile/emerge
 and `drHealth.emergencyPair.v1`. Do not store the account password in
 localStorage; the JWT and this setup code are enough.
 
+### Push notifications
+
+Reminder pushes use Web Push (`ai_compare/health_push.py`). Subscriptions are
+stored in `health_profiles/push_subscriptions.json` (gitignored, excluded from
+deploy). VAPID keys come from `VAPID_PRIVATE_KEY` / `VAPID_PUBLIC_KEY` in
+`.env`. Sending needs `pywebpush` + `py_vapid` + `http_ece` + `cryptography` +
+`cffi` + `pycparser` + `six`, vendored as wheels in `vendor/` — the compiled
+ones (`.so` files) cannot be zipimported, so `health_push._import_pywebpush()`
+extracts `vendor/*.whl` into `vendor/_extracted/` (gitignored) on first use.
+New wheels must be uploaded to PA with a raw Files-API POST — `pa_sync`
+excludes them. A PythonAnywhere scheduled task (id 1527586, daily 22:00 UTC ≈
+8am Melbourne) runs `push_dispatch.py`. The schedule API needs the **trailing
+slash** — POST `/schedule` silently becomes a GET through the redirect. iOS
+only delivers web push to apps installed to the home screen.
+
 ---
 
 ## 3. Testing

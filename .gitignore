@@ -82,3 +82,6 @@ debug_*.md
 
 # LibreOffice lock artefacts — accidentally committed; never useful
 .~lock.*#
+
+# extracted at runtime on the server — never commit
+vendor/_extracted/
