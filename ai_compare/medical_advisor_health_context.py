@@ -3090,7 +3090,7 @@ class HealthContextManager:
         return (
             "\n\n--- PATIENT HEALTH CONTEXT (use this to personalize responses) ---\n"
             f"{context}\n{cls.provenance_note(user_id)}"
-            f"LANGUAGE: {lang} Reply in that language.\n"
+            f"LANGUAGE: {lang}\n"
             "--- END HEALTH CONTEXT ---\n"
         )
 

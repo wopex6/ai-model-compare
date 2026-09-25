@@ -480,7 +480,7 @@ class HealthAdviceApiTest(unittest.TestCase):
         self.assertNotIn('oatmeal', packed)
         ctx = HealthContextManager.get_context_for_prompt(TEST_USER, question='LDL')
         self.assertIn('Traditional Chinese', ctx)
-        self.assertIn('Reply in that language', ctx)
+        self.assertIn('same language', ctx)
 
         from ai_compare.medical_advisor_health_context import pack_prompt_sections
         always = 'ALLERGIES (must not be contradicted by advice): penicillin'

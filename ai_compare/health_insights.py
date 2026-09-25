@@ -829,17 +829,34 @@ DEFAULT_ADVICE_SETTINGS = {
     'reminders_enabled': True,
     'notifications_enabled': False,
     'digest_frequency': 'weekly',   # weekly | monthly | off
-    'locale': 'en',                 # en | zh-HK
+    'locale': 'auto',               # auto | en | zh-HK
 }
 
 DIGEST_PERIOD_DAYS = {'weekly': 7, 'monthly': 30}
 
 
 def prompt_language_note(data: Dict) -> str:
-    """Which language the model should write in for this patient."""
+    """Which language the model should write in for this patient.
+
+    'auto' mirrors the language of the user's question — the model's natural
+    behaviour — while keeping clinical terms in their original wording. The
+    spoken-language field only steers which written Chinese to use. A stored
+    'en'/'zh-HK' is an explicit fixed choice; 'en' still honours the legacy
+    spoken-language hint because older profiles stored 'en' by default.
+    """
     settings = advice_settings(data)
-    locale = str(settings.get('locale') or 'en')
+    locale = str(settings.get('locale') or 'auto')
     spoken = str((data.get('personal') or {}).get('language') or '')
+    if locale == 'auto':
+        note = ('Reply in the same language as the user’s question. '
+                'Keep medication names, test names and units in their '
+                'original wording.')
+        if any(token in spoken.lower() for token in (
+                'cantonese', 'zh-hk', 'zh_hk', 'traditional chinese',
+                '中文', '廣東', '广东', '粤')):
+            note += (' They speak Cantonese — if the question is in Chinese, '
+                     'reply in Traditional Chinese (Hong Kong).')
+        return note
     blob = (locale + ' ' + spoken).lower()
     if locale == 'zh-HK' or any(token in blob for token in (
             'cantonese', 'zh-hk', 'zh_hk', 'traditional chinese',
@@ -905,7 +922,7 @@ def advice_signature(data: Dict) -> str:
             str((data.get('personal') or {}).get('age') or ''),
             str((data.get('personal') or {}).get('gender') or ''),
         ],
-        'locale': advice_settings(data).get('locale', 'en'),
+        'locale': advice_settings(data).get('locale', 'auto'),
     }
     blob = json.dumps(payload, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(blob.encode('utf-8')).hexdigest()
@@ -1206,7 +1223,7 @@ def generate_advice(data: Dict, force: bool = False, today: Optional[date] = Non
         'model': model or os.getenv('OPENAI_MODEL', 'gpt-4o-mini'),
         'prompt_version': PROMPT_VERSION,
         'conversation_marker': str(conversation_marker or ''),
-        'locale': settings.get('locale', 'en'),
+        'locale': settings.get('locale', 'auto'),
         'suggestions': validated['suggestions'],
         'questions_for_doctor': validated['questions_for_doctor'],
         'disclaimer': DISCLAIMER,

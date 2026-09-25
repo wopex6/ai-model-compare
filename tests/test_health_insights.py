@@ -427,7 +427,9 @@ class TestPromptLanguageAndExplain(unittest.TestCase):
         return chat
 
     def test_language_follows_locale_and_spoken_field(self):
-        self.assertIn('English', hi.prompt_language_note({}))
+        self.assertIn('same language', hi.prompt_language_note({}))
+        self.assertIn('English', hi.prompt_language_note({
+            'advice_settings': {'locale': 'en'}}))
         self.assertIn('Traditional Chinese', hi.prompt_language_note({
             'advice_settings': {'locale': 'zh-HK'}}))
         self.assertIn('Traditional Chinese', hi.prompt_language_note({
@@ -446,7 +448,7 @@ class TestPromptLanguageAndExplain(unittest.TestCase):
         self.assertIn('LDL note', titles)
         self.assertNotIn('Guess', titles)
         self.assertEqual(data['ai_advice']['suggestions'][0]['title'], 'keep me')
-        self.assertIn('Write in English', calls[0][1]['content'])
+        self.assertIn('same language', calls[0][1]['content'])
 
     def test_explain_respects_opt_out_and_does_not_cite_unverified_row(self):
         data = self._profile()
