@@ -1478,13 +1478,11 @@
                     Notification.permission === 'default') {
                 try { await Notification.requestPermission(); } catch (e) {}
             }
-            if (nfy.checked && (typeof Notification === 'undefined' ||
-                    Notification.permission !== 'granted')) {
-                this.status(typeof Notification === 'undefined'
-                    ? 'This device/browser cannot show notifications. On iPhone, open the copy installed to the Home Screen (iOS 16.4+), not a Safari tab.'
-                    : 'Notifications are blocked — enable them for this app in the device settings.', true);
-                return;
-            }
+            // A blocked permission must NOT abort the save — the preference is
+            // the user's intent, and the quiet resubscribe in loadOverview
+            // picks it up once the device setting is fixed.
+            const notifyBlocked = nfy.checked && (typeof Notification === 'undefined' ||
+                    Notification.permission !== 'granted');
             this.busy = true;
             this.status('Saving…');
             try {
@@ -1506,6 +1504,13 @@
                     return;
                 }
                 this.status('Preferences saved.');
+                if (notifyBlocked) {
+                    this.status(typeof Notification === 'undefined'
+                        ? 'Preferences saved. This device/browser cannot show notifications — on iPhone, open the copy installed to the Home Screen (iOS 16.4+), not a Safari tab.'
+                        : 'Preferences saved. Notifications are blocked on this device — on iPhone allow them under Settings → Apps → Dr. Health → Notifications, then reopen the app.', true);
+                    this.loadOverview();
+                    return;
+                }
                 // Push setup is best-effort: the in-app notification path works
                 // regardless, so a failure here never un-saves the preference.
                 const pushResult = await this.ensurePushSubscription(nfy.checked);
