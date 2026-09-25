@@ -154,7 +154,7 @@
             title: 'Personal Details',
             icon: 'fa-id-card',
             desc: 'Identity, alerts and contacts for the emergency card',
-            hint: 'Identity, alerts and contacts live here. Medications are a separate list under Health → Medications — they still appear on the emergency card.',
+            hint: 'Identity, alerts and contacts live here. Private details at the bottom are stored only on this phone. Medications are a separate list under Health → Medications — they still appear on the emergency card.',
             fields: [
                 { heading: 'Who you are' },
                 { key: 'name', label: 'Full name', type: 'text' },
@@ -497,6 +497,13 @@
                     this.overview = data.overview;
                     if (typeof HealthReview !== 'undefined' && HealthReview.maybeNotify) {
                         HealthReview.maybeNotify(this.overview);
+                    }
+                    // Users who enabled notifications before push existed get
+                    // their subscription silently (re)created on the next load.
+                    const s = data.overview.settings || {};
+                    if (s.notifications_enabled && typeof Notification !== 'undefined' &&
+                            Notification.permission === 'granted') {
+                        this.ensurePushSubscription(true).catch(function () {});
                     }
                     if (this.route.view === 'index') this.render();
                 }
@@ -1032,6 +1039,10 @@
                     : obj[field.key];
                 html += this.inputHtml(field, value);
             }
+            if (id === 'personal' && typeof EmergencyCard !== 'undefined' &&
+                    EmergencyCard.LOCAL_FIELDS && EmergencyCard.loadLocal) {
+                html += this.privateDetailsHtml();
+            }
             html += '<div class="hub-row-actions">';
             html += '<button class="hub-btn primary" id="hub-obj-save"><i class="fas fa-check"></i> Save</button>';
             html += '</div></div>';
@@ -1044,6 +1055,58 @@
                 }
             }
             return html;
+        },
+
+        // Phone-only identity fields for the emergency card. They use data-lf
+        // (not data-key) so readForm never puts them in the server payload.
+        privateDetailsHtml() {
+            const labels = {
+                full_name: 'Full name', date_of_birth: 'Date of birth (e.g. 12/06/1962)',
+                address: 'Address', phone: 'Phone',
+                medicare: 'Medicare number', medicare_expiry: 'Medicare valid to (MM/YYYY)',
+                insurer: 'Private health insurer', insurance_member: 'Insurance member / policy no.'
+            };
+            const local = EmergencyCard.loadLocal();
+            let html = '<div class="hub-form-group">Private details</div>';
+            html += '<div class="hub-form-hint"><strong>Private:</strong> these are stored only on this ' +
+                'phone, shown only on the Emergency Card, and are never uploaded or used for ' +
+                'anything else. They are lost if this phone\u2019s storage is cleared \u2014 ' +
+                'enter them again on each device you use.</div>';
+            for (const f of EmergencyCard.LOCAL_FIELDS) {
+                html += '<label class="hub-input-label">' + esc(labels[f] || f) + '</label>';
+                html += '<input class="hub-input" type="text" data-lf="' + esc(f) +
+                    '" autocomplete="off" value="' + esc(local[f] || '') + '">';
+            }
+            html += '<div class="hub-form-hint hub-local-status"></div>';
+            html += '<div class="hub-row-actions">' +
+                '<button class="hub-btn" id="hub-local-suggest">' +
+                '<i class="fas fa-wand-magic-sparkles"></i> Suggest from my documents</button></div>';
+            return html;
+        },
+
+        async suggestLocalDetails() {
+            const statusEl = this.root.querySelector('.hub-local-status');
+            if (!statusEl || typeof EmergencyCard === 'undefined') return;
+            statusEl.textContent = 'Looking through stored documents…';
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/emergency-card/suggest');
+                const data = resp.ok ? await resp.json() : {};
+                const sugg = (data && data.suggestions) || {};
+                const found = [];
+                this.root.querySelectorAll('input[data-lf]').forEach(function (inp) {
+                    const cands = sugg[inp.getAttribute('data-lf')] || [];
+                    if (cands.length && !inp.value.trim()) {
+                        inp.value = cands[0];
+                        found.push(inp.previousElementSibling ?
+                            inp.previousElementSibling.textContent : inp.getAttribute('data-lf'));
+                    }
+                });
+                statusEl.textContent = found.length
+                    ? 'Filled: ' + found.join(', ') + '. Check them, then Save.'
+                    : 'Nothing found in stored documents — type the details in.';
+            } catch (e) {
+                statusEl.textContent = 'Could not check documents. You can still type the details in.';
+            }
         },
 
         // ---------- Advice & Insights ----------
@@ -1283,7 +1346,8 @@
             html += '<label class="hub-check"><input type="checkbox" id="hub-reminders-enabled"' +
                 (s.reminders_enabled === false ? '' : ' checked') + '> Show reminders</label>';
             html += '<label class="hub-check"><input type="checkbox" id="hub-notifications-enabled"' +
-                (s.notifications_enabled === true ? ' checked' : '') + '> Notify me when a reminder is due</label>';
+                (s.notifications_enabled === true ? ' checked' : '') +
+                '> Notify me when a reminder is due, even when the app is closed</label>';
             html += '<label class="hub-input-label" for="hub-digest-frequency">Periodic review</label>';
             html += '<select class="hub-input" id="hub-digest-frequency">';
             const freqs = [['weekly', 'Weekly'], ['monthly', 'Monthly'], ['off', 'Off']];
@@ -1340,6 +1404,66 @@
             }
         },
 
+        // Subscribe this device for pushed reminders (or unsubscribe).
+        // Returns 'on' | 'off' | 'unsupported' | 'unconfigured' | 'failed'.
+        async ensurePushSubscription(enable) {
+            try {
+                if (!('serviceWorker' in navigator) || typeof PushManager === 'undefined') {
+                    return 'unsupported';
+                }
+                const reg = await navigator.serviceWorker.getRegistration('/dr-health') ||
+                            await navigator.serviceWorker.ready;
+                if (!reg || !reg.pushManager) return 'unsupported';
+                if (!enable) {
+                    const sub = await reg.pushManager.getSubscription();
+                    if (sub) {
+                        await AuthHelper.authenticatedFetch('/api/health-profile/push-subscription', {
+                            method: 'DELETE',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ endpoint: sub.endpoint })
+                        });
+                        await sub.unsubscribe();
+                    }
+                    return 'off';
+                }
+                const existing = await reg.pushManager.getSubscription();
+                // Already subscribed and the server knows it — nothing to do.
+                try {
+                    if (existing && localStorage.getItem('drHealth.pushSynced') === existing.endpoint) {
+                        return 'on';
+                    }
+                } catch (e) {}
+                const keyResp = await AuthHelper.authenticatedFetch('/api/health-profile/push-key');
+                const kd = keyResp.ok ? await keyResp.json() : {};
+                if (!kd.vapid_public_key) return 'unconfigured';
+                const sub = existing || await reg.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: this._urlB64ToUint8Array(kd.vapid_public_key)
+                });
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/push-subscription', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ subscription: sub.toJSON ? sub.toJSON() : sub })
+                });
+                if (resp.ok) {
+                    try { localStorage.setItem('drHealth.pushSynced', sub.endpoint); } catch (e) {}
+                    return 'on';
+                }
+                return 'failed';
+            } catch (e) {
+                return 'failed';
+            }
+        },
+
+        _urlB64ToUint8Array(base64) {
+            const padding = '='.repeat((4 - base64.length % 4) % 4);
+            const b64 = (base64 + padding).replace(/-/g, '+').replace(/_/g, '/');
+            const raw = atob(b64);
+            const arr = new Uint8Array(raw.length);
+            for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+            return arr;
+        },
+
         async saveAdviceSettings() {
             if (this.busy) return;
             const ai = this.root.querySelector('#hub-ai-enabled');
@@ -1380,6 +1504,16 @@
                     return;
                 }
                 this.status('Preferences saved.');
+                // Push setup is best-effort: the in-app notification path works
+                // regardless, so a failure here never un-saves the preference.
+                const pushResult = await this.ensurePushSubscription(nfy.checked);
+                if (nfy.checked && pushResult === 'unsupported') {
+                    this.status('Preferences saved. This device can only alert you while the app is ' +
+                        'open — install Dr. Health to the home screen for background notifications.', true);
+                } else if (nfy.checked && pushResult !== 'on') {
+                    this.status('Preferences saved, but background notifications could not be set up ' +
+                        'on this device yet — they will retry next time the app opens.', true);
+                }
                 this.loadOverview();
             } catch (e) {
                 this.busy = false;
@@ -2003,6 +2137,8 @@
             } else if (kind === 'object') {
                 const save = this.root.querySelector('#hub-obj-save');
                 if (save) save.addEventListener('click', () => self.saveObject(id));
+                const suggest = this.root.querySelector('#hub-local-suggest');
+                if (suggest) suggest.addEventListener('click', () => self.suggestLocalDetails());
                 this.wireDobPicker();
             } else if (kind === 'vitals') {
                 const open = this.root.querySelector('#hub-open-vitals');
@@ -2239,6 +2375,15 @@
             const form = this.root.querySelector('[data-object="' + id + '"]');
             if (!form) return;
             const values = this.readForm(form);
+            // Private details are device-local — saved straight to this phone,
+            // never part of the payload below.
+            if (id === 'personal' && typeof EmergencyCard !== 'undefined' && EmergencyCard.saveLocal) {
+                const fields = {};
+                form.querySelectorAll('input[data-lf]').forEach(function (inp) {
+                    fields[inp.getAttribute('data-lf')] = inp.value;
+                });
+                EmergencyCard.saveLocal(fields);
+            }
             const payload = {};
             if (id === 'personal' && 'name' in values) {
                 payload.name = values.name;

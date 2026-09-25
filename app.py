@@ -6466,6 +6466,7 @@ from ai_compare.medical_advisor_health_context import (
 )
 from ai_compare import health_insights
 from ai_compare import health_freshness
+from ai_compare import health_push
 
 HEALTH_UPLOADS_DIR = Path(__file__).parent / "health_uploaded_documents"
 
@@ -6862,6 +6863,76 @@ def pair_emergency_card():
         return jsonify({'success': True, 'card': profile.emergency_card()})
     except Exception as e:
         return _safe_error(e, 'pair_emergency_card')
+
+
+# ---------------------------------------------------------------------------
+# Web Push — background reminder notifications. Subscriptions live in the
+# patient-data dir (gitignored); the actual sending runs in push_dispatch.py
+# on a schedule, never inside a request.
+# ---------------------------------------------------------------------------
+
+@app.route('/api/health-profile/push-key', methods=['GET'])
+@require_auth
+def health_push_key():
+    """Public VAPID key the browser needs to subscribe. Not secret."""
+    key = health_push.vapid_public_key()
+    if not key:
+        return jsonify({'success': False,
+                        'error': 'Push notifications are not configured on the server.'}), 503
+    return jsonify({'success': True, 'vapid_public_key': key})
+
+
+@app.route('/api/health-profile/push-subscription', methods=['POST'])
+@require_auth
+def health_push_subscribe():
+    """Store this device's push subscription for the signed-in user."""
+    try:
+        data = request.get_json(silent=True) or {}
+        sub = data.get('subscription') if isinstance(data.get('subscription'), dict) else data
+        if not health_push.add_subscription(request.current_user['user_id'], sub):
+            return jsonify({'error': 'Invalid subscription.'}), 400
+        return jsonify({'success': True})
+    except Exception as e:
+        return _safe_error(e, 'health_push_subscribe')
+
+
+@app.route('/api/health-profile/push-subscription', methods=['DELETE'])
+@require_auth
+def health_push_unsubscribe():
+    """Drop one subscription, identified by its endpoint."""
+    try:
+        data = request.get_json(silent=True) or {}
+        health_push.remove_subscription(request.current_user['user_id'],
+                                        str(data.get('endpoint') or ''))
+        return jsonify({'success': True})
+    except Exception as e:
+        return _safe_error(e, 'health_push_unsubscribe')
+
+
+@app.route('/api/health-profile/push-test', methods=['POST'])
+@require_auth
+def health_push_test():
+    """Send a test notification to every device this user subscribed."""
+    try:
+        user_id = str(request.current_user['user_id'])
+        subs = health_push.subscriptions_for(user_id)
+        if not subs:
+            return jsonify({'error': 'No push subscription stored for this device.'}), 404
+        if not health_push.push_configured():
+            return jsonify({'error': 'Push notifications are not configured on the server.'}), 503
+        sent, errors = 0, []
+        for sub in subs:
+            try:
+                health_push.send_push(
+                    sub, 'Dr. Health',
+                    'Notifications are working — reminders will arrive here.')
+                sent += 1
+            except Exception as exc:
+                errors.append(str(exc)[:200])
+        return jsonify({'success': sent > 0, 'sent': sent,
+                        'errors': errors or None})
+    except Exception as e:
+        return _safe_error(e, 'health_push_test')
 
 
 @app.route('/api/health-profile/visit-brief', methods=['GET'])

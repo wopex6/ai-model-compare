@@ -13,7 +13,7 @@
 //   2. Cached assets are revalidated in the background every time they are
 //      used, so a stale copy survives at most one launch. Bumping CACHE_NAME
 //      forces it sooner, but forgetting to no longer strands users.
-const CACHE_NAME = 'dr-health-shell-v121';
+const CACHE_NAME = 'dr-health-shell-v122';
 const APP_SHELL = '/dr-health';
 const EMERGENCY_SHELL = '/dr-health/emergency';
 const SHELL_ASSETS = [
@@ -144,6 +144,39 @@ self.addEventListener('fetch', (event) => {
                 return cached;
             }
             return fromNetwork;
+        })
+    );
+});
+
+// Reminder notifications pushed by the server while the app is closed.
+self.addEventListener('push', (event) => {
+    let data = {};
+    try {
+        data = event.data ? event.data.json() : {};
+    } catch (e) {
+        data = { body: event.data ? event.data.text() : '' };
+    }
+    event.waitUntil(
+        self.registration.showNotification(data.title || 'Dr. Health', {
+            body: data.body || 'A reminder needs attention.',
+            icon: '/static/icons/dr_health_icon_192.png',
+            badge: '/static/icons/dr_health_icon_96.png',
+            data: { url: data.url || '/dr-health' }
+        })
+    );
+});
+
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    const target = (event.notification.data && event.notification.data.url) || APP_SHELL;
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+            for (const client of list) {
+                if (client.url.indexOf('/dr-health') !== -1 && 'focus' in client) {
+                    return client.focus();
+                }
+            }
+            return clients.openWindow(target);
         })
     );
 });

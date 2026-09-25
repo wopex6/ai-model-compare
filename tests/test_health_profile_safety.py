@@ -866,3 +866,73 @@ def test_emergency_field_candidates_empty_and_safe():
     assert all(v == [] for v in out.values())
     out2 = app_mod._emergency_field_candidates([])
     assert all(v == [] for v in out2.values())
+
+
+def test_push_subscriptions_roundtrip(tmp_path, monkeypatch):
+    from ai_compare import health_push
+    monkeypatch.setattr(health_push, 'SUBS_PATH', tmp_path / 'subs.json')
+    monkeypatch.setattr(health_push, 'DATA_DIR', tmp_path)
+    sub = {'endpoint': 'https://push.example.com/abc',
+           'keys': {'p256dh': 'k1', 'auth': 'a1'}}
+    assert health_push.add_subscription(21, sub)
+    assert health_push.subscriptions_for('21')[0]['endpoint'].endswith('/abc')
+    # Re-posting the same endpoint updates it, does not duplicate.
+    assert health_push.add_subscription(21, sub)
+    assert len(health_push.subscriptions_for('21')) == 1
+    # Malformed subscriptions are rejected.
+    assert not health_push.add_subscription(21, {'endpoint': 'http://x'})
+    assert not health_push.add_subscription(21, {'endpoint': 'https://x/1'})
+    health_push.remove_subscription(21, 'https://push.example.com/abc')
+    assert health_push.subscriptions_for('21') == []
+
+
+def test_push_dispatch_only_when_reminders_due(tmp_path, monkeypatch):
+    import json as _json
+    from datetime import date as _date
+    from ai_compare import health_push
+    monkeypatch.setattr(health_push, 'SUBS_PATH', tmp_path / 'subs.json')
+    monkeypatch.setattr(health_push, 'DATA_DIR', tmp_path)
+    health_push.add_subscription(21, {'endpoint': 'https://push.example.com/x',
+                                      'keys': {'p256dh': 'k', 'auth': 'a'}})
+    profile = {
+        'advice_settings': {'notifications_enabled': False},
+        'follow_ups': [{'title': 'Blood test', 'due_date': '2000-01-01'}],
+    }
+    (tmp_path / '21.json').write_text(_json.dumps(profile))
+    calls = []
+    send = lambda s, t, b, url='/dr-health': calls.append((s, t, b))
+    result = health_push.dispatch_due_reminders(today=_date(2026, 9, 24), send=send)
+    assert result['sent'] == 0 and calls == []
+    profile['advice_settings']['notifications_enabled'] = True
+    (tmp_path / '21.json').write_text(_json.dumps(profile))
+    result = health_push.dispatch_due_reminders(today=_date(2026, 9, 24), send=send)
+    assert result['sent'] == 1
+    assert 'Blood test' in calls[0][2]
+
+
+def test_push_dispatch_prunes_dead_subscription(tmp_path, monkeypatch):
+    import json as _json
+    from datetime import date as _date
+    from ai_compare import health_push
+    monkeypatch.setattr(health_push, 'SUBS_PATH', tmp_path / 'subs.json')
+    monkeypatch.setattr(health_push, 'DATA_DIR', tmp_path)
+    health_push.add_subscription(21, {'endpoint': 'https://push.example.com/dead',
+                                      'keys': {'p256dh': 'k', 'auth': 'a'}})
+    profile = {
+        'advice_settings': {'notifications_enabled': True},
+        'follow_ups': [{'title': 'Review meds', 'due_date': '2000-01-01'}],
+    }
+    (tmp_path / '21.json').write_text(_json.dumps(profile))
+
+    class _Resp:
+        status_code = 410
+
+    class _Gone(Exception):
+        response = _Resp()
+
+    def dead_send(s, t, b, url='/dr-health'):
+        raise _Gone('gone')
+
+    result = health_push.dispatch_due_reminders(today=_date(2026, 9, 24), send=dead_send)
+    assert result['pruned'] == 1
+    assert health_push.subscriptions_for('21') == []

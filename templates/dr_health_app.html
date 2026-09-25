@@ -3826,65 +3826,6 @@
                 pairCode.hidden = !pairCode.hidden;
             });
         }
-        // Private details live only in this phone's storage — never uploaded.
-        // The home-screen icon keeps its own copy on iOS, so it offers the
-        // same editor on its own page.
-        if (EmergencyCard.LOCAL_FIELDS && EmergencyCard.saveLocal) {
-            const labels = {
-                full_name: 'Full name', date_of_birth: 'Date of birth',
-                address: 'Address',
-                phone: 'Phone', medicare: 'Medicare number',
-                medicare_expiry: 'Medicare valid to (MM/YYYY)',
-                insurer: 'Private health insurer',
-                insurance_member: 'Insurance member / policy no.'
-            };
-            const local = EmergencyCard.loadLocal();
-            const wrap = document.createElement('details');
-            wrap.className = 'emergency-local-edit';
-            let inner = '<summary>Private details — this phone only</summary>' +
-                '<p class="emergency-cache-note">Stored only on this phone and never uploaded. ' +
-                'Lost if this phone’s storage is cleared.</p>';
-            for (const f of EmergencyCard.LOCAL_FIELDS) {
-                inner += '<label>' + labels[f] +
-                    '<input type="text" data-lf="' + f + '" value="' + escCard(local[f] || '') + '"></label>';
-            }
-            inner += '<div class="emergency-local-status"></div>' +
-                '<button type="button" class="emergency-local-suggest">Suggest from my documents</button>' +
-                '<button type="button" class="emergency-local-save">Save on this phone</button>';
-            wrap.innerHTML = inner;
-            view.appendChild(wrap);
-            const statusEl = wrap.querySelector('.emergency-local-status');
-            wrap.querySelector('.emergency-local-suggest').addEventListener('click', async function () {
-                statusEl.textContent = 'Looking through stored documents…';
-                try {
-                    const resp = await AuthHelper.authenticatedFetch('/api/health-profile/emergency-card/suggest');
-                    const data = resp.ok ? await resp.json() : {};
-                    const sugg = (data && data.suggestions) || {};
-                    const found = [];
-                    wrap.querySelectorAll('input[data-lf]').forEach(function (inp) {
-                        const f = inp.getAttribute('data-lf');
-                        const cands = sugg[f] || [];
-                        if (cands.length && !inp.value.trim()) {
-                            inp.value = cands[0];
-                            found.push(labels[f] || f);
-                        }
-                    });
-                    statusEl.textContent = found.length
-                        ? 'Filled: ' + found.join(', ') + '. Check them, then save.'
-                        : 'Nothing found in stored documents — type the details in.';
-                } catch (e) {
-                    statusEl.textContent = 'Could not check documents. You can still type the details in.';
-                }
-            });
-            wrap.querySelector('.emergency-local-save').addEventListener('click', function () {
-                const fields = {};
-                wrap.querySelectorAll('input[data-lf]').forEach(function (inp) {
-                    fields[inp.getAttribute('data-lf')] = inp.value;
-                });
-                EmergencyCard.saveLocal(fields);
-                renderEmergency(loadEmergencyCache());
-            });
-        }
     }
 
     async function bootApp() {
