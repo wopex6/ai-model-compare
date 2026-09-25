@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-25 10:50 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-25 19:33 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-private details moved to Personal Details; web push live (endpoints verified on prod, daily task 22:00 UTC); FLASK_ENV unset on prod so default JWT_SECRET in use — needs fixing
+Added 'auto' reply-language mode (default): AI replies mirror the question's language, clinical terms stay in original wording; en/zh-HK remain as explicit overrides. SW v123. Backlog: real JWT_SECRET/FLASK_ENV on PA (.//. password too), bilingual crisis keywords, Chinese drug-name aliases.
 
 ## Git
 
@@ -41,19 +41,19 @@ private details moved to Personal Details; web push live (endpoints verified on 
 Recent commits:
 
 ```
+46c64e7 Add 'auto' reply-language mode that mirrors the question's language
+454519c push: send at high urgency so Doze doesn't defer reminders
+2945a3d settings: save preferences even when notification permission is blocked
+f0a346a settings: distinguish unsupported vs denied notification error
+1584572 handoff: snapshot after private-details + web push deploy
 e03bb05 private details in Personal Details + web push for reminders
 9d85d5a handoff: snapshot after DOB-to-phone-local deploy
 1ec1a1f emergency card: move date of birth into phone-only details
-244ead2 handoff: snapshot after emergency-suggest deploy
-36d068a emergency card: suggest private details from stored documents
-1d28b79 handoff: snapshot after phone-only emergency fields deploy
-bedae29 emergency card: phone-only private details
-69b5ca6 handoff: snapshot after profile retirement and sensitive-data removal
 ```
 
 ## Production (PythonAnywhere)
 
-**4 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
+Local and production match.
 
 ```
 ok       tests/test_review_flow.py
@@ -80,27 +80,25 @@ ok       web_enhancement_test_runner.py
 ok       webhook_deploy.py
 ok       wisdom_profiles/23.json
 ok       wisdom_profiles/23_hypotheses.json
-4 file(s) stale. Re-run with --push to upload.
+Everything on the server matches local.
 ```
-
-Reload often returns `409 slow_startup_error` on the first attempt — retry rather than debug it.
 
 ## Tests
 
 All passing.
 
 ```
-automated_greeting_system.py:416
-automated_greeting_system.py:416
-  C:\Users\trabc\CascadeProjects\ai-model-compare - Claude\automated_greeting_system.py:416: DeprecationWarning: The default datetime adapter is deprecated as of Python 3.12; see the sqlite3 documentation for suggested replacement recipes
-    cursor.execute('''
-
+........................................................................ [ 52%]
+........................................................................ [ 70%]
+........................................................................ [ 88%]
+.................................................                        [100%]
+============================== warnings summary ===============================
 ..\..\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37
   C:\Users\trabc\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-409 passed, 5 warnings in 21.96s
+409 passed, 1 warning in 21.81s
 [AutoDoc] Monitoring stopped
 ```
 
