@@ -129,6 +129,9 @@ def send_push(subscription, title, body, url='/dr-health'):
         data=json.dumps({'title': title, 'body': body, 'url': url}),
         vapid_private_key=_env('VAPID_PRIVATE_KEY'),
         vapid_claims={'sub': _env('VAPID_CLAIMS_EMAIL', _VAPID_EMAIL_DEFAULT)},
+        # High urgency maps to a high-priority FCM/Apple message — normal
+        # priority gets deferred for a long time on idle devices (Doze).
+        headers={'Urgency': 'high'},
         timeout=15,
     )
 
