@@ -936,3 +936,44 @@ def test_push_dispatch_prunes_dead_subscription(tmp_path, monkeypatch):
     result = health_push.dispatch_due_reminders(today=_date(2026, 9, 24), send=dead_send)
     assert result['pruned'] == 1
     assert health_push.subscriptions_for('21') == []
+
+
+def test_analyze_parses_spirometry_style_table(monkeypatch):
+    """Pre/Post-bronchodilator reports have Actual/Pred/%Pred columns, not
+    dates — the parser must classify column roles instead of storing the
+    column headers as dates."""
+    import ai_compare.medical_advisor_health_context as m
+
+    raw = '''PULMONARY FUNCTION TEST
+| | Pre-Bronch | | | Post-Bronch | | |
+| | Actual | Pred | %Pred | Actual | %Pred | %Chng |
+| --- | --- | --- | --- | --- | --- | --- |
+| FEV1 (L) | 0.96 | 1.62 | 59 | 1.30 | 80 | 36.2 |
+| FVC (L) | 1.47 | 2.03 | 73 | 1.37 | 68 | -6.8 |
+---- DIFFUSION ----
+| | Actual | Pred | %Pred |
+| --- | --- | --- | --- |
+| DLCOunc (ml/min/mmHg) | 13.37 | 16.93 | 79 |
+'''
+    user_id = _user()
+    monkeypatch.setattr(m, '_health_ai_chat', lambda *a, **k: '{}')
+    try:
+        out = m.HealthContextManager.analyze_and_store(user_id, raw, save=False)
+        assert out.get('success'), out
+        rows = out['extracted']['test_results']
+        names = {r['test_name'] for r in rows}
+        assert 'FEV1 (L) (Pre-Bronch)' in names and 'FEV1 (L) (Post-Bronch)' in names
+        pre = next(r for r in rows if r['test_name'] == 'FEV1 (L) (Pre-Bronch)')
+        assert pre['value'] == '0.96 L'
+        assert '1.62' in pre['reference_range']
+        assert '59%' in pre['notes']
+        post = next(r for r in rows if r['test_name'] == 'FEV1 (L) (Post-Bronch)')
+        assert post['value'] == '1.30 L' and '+36.2%' in post['notes']
+        # Column labels are not dates, and predicted/% figures are never
+        # standalone values.
+        assert all(not r.get('date') for r in rows)
+        assert all(r['value'] not in ('1.62', '59', '80', '36.2') for r in rows)
+        dlco = next(r for r in rows if r['test_name'] == 'DLCOunc (ml/min/mmHg)')
+        assert dlco['value'].lower() == '13.37 ml/min/mmhg'
+    finally:
+        _cleanup(user_id)

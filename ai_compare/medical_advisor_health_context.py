@@ -3188,7 +3188,11 @@ Rules:
 - Do not combine multiple date values into a single value string such as "v1, v2, v3" or "v1 / v2 / v3".
 - Take each value and unit from that test's own row. Do not swap or shift values between adjacent rows and do not drop the unit.
 - Wide tables may wrap: a Reference or Units fragment on the line AFTER a result row belongs to that row, not a new row. Attach it before extracting.
-- Never collapse multiple date columns into a single object or combined string value."""
+- Never collapse multiple date columns into a single object or combined string value.
+- Not every result-table column is a date. BEFORE extracting, identify each column's role — test name, actual/result value, predicted value, % of predicted, % change, reference range, units, or date. Verify the reading: a %Pred-style column should be roughly actual ÷ predicted × 100 — if it is not, the column roles were misread; re-examine the table before extracting.
+- Predicted values, % of predicted and % change are context, not measurements: put the predicted value in reference_range as 'predicted X' and the percentages in notes. Never create a test_result whose value is a predicted, %-predicted or %-change figure.
+- Paired phases of one measurement (e.g. pre/post bronchodilator spirometry) are separate results — keep the phase in the test name, e.g. 'FEV1 (L) (Post-Bronch)'.
+- If a table has no date column and the document shows no report date, leave the date empty. Never invent a date or copy a column label into the date field."""
 
         user_prompt = f"""EXISTING PATIENT PROFILE:
 - Daily foods: {', '.join(existing_foods)}
@@ -3239,19 +3243,123 @@ NEW TEXT TO ANALYZE:
                 if sep_idx is None or sep_idx == 0:
                     continue
 
-                headers = rows[0]
-                ref_idx = None
-                unit_idx = None
-                for idx, h in enumerate(headers):
-                    if re.search(r'\b(refer|ref|reference)', h, re.I):
-                        ref_idx = idx
-                    if re.search(r'\bunit', h, re.I):
-                        unit_idx = idx
+                # Header rows: everything above the separator. Lab tables
+                # have one; grouped reports (e.g. spirometry "Pre-Bronch /
+                # Post-Bronch" spanning Actual/Pred/%Pred) have a sparse
+                # group row above the column-name row — carry each group
+                # label forward over the columns it introduces.
+                header_rows = rows[:sep_idx]
+                name_row = header_rows[-1]
+                span_rows = header_rows[:-1]
+                groups = [''] * len(name_row)
+                cur_group = ''
+                for c in range(len(name_row)):
+                    for sr in span_rows:
+                        if c < len(sr) and sr[c].strip():
+                            cur_group = sr[c].strip()
+                            break
+                    groups[c] = cur_group
 
-                # Date columns sit between the test-name column (0) and reference/unit columns
-                end_candidates = [x for x in [ref_idx, unit_idx, len(headers)] if x is not None]
+                # Classify each column's role before extracting — middle
+                # columns are not always dates. Anything unrecognised still
+                # falls through to the date-column behaviour below.
+                def _role(label):
+                    hl = label.strip().lower()
+                    if re.search(r'%', hl) and re.search(r'pred|predict', hl):
+                        return 'pct_pred'
+                    if re.search(r'%', hl) and re.search(r'ch?n?g|change', hl):
+                        return 'pct_change'
+                    if re.search(r'\b(refer|ref|reference)\b', hl):
+                        return 'ref'
+                    if 'unit' in hl:
+                        return 'unit'
+                    if _DATE_RE.search(label) or re.search(r'latest', hl):
+                        return 'date'
+                    if re.search(r'\b(pred|predicted|expected|target)\b', hl):
+                        return 'pred'
+                    if re.search(r'\b(actual|result|value|measured|observed)\b', hl):
+                        return 'actual'
+                    if re.search(r'\b(flag|abnormal)\b', hl) or re.search(r'\bh/l\b', hl):
+                        return 'flag'
+                    return ''
+
+                roles = [_role(h) for h in name_row]
+                ref_idx = roles.index('ref') if 'ref' in roles else None
+                unit_idx = roles.index('unit') if 'unit' in roles else None
+                end_candidates = [x for x in [ref_idx, unit_idx, len(name_row)] if x is not None]
                 end_idx = min(end_candidates)
-                date_cols = list(range(1, end_idx))
+
+                # Unclassified middle columns keep the old behaviour:
+                # one result per column headed by a date.
+                for c in range(1, end_idx):
+                    if roles[c] == '':
+                        roles[c] = 'date'
+                date_cols = [c for c in range(1, end_idx) if roles[c] == 'date']
+                has_semantic = any(
+                    roles[c] in ('actual', 'pred', 'pct_pred', 'pct_change')
+                    for c in range(1, end_idx))
+
+                def _cell(row, idx):
+                    return row[idx].strip() if idx is not None and idx < len(row) else ''
+
+                if has_semantic:
+                    # Role-typed table (Actual/Pred/%Pred/…): one result per
+                    # row per measurement group, predicted → reference_range,
+                    # percentages → notes. No date unless the table has one.
+                    group_order = []
+                    for c in range(1, end_idx):
+                        if groups[c] not in group_order:
+                            group_order.append(groups[c])
+                    for row in rows[sep_idx + 1:]:
+                        if not row or len(row) < 2:
+                            continue
+                        test_name = row[0].strip()
+                        if not test_name or _META_LABEL_RE.search(test_name):
+                            continue
+                        test_name = re.sub(r'^[*+]\s*', '', test_name).strip()
+                        unit = _cell(row, unit_idx)
+                        if not unit:
+                            m = re.search(r'\(([^)]+)\)\s*$', test_name)
+                            if m:
+                                unit = m.group(1)
+                        row_ref = _cell(row, ref_idx)
+                        for gname in group_order:
+                            gcols = [c for c in range(1, end_idx) if groups[c] == gname]
+                            actual = next((c for c in gcols if roles[c] == 'actual'), None)
+                            if actual is None:
+                                # group with no Actual column — take its
+                                # first classified value column instead
+                                actual = next((c for c in gcols
+                                               if roles[c] in ('pred', 'pct_pred', 'pct_change')), None)
+                            if actual is None:
+                                continue
+                            val = _cell(row, actual)
+                            if not val:
+                                continue
+                            notes = []
+                            pred = next((c for c in gcols if roles[c] == 'pred'), None)
+                            pct = next((c for c in gcols if roles[c] == 'pct_pred'), None)
+                            chg = next((c for c in gcols if roles[c] == 'pct_change'), None)
+                            ref = row_ref
+                            if pred is not None and _cell(row, pred):
+                                ref = ('predicted ' + _cell(row, pred) +
+                                       ((' ' + unit) if unit else '')).strip()
+                            if pct is not None and _cell(row, pct):
+                                notes.append(_cell(row, pct).rstrip('%') + '% of predicted')
+                            if chg is not None and _cell(row, chg):
+                                cv = _cell(row, chg).rstrip('%')
+                                notes.append('change ' + (cv if cv.startswith('-') else '+' + cv) + '%')
+                            if unit and not re.search(re.escape(unit), val, re.I):
+                                val = (val + ' ' + unit).strip()
+                            results.append({
+                                "test_name": test_name + (' (' + gname + ')' if gname else ''),
+                                "value": val,
+                                "reference_range": ref,
+                                "date": '',
+                                "notes": ' · '.join(notes)
+                            })
+                    continue
+
                 if not date_cols:
                     continue
 
@@ -3259,7 +3367,7 @@ NEW TEXT TO ANALYZE:
                 # a date pattern near those words and replace the header.
                 full_text = '\n'.join(lines)
                 for d_idx in date_cols:
-                    h = headers[d_idx].strip()
+                    h = name_row[d_idx].strip()
                     if re.search(r'latest', h, re.I):
                         # Look for a date pattern (e.g. 03-Apr-25, 03/04/2025) in the text
                         # near the word "Latest" or in the column header itself
@@ -3268,7 +3376,7 @@ NEW TEXT TO ANALYZE:
                             # Search the full text for dates that appear after the previous column header
                             date_match = re.search(r'(\d{1,2}[-/\s][A-Za-z]{3,9}[-/\s]\d{2,4}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4})', full_text)
                         if date_match:
-                            headers[d_idx] = date_match.group(1)
+                            name_row[d_idx] = date_match.group(1)
 
                 for row in rows[sep_idx + 1:]:
                     if not row or len(row) < 2:
@@ -3282,7 +3390,7 @@ NEW TEXT TO ANALYZE:
                     for d_idx in date_cols:
                         if d_idx >= len(row):
                             continue
-                        date = headers[d_idx].strip()
+                        date = name_row[d_idx].strip()
                         val = row[d_idx].strip()
                         if not val:
                             continue
