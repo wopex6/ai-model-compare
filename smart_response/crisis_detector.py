@@ -42,6 +42,13 @@ CRITICAL_SIGNALS = [
     'hang myself', 'shoot myself', 'kill myself',
     'goodbye forever', 'final goodbye', 'this is my last',
     'nobody will miss me', 'world without me',
+    # Chinese (Traditional + Simplified + Cantonese colloquial)
+    '想死', '自殺', '自杀', '輕生', '轻生', '生無可戀', '生无可恋',
+    '唔想活', '不想活', '一了百了', '結束生命', '结束生命',
+    '死咗好過', '死了好過', '死了好过', '跳樓', '跳楼',
+    '燒炭', '烧炭', '割脈', '割脉', '吊頸', '吊颈', '服毒',
+    '永別', '永别', '殺咗自己', '殺左自己', '殺死自己', '杀死自己',
+    '冇人會掛住我', '沒人會想念我', '没人会想念我',
 ]
 
 URGENT_SIGNALS = [
@@ -54,6 +61,12 @@ URGENT_SIGNALS = [
     'want to disappear', 'want to vanish forever',
     'abuse', 'being abused', 'hitting me', 'hurting me',
     'domestic violence', 'sexual assault', 'raped',
+    # Chinese
+    '自殘', '自残', '撐唔住', '撑唔住', '撑不住', '受唔住', '受不住',
+    '捱唔住', '挨唔住', '挨不住',
+    '活唔落去', '活不下去', '活着沒意思', '活著沒意思', '活着没意思',
+    '俾人打', '被人打', '被打', '被虐待', '受虐待', '虐待',
+    '家暴', '家庭暴力', '性侵犯', '性侵', '強姦', '强奸',
 ]
 
 CONCERN_SIGNALS = [
@@ -66,6 +79,12 @@ CONCERN_SIGNALS = [
     'binge', 'purge', 'eating disorder', 'anorexia', 'bulimia',
     'completely alone', 'nobody cares about me',
     'trapped', 'no way out', 'prison in my mind',
+    # Chinese
+    '絕望', '绝望', '無助', '无助', '冇用', '沒用', '没用',
+    '討厭自己', '讨厌自己', '憎自己', '恨自己', '頂唔順', '顶不顺',
+    '崩潰', '崩溃', '恐慌發作', '恐慌发作', '驚恐發作', '惊恐发作',
+    '瞓唔著', '睡唔著', '睡不着', '食唔落', '吃不下', '唔想食',
+    '冇出路', '走投無路', '走投无路',
 ]
 
 WATCH_SIGNALS = [
@@ -76,6 +95,12 @@ WATCH_SIGNALS = [
     'isolating', 'withdrawing', 'avoiding everyone',
     'nightmares', 'flashbacks', 'triggered',
     'grief', 'mourning', 'lost someone',
+    # Chinese
+    '好大壓力', '很大壓力', '压力很大', '好攰', '好累', '好辛苦',
+    '喊不停', '哭不停', '喊到停唔到', '焦慮', '焦虑', '發惡夢', '发恶梦',
+    '做噩夢', '做恶梦', '唔想見人', '不想见人', '唔想出門', '不想出门',
+    '冇胃口', '没胃口', '悶悶不樂', '闷闷不乐', '唔開心', '不开心',
+    '好擔心', '好驚', '擔心得瞓唔著',
 ]
 
 

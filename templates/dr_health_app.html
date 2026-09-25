@@ -318,31 +318,6 @@
         border-radius: 0 8px 8px 0;
     }
     .emergency-empty { color: #999; font-style: italic; }
-    .emergency-local-edit {
-        margin-top: 14px; border-top: 1px dashed #e0e0e0; padding-top: 10px;
-    }
-    .emergency-local-edit summary {
-        cursor: pointer; color: #c62828; font-weight: 600; font-size: 0.9rem;
-    }
-    .emergency-local-edit label {
-        display: block; font-size: 0.8rem; color: #666; margin-top: 8px;
-    }
-    .emergency-local-edit input {
-        display: block; width: 100%; margin-top: 2px; padding: 8px 10px;
-        border: 1px solid #ddd; border-radius: 8px; font-size: 0.95rem;
-    }
-    .emergency-local-edit .emergency-local-status {
-        margin-top: 8px; font-size: 0.8rem; color: #607d8b; min-height: 1em;
-    }
-    .emergency-local-edit .emergency-local-suggest {
-        margin-top: 8px; width: 100%; padding: 9px; border-radius: 10px;
-        border: 1px solid #c62828; background: #fff; color: #c62828;
-        font-size: 0.9rem; font-weight: 600;
-    }
-    .emergency-local-edit .emergency-local-save {
-        margin-top: 10px; width: 100%; padding: 10px; border: none; border-radius: 10px;
-        background: #c62828; color: #fff; font-size: 0.95rem; font-weight: 700;
-    }
     .emergency-cache-note {
         background: #fff3cd; border: 1px solid #f0ad4e; color: #856404;
         padding: 10px; border-radius: 8px; font-size: 0.85rem; margin-bottom: 12px;
@@ -3793,17 +3768,20 @@
             view.innerHTML = '<p class="emergency-empty">Could not load the emergency card.</p>';
             return;
         }
+        const iconSeed = (typeof EmergencyCard !== 'undefined' && EmergencyCard.localHash)
+            ? EmergencyCard.localHash() : '';
         const actions = opts.fromCache ? '' : (
             '<div class="emergency-source-actions">' +
             '<button type="button" data-hub-go="personal">Personal Details</button>' +
             '<button type="button" data-hub-go="medications">Medications</button>' +
             '<button type="button" data-hub-go="conditions">Conditions</button>' +
-            '<a href="/dr-health/emergency">Home-screen icon</a>' +
+            '<a href="/dr-health/emergency' + iconSeed + '">Home-screen icon</a>' +
             '</div>' +
             (lastPairCode
                 ? '<div class="emergency-pair-note">' +
                   '<button type="button" id="emergency-show-pair">Link home-screen icon</button>' +
-                  '<p id="emergency-pair-code" hidden>On the Emergency icon, tap Refresh and enter this setup code if the card is empty: <strong>' +
+                  '<p id="emergency-pair-code" hidden>Install the icon from the Home-screen icon link — private details travel inside it. ' +
+                  'On the icon, tap Refresh and enter this setup code if the card is still empty: <strong>' +
                   escCard(lastPairCode) + '</strong></p></div>'
                 : '')
         );
