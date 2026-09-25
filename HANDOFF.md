@@ -1,25 +1,21 @@
 # Handoff snapshot
 
-_Generated 2026-09-24 22:04 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-25 10:50 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-emergency card: DOB moved to phone-only private details; age optional + DOB-derived; suggest endpoint extended with DOB; one-time server DOB migration+clear; SW v121
+private details moved to Personal Details; web push live (endpoints verified on prod, daily task 22:00 UTC); FLASK_ENV unset on prod so default JWT_SECRET in use — needs fixing
 
 ## Git
 
 **Branch:** `cursor/emergency-card-paramedic-fields`  
-**Uncommitted files:** 24
+**Uncommitted files:** 20
 
 > Uncommitted work is the main handoff hazard: the next agent
 > cannot tell finished edits from half-written ones. Commit
 > before switching, even as `wip:`.
 
 ```
-M AI_REGENERATION_SPEC.md
- M ENHANCEMENTS.md
- M README.md
- M SYSTEM_REGENERATION_GUIDE.md
 ?? check_wk_credentials.py
 ?? debug_auth.py
 ?? direct_password_test.py
@@ -42,28 +38,17 @@ M AI_REGENERATION_SPEC.md
 ?? verify_wai_tse.py
 ```
 
-<details><summary>diff --stat</summary>
-
-```
-AI_REGENERATION_SPEC.md      |  2 +-
- ENHANCEMENTS.md              | 24 ++++++++++++++++++++++++
- README.md                    |  2 +-
- SYSTEM_REGENERATION_GUIDE.md |  2 +-
- 4 files changed, 27 insertions(+), 3 deletions(-)
-```
-</details>
-
 Recent commits:
 
 ```
+e03bb05 private details in Personal Details + web push for reminders
+9d85d5a handoff: snapshot after DOB-to-phone-local deploy
 1ec1a1f emergency card: move date of birth into phone-only details
 244ead2 handoff: snapshot after emergency-suggest deploy
 36d068a emergency card: suggest private details from stored documents
 1d28b79 handoff: snapshot after phone-only emergency fields deploy
 bedae29 emergency card: phone-only private details
 69b5ca6 handoff: snapshot after profile retirement and sensitive-data removal
-1a8002d Remove leaked patient data and credentials from tracked files
-e8862ed handoff: snapshot after profile 23-to-21 data copy
 ```
 
 ## Production (PythonAnywhere)
@@ -105,17 +90,17 @@ Reload often returns `409 slow_startup_error` on the first attempt — retry rat
 All passing.
 
 ```
-........................................................................ [ 52%]
-........................................................................ [ 70%]
-........................................................................ [ 88%]
-.................................................                        [100%]
-============================== warnings summary ===============================
+automated_greeting_system.py:416
+automated_greeting_system.py:416
+  C:\Users\trabc\CascadeProjects\ai-model-compare - Claude\automated_greeting_system.py:416: DeprecationWarning: The default datetime adapter is deprecated as of Python 3.12; see the sqlite3 documentation for suggested replacement recipes
+    cursor.execute('''
+
 ..\..\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37
   C:\Users\trabc\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-409 passed, 1 warning in 22.39s
+409 passed, 5 warnings in 21.96s
 [AutoDoc] Monitoring stopped
 ```
 
