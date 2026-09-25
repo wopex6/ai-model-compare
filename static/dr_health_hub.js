@@ -1480,7 +1480,9 @@
             }
             if (nfy.checked && (typeof Notification === 'undefined' ||
                     Notification.permission !== 'granted')) {
-                this.status('Notifications are blocked by the browser — enable them in the browser/OS settings first.', true);
+                this.status(typeof Notification === 'undefined'
+                    ? 'This device/browser cannot show notifications. On iPhone, open the copy installed to the Home Screen (iOS 16.4+), not a Safari tab.'
+                    : 'Notifications are blocked — enable them for this app in the device settings.', true);
                 return;
             }
             this.busy = true;
