@@ -113,6 +113,35 @@
         return v;
     }
 
+    // The home-screen icon has no editor: on iOS it keeps its own storage,
+    // so the phone-only fields travel inside the install link's fragment.
+    // Fragments never reach the server — the data stays on this phone.
+    function localHash() {
+        const l = loadLocal();
+        if (!Object.keys(l).length) return '';
+        try {
+            const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(l))))
+                .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+            return '#ec=' + b64;
+        } catch (e) { return ''; }
+    }
+
+    function importLocalHash() {
+        try {
+            const m = String(location.hash || '').match(/#ec=([A-Za-z0-9_-]+)/);
+            if (!m) return false;
+            let b64 = m[1].replace(/-/g, '+').replace(/_/g, '/');
+            while (b64.length % 4) b64 += '=';
+            const obj = JSON.parse(decodeURIComponent(escape(atob(b64))));
+            if (!obj || typeof obj !== 'object') return false;
+            saveLocal(obj);
+            try {
+                history.replaceState(null, '', location.pathname + location.search);
+            } catch (e) {}
+            return true;
+        } catch (e) { return false; }
+    }
+
     function pairToken() {
         try { return localStorage.getItem(PAIR_KEY) || ''; } catch (e) { return ''; }
     }
@@ -303,6 +332,8 @@
         loadLocal: loadLocal,
         saveLocal: saveLocal,
         mergeLocal: mergeLocal,
+        localHash: localHash,
+        importLocalHash: importLocalHash,
         load: load,
         save: save,
         pairToken: pairToken,

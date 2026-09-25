@@ -92,14 +92,6 @@ html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Segoe UI', s
             <div class="emergency-pair-status" id="emergency-pair-status"></div>
         </form>
         <div id="emergency-view"></div>
-        <details class="emergency-local-edit" id="emergency-local-edit" style="margin-top:14px;">
-            <summary>Private details</summary>
-            <p style="font-size:0.8rem;color:#888;">This icon keeps its own copy — entries here don't sync from the main app.</p>
-            <div id="emergency-local-fields"></div>
-            <div id="emergency-local-status" style="margin-top:8px;font-size:0.8rem;color:#607d8b;min-height:1em;"></div>
-            <button type="button" id="emergency-local-suggest" hidden style="margin-top:8px;width:100%;padding:9px;border-radius:10px;border:1px solid #c62828;background:#fff;color:#c62828;font-weight:600;">Suggest from my documents</button>
-            <button type="button" id="emergency-local-save" style="margin-top:10px;width:100%;padding:10px;border:none;border-radius:10px;background:#c62828;color:#fff;font-weight:700;">Save on this phone</button>
-        </details>
     </div>
 </div>
 <script src="{{ url_for('static', filename='emergency_card.js') }}"></script>
@@ -129,7 +121,7 @@ html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Segoe UI', s
         window.EmergencyCard.render(view, card, {
             sourceNote: false,
             leadHtml: window.EmergencyCard.hasData(card) ? leadHtml(card, status) : '',
-            emptyText: 'No emergency details on this phone yet. On iPhone the home-screen icon has its own storage, so enter the setup code from signed-in Dr. Health → Emergency Info. This icon does not open that app.'
+            emptyText: 'No emergency details on this phone yet. Install this icon from the "Home-screen icon" link inside signed-in Dr. Health → Emergency Card — private details travel inside that link. Or enter the setup code shown there to pull the card.'
         });
         showPairForm(!window.EmergencyCard.hasData(card));
     }
@@ -183,74 +175,12 @@ html, body { margin: 0; padding: 0; min-height: 100%; font-family: 'Segoe UI', s
         }
     }
 
-    // Private details are entered here because a home-screen icon keeps its
-    // own storage — they never leave this phone.
-    (function initLocalEditor() {
-        const box = document.getElementById('emergency-local-fields');
-        const saveBtn = document.getElementById('emergency-local-save');
-        if (!box || !saveBtn || !window.EmergencyCard || !EmergencyCard.saveLocal) return;
-        const labels = {
-            full_name: 'Full name', date_of_birth: 'Date of birth',
-            address: 'Address',
-            phone: 'Phone', medicare: 'Medicare number',
-            medicare_expiry: 'Medicare valid to (MM/YYYY)',
-            insurer: 'Private health insurer',
-            insurance_member: 'Insurance member / policy no.'
-        };
-        const local = EmergencyCard.loadLocal();
-        EmergencyCard.LOCAL_FIELDS.forEach(function (f) {
-            const lab = document.createElement('label');
-            lab.style.cssText = 'display:block;font-size:0.8rem;color:#666;margin-top:8px;';
-            lab.textContent = labels[f];
-            const inp = document.createElement('input');
-            inp.type = 'text';
-            inp.setAttribute('data-lf', f);
-            inp.value = local[f] || '';
-            inp.style.cssText = 'display:block;width:100%;margin-top:2px;padding:8px 10px;border:1px solid #ddd;border-radius:8px;font-size:0.95rem;';
-            lab.appendChild(inp);
-            box.appendChild(lab);
-        });
-        // Suggest needs a login token — a home-screen icon on iOS keeps its
-        // own storage and has none, so the button only shows where it can work.
-        const suggestBtn = document.getElementById('emergency-local-suggest');
-        const statusEl = document.getElementById('emergency-local-status');
-        let auth = null;
-        try { auth = localStorage.getItem('authToken'); } catch (e) {}
-        if (suggestBtn && auth) {
-            suggestBtn.hidden = false;
-            suggestBtn.addEventListener('click', function () {
-                statusEl.textContent = 'Looking through stored documents…';
-                fetch('/api/health-profile/emergency-card/suggest', {
-                    headers: { Authorization: 'Bearer ' + auth }
-                }).then(function (r) { return r.ok ? r.json() : {}; })
-                .then(function (data) {
-                    const sugg = (data && data.suggestions) || {};
-                    const found = [];
-                    box.querySelectorAll('input[data-lf]').forEach(function (inp) {
-                        const f = inp.getAttribute('data-lf');
-                        const cands = sugg[f] || [];
-                        if (cands.length && !inp.value.trim()) {
-                            inp.value = cands[0];
-                            found.push(labels[f] || f);
-                        }
-                    });
-                    statusEl.textContent = found.length
-                        ? 'Filled: ' + found.join(', ') + '. Check them, then save.'
-                        : 'Nothing found in stored documents — type the details in.';
-                }).catch(function () {
-                    statusEl.textContent = 'Could not check documents. You can still type the details in.';
-                });
-            });
-        }
-        saveBtn.addEventListener('click', function () {
-            const fields = {};
-            box.querySelectorAll('input[data-lf]').forEach(function (inp) {
-                fields[inp.getAttribute('data-lf')] = inp.value;
-            });
-            EmergencyCard.saveLocal(fields);
-            showCard(window.EmergencyCard.load());
-        });
-    }());
+    // Read-only mirror of the main app: private fields arrive inside the
+    // install link's fragment (imported once, stripped after) and are edited
+    // only under Personal Details there. Nothing here sends them anywhere.
+    if (window.EmergencyCard && EmergencyCard.importLocalHash) {
+        EmergencyCard.importLocalHash();
+    }
 
     showCard(window.EmergencyCard.load());
     autoRefresh();
