@@ -8681,8 +8681,8 @@ def update_health_advice_settings():
             settings['digest_frequency'] = frequency
         if 'locale' in data:
             locale = str(data['locale'] or '').strip()
-            if locale not in ('en', 'zh-HK'):
-                return jsonify({'error': 'locale must be en or zh-HK'}), 400
+            if locale not in ('auto', 'en', 'zh-HK'):
+                return jsonify({'error': 'locale must be auto, en or zh-HK'}), 400
             settings['locale'] = locale
 
         profile.data['advice_settings'] = settings

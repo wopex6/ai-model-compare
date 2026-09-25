@@ -2360,7 +2360,8 @@ Examples:
                     </select></label>
                 <label style="display:block;font-size:0.85rem;margin:5px 0;color:#37474f;">Advice language
                     <select id="ws-advice-locale" style="margin-left:6px;padding:3px 6px;border:1px solid #ccc;border-radius:6px;">
-                        <option value="en"${String(st.locale || 'en') === 'en' ? ' selected' : ''}>English</option>
+                        <option value="auto"${String(st.locale || 'auto') === 'auto' ? ' selected' : ''}>Same as my question</option>
+                        <option value="en"${String(st.locale) === 'en' ? ' selected' : ''}>English</option>
                         <option value="zh-HK"${String(st.locale) === 'zh-HK' ? ' selected' : ''}>繁體中文 (香港)</option>
                     </select></label>
                 <button onclick="saveAdviceSettings()" style="margin-top:8px;padding:6px 14px;font-size:0.8rem;

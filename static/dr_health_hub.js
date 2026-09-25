@@ -1359,7 +1359,8 @@
             html += '</select>';
             html += '<label class="hub-input-label" for="hub-advice-locale">Advice language</label>';
             html += '<select class="hub-input" id="hub-advice-locale">';
-            html += '<option value="en"' + (String(s.locale || 'en') === 'en' ? ' selected' : '') + '>English</option>';
+            html += '<option value="auto"' + (String(s.locale || 'auto') === 'auto' ? ' selected' : '') + '>Same as my question</option>';
+            html += '<option value="en"' + (String(s.locale) === 'en' ? ' selected' : '') + '>English</option>';
             html += '<option value="zh-HK"' + (String(s.locale) === 'zh-HK' ? ' selected' : '') + '>繁體中文 (香港)</option>';
             html += '</select>';
             html += '<div class="hub-row-actions"><button class="hub-btn primary" id="hub-advice-settings-save"><i class="fas fa-check"></i> Save preferences</button></div>';
