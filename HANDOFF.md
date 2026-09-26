@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-26 15:10 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-26 15:56 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Multi-photo merge done + deployed (v127): batch upload endpoint, parse_report_pages w/ document-date propagation + overlap dedupe + page provenance; website review now preserves provenance keys. Next: surface confirmed layouts in hub; after-visit doc flow.
+Report layouts in hub + whole-app PWA shipped; legacy chat stack retired; SW v128 + life-companion-shell-v3 live
 
 ## Git
 
@@ -41,19 +41,19 @@ Multi-photo merge done + deployed (v127): batch upload endpoint, parse_report_pa
 Recent commits:
 
 ```
+8d0a729 Surface learned report layouts in the hub + whole-app PWA; retire dead chat stack
+268c09b Handoff: multi-photo merge committed and deployed (SW v127).
 1609f12 Merge multi-photo uploads of one report into a single document.
 0f4c9bc Handoff: report-layout learning loop committed, not deployed.
 1422c89 Remember confirmed report layouts and reuse them on the next scan.
 648c52b Handoff: spirometry-table parsing fix deployed
 ca3e72a Classify report-table column roles before extracting test results
 f7df04e Handoff: read-only emergency icon + security hardening (SW v124)
-1a7c641 Make emergency icon read-only mirror; bilingual crisis signals
-3a2331e Handoff: auto reply-language deployed (SW v123)
 ```
 
 ## Production (PythonAnywhere)
 
-**9 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
+**4 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
 
 ```
 ok       tests/test_review_flow.py
@@ -80,7 +80,7 @@ ok       web_enhancement_test_runner.py
 ok       webhook_deploy.py
 ok       wisdom_profiles/23.json
 ok       wisdom_profiles/23_hypotheses.json
-9 file(s) stale. Re-run with --push to upload.
+4 file(s) stale. Re-run with --push to upload.
 ```
 
 Reload often returns `409 slow_startup_error` on the first attempt — retry rather than debug it.
@@ -91,16 +91,16 @@ All passing.
 
 ```
 ........................................................................ [ 65%]
-........................................................................ [ 81%]
-........................................................................ [ 97%]
-..........                                                               [100%]
+........................................................................ [ 82%]
+........................................................................ [ 98%]
+.....                                                                    [100%]
 ============================== warnings summary ===============================
 ..\..\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37
   C:\Users\trabc\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-442 passed, 1 warning in 23.15s
+437 passed, 1 warning in 22.12s
 [AutoDoc] Monitoring stopped
 ```
 
