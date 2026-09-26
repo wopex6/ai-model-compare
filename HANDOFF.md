@@ -1,21 +1,25 @@
 # Handoff snapshot
 
-_Generated 2026-09-26 15:56 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-26 17:48 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Report layouts in hub + whole-app PWA shipped; legacy chat stack retired; SW v128 + life-companion-shell-v3 live
+Follow-up: /chat 301 redirect + has_result filter on layout doc links. SW v129 live.
 
 ## Git
 
 **Branch:** `cursor/emergency-card-paramedic-fields`  
-**Uncommitted files:** 20
+**Uncommitted files:** 24
 
 > Uncommitted work is the main handoff hazard: the next agent
 > cannot tell finished edits from half-written ones. Commit
 > before switching, even as `wip:`.
 
 ```
+M AI_REGENERATION_SPEC.md
+ M ENHANCEMENTS.md
+ M README.md
+ M SYSTEM_REGENERATION_GUIDE.md
 ?? check_wk_credentials.py
 ?? debug_auth.py
 ?? direct_password_test.py
@@ -38,17 +42,28 @@ Report layouts in hub + whole-app PWA shipped; legacy chat stack retired; SW v12
 ?? verify_wai_tse.py
 ```
 
+<details><summary>diff --stat</summary>
+
+```
+AI_REGENERATION_SPEC.md      |  2 +-
+ ENHANCEMENTS.md              | 24 ++++++++++++++++++++++++
+ README.md                    |  2 +-
+ SYSTEM_REGENERATION_GUIDE.md |  2 +-
+ 4 files changed, 27 insertions(+), 3 deletions(-)
+```
+</details>
+
 Recent commits:
 
 ```
+f981075 Redirect /chat to /chatchat; only link analysable documents to layouts
+8f5abd4 Handoff: report layouts hub + app PWA deployed (SW v128, life-companion-shell-v3).
 8d0a729 Surface learned report layouts in the hub + whole-app PWA; retire dead chat stack
 268c09b Handoff: multi-photo merge committed and deployed (SW v127).
 1609f12 Merge multi-photo uploads of one report into a single document.
 0f4c9bc Handoff: report-layout learning loop committed, not deployed.
 1422c89 Remember confirmed report layouts and reuse them on the next scan.
 648c52b Handoff: spirometry-table parsing fix deployed
-ca3e72a Classify report-table column roles before extracting test results
-f7df04e Handoff: read-only emergency icon + security hardening (SW v124)
 ```
 
 ## Production (PythonAnywhere)
@@ -100,7 +115,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-437 passed, 1 warning in 22.12s
+437 passed, 1 warning in 22.11s
 [AutoDoc] Monitoring stopped
 ```
 
