@@ -1,25 +1,21 @@
 # Handoff snapshot
 
-_Generated 2026-09-26 17:48 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-26 19:49 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Follow-up: /chat 301 redirect + has_result filter on layout doc links. SW v129 live.
+Engagement layer shipped: ai_compare/engagement.py (open threads, deterministic picker, quiet window, self-snooze, per-kind responsiveness), Milo companion character as front door with roster+loops injection, ---HANDOFF---/---THREAD--- markers rendered as chips, dashboard open-loops strip, /api/engagement/* + /api/push-subscription, engagement_dispatch.py scheduled push. 22 engagement tests + 65 ui_features pass; suite failures are the documented known ones + localhost-dependent Playwright (pass with dev server). Left: PA scheduled task for engagement_dispatch not yet created; greeting scheduler not yet reconciled with quiet window; health follow-ups surface only as link chips (not full threads); real-device push/install unverified.
 
 ## Git
 
 **Branch:** `cursor/emergency-card-paramedic-fields`  
-**Uncommitted files:** 24
+**Uncommitted files:** 20
 
 > Uncommitted work is the main handoff hazard: the next agent
 > cannot tell finished edits from half-written ones. Commit
 > before switching, even as `wip:`.
 
 ```
-M AI_REGENERATION_SPEC.md
- M ENHANCEMENTS.md
- M README.md
- M SYSTEM_REGENERATION_GUIDE.md
 ?? check_wk_credentials.py
 ?? debug_auth.py
 ?? direct_password_test.py
@@ -42,33 +38,22 @@ M AI_REGENERATION_SPEC.md
 ?? verify_wai_tse.py
 ```
 
-<details><summary>diff --stat</summary>
-
-```
-AI_REGENERATION_SPEC.md      |  2 +-
- ENHANCEMENTS.md              | 24 ++++++++++++++++++++++++
- README.md                    |  2 +-
- SYSTEM_REGENERATION_GUIDE.md |  2 +-
- 4 files changed, 27 insertions(+), 3 deletions(-)
-```
-</details>
-
 Recent commits:
 
 ```
+58b19a3 Add engagement layer + Milo companion: open loops, not broadcasts
+48fb94b Handoff: /chat redirect + layout-doc filter deployed (SW v129).
 f981075 Redirect /chat to /chatchat; only link analysable documents to layouts
 8f5abd4 Handoff: report layouts hub + app PWA deployed (SW v128, life-companion-shell-v3).
 8d0a729 Surface learned report layouts in the hub + whole-app PWA; retire dead chat stack
 268c09b Handoff: multi-photo merge committed and deployed (SW v127).
 1609f12 Merge multi-photo uploads of one report into a single document.
 0f4c9bc Handoff: report-layout learning loop committed, not deployed.
-1422c89 Remember confirmed report layouts and reuse them on the next scan.
-648c52b Handoff: spirometry-table parsing fix deployed
 ```
 
 ## Production (PythonAnywhere)
 
-**4 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
+**19 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
 
 ```
 ok       tests/test_review_flow.py
@@ -95,7 +80,7 @@ ok       web_enhancement_test_runner.py
 ok       webhook_deploy.py
 ok       wisdom_profiles/23.json
 ok       wisdom_profiles/23_hypotheses.json
-4 file(s) stale. Re-run with --push to upload.
+19 file(s) stale. Re-run with --push to upload.
 ```
 
 Reload often returns `409 slow_startup_error` on the first attempt — retry rather than debug it.
@@ -115,7 +100,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-437 passed, 1 warning in 22.11s
+437 passed, 1 warning in 20.36s
 [AutoDoc] Monitoring stopped
 ```
 
