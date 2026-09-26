@@ -1155,6 +1155,19 @@ Examples:
                 row.querySelectorAll('input[data-field]').forEach(inp => {
                     obj[inp.dataset.field] = inp.value;
                 });
+                const idx = parseInt(row.dataset.idx, 10);
+                const original = (extracted.test_results || [])[idx];
+                if (original && typeof original === 'object') {
+                    ['format_structure', 'format_signature', 'source_role',
+                     'date_source', 'unit', 'fields', 'qualifier', 'section',
+                     'source_page', 'source_file'].forEach(k => {
+                        if (obj[k] === undefined && original[k] != null) obj[k] = original[k];
+                    });
+                    if (original.date_source === 'filed' && obj.date
+                            && obj.date !== String(original.date || '')) {
+                        obj.date_source = 'user';
+                    }
+                }
                 testResults.push(obj);
             });
             extracted.test_results = testResults;
@@ -1345,17 +1358,21 @@ Examples:
             resultsDiv.style.display = 'none';
             let allHtml = '';
             let totalActions = 0;
-            let completed = 0;
             const token = localStorage.getItem('authToken');
 
+            // All selected files go up in one request: photos of one report are
+            // analysed together, so a continuation page inherits the report
+            // date and overlapping shots don't double-count rows.
+            const formData = new FormData();
             for (const file of files) {
-                completed++;
-                statusDiv.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Processing file ${completed}/${files.length}: <b>${file.name}</b>... (may take 15-30s for images)`;
+                formData.append('file', file);
+            }
+            const names = files.map(f => f.name).join(', ');
+            statusDiv.innerHTML = `<i class="fas fa-spinner fa-spin"></i> Processing ${files.length} file(s): <b>${names}</b>... (may take 15-30s per image)`;
 
+            {
+                const file = files[0];
                 try {
-                    const formData = new FormData();
-                    formData.append('file', file);
-
                     const resp = await fetch('/api/health-profile/upload', {
                         method: 'POST',
                         headers: { 'Authorization': `Bearer ${token}` },
@@ -1364,20 +1381,19 @@ Examples:
                     const result = await resp.json();
 
                     if (result.error) {
-                        allHtml += `<div style="padding:8px;margin-bottom:8px;background:#ffebee;border-radius:6px;font-size:0.8rem;"><b>${file.name}</b>: <span style="color:#c62828;">${result.error}</span></div>`;
-                        continue;
-                    }
-
+                        allHtml += `<div style="padding:8px;margin-bottom:8px;background:#ffebee;border-radius:6px;font-size:0.8rem;"><b>${names}</b>: <span style="color:#c62828;">${result.error}</span></div>`;
+                    } else {
+                        const label = result.source_file || names;
                     const pending = result.pending_review;
                     if (pending && Object.keys(pending).length > 0) {
                         const encoded = encodeURIComponent(JSON.stringify(pending));
                         allHtml += `<div style='margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #e0e0e0;' class='pending-review-card'>`;
-                        allHtml += `<h4 style='margin:0 0 10px;color:#1565c0;font-size:0.9rem;'><i class='fas fa-clipboard-check'></i> Review before saving: ${result.source_file || file.name}</h4>`;
+                        allHtml += `<h4 style='margin:0 0 10px;color:#1565c0;font-size:0.9rem;'><i class='fas fa-clipboard-check'></i> Review before saving: ${label}</h4>`;
                         if (result.stored_document) {
                             const sd = result.stored_document;
                             const expires = sd.expires_at ? new Date(sd.expires_at).toLocaleDateString('en-AU') : 'unknown';
                             allHtml += `<div style='margin-bottom:8px;font-size:0.78rem;color:#455a64;background:#e3f2fd;padding:6px 8px;border-radius:6px;'>`;
-                            allHtml += `<i class='fas fa-archive'></i> File retained for ${sd.retention_days} day(s) until ${expires}.`;
+                            allHtml += `<i class='fas fa-archive'></i> ${result.page_count > 1 ? result.page_count + ' pages retained' : 'File retained'} for ${sd.retention_days} day(s) until ${expires}.`;
                             allHtml += `</div>`;
                         }
                         if (result.extracted_text_preview) {
@@ -1391,7 +1407,7 @@ Examples:
                     } else if (result.actions && result.actions.length) {
                         totalActions += result.actions.length;
                         allHtml += `<div style="margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #e0e0e0;">`;
-                        allHtml += `<h4 style="margin:0 0 10px;color:#1565c0;font-size:0.9rem;"><i class="fas fa-file-medical"></i> ${result.source_file || file.name}</h4>`;
+                        allHtml += `<h4 style="margin:0 0 10px;color:#1565c0;font-size:0.9rem;"><i class="fas fa-file-medical"></i> ${label}</h4>`;
                         if (result.stored_document) {
                             const sd = result.stored_document;
                             const expires = sd.expires_at ? new Date(sd.expires_at).toLocaleDateString('en-AU') : 'unknown';
@@ -1419,10 +1435,11 @@ Examples:
                         }
                         allHtml += '</div>';
                     } else {
-                        allHtml += `<div style="padding:8px;margin-bottom:8px;background:#fff8e1;border-radius:6px;font-size:0.8rem;"><b>${file.name}</b>: No health data extracted.</div>`;
+                        allHtml += `<div style="padding:8px;margin-bottom:8px;background:#fff8e1;border-radius:6px;font-size:0.8rem;"><b>${names}</b>: No health data extracted.</div>`;
+                    }
                     }
                 } catch(e) {
-                    allHtml += `<div style="padding:8px;margin-bottom:8px;background:#ffebee;border-radius:6px;font-size:0.8rem;"><b>${file.name}</b>: <span style="color:#c62828;">Upload failed: ${e.message}</span></div>`;
+                    allHtml += `<div style="padding:8px;margin-bottom:8px;background:#ffebee;border-radius:6px;font-size:0.8rem;"><b>${names}</b>: <span style="color:#c62828;">Upload failed: ${e.message}</span></div>`;
                 }
             }
 

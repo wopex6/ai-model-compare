@@ -507,6 +507,177 @@ def test_deleting_every_row_from_a_column_drops_that_role():
     assert store['report_formats']['sig1']['confirmed'] is True
 
 
+# --- several photos of one report -------------------------------------------
+# parse_report_pages lives in medical_advisor_health_context (it owns the
+# metadata regexes); the merge rules below are what make pages one document.
+
+def _pages_module():
+    import importlib
+    mod = importlib.import_module(
+        'ai_compare.medical_advisor_health_context')
+    return mod
+
+
+def test_undated_continuation_page_inherits_the_document_date():
+    """Page 2 of a report often repeats nothing but the table itself. When the
+    batch shows exactly one report date, undated rows inherit it and say so."""
+    m = _pages_module()
+    page1 = '''Patient: Wai T
+Collection Date: 12-May-2026
+
+| Test | 12-May-26 | Reference |
+| --- | --- | --- |
+| S CHOL | 6.7 | 3.0 - 5.5 |
+'''
+    page2 = '''
+| Measure | Got | Norm | Ratio % |
+| --- | --- | --- | --- |
+| Alpha | 0.96 | 1.62 | 59 |
+| Beta | 1.47 | 2.03 | 72 |
+'''
+    rows, analysis = m.parse_report_pages(
+        [{'name': 'page1.jpg', 'text': page1},
+         {'name': 'page2.jpg', 'text': page2}], store={})
+    alpha = next(r for r in rows if r['test_name'] == 'Alpha')
+    assert alpha['date'] == '12-May-2026'
+    assert alpha['date_source'] == 'document'
+    assert alpha['source_page'] == 2
+    assert alpha['source_file'] == 'page2.jpg'
+    # Page 1's own rows keep their real column date, untouched.
+    chol = next(r for r in rows if r['test_name'] == 'S CHOL')
+    assert chol['date'] == '12-May-26'
+    assert 'date_source' not in chol
+
+
+def test_overlapping_photos_drop_duplicate_rows_and_say_so():
+    """An overlap screenshot re-shows the bottom rows of page 1. Identical
+    name+value+date is one reading seen twice; the drop is recorded."""
+    m = _pages_module()
+    page1 = '''Collection Date: 12-May-2026
+
+| Test | 12-May-26 | Reference |
+| --- | --- | --- |
+| S CHOL | 6.7 | 3.0 - 5.5 |
+| S TRIG | 1.9 | < 1.7 |
+'''
+    page2 = '''
+| Test | 12-May-26 | Reference |
+| --- | --- | --- |
+| S TRIG | 1.9 | < 1.7 |
+| S HDL | 1.2 | > 1.0 |
+'''
+    rows, analysis = m.parse_report_pages(
+        [{'name': 'p1.jpg', 'text': page1},
+         {'name': 'p2.jpg', 'text': page2}], store={})
+    trigs = [r for r in rows if r['test_name'] == 'S TRIG']
+    assert len(trigs) == 1
+    assert trigs[0]['source_page'] == 1
+    assert len(analysis['duplicates_dropped']) == 1
+    assert analysis['duplicates_dropped'][0]['test_name'] == 'S TRIG'
+    assert analysis['duplicates_dropped'][0]['dropped_page'] == 2
+    assert analysis['duplicates_dropped'][0]['kept_page'] == 1
+
+
+def test_two_reports_in_one_batch_keep_their_own_dates():
+    """Pages that are actually different reports each have their own metadata
+    date, so each page's undated rows take their own page's date — never the
+    other report's."""
+    m = _pages_module()
+    page_a = '''Reported: 01-Jun-2026
+
+| Test | Result |
+| --- | --- |
+| Alpha | 1.2 |
+'''
+    page_b = '''Reported: 15-Jun-2026
+
+| Test | Result |
+| --- | --- |
+| Beta | 3.4 |
+'''
+    rows, _ = m.parse_report_pages(
+        [{'name': 'a.jpg', 'text': page_a},
+         {'name': 'b.jpg', 'text': page_b}], store={})
+    alpha = next(r for r in rows if r['test_name'] == 'Alpha')
+    beta = next(r for r in rows if r['test_name'] == 'Beta')
+    assert alpha['date'] == '01-Jun-2026'
+    assert beta['date'] == '15-Jun-2026'
+
+
+def test_ambiguous_batch_dates_leave_rows_undated():
+    """Two different metadata dates and a page with none: guessing is worse
+    than admitting the date is unknown — the row stays undated for filing."""
+    m = _pages_module()
+    page_a = '''Reported: 01-Jun-2026
+
+| Test | Result |
+| --- | --- |
+| Alpha | 1.2 |
+'''
+    page_b = '''Reported: 15-Jun-2026
+
+| Test | Result |
+| --- | --- |
+| Beta | 3.4 |
+'''
+    page_c = '''
+| Test | Result |
+| --- | --- |
+| Gamma | 5.6 |
+'''
+    rows, analysis = m.parse_report_pages(
+        [{'name': 'a.jpg', 'text': page_a},
+         {'name': 'b.jpg', 'text': page_b},
+         {'name': 'c.jpg', 'text': page_c}], store={})
+    gamma = next(r for r in rows if r['test_name'] == 'Gamma')
+    assert not gamma['date']
+    assert gamma.get('date_source') != 'document'
+
+
+def test_a_birth_date_is_never_a_document_date():
+    """'Date of Birth' is the patient's date, not the report's — propagating
+    it onto result rows would misdate every measurement."""
+    m = _pages_module()
+    page = '''Patient: Wai T
+Date of Birth: 03-Mar-1968
+
+| Test | Result |
+| --- | --- |
+| Alpha | 1.2 |
+'''
+    rows, analysis = m.parse_report_pages(
+        [{'name': 'a.jpg', 'text': page}], store={})
+    alpha = next(r for r in rows if r['test_name'] == 'Alpha')
+    assert alpha['date'] != '03-Mar-1968'
+
+
+def test_pages_naming_different_patients_are_flagged():
+    m = _pages_module()
+    page_a = 'Patient: Wai T\n\n| Test | Result |\n| --- | --- |\n| Alpha | 1.2 |\n'
+    page_b = 'Patient: Someone Else\n\n| Test | Result |\n| --- | --- |\n| Beta | 3.4 |\n'
+    _, analysis = m.parse_report_pages(
+        [{'name': 'a.jpg', 'text': page_a},
+         {'name': 'b.jpg', 'text': page_b}], store={})
+    assert analysis.get('patient_conflict') == ['someone else', 'wai t']
+
+
+def test_single_page_batch_matches_single_text_parse():
+    """A one-page batch must produce the same rows as the single-text parse —
+    page plumbing must not change what a single document reads."""
+    m = _pages_module()
+    text = '''
+| Test | 05-Aug-24 | Reference | Units |
+| --- | --- | --- | --- |
+| S CHOL | 6.7 H | 3.0 - 5.5 | mmol/L |
+'''
+    single, _ = m.parse_report_tables(text, store={})
+    batched, analysis = m.parse_report_pages(
+        [{'name': 'p.jpg', 'text': text}], store={})
+    assert [ (r['test_name'], r['value'], r['date']) for r in batched
+            ] == [ (r['test_name'], r['value'], r['date']) for r in single ]
+    assert batched[0]['source_page'] == 1
+
+
 def test_sibling_date_fills_an_undated_page_of_the_same_layout():
     from datetime import datetime
     rows, sep = _table('''
