@@ -1097,15 +1097,26 @@ Examples:
                 if (!Array.isArray(items) || !items.length) continue;
                 html += `<h5 style='margin:8px 0 6px;color:#333;'>${cat.replace(/_/g,' ')} (${items.length})</h5>`;
                 if (cat === 'test_results') {
+                    // Columns are whatever THIS report produced: the union of
+                    // each row's keys plus its `fields` bag (the report's own
+                    // headings) — never a fixed schema. HealthReview owns the
+                    // enumeration; this page only renders it.
+                    const cols = (window.HealthReview ? HealthReview.reviewColumnUnion(items)
+                        : ['test_name','value','date','reference_range'].map(k => ({key:k,label:k})));
                     html += "<table style='width:100%;border-collapse:collapse;font-size:0.78rem;'><thead><tr style='background:#f5f5f5;'>";
-                    html += "<th style='text-align:left;padding:4px;'>Test</th><th style='text-align:left;padding:4px;'>Value</th><th style='text-align:left;padding:4px;'>Date</th><th style='text-align:left;padding:4px;'>Reference</th></tr></thead><tbody>";
+                    cols.forEach(c => {
+                        html += `<th data-key='${escapeHtml(c.key)}' style='text-align:left;padding:4px;'>${escapeHtml(c.label)}</th>`;
+                    });
+                    html += "</tr></thead><tbody>";
                     for (let i = 0; i < items.length; i++) {
                         const t = items[i];
                         html += `<tr style='border-bottom:1px solid #eee;' data-cat='test_results' data-idx='${i}'>`;
-                        html += `<td style='padding:4px;'><input type='text' data-field='test_name' value='${t.test_name || ''}' style='width:100%;border:1px solid #ccc;border-radius:4px;padding:3px;font-size:0.78rem;box-sizing:border-box;'></td>`;
-                        html += `<td style='padding:4px;'><input type='text' data-field='value' value='${t.value || ''}' style='width:100%;border:1px solid #ccc;border-radius:4px;padding:3px;font-size:0.78rem;box-sizing:border-box;'></td>`;
-                        html += `<td style='padding:4px;'><input type='text' data-field='date' value='${t.date || ''}' style='width:100%;border:1px solid #ccc;border-radius:4px;padding:3px;font-size:0.78rem;box-sizing:border-box;'></td>`;
-                        html += `<td style='padding:4px;'><input type='text' data-field='reference_range' value='${t.reference_range || ''}' style='width:100%;border:1px solid #ccc;border-radius:4px;padding:3px;font-size:0.78rem;box-sizing:border-box;'></td>`;
+                        cols.forEach(c => {
+                            const v = c.key.indexOf('fields.') === 0
+                                ? ((t.fields || {})[c.key.slice(7)] || '')
+                                : (t[c.key] || '');
+                            html += `<td style='padding:4px;'><input type='text' data-field='${escapeHtml(c.key)}' value='${escapeHtml(v)}' style='width:100%;border:1px solid #ccc;border-radius:4px;padding:3px;font-size:0.78rem;box-sizing:border-box;'></td>`;
+                        });
                         html += `</tr>`;
                     }
                     html += "</tbody></table>";
@@ -1131,12 +1142,14 @@ Examples:
             const tr = document.createElement('tr');
             tr.style.borderBottom = '1px solid #eee';
             tr.dataset.cat = 'test_results';
-            ['test_name','value','date','reference_range'].forEach(field => {
+            // Columns come from the report's own headings (data-key on the
+            // header cells), not a fixed schema.
+            table.querySelectorAll('thead th[data-key]').forEach(th => {
                 const td = document.createElement('td');
                 td.style.padding = '4px';
                 const input = document.createElement('input');
                 input.type = 'text';
-                input.dataset.field = field;
+                input.dataset.field = th.dataset.key;
                 input.value = '';
                 input.style = 'width:100%;border:1px solid #ccc;border-radius:4px;padding:3px;font-size:0.78rem;box-sizing:border-box;';
                 td.appendChild(input);
@@ -1151,10 +1164,12 @@ Examples:
             const extracted = JSON.parse(decodeURIComponent(btn.dataset.extracted));
             const testResults = [];
             card.querySelectorAll('tr[data-cat=test_results]').forEach(row => {
-                const obj = {};
+                const flat = {};
                 row.querySelectorAll('input[data-field]').forEach(inp => {
-                    obj[inp.dataset.field] = inp.value;
+                    flat[inp.dataset.field] = inp.value;
                 });
+                // fields.<heading> inputs fold back into the row's fields bag.
+                const obj = window.HealthReview ? HealthReview.splitReviewFields(flat) : flat;
                 const idx = parseInt(row.dataset.idx, 10);
                 const original = (extracted.test_results || [])[idx];
                 if (original && typeof original === 'object') {
@@ -1786,6 +1801,9 @@ Examples:
                         <td>${statusPill(item.status)}</td>
                         <td>${escapeHtml(item.date || '—')}</td>
                     </tr>`;
+                    if (item.extras) {
+                        html += `<tr><td colspan="5" style="font-size:0.75rem;color:#888;padding:0 4px 4px;">${escapeHtml(item.extras)}</td></tr>`;
+                    }
                 });
                 html += `</tbody></table></div>`;
             }
@@ -1804,6 +1822,9 @@ Examples:
                         <td>${trendLabel(group.trend)}</td>
                         <td>${group.reading_count || 0}</td>
                     </tr>`;
+                    if (latest.extras) {
+                        html += `<tr><td colspan="7" style="font-size:0.75rem;color:#888;padding:0 4px 4px;">${escapeHtml(latest.extras)}</td></tr>`;
+                    }
                 });
                 html += `</tbody></table></div>`;
 
@@ -1814,7 +1835,7 @@ Examples:
                         html += `<div style="margin-bottom:12px;"><strong>${escapeHtml(group.display_name)}</strong>`;
                         html += `<ul style="margin:6px 0 0 18px;padding:0;font-size:0.82rem;color:#475569;">`;
                         (group.history || []).slice(0, 5).forEach(entry => {
-                            html += `<li>${escapeHtml(entry.date || 'no date')}: ${escapeHtml(entry.value)} ${statusPill(entry.status)}</li>`;
+                            html += `<li>${escapeHtml(entry.date || 'no date')}: ${escapeHtml(entry.value)} ${statusPill(entry.status)}${entry.extras ? ` <span style="color:#888;font-size:0.85em;">${escapeHtml(entry.extras)}</span>` : ''}</li>`;
                         });
                         html += `</ul></div>`;
                     });
@@ -2043,6 +2064,10 @@ Examples:
                     html += `<table><tr><th>Test</th><th>Value</th><th>Ref Range</th><th>Date</th><th>Notes</th></tr>`;
                     group.entries.forEach(t => {
                         html += `<tr><td><strong>${t.test_name}</strong></td><td>${t.value}</td><td>${formatRefRange(t.reference_range)}</td><td>${t.date||''}</td><td>${t.notes||''}</td></tr>`;
+                        if (t.fields && typeof t.fields === 'object') {
+                            const extras = Object.keys(t.fields).map(k => k + ': ' + t.fields[k]).join(' · ');
+                            if (extras) html += `<tr><td colspan="5" style="font-size:0.75rem;color:#888;">${escapeHtml(extras)}</td></tr>`;
+                        }
                     });
                     html += `</table>`;
                 });

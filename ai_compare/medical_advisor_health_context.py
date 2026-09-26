@@ -468,6 +468,15 @@ def _document_dates(text):
     return found
 
 
+def _fields_line(row):
+    """'Heading: value' pairs for a row's `fields` bag — the report's extra
+    columns, shown under their own headings rather than dropped."""
+    bag = (row or {}).get('fields')
+    if not isinstance(bag, dict):
+        return ''
+    return ' · '.join('{}: {}'.format(k, v) for k, v in bag.items())
+
+
 def _page_patient(text):
     """Patient name from a page header, or ''."""
     for line in text.splitlines()[:40]:
@@ -3002,6 +3011,7 @@ class HealthProfile:
                     "reference_range": self._format_for_display(entry.get("reference_range", ""), 80),
                     "date": entry.get("date", ""),
                     "status": entry_status,
+                    "extras": _fields_line(entry),
                 })
 
             if status in ("high", "low"):
@@ -3011,6 +3021,7 @@ class HealthProfile:
                     "reference_range": self._format_for_display(latest.get("reference_range", ""), 80),
                     "date": latest.get("date", ""),
                     "status": status,
+                    "extras": _fields_line(latest),
                 })
 
             groups.append({
@@ -3022,6 +3033,7 @@ class HealthProfile:
                     "reference_range": self._format_for_display(latest.get("reference_range", ""), 80),
                     "date": latest.get("date", ""),
                     "notes": latest.get("notes", ""),
+                    "extras": _fields_line(latest),
                 },
                 "status": status,
                 "trend": trend,

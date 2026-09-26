@@ -1502,6 +1502,9 @@
                 html += `<tr><td style="white-space:nowrap; color:#555;"><span class="pwa-tt-editable" contenteditable="false" data-idx="${e.idx}" data-field="date" ontouchstart="startEditHold(this, event)" ontouchend="cancelEditHold()" ontouchmove="cancelEditHold()" oncontextmenu="return false" onblur="saveTestResult(this)">${escapeHtml(e.item.date || '')}</span></td>`;
                 html += `<td style="font-weight:500;"><span class="pwa-tt-editable" contenteditable="false" data-idx="${e.idx}" data-field="value" data-unit="${group.unit.replace(/"/g, '&quot;')}" ontouchstart="startEditHold(this, event)" ontouchend="cancelEditHold()" ontouchmove="cancelEditHold()" oncontextmenu="return false" onblur="saveTestResult(this)">${escapeHtml(e.displayVal)}</span> ${flagHtml}</td>`;
                 html += `<td style="font-size:0.75rem; color:#777;">${rowRef}</td></tr>`;
+                if (e.fieldsLine) {
+                    html += `<tr><td colspan="3" style="font-size:0.72rem; color:#888; padding:0 4px 4px;">${escapeHtml(e.fieldsLine)}</td></tr>`;
+                }
             });
             html += `</tbody></table></div>`;
         });
@@ -2493,19 +2496,36 @@
                     if (key === 'test_results') {
                         const fields = document.createElement('div');
                         fields.className = 'review-item-fields';
-                        if (item && item.source_page) {
-                            // Multi-photo batch: which photo this row came from.
-                            const pg = document.createElement('label');
-                            pg.textContent = 'page ' + item.source_page +
-                                (item.source_file ? ' · ' + item.source_file : '');
-                            pg.style.color = '#7a6a00';
-                            fields.appendChild(pg);
+                        // Editable keys are whatever THIS report produced —
+                        // canonical slots first, then the row's own keys, then
+                        // its `fields` bag under the report's own headings
+                        // (see HealthReview.reviewFieldList). Provenance keys
+                        // show as badges, never inputs.
+                        const metaBadges = (window.HealthReview ? HealthReview.rowMetaBadges(item || {}) : []);
+                        if (metaBadges.length) {
+                            const badgeRow = document.createElement('div');
+                            badgeRow.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-bottom:2px;';
+                            metaBadges.forEach(b => {
+                                const s = document.createElement('span');
+                                s.textContent = b.label;
+                                s.title = b.title || '';
+                                s.style.cssText = 'font-size:0.72rem;color:#7a6a00;background:#fff8e1;border-radius:8px;padding:1px 8px;';
+                                badgeRow.appendChild(s);
+                            });
+                            fields.appendChild(badgeRow);
                         }
-                        ['test_name', 'value', 'reference_range', 'date', 'notes'].forEach(field => {
+                        const fieldDefs = (window.HealthReview
+                            ? HealthReview.reviewFieldList(item || {})
+                            : ['test_name', 'value', 'reference_range', 'date', 'notes']
+                                .map(f => ({ key: f, label: f, long: f === 'notes' })));
+                        fieldDefs.forEach(def => {
+                            const field = def.key;
                             const label = document.createElement('label');
-                            label.textContent = field;
-                            const input = document.createElement(field === 'notes' ? 'textarea' : 'input');
-                            const rawVal = (item && item[field] !== undefined && item[field] !== null ? String(item[field]) : '');
+                            label.textContent = def.label;
+                            const input = document.createElement(def.long ? 'textarea' : 'input');
+                            const rawVal = field.indexOf('fields.') === 0
+                                ? String(((item || {}).fields || {})[field.slice(7)] ?? '')
+                                : (item && item[field] !== undefined && item[field] !== null ? String(item[field]) : '');
                             if (input.tagName === 'INPUT' && field === 'date') {
                                 // type=date only accepts ISO; keep text so report dates like 09/09/2026 are not blanked
                                 const iso = normalizeDateInput(rawVal);
@@ -2515,9 +2535,29 @@
                                 input.value = rawVal;
                             }
                             input.dataset.field = field;
+                            if (def.long) input.rows = 2;
                             fields.appendChild(label);
                             fields.appendChild(input);
                         });
+                        // New-format columns the scan didn't model — the user
+                        // can add a box under any heading name.
+                        const addFieldBtn = document.createElement('button');
+                        addFieldBtn.type = 'button';
+                        addFieldBtn.className = 'btn-secondary';
+                        addFieldBtn.style.cssText = 'font-size:0.72rem;padding:2px 10px;margin-top:4px;';
+                        addFieldBtn.textContent = '+ field';
+                        addFieldBtn.addEventListener('click', () => {
+                            const heading = (prompt('Field name (as printed on the report):') || '').trim();
+                            if (!heading) return;
+                            const label = document.createElement('label');
+                            label.textContent = heading;
+                            const input = document.createElement('input');
+                            input.type = 'text';
+                            input.dataset.field = 'fields.' + heading;
+                            fields.insertBefore(label, addFieldBtn);
+                            fields.insertBefore(input, addFieldBtn);
+                        });
+                        fields.appendChild(addFieldBtn);
                         row.appendChild(fields);
                     } else if (typeof item === 'object' && item !== null) {
                         const fields = document.createElement('div');
@@ -2713,10 +2753,12 @@
             if (!Array.isArray(extracted[cat])) extracted[cat] = [];
 
             if (cat === 'test_results') {
-                const item = {};
+                const flat = {};
                 row.querySelectorAll('.review-item-fields input, .review-item-fields textarea').forEach(el => {
-                    item[el.dataset.field] = el.value;
+                    flat[el.dataset.field] = el.value;
                 });
+                // fields.<heading> inputs fold back into the row's fields bag.
+                const item = window.HealthReview ? HealthReview.splitReviewFields(flat) : flat;
                 const idx = parseInt(cb.dataset.index, 10);
                 const original = ((currentReviewPending || {}).test_results || [])[idx];
                 if (original && typeof original === 'object') {

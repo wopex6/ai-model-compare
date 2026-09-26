@@ -260,6 +260,13 @@
                     ? ''
                     : (formatRefRange(e.item.reference_range || '') || g.ref);
                 e.flag = testFlag(e.item, g.unit, e.displayRef);
+                // Extra columns the report printed — the profile has no slot
+                // for them, so they live in `fields` under the report's own
+                // headings and display as a sub-line, not a dropped value.
+                const bag = e.item.fields;
+                e.fieldsLine = (bag && typeof bag === 'object')
+                    ? Object.keys(bag).map(k => k + ': ' + bag[k]).join(' · ')
+                    : '';
                 if (!e.flag) return latest;
                 const d = parseMedicalDate(e.item.date, e.item.added_at);
                 return d > latest ? d : latest;

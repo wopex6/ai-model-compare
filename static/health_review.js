@@ -306,6 +306,98 @@
         } catch (e) { /* notifications are best-effort */ }
     }
 
+    // ── Dynamic review fields ───────────────────────────────────────────────
+    // A scanned row's editable keys are whatever THIS report produced — never
+    // a fixed schema. Canonical lab keys render first for familiarity, then any
+    // other top-level key the row carries, then the `fields` bag (keyed by the
+    // report's own column headings). Provenance/lifecycle keys render as badges,
+    // not inputs — hand-editing them corrupts the confirmation queue.
+
+    const ROW_META_KEYS = ['format_structure', 'format_signature', 'source_role',
+        'source_page', 'source_file', 'date_source', 'status', 'history',
+        'last_confirmed_at', 'ref_locked', 'auto_filled'];
+    const ROW_FIELD_ORDER = ['test_name', 'value', 'unit', 'reference_range',
+        'date', 'qualifier', 'section', 'notes'];
+
+    // → [{key, label, long}] where key 'fields.<heading>' addresses the bag.
+    function reviewFieldList(item) {
+        const out = [];
+        const seen = new Set();
+        const push = (key, label, long) => {
+            if (seen.has(key)) return;
+            seen.add(key);
+            out.push({ key, label, long });
+        };
+        const isLong = (k, v) => typeof v === 'string' &&
+            (v.length > 60 || /note|comment|text/i.test(k));
+        for (const k of ROW_FIELD_ORDER) {
+            if (item[k] !== undefined && item[k] !== null)
+                push(k, k, isLong(k, item[k]));
+        }
+        // The five slots the review always offered stay always-editable — the
+        // common correction is typing in a date or reference the scan missed.
+        // Everything else appears only if this report produced it.
+        for (const k of ['test_name', 'value', 'reference_range', 'date', 'notes'])
+            push(k, k, isLong(k, item[k]));
+        for (const [k, v] of Object.entries(item)) {
+            if (seen.has(k) || k === 'fields' || ROW_META_KEYS.indexOf(k) !== -1)
+                continue;
+            if (v === null || typeof v === 'object') continue;
+            push(k, k, isLong(k, v));
+        }
+        const bag = item.fields || {};
+        for (const h of Object.keys(bag)) push('fields.' + h, h, false);
+        return out;
+    }
+
+    // Union of reviewFieldList across rows — for table layouts that share
+    // columns (the website review). Order: first row's list, then newcomers.
+    function reviewColumnUnion(items) {
+        const cols = [];
+        const seen = new Set();
+        for (const item of (items || [])) {
+            for (const f of reviewFieldList(item)) {
+                if (seen.has(f.key)) continue;
+                seen.add(f.key);
+                cols.push(f);
+            }
+        }
+        return cols;
+    }
+
+    // Provenance worth showing on a row, as {label, title} chips.
+    function rowMetaBadges(item) {
+        const out = [];
+        if (item.source_page)
+            out.push({ label: 'page ' + item.source_page +
+                (item.source_file ? ' · ' + item.source_file : ''),
+                title: 'Photo page this row came from' });
+        if (item.date_source === 'document')
+            out.push({ label: 'date from report', title: 'Date inherited from the document, not the row' });
+        if (item.date_source === 'filed')
+            out.push({ label: 'date = filed', title: 'No date in the document — filed date used' });
+        if (item.source_role)
+            out.push({ label: item.source_role, title: 'Column role the report layout gave this cell' });
+        return out;
+    }
+
+    // flat {key: value} (where key may be 'fields.<heading>') → row object.
+    // Empty fields.* values drop out of the bag entirely.
+    function splitReviewFields(flat) {
+        const item = {};
+        const bag = {};
+        for (const k of Object.keys(flat)) {
+            const v = flat[k];
+            if (k.indexOf('fields.') === 0) {
+                if (v !== '') bag[k.slice(7)] = v;
+            } else {
+                item[k] = v;
+            }
+        }
+        if (Object.keys(bag).length) item.fields = bag;
+        return item;
+    }
+
     window.HealthReview = {
         mount: create,
         partition: partition,
@@ -313,6 +405,10 @@
         setStatus: setStatus,
         maybeNotify: maybeNotify,
         actOnReminder: actOnReminder,
+        reviewFieldList: reviewFieldList,
+        reviewColumnUnion: reviewColumnUnion,
+        rowMetaBadges: rowMetaBadges,
+        splitReviewFields: splitReviewFields,
         endStatusFor: function (category) { return END_STATUS[category] || ''; },
         hasLifecycle: function (category) { return !!END_STATUS[category]; },
     };
