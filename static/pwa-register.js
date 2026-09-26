@@ -1,13 +1,28 @@
 // PWA Service Worker Registration
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/static/service-worker.js')
+        // Served from the root so the worker can claim scope '/' — the old
+        // /static/service-worker.js registration could only reach /static/
+        // and silently controlled nothing.
+        navigator.serviceWorker.register('/app_sw.js', { scope: '/', updateViaCache: 'none' })
             .then((registration) => {
                 console.log('✅ ServiceWorker registered:', registration.scope);
             })
             .catch((error) => {
                 console.log('❌ ServiceWorker registration failed:', error);
             });
+        // Retire the dead /static/-scoped registration left on devices by the
+        // old code — it holds stale caches that would otherwise never clear.
+        navigator.serviceWorker.getRegistrations().then((regs) => {
+            regs.forEach((reg) => {
+                const url = (reg.active && reg.active.scriptURL) ||
+                            (reg.waiting && reg.waiting.scriptURL) ||
+                            (reg.installing && reg.installing.scriptURL) || '';
+                if (url.endsWith('/static/service-worker.js')) {
+                    reg.unregister();
+                }
+            });
+        });
     });
 }
 

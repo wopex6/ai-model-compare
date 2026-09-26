@@ -1,8 +1,10 @@
 {
+  "id": "/",
   "name": "AI Life Companion",
   "short_name": "Life Companion",
   "description": "Your multi-domain AI advisors - specialized guidance across all areas of life",
   "start_url": "/chatchat",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#667eea",
   "theme_color": "#667eea",

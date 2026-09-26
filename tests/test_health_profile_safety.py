@@ -1471,3 +1471,69 @@ console.log('PASS');
         assert reloaded['value'] == 'Clear'
     finally:
         _cleanup(user_id)
+
+
+def test_tag_doc_format_structures():
+    """A document records which learned report layouts its tables used, so the
+    hub can link a stored layout back to the document that produced it."""
+    import app as app_mod
+    docs = [{'stored_name': 'a.pdf'}, {'stored_name': 'b.pdf'}]
+    result = {'format_analysis': {'tables': [
+        {'structure': 's2', 'columns': []},
+        {'structure': 's1', 'columns': []},
+        {'structure': 's1', 'columns': []},
+        {'structure': '', 'columns': []},
+    ]}}
+    app_mod._tag_doc_format_structures(docs, result)
+    for d in docs:
+        assert d['format_structures'] == ['s1', 's2']
+
+    # A re-analysis that finds no tables clears a stale tag rather than
+    # leaving a link to a layout the document no longer produces.
+    app_mod._tag_doc_format_structures(docs, {'format_analysis': {'tables': []}})
+    assert all('format_structures' not in d for d in docs)
+
+    # Non-dict entries and missing analysis must not blow up.
+    app_mod._tag_doc_format_structures([None, {}], None)
+
+
+def test_upload_tags_document_with_layout_structures():
+    """After analysis the stored document carries the structures of the
+    report tables it produced — the hub's Report layouts link."""
+    import io
+    import app as app_mod
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        profile.save()
+
+        app_mod.app.config['TESTING'] = True
+        client = app_mod.app.test_client()
+        with client.session_transaction() as sess:
+            sess['user_id'] = user_id
+            sess['username'] = 'safety-test'
+
+        fake_result = {
+            'success': True,
+            'extracted': {'test_results': []},
+            'format_analysis': {'tables': [{'structure': 'struct-abc', 'columns': []}]},
+        }
+        with patch.object(app_mod, '_extract_text_from_file_bytes', return_value='table text'), \
+             patch.object(app_mod.HealthContextManager, 'analyze_and_store',
+                          return_value=fake_result):
+            resp = client.post('/api/health-profile/upload', data={
+                'file': (io.BytesIO(b'%PDF-1.4 fake'), 'report.pdf'),
+                'retain': 'true',
+            }, content_type='multipart/form-data')
+        assert resp.status_code == 200, resp.get_json()
+
+        HealthContextManager._profiles.pop(str(user_id), None)
+        doc = HealthProfile(user_id).data['uploaded_documents'][0]
+        assert doc['format_structures'] == ['struct-abc']
+
+        # The documents list surfaces the tag for the hub to match against.
+        resp = client.get('/api/health-profile/documents')
+        listing = resp.get_json()['documents']
+        assert listing[0]['format_structures'] == ['struct-abc']
+    finally:
+        _cleanup(user_id)

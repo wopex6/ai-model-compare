@@ -5084,87 +5084,13 @@ def multi_user_redirect():
     """Redirect old /multi-user URL to /chatchat for backward compatibility"""
     return redirect('/chatchat', code=301)
 
-@app.route('/login-test')
-def login_test():
-    """Login test page for debugging"""
-    return render_template('login_test.html')
-
-@app.route('/ask', methods=['POST'])
-def ask_question():
-    try:
-        data = request.get_json()
-        question = data.get('question', '')
-        include_metrics = data.get('include_metrics', True)
-
-        if not question.strip():
-            return jsonify({'error': 'Please enter a question'})
-
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        responses = loop.run_until_complete(ai_compare.ask_all(question))
-        loop.close()
-
-        # Attach advanced comparison metrics to each model response
-        comparison_metrics = {}
-        rankings = {}
-        if include_metrics:
-            try:
-                from advanced_comparison_metrics import AdvancedResponseEvaluator
-                evaluator = AdvancedResponseEvaluator()
-                model_texts = {
-                    k: v for k, v in responses.items()
-                    if not k.startswith('_') and isinstance(v, str) and not v.startswith('Error:')
-                }
-                if model_texts:
-                    loop2 = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop2)
-                    eval_results = loop2.run_until_complete(
-                        evaluator.evaluate_responses(question, model_texts)
-                    )
-                    loop2.close()
-                    comparison_metrics = eval_results.get('individual_metrics', {})
-                    rankings = eval_results.get('rankings', {})
-            except Exception as _me:
-                comparison_metrics = {}
-                rankings = {}
-
-        return jsonify({
-            'success': True,
-            'responses': responses,
-            'question': question,
-            'comparison_metrics': comparison_metrics,
-            'rankings': rankings
-        })
-
-    except Exception as e:
-        return jsonify({'error': str(e)})
-
-@app.route('/summarize', methods=['POST'])
-def summarize():
-    try:
-        data = request.get_json()
-        responses = data.get('responses', {})
-        
-        if not responses:
-            return jsonify({'error': 'No responses provided'}), 400
-        
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        summary = loop.run_until_complete(ai_compare.summarize_responses(responses))
-        consolidated = loop.run_until_complete(ai_compare.consolidate_responses(responses))
-        loop.close()
-        
-        return jsonify({
-            'summary': summary,
-            'consolidated': consolidated
-        })
-    except Exception as e:
-        return _safe_error(e, 'api')
-
 # Chatbot routes
-@app.route('/chat')
-def chat_interface():
-    return render_template('chat.html')
+# The original single-personality chat page (/chat), the model-compare /ask
+# and /summarize endpoints, and the /login-test and /test-session debug pages
+# were removed: nothing linked to them after the character system replaced the
+# early chat UI (the only caller, unrouted index.html, went with them). The
+# /chat/* JSON endpoints stay — the dashboard's generic conversation still
+# posts to /chat/message.
 
 @app.route('/chat/session', methods=['GET', 'POST'])
 def chat_session():
@@ -5841,11 +5767,6 @@ def get_personality_trait_trends(trait_name):
         })
     except Exception as e:
         return _safe_error(e, 'api')
-
-@app.route('/test-session')
-def test_session_page():
-    """Debug page for testing session restoration"""
-    return render_template('test_session_restoration.html')
 
 # Special endpoint for coach-specific reminder toggle (not in dynamic system)
 @app.route('/coach/toggle-reminders', methods=['POST'])
@@ -7128,6 +7049,21 @@ def dr_health_emergency_icon(size):
     return resp
 
 
+@app.route('/app_sw.js')
+def app_service_worker():
+    """Serve the whole-app service worker from the site root.
+
+    Scope '/' is the point: a worker can only claim a scope at or below its
+    own path, and the old /static/service-worker.js registration could only
+    ever claim /static/. The root scope overlaps /dr-health, but the more
+    specific worker keeps those pages — this one passes them through.
+    """
+    resp = send_from_directory(app.static_folder, 'app_sw.js',
+                               mimetype='application/javascript')
+    resp.headers['Cache-Control'] = 'no-cache'
+    return resp
+
+
 @app.route('/dr_health_sw.js')
 def dr_health_service_worker():
     """Serve the Dr. Health service worker from the site root.
@@ -7628,6 +7564,7 @@ def upload_health_document():
             # Indented: this file is read by people when a reading looks wrong.
             json.dump(result, f, ensure_ascii=False, indent=2, default=str)
         stored_doc['result_path'] = str(result_path)
+        _tag_doc_format_structures([stored_doc], result)
         if retain:
             profile.save()
 
@@ -7762,6 +7699,7 @@ def _upload_health_document_batch(user_id, profile, files):
         user_id, combined, save=False, pages=pages)
     with open(result_path, 'w', encoding='utf-8') as fh:
         json.dump(result, fh, ensure_ascii=False, indent=2, default=str)
+    _tag_doc_format_structures(stored_docs, result)
     if retain:
         profile.save()
 
@@ -7883,6 +7821,10 @@ def reparse_uploaded_document():
             json.dumps(result, ensure_ascii=False, indent=2, default=str),
             encoding='utf-8')
         doc['result_path'] = str(result_path)
+        batch_mates = ([d for d in profile.data.get('uploaded_documents', [])
+                        if d.get('batch_id') == doc.get('batch_id')]
+                       if doc.get('batch_id') else [doc])
+        _tag_doc_format_structures(batch_mates, result)
         profile.save()
 
         if 'pending_review' not in result and 'extracted' in result:
@@ -7901,6 +7843,24 @@ def reparse_uploaded_document():
         return jsonify(result)
     except Exception as e:
         return _safe_error(e, 'api')
+
+
+def _tag_doc_format_structures(docs, result):
+    """Record which report layouts a stored document produced.
+
+    The hub's Report layouts view links each learned format to the documents
+    that use it, so a stored layout can be re-read (and corrected) without
+    re-uploading. Structures live on the parsed tables in format_analysis.
+    """
+    tables = ((result or {}).get('format_analysis') or {}).get('tables') or []
+    structures = sorted({t.get('structure') for t in tables if t.get('structure')})
+    for doc in docs or []:
+        if not isinstance(doc, dict):
+            continue
+        if structures:
+            doc['format_structures'] = structures
+        else:
+            doc.pop('format_structures', None)
 
 
 def _batch_pages_for_doc(profile, doc):
@@ -8238,6 +8198,7 @@ def list_health_documents():
                 'batch_id': d.get('batch_id'),
                 'page_index': d.get('page_index'),
                 'page_count': d.get('page_count'),
+                'format_structures': d.get('format_structures'),
                 'has_result': bool(d.get('result_path') and os.path.exists(d['result_path']))
             })
         # Newest upload first — display order only; the stored list (and the

@@ -85,6 +85,13 @@ else — every API, chat, session and history call — always goes to the networ
 A new file the PWA needs offline must be added there or it is simply never
 cached. Never add a path that returns user data.
 
+The whole-app worker `static/app_sw.js` follows the same rules, served from
+root by `/app_sw.js` and registered by `static/pwa-register.js` with scope
+`/`. Its `SHELL_ASSETS` matches on **pathname** — several templates request
+assets with `?v=` cache-busters, and a raw string allow-list would never hit.
+Scope `/` overlaps `/dr-health`; the longer scope wins for those pages, so
+both workers coexist — do not merge them.
+
 Cached assets are served from the copy on the device and revalidated in the
 background, so a stale asset self-heals after one launch. Bumping `CACHE_NAME`
 still forces the change through immediately and drops old caches, but
@@ -426,11 +433,31 @@ handoff.py                      session handoff snapshot
 
 ## 8. Open work (replace this when it ships)
 
-As of 26 Sep 2026, branch `cursor/emergency-card-paramedic-fields`, PWA cache
-`dr-health-shell-v127`. Learning loop + multi-photo merge committed on this
-branch.
+As of 26 Sep 2026, branch `cursor/emergency-card-paramedic-fields`, PWA caches
+`dr-health-shell-v128` and `life-companion-shell-v3`. Report-layouts hub,
+whole-app PWA and the legacy-chat retirement committed on this branch.
 
 Shipped this session (do not redo):
+
+- Whole-app PWA: `static/app_sw.js` served from root by `/app_sw.js`, scope
+  `/`, allow-list cache (`life-companion-shell-v3`). The old
+  `/static/service-worker.js` worker could only ever claim `/static/` — it
+  controlled nothing — and its fetch handler cached ANY 200 GET including
+  `/chat/session` payloads, which is why it was replaced, not moved.
+  `pwa-register.js` registers the new worker and unregisters the dead one.
+  `manifest.json` (AI Life Companion, start_url `/chatchat`) now has
+  `id`/`scope` `/`; `chatchat.html` finally links it (it never did — the app
+  was uninstallable from its own dashboard). Character pages and the domain
+  page are precached — all renders are user-agnostic. The `/` scope overlaps
+  `/dr-health`; the more specific worker wins those pages.
+- Retired the early chat stack: `/ask`, `/summarize`, `/chat` page,
+  `/login-test`, `/test-session` and their templates (`index.html`,
+  `chat.html`, `login_test.html`, `test_session_restoration.html`). The
+  `/chat/*` JSON endpoints stay — `multi_user_app.js` still posts to
+  `/chat/message`, and `ai_compare.ask_all`/`consolidate_responses` is how
+  every chatbot still generates answers internally. `TestAskEndpointMetrics`
+  in test_web_enhancements.py went with the endpoint (it grepped app.py
+  source for it).
 
 - `ai_compare/report_format.py` — cell/arithmetic layout, not heading keywords.
   See section 4. `describe()` returns `signature` **and** `structure`.
@@ -458,8 +485,15 @@ Next, in order:
    carry `batch_id`/`page_index`/`batch_text_path`; report-format re-reads and
    `reparse` run on the whole batch via `_batch_pages_for_doc`. All three
    upload UIs post one multi-file request now. Max 8 pages per batch.
-2. Surface `confirmed` in the hub so the user can edit a stored layout
-   without re-uploading. The flag is set; there is no format-editor page.
+2. ~~Surface `confirmed` in the hub so the user can edit a stored layout
+   without re-uploading.~~ Done: hub tile "Report layouts" (Tools group,
+   kind `formats` in `dr_health_hub.js`) renders `profile.report_formats`
+   with confirmed badges, role chips and last-report dates. Each stored
+   document is tagged `format_structures` at analysis time
+   (`_tag_doc_format_structures` in app.py) and the documents endpoint
+   exposes them, so the layout card links straight to a document's stored
+   review — the role chips there are the editor, and re-extraction confirms
+   the corrected roles back into the registry.
 3. After-visit return — photograph the new script or letter, park extracted
    meds as proposals, offer to mark visit questions answered. Never retire or
    add a drug as fact until the user confirms.
@@ -478,8 +512,11 @@ aliases at runtime and `pin_test_name` lets the user override, so extend that
 mechanism rather than the tables.
 
 Not verified from a desktop: the emergency-card link fix on a real phone (the
-bug is a history/popstate race, so it needs a device or a real browser), v126 on
-an installed phone, role-chip re-extract in a real review modal, the analysis
+bug is a history/popstate race, so it needs a device or a real browser), v128 on
+an installed phone, the app-wide worker actually installing and controlling
+pages on a real device (needs HTTPS + a browser — verified only by route smoke
+and `node --check` here), the Report layouts card against a profile that has
+real stored documents, role-chip re-extract in a real review modal, the analysis
 download against a real stored document — there is no patient data on this
 machine, so those paths were only exercised at source/test level. Local Flask
 on :5050/:5051 may still be a process started before these routes existed; a
