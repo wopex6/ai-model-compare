@@ -1410,30 +1410,33 @@
 
     async function uploadChatFiles(files) {
         if (!files || !files.length) return;
+        // Several photos go up in one request: the server treats them as pages
+        // of one report, so a continuation page inherits the report date and
+        // overlapping shots don't double-count rows.
         setChatAttachStatus('Uploading ' + files.length + ' file(s)…');
         let ok = 0, failed = 0, lastError = '', lastPending = null, lastMeta = null;
+        const formData = new FormData();
         for (let i = 0; i < files.length; i++) {
-            const formData = new FormData();
             formData.append('file', files[i]);
-            formData.append('retain', 'false');
-            try {
-                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await resp.json();
-                if (resp.ok && data.success !== false && data.pending_review) {
-                    ok++;
-                    lastPending = data.pending_review;
-                    lastMeta = reviewMetaFrom(data);
-                } else {
-                    failed++;
-                    lastError = data.error || 'Upload failed.';
-                }
-            } catch (e) {
-                failed++;
-                lastError = 'Network error.';
+        }
+        formData.append('retain', 'false');
+        try {
+            const resp = await AuthHelper.authenticatedFetch('/api/health-profile/upload', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await resp.json();
+            if (resp.ok && data.success !== false && data.pending_review) {
+                ok = files.length;
+                lastPending = data.pending_review;
+                lastMeta = reviewMetaFrom(data);
+            } else {
+                failed = files.length;
+                lastError = data.error || 'Upload failed.';
             }
+        } catch (e) {
+            failed = files.length;
+            lastError = 'Network error.';
         }
         if (lastPending) {
             setChatAttachStatus(ok + ' file(s) ready to review.');
@@ -2032,28 +2035,30 @@
         let ok = 0, failed = 0, lastError = '', lastPending = null, lastMeta = null;
         const retainEl = document.getElementById('retain-photo');
         const retain = (retainEl && retainEl.checked != null) ? retainEl.checked : false;
+        // All selected photos are uploaded as one batch: the server merges them
+        // into a single report document (shared date, deduped overlap rows).
+        const formData = new FormData();
         for (let i = 0; i < files.length; i++) {
-            const formData = new FormData();
             formData.append('file', files[i]);
-            formData.append('retain', String(retain));
-            try {
-                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await resp.json();
-                if (resp.ok && data.success !== false && data.pending_review) {
-                    ok++;
-                    lastPending = data.pending_review;
-                    lastMeta = reviewMetaFrom(data);
-                } else {
-                    failed++;
-                    lastError = data.error || 'Upload failed.';
-                }
-            } catch (e) {
-                failed++;
-                lastError = 'Network error.';
+        }
+        formData.append('retain', String(retain));
+        try {
+            const resp = await AuthHelper.authenticatedFetch('/api/health-profile/upload', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await resp.json();
+            if (resp.ok && data.success !== false && data.pending_review) {
+                ok = files.length;
+                lastPending = data.pending_review;
+                lastMeta = reviewMetaFrom(data);
+            } else {
+                failed = files.length;
+                lastError = data.error || 'Upload failed.';
             }
+        } catch (e) {
+            failed = files.length;
+            lastError = 'Network error.';
         }
         if (lastPending) {
             status.textContent = `✓ ${ok} file(s) ready for review.`;
@@ -2309,6 +2314,7 @@
             if (table.recognition === 'new') tags.push('first time seeing this layout');
             if (table.applied_confirmed) tags.push('using your last correction');
             if (table.layout) tags.push(table.layout);
+            if (table.source_page) tags.push('page ' + table.source_page);
             hint.textContent = (table.section ? table.section + ' — ' : '') + (tags.join(' · ') || 'change a role to re-read the same table');
             section.appendChild(hint);
             const row = document.createElement('div');
@@ -2487,6 +2493,14 @@
                     if (key === 'test_results') {
                         const fields = document.createElement('div');
                         fields.className = 'review-item-fields';
+                        if (item && item.source_page) {
+                            // Multi-photo batch: which photo this row came from.
+                            const pg = document.createElement('label');
+                            pg.textContent = 'page ' + item.source_page +
+                                (item.source_file ? ' · ' + item.source_file : '');
+                            pg.style.color = '#7a6a00';
+                            fields.appendChild(pg);
+                        }
                         ['test_name', 'value', 'reference_range', 'date', 'notes'].forEach(field => {
                             const label = document.createElement('label');
                             label.textContent = field;
@@ -2707,7 +2721,8 @@
                 const original = ((currentReviewPending || {}).test_results || [])[idx];
                 if (original && typeof original === 'object') {
                     ['format_structure', 'format_signature', 'source_role',
-                     'date_source', 'unit', 'fields', 'qualifier', 'section'].forEach(k => {
+                     'date_source', 'unit', 'fields', 'qualifier', 'section',
+                     'source_page', 'source_file'].forEach(k => {
                         if (item[k] === undefined && original[k] != null) item[k] = original[k];
                     });
                     if (original.date_source === 'filed' && item.date

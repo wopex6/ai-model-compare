@@ -319,25 +319,20 @@ def _canonicalize_lab_tables(text):
     return '\n'.join(out)
 
 
-def parse_report_tables(text, store=None, now=None, overlays=None):
-    """Extract test_results from markdown tables in OCR text.
+def _scan_report_tables(text, store, now, overlays, table_index,
+                        allow_sibling=True):
+    """One pass over the markdown tables in a page's text.
 
-    The vision model returns report tables in markdown form. Instead of
-    letting the JSON analysis model re-interpret the numbers, we parse those
-    tables directly. A confirmed layout for the same structure is overlaid
-    before extract, so a correction the user made last time is reused.
-
-    Returns (rows, {'tables': [...]}) — the analysis record is kept with the
-    document and is the only way to tell a reading the numbers confirmed from
-    one that rested on a column heading.
+    Returns (results, tables, table_index). `allow_sibling` is off for batch
+    pages: pages of one document inherit dates from the document itself, not
+    from whatever the registry saw in the last two hours — a same-layout
+    report scanned weeks ago must not stamp its date onto this one.
     """
     results = []
     tables = []
-    store = store if store is not None else {}
     lines = text.splitlines()
     section = ''
     i = 0
-    table_index = 0
     while i < len(lines):
         if not lines[i].strip().startswith('|'):
             bare = lines[i].strip().strip('-=_*# ').strip()
@@ -382,8 +377,10 @@ def parse_report_tables(text, store=None, now=None, overlays=None):
                 description, overlay, basis='user')
         elif store:
             applied = report_format.apply_remembered(description, store)
-        sibling = report_format.sibling_date(
-            store, description.get('structure') or '', now=now)
+        sibling = ''
+        if allow_sibling:
+            sibling = report_format.sibling_date(
+                store, description.get('structure') or '', now=now)
         rows_out, skipped = report_format.extract(
             description, rows[sep_idx + 1:], skip_name=_META_LABEL_RE)
         if sibling:
@@ -414,7 +411,184 @@ def parse_report_tables(text, store=None, now=None, overlays=None):
         })
         table_index += 1
 
+    return results, tables, table_index
+
+
+def parse_report_tables(text, store=None, now=None, overlays=None):
+    """Extract test_results from markdown tables in OCR text.
+
+    The vision model returns report tables in markdown form. Instead of
+    letting the JSON analysis model re-interpret the numbers, we parse those
+    tables directly. A confirmed layout for the same structure is overlaid
+    before extract, so a correction the user made last time is reused.
+
+    Returns (rows, {'tables': [...]}) — the analysis record is kept with the
+    document and is the only way to tell a reading the numbers confirmed from
+    one that rested on a column heading.
+    """
+    store = store if store is not None else {}
+    results, tables, _ = _scan_report_tables(
+        text, store, now, overlays, 0, allow_sibling=True)
     return results, {'tables': tables}
+
+
+_DOC_DATE_LABEL_RE = re.compile(
+    r'(collect(?:ed|ion)|specimen|report(?:ed)?|received|ordered|performed'
+    r'|resulted|print(?:ed)?|date)\b',
+    re.I,
+)
+# A date next to any of these labels is the person's, not the report's.
+_PERSONAL_DATE_RE = re.compile(r'birth|\bdob\b|age\b', re.I)
+_PAGE_PATIENT_RE = re.compile(
+    r'\b(?:patient(?:\s+name)?|name)\s*[:.\-]\s*'
+    r'([A-Za-z][A-Za-z.,\'\-]*(?:\s+[A-Za-z][A-Za-z.,\'\-]*){0,4})',
+    re.I,
+)
+
+
+def _document_dates(text):
+    """Report-level dates from a page's non-table lines, label-first.
+
+    'Collection Date: 12 May 2026' in a page header is a date for the whole
+    document; a table that prints no date column should inherit it. Lines
+    naming the person ('Date of Birth') are excluded — a DOB must never land
+    on a result row. Returns [{'label', 'date'}] in document order.
+    """
+    found = []
+    for line in text.splitlines():
+        s = line.strip()
+        if not s or s.startswith('|') or _PERSONAL_DATE_RE.search(s):
+            continue
+        label = _DOC_DATE_LABEL_RE.search(s)
+        if not label:
+            continue
+        date = _DATE_RE.search(s, label.end())
+        if date:
+            found.append({'label': label.group(1).lower(), 'date': date.group(1)})
+    return found
+
+
+def _page_patient(text):
+    """Patient name from a page header, or ''."""
+    for line in text.splitlines()[:40]:
+        m = _PAGE_PATIENT_RE.search(line)
+        if m:
+            return re.sub(r'\s+', ' ', m.group(1)).strip(' .').lower()
+    return ''
+
+
+def parse_report_pages(pages, store=None, now=None, overlays=None):
+    """Several images of one report, parsed as a single document.
+
+    Each entry is {'name': filename, 'text': OCR markdown}. Rows carry
+    source_page/source_file so a merged review still says which photo each
+    result came from. Three extra things happen across the batch that a
+    per-file upload could never do:
+
+    - a page's own report date fills its undated rows; when the whole batch
+      shows exactly one date, undated rows on any page inherit it
+      (date_source 'document') — the page-2 continuation table that drops
+      the date heading still dates its rows;
+    - identical rows from overlapping screenshots are dropped once, and the
+      drop is recorded in the analysis so nothing silently disappears;
+    - pages that name different patients are flagged, since then these are
+      probably not pages of one report at all.
+    """
+    store = store if store is not None else {}
+    pages = [{'name': str((p or {}).get('name') or ''),
+              'text': str((p or {}).get('text') or '')} for p in pages or []]
+    all_rows: List[Dict] = []
+    all_tables: List[Dict] = []
+    page_meta: List[Dict] = []
+    table_index = 0
+    for pno, page in enumerate(pages, 1):
+        rows, tables, table_index = _scan_report_tables(
+            page['text'], store, now, overlays, table_index,
+            allow_sibling=False)
+        for r in rows:
+            r['source_page'] = pno
+            r['source_file'] = page['name']
+        for t in tables:
+            t['source_page'] = pno
+            t['source_file'] = page['name']
+        all_rows.extend(rows)
+        all_tables.extend(tables)
+        page_meta.append({
+            'page': pno,
+            'file': page['name'],
+            'dates': _document_dates(page['text']),
+            'patient': _page_patient(page['text']),
+        })
+
+    # Report date propagation, in order of confidence:
+    # 1. a date on the row already (a dated column) — untouched;
+    # 2. the page's own metadata date — two reports in one batch stay apart;
+    # 3. a single distinct date anywhere in the batch — the classic page-2
+    #    continuation. More than one distinct date means the batch is
+    #    ambiguous, and an ambiguous guess is worse than 'filed'.
+    def _best(meta):
+        for d in meta['dates']:
+            if 'collect' in d['label'] or 'specimen' in d['label']:
+                return d['date']
+        return meta['dates'][0]['date'] if meta['dates'] else ''
+
+    batch_dates = []
+    for meta in page_meta:
+        for d in meta['dates']:
+            if d['date'] not in batch_dates:
+                batch_dates.append(d['date'])
+    row_dates = []
+    for r in all_rows:
+        d = str(r.get('date') or '').strip()
+        if d and not r.get('date_source') and d not in row_dates:
+            row_dates.append(d)
+    batch_date = batch_dates[0] if len(batch_dates) == 1 else (
+        row_dates[0] if not batch_dates and len(row_dates) == 1 else '')
+
+    for r in all_rows:
+        if str(r.get('date') or '').strip():
+            continue
+        own = _best(page_meta[r['source_page'] - 1])
+        if own:
+            r['date'] = own
+            r['date_source'] = 'document'
+        elif batch_date:
+            r['date'] = batch_date
+            r['date_source'] = 'document'
+
+    # Overlapping screenshots repeat rows. Same test, same value, same date is
+    # one reading seen twice — keep the first, record the drop. Different
+    # values under one name are real repeats and all stay.
+    def _row_key(r):
+        return (_canonical_test_key(str(r.get('test_name') or '')),
+                re.sub(r'\s+', '', str(r.get('value') or '')).lower(),
+                str(r.get('date') or '').strip().lower())
+
+    kept, seen, duplicates = [], {}, []
+    for r in all_rows:
+        key = _row_key(r)
+        if key in seen:
+            duplicates.append({
+                'test_name': r.get('test_name'),
+                'value': r.get('value'),
+                'date': r.get('date'),
+                'dropped_page': r.get('source_page'),
+                'kept_page': seen[key],
+            })
+            continue
+        seen[key] = r.get('source_page')
+        kept.append(r)
+
+    patients = {m['patient'] for m in page_meta if m['patient']}
+    analysis = {
+        'tables': all_tables,
+        'pages': page_meta,
+        'document_date': batch_date,
+        'duplicates_dropped': duplicates,
+    }
+    if len(patients) > 1:
+        analysis['patient_conflict'] = sorted(patients)
+    return kept, analysis
 
 
 _SPECIMEN_PREFIXES = {
@@ -1676,7 +1850,8 @@ class HealthProfile:
                     if not stored_fields:
                         t.pop("fields", None)
                 for key in ("format_structure", "format_signature", "source_role",
-                            "date_source", "qualifier", "section"):
+                            "date_source", "qualifier", "section",
+                            "source_page", "source_file"):
                     incoming = (layout or {}).get(key)
                     if incoming not in (None, "", [], {}) and not t.get(key):
                         t[key] = incoming
@@ -1700,7 +1875,8 @@ class HealthProfile:
         if extra_fields:
             entry["fields"] = extra_fields
         for key in ("format_structure", "format_signature", "source_role",
-                    "date_source", "qualifier", "section"):
+                    "date_source", "qualifier", "section",
+                    "source_page", "source_file"):
             incoming = (layout or {}).get(key)
             if incoming not in (None, "", [], {}):
                 entry[key] = incoming
@@ -2025,7 +2201,7 @@ class HealthProfile:
                         "unit", "fields")
                 layout_keys = ("format_structure", "format_signature",
                                "source_role", "date_source", "qualifier",
-                               "section")
+                               "section", "source_page", "source_file")
                 extra_fields = dict(test.get("fields") or {})
                 for key, item in test.items():
                     if key in core or key in layout_keys or item in (None, "", [], {}):
@@ -3295,10 +3471,30 @@ class HealthContextManager:
         return [f.stem for f in HEALTH_DATA_DIR.glob("*.json")]
 
     @classmethod
-    def analyze_and_store(cls, user_id: str, raw_text: str, save: bool = True) -> Dict:
+    def analyze_and_store(cls, user_id: str, raw_text: str, save: bool = True,
+                          pages: Optional[List[Dict]] = None) -> Dict:
         """Use AI to analyze raw health text and return structured data.
-        If save=True, stores into the profile. Otherwise returns a pending-review object."""
-        raw_text = _canonicalize_lab_tables(raw_text)
+        If save=True, stores into the profile. Otherwise returns a pending-review object.
+
+        `pages` (optional) is [{'name': filename, 'text': OCR text}] — several
+        photos of one report. The AI sees the pages joined; the table parser
+        runs per page so every row keeps its source page, undated rows inherit
+        the document's own date, and rows repeated by overlapping photos are
+        deduplicated (each drop recorded in format_analysis)."""
+        if pages:
+            canon_pages = [_canonicalize_lab_tables(p.get('text') or '')
+                           for p in pages]
+            raw_text = '\n\n'.join(
+                '--- Page {} of {} ({}) ---\n{}'.format(
+                    i + 1, len(canon_pages),
+                    (pages[i] or {}).get('name') or '', canon_pages[i])
+                for i in range(len(canon_pages)))
+            if len(raw_text) > 15000:
+                raw_text = (raw_text[:7500]
+                            + "\n\n[... content truncated ...]\n\n"
+                            + raw_text[-7500:])
+        else:
+            raw_text = _canonicalize_lab_tables(raw_text)
         profile = cls.get_profile(user_id)
 
         # Build the analysis prompt (use only recent entries to keep prompt short and fast)
@@ -3419,8 +3615,14 @@ NEW TEXT TO ANALYZE:
             # Prefer the OCR markdown table values over any AI-re-interpreted ones,
             # but keep any (test, date) pair the table parse missed so a dropped row
             # is still recovered from the AI extraction.
-            parsed_from_table, format_analysis = parse_report_tables(
-                raw_text, store=profile.data)
+            if pages:
+                parsed_from_table, format_analysis = parse_report_pages(
+                    [{'name': pages[i].get('name'), 'text': canon_pages[i]}
+                     for i in range(len(pages))],
+                    store=profile.data)
+            else:
+                parsed_from_table, format_analysis = parse_report_tables(
+                    raw_text, store=profile.data)
             if parsed_from_table:
                 def _key(t):
                     return (_canonical_test_key(t.get('test_name', '')),

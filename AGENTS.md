@@ -243,7 +243,19 @@ review calls `confirm()`. Dating a filed row records `last_report_date` so a
 sibling page of the same structure uploaded within two hours inherits it.
 Deleting every row that came from one column demotes that column to `text`.
 `format_structure` / `source_role` stay on the row (and in `MANAGED_KEYS`) so
-those edits can find the layout; they are never free-text extras.
+those edits can find the layout; they are never free-text extras. `source_page`
+/ `source_file` ride along the same way for multi-photo batches.
+
+Multi-photo uploads are one document, not N documents: `parse_report_pages`
+runs the same describe/overlay/extract/remember pass per page and then merges
+at batch level. Date propagation order: the row's own dated column, then the
+page's own metadata date, then the batch's *single* distinct date —
+`date_source: 'document'`. A page's own date always wins, so two reports
+photographed together still date correctly; two conflicting dates in a batch
+leave undated rows undated rather than guessing. 'Date of Birth' and friends
+are excluded from document dates — a DOB must never land on a result. Rows
+identical on name+value+date across pages are dropped once and listed in
+`duplicates_dropped`.
 
 Heading keywords survive only in `_HINTS`, as a tie-break and a fallback. Every
 role they suggest is reachable from the cells alone. **Do not promote a hint
@@ -415,8 +427,8 @@ handoff.py                      session handoff snapshot
 ## 8. Open work (replace this when it ships)
 
 As of 26 Sep 2026, branch `cursor/emergency-card-paramedic-fields`, PWA cache
-`dr-health-shell-v126`. Learning loop is committed on this branch. Not
-deployed — only `pa_sync.py --push` if asked.
+`dr-health-shell-v127`. Learning loop + multi-photo merge committed on this
+branch.
 
 Shipped this session (do not redo):
 
@@ -433,11 +445,19 @@ Shipped this session (do not redo):
 
 Next, in order:
 
-1. **Several images for one report.** `sibling_date` only helps when the later
-   page shares **structure** (same headings/shapes). A photo of page 2 that
-   dropped the date heading is a *different* structure and still loses the
-   date and patient header from page 1. Overlapping screenshots still
-   duplicate rows. Merge pages that arrive together, not just inherit a date.
+1. ~~**Several images for one report.**~~ Done: the upload endpoint accepts
+   `files.getlist('file')`; >1 file routes to `_upload_health_document_batch`,
+   which stores/OCRs each page and calls `analyze_and_store(..., pages=)`.
+   `parse_report_pages` tags rows `source_page`/`source_file`, fills undated
+   rows from the page's own metadata date then the batch's single distinct
+   date (`date_source: 'document'` — never a DOB, never across conflicting
+   dates), dedupes overlapping screenshots (drops recorded in
+   `format_analysis.duplicates_dropped`), and flags `patient_conflict` when
+   pages name different people. Sibling-date lookup is **off** inside a batch
+   — a page inherits from its own document, not the registry. Stored page docs
+   carry `batch_id`/`page_index`/`batch_text_path`; report-format re-reads and
+   `reparse` run on the whole batch via `_batch_pages_for_doc`. All three
+   upload UIs post one multi-file request now. Max 8 pages per batch.
 2. Surface `confirmed` in the hub so the user can edit a stored layout
    without re-uploading. The flag is set; there is no format-editor page.
 3. After-visit return — photograph the new script or letter, park extracted

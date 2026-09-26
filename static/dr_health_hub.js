@@ -397,7 +397,8 @@
     const MANAGED_KEYS = ['status', 'started_on', 'ended_on', 'last_confirmed_at',
         'history', 'pending', 'ref_locked', 'unit_locked', 'date_source',
         'verified_at', 'proposed_by', 'change_note',
-        'format_structure', 'format_signature', 'source_role'];
+        'format_structure', 'format_signature', 'source_role',
+        'source_page', 'source_file'];
 
     // Mirrors the vocabulary in ai_compare/health_insights.py.
     const SOURCE_LABELS = {

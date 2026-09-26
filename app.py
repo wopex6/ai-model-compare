@@ -6464,6 +6464,7 @@ from ai_compare.medical_advisor_health_context import (
     find_profile_by_pair_token,
     medication_card_labels,
     parse_report_tables,
+    parse_report_pages,
     _canonical_test_name,
     _fill_test_defaults,
 )
@@ -7544,10 +7545,14 @@ def upload_health_document():
         profile.data.setdefault('uploaded_documents', [])
         _cleanup_expired_uploaded_documents(profile)
 
-        if 'file' not in request.files:
+        files = request.files.getlist('file')
+        if not files or not any(f.filename for f in files):
             return jsonify({'error': 'No file uploaded'}), 400
 
-        file = request.files['file']
+        if len(files) > 1:
+            return _upload_health_document_batch(user_id, profile, files)
+
+        file = files[0]
         if not file.filename:
             return jsonify({'error': 'No file selected'}), 400
 
@@ -7650,6 +7655,139 @@ def upload_health_document():
         return _safe_error(e, 'api')
 
 
+_UPLOAD_BATCH_MAX = 8
+
+
+def _upload_health_document_batch(user_id, profile, files):
+    """Several photos of one report, handled as a single document.
+
+    Each file is stored and OCR'd on its own; the pages are then analysed
+    together so a continuation page inherits the report's own date,
+    overlapping shots do not double-count rows, and the user reviews one
+    document instead of one review per photo. Every stored page links back
+    to the batch so the whole reading stays inspectable.
+    """
+    files = files[:_UPLOAD_BATCH_MAX]
+    retain = request.form.get('retain', 'true').lower() != 'false'
+    allowed_extensions = {'.pdf', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'}
+    user_dir = HEALTH_UPLOADS_DIR / str(user_id)
+    user_dir.mkdir(parents=True, exist_ok=True)
+    retention_days = _get_retention_days(profile)
+
+    # Validate every file before spending a single OCR call.
+    prepared = []
+    for f in files:
+        ext = os.path.splitext((f.filename or '').lower())[1]
+        if ext not in allowed_extensions:
+            return jsonify({'error': 'Unsupported file type for {}. Allowed: {}'.format(
+                f.filename, ", ".join(allowed_extensions))}), 400
+        file_bytes = f.read()
+        if len(file_bytes) > 10 * 1024 * 1024:
+            return jsonify({'error': '{} is too large (max 10MB)'.format(f.filename)}), 400
+        if not _file_matches_extension(file_bytes, ext):
+            return jsonify({'error': '{}: file content does not match its extension.'.format(
+                f.filename)}), 400
+        prepared.append({'file': f, 'bytes': file_bytes, 'ext': ext,
+                         'hash': hashlib.sha256(file_bytes).hexdigest()[:32]})
+
+    # A batch spends one vision call per page; charge each against the bucket.
+    for _ in prepared:
+        limited = _health_ai_rate_limit(user_id)
+        if limited:
+            return limited
+
+    _cleanup_expired_uploaded_documents(profile)
+    profile.data.setdefault('uploaded_documents', [])
+    cutoff = datetime.now() - timedelta(days=retention_days)
+
+    batch_id = hashlib.sha256(
+        ''.join(p['hash'] for p in prepared).encode()).hexdigest()[:32]
+    batch_text_path = user_dir / "{}.txt".format(batch_id)
+    result_path = user_dir / "{}_result.json".format(batch_id)
+
+    pages, stored_docs = [], []
+    for idx, p in enumerate(prepared, 1):
+        stored_doc = None
+        for doc in profile.data['uploaded_documents']:
+            if doc.get('content_hash') != p['hash']:
+                continue
+            uploaded_at = _parse_iso_datetime(doc.get('uploaded_at'))
+            if (uploaded_at and uploaded_at >= cutoff and doc.get('stored_path')
+                    and os.path.exists(doc['stored_path'])):
+                # The same photo filed under a different batch must not be
+                # relabelled — that would silently break the old batch.
+                if doc.get('batch_id') and doc.get('batch_id') != batch_id:
+                    continue
+                stored_doc = doc
+                break
+        if not stored_doc:
+            stored_doc = _store_uploaded_health_document(
+                user_id, p['file'], p['bytes'], content_hash=p['hash'])
+            if retain:
+                profile.data['uploaded_documents'].append(stored_doc)
+
+        try:
+            text = _extract_text_from_file_bytes(p['bytes'], p['ext'])
+        except ValueError as e:
+            return jsonify({'error': '{}: {}'.format(p['file'].filename, e)}), 400
+        except RuntimeError as e:
+            return jsonify({'error': '{}: {}'.format(p['file'].filename, e)}), 500
+        except Exception as e:
+            return jsonify({'error': '{}: processing failed: {}'.format(
+                p['file'].filename, e)}), 500
+
+        page_text_path = user_dir / "{}.txt".format(p['hash'])
+        with open(page_text_path, 'w', encoding='utf-8') as fh:
+            fh.write(text)
+        stored_doc['extracted_text_path'] = str(page_text_path)
+        stored_doc['batch_id'] = batch_id
+        stored_doc['page_index'] = idx
+        stored_doc['page_count'] = len(prepared)
+        stored_doc['batch_text_path'] = str(batch_text_path)
+        stored_doc['result_path'] = str(result_path)
+        pages.append({'name': p['file'].filename, 'text': text})
+        stored_docs.append(stored_doc)
+
+    if retain:
+        profile.save()
+
+    combined = '\n\n'.join(
+        '=== Page {} of {}: {} ===\n{}'.format(
+            i + 1, len(pages), pages[i]['name'], pages[i]['text'])
+        for i in range(len(pages)))
+    with open(batch_text_path, 'w', encoding='utf-8') as fh:
+        fh.write(combined)
+
+    result = HealthContextManager.analyze_and_store(
+        user_id, combined, save=False, pages=pages)
+    with open(result_path, 'w', encoding='utf-8') as fh:
+        json.dump(result, fh, ensure_ascii=False, indent=2, default=str)
+    if retain:
+        profile.save()
+
+    if 'pending_review' not in result and 'extracted' in result:
+        result['pending_review'] = result['extracted']
+    result['extracted_text'] = combined
+    result['extracted_text_preview'] = combined[:4000] + ('...' if len(combined) > 4000 else '')
+    result['source_files'] = [p['name'] for p in pages]
+    result['source_file'] = pages[0]['name'] if len(pages) == 1 else (
+        '{} pages ({} …)'.format(len(pages), pages[0]['name']))
+    result['page_count'] = len(pages)
+    result['stored_documents'] = [{
+        'original_name': d.get('original_name'),
+        'stored_name': d.get('stored_name'),
+        'uploaded_at': d.get('uploaded_at'),
+        'page_index': d.get('page_index'),
+        'expires_at': (_doc_expiry(d, retention_days).isoformat()
+                       if _doc_expiry(d, retention_days) else None),
+        'keep_forever': bool(d.get('keep_forever')),
+        'retention_days': retention_days,
+        'size_bytes': d.get('size_bytes'),
+    } for d in stored_docs]
+    result['stored_document'] = result['stored_documents'][0] if stored_docs else None
+    return jsonify(result)
+
+
 @app.route('/api/health-profile/reparse', methods=['POST'])
 @require_auth
 def reparse_uploaded_document():
@@ -7692,7 +7830,16 @@ def reparse_uploaded_document():
         content_hash = doc.get('content_hash') or hashlib.sha256(file_bytes).hexdigest()[:32]
         user_dir = HEALTH_UPLOADS_DIR / str(user_id)
         extracted_text_path = user_dir / f'{content_hash}.txt'
-        result_path = user_dir / f'{content_hash}_result.json'
+        batch_pages = None
+        if doc.get('batch_id') and doc.get('batch_text_path'):
+            # A batch page shares the batch's combined text and result file;
+            # re-analysing one page means re-analysing the whole batch.
+            result_path = Path(doc['batch_text_path'].replace('.txt', '')) \
+                .with_name(Path(doc['batch_text_path']).stem + '_result.json')
+            batch_text_path = Path(doc['batch_text_path'])
+        else:
+            result_path = user_dir / f'{content_hash}_result.json'
+            batch_text_path = None
         if extracted_text_path.exists():
             extracted_text_path.unlink()
         if result_path.exists():
@@ -7710,14 +7857,28 @@ def reparse_uploaded_document():
         extracted_text_path.write_text(extracted_text, encoding='utf-8')
         doc['extracted_text_path'] = str(extracted_text_path)
 
-        if len(extracted_text) > 15000:
-            head = extracted_text[:7500]
-            tail = extracted_text[-7500:]
-            analyzed_text = head + "\n\n[... content truncated ...]\n\n" + tail
+        if batch_text_path is not None:
+            batch_pages = _batch_pages_for_doc(profile, doc)
+        if batch_pages:
+            # One page of a batch re-analyses the whole batch — a page alone
+            # would lose the document date and the overlap dedupe.
+            combined = '\n\n'.join(
+                '=== Page {} of {}: {} ===\n{}'.format(
+                    i + 1, len(batch_pages), batch_pages[i]['name'],
+                    batch_pages[i]['text'])
+                for i in range(len(batch_pages)))
+            batch_text_path.write_text(combined, encoding='utf-8')
+            result = HealthContextManager.analyze_and_store(
+                user_id, combined, save=False, pages=batch_pages)
+            extracted_text = combined
         else:
-            analyzed_text = extracted_text
-
-        result = HealthContextManager.analyze_and_store(user_id, analyzed_text, save=False)
+            if len(extracted_text) > 15000:
+                head = extracted_text[:7500]
+                tail = extracted_text[-7500:]
+                analyzed_text = head + "\n\n[... content truncated ...]\n\n" + tail
+            else:
+                analyzed_text = extracted_text
+            result = HealthContextManager.analyze_and_store(user_id, analyzed_text, save=False)
         result_path.write_text(
             json.dumps(result, ensure_ascii=False, indent=2, default=str),
             encoding='utf-8')
@@ -7742,6 +7903,31 @@ def reparse_uploaded_document():
         return _safe_error(e, 'api')
 
 
+def _batch_pages_for_doc(profile, doc):
+    """The pages of a batch document, ordered, from their stored OCR text.
+
+    Returns a [{'name', 'text'}] list, or None when the doc is not part of a
+    batch or its page texts are gone.
+    """
+    batch_id = (doc or {}).get('batch_id')
+    if not batch_id:
+        return None
+    siblings = [d for d in profile.data.get('uploaded_documents', [])
+                if d.get('batch_id') == batch_id]
+    siblings.sort(key=lambda d: d.get('page_index') or 0)
+    pages = []
+    for d in siblings:
+        path = d.get('extracted_text_path')
+        if not path or not Path(path).exists():
+            return None
+        try:
+            pages.append({'name': d.get('original_name') or '',
+                          'text': Path(path).read_text(encoding='utf-8')})
+        except OSError:
+            return None
+    return pages or None
+
+
 @app.route('/api/health-profile/report-format', methods=['POST'])
 @require_auth
 def apply_health_report_format():
@@ -7756,19 +7942,29 @@ def apply_health_report_format():
         profile = HealthContextManager.get_profile(user_id)
         data = request.get_json() or {}
         text = str(data.get('extracted_text') or '').strip()
-        if not text:
-            stored_name = data.get('stored_name')
-            if stored_name:
-                doc = next((d for d in profile.data.get('uploaded_documents', [])
-                            if d.get('stored_name') == stored_name), None)
-                path = (doc or {}).get('extracted_text_path')
-                if path and Path(path).exists():
-                    text = Path(path).read_text(encoding='utf-8')
-        if not text:
-            return jsonify({'error': 'extracted_text is required'}), 400
+        doc = None
+        stored_name = data.get('stored_name')
+        if stored_name:
+            doc = next((d for d in profile.data.get('uploaded_documents', [])
+                        if d.get('stored_name') == stored_name), None)
+        if not text and doc:
+            path = doc.get('extracted_text_path')
+            if path and Path(path).exists():
+                text = Path(path).read_text(encoding='utf-8')
         overlays = data.get('tables') if isinstance(data.get('tables'), list) else []
-        parsed, format_analysis = parse_report_tables(
-            text, store=profile.data, overlays=overlays)
+        # A batch page always re-reads through its stored pages — the combined
+        # text the client sends back loses the page boundaries the merge needs.
+        pages = _batch_pages_for_doc(profile, doc)
+        if pages:
+            # Re-read the batch the way it was analysed: page provenance,
+            # document-date propagation and overlap dedupe all still apply.
+            parsed, format_analysis = parse_report_pages(
+                pages, store=profile.data, overlays=overlays)
+        elif text:
+            parsed, format_analysis = parse_report_tables(
+                text, store=profile.data, overlays=overlays)
+        else:
+            return jsonify({'error': 'extracted_text is required'}), 400
         if data.get('confirm', True):
             for table in format_analysis.get('tables') or []:
                 if table.get('columns'):
@@ -7974,7 +8170,9 @@ def get_health_document_result():
         if 'pending_review' not in result and 'extracted' in result:
             result['pending_review'] = result['extracted']
         extracted_text = ''
-        text_path = doc.get('extracted_text_path')
+        # Batch pages store the combined per-batch text the analysis ran on;
+        # the page's own transcription lives at extracted_text_path.
+        text_path = doc.get('batch_text_path') or doc.get('extracted_text_path')
         if text_path and Path(text_path).exists():
             try:
                 extracted_text = Path(text_path).read_text(encoding='utf-8')
@@ -8037,6 +8235,9 @@ def list_health_documents():
                 'retention_days': retention_days,
                 'size_bytes': d.get('size_bytes'),
                 'content_hash': d.get('content_hash'),
+                'batch_id': d.get('batch_id'),
+                'page_index': d.get('page_index'),
+                'page_count': d.get('page_count'),
                 'has_result': bool(d.get('result_path') and os.path.exists(d['result_path']))
             })
         # Newest upload first — display order only; the stored list (and the
