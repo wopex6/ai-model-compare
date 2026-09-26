@@ -299,6 +299,17 @@ PERSONALITY_PRESETS = {
         creativity_level=0.5,   # clear, evidence-based language
         empathy_level=0.85,     # caring but factual
         humor_level=0.2         # warm but serious about health
+    ),
+
+    "companion": PersonalityTraits(
+        character="Milo",
+        mood=Mood.HELPFUL,
+        goal=Goal.COLLABORATE,
+        context_awareness=0.97,  # the whole point is knowing the user's context
+        formality_level=0.35,    # a friend who organises, not a consultant
+        creativity_level=0.5,
+        empathy_level=0.85,
+        humor_level=0.4
     )
 }
 

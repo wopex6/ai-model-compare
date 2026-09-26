@@ -410,7 +410,8 @@ character_ids = [
     "life_coach",                 # Coach Jordan
     "scientist",                  # Dr. Nova
     "gentle_companion",           # Sam - low-pressure listening companion
-    "medical_advisor"             # Dr. Health - general health information
+    "medical_advisor",            # Dr. Health - general health information
+    "companion"                   # Milo - front door, owns open loops & handoffs
 ]
 
 for char_id in character_ids:
@@ -6865,6 +6866,139 @@ def health_push_test():
         return _safe_error(e, 'health_push_test')
 
 
+# ---------------------------------------------------------------------------
+# Engagement — open loops (commitments, decisions, health follow-ups) that the
+# app follows up on. Deterministic picking lives in ai_compare/engagement.py;
+# these routes are thin wrappers. Same VAPID pair as the health pushes — the
+# subscription store is separate (engagement.db) because scope differs.
+# ---------------------------------------------------------------------------
+
+@app.route('/api/engagement/suggestions', methods=['GET'])
+@require_auth
+def engagement_suggestions():
+    """Dashboard chips: pending 'Track this?' candidates, then due threads."""
+    try:
+        from ai_compare import engagement
+        uid = str(request.current_user['user_id'])
+        # Health follow-ups join the same strip — they are open loops too.
+        # A chip deep-links into Dr. Health rather than creating a second
+        # tracking system next to the profile's own lifecycle.
+        extras = []
+        try:
+            profile = HealthContextManager.get_profile(uid)
+            from datetime import date as _date
+            from ai_compare.health_insights import parse_date as _pd
+            today = _date.today()
+            for f in (profile.data.get('follow_ups') or []):
+                if f.get('status') != 'active':
+                    continue
+                due = _pd(f.get('due_date'))
+                if due is None or (due - today).days > 0:
+                    continue
+                extras.append({'type': 'link', 'kind': 'health',
+                               'title': f.get('title', 'Health follow-up'),
+                               'text': 'Due in Dr. Health', 'url': '/dr-health'})
+        except Exception:
+            pass
+        return jsonify({'success': True,
+                        'chips': engagement.suggestions(uid, extras=extras)})
+    except Exception as e:
+        return _safe_error(e, 'engagement_suggestions')
+
+
+@app.route('/api/engagement/threads', methods=['GET'])
+@require_auth
+def engagement_threads():
+    """All non-closed threads for the signed-in user."""
+    try:
+        from ai_compare import engagement
+        return jsonify({'success': True,
+                        'threads': engagement.list_threads(str(request.current_user['user_id']))})
+    except Exception as e:
+        return _safe_error(e, 'engagement_threads')
+
+
+def _engagement_action(thread_id, action):
+    try:
+        from ai_compare import engagement
+        uid = str(request.current_user['user_id'])
+        data = request.get_json(silent=True) or {}
+        fn = {
+            'confirm': lambda: engagement.confirm_candidate(uid, thread_id),
+            'dismiss': lambda: engagement.dismiss_candidate(uid, thread_id),
+            'drop': lambda: engagement.drop_thread(uid, thread_id),
+            'reopen': lambda: engagement.reopen_thread(uid, thread_id),
+            'snooze': lambda: engagement.snooze_thread(
+                uid, thread_id, days=int(data.get('days') or 3)),
+            'answer': lambda: engagement.answer_thread(
+                uid, thread_id, str(data.get('answer') or ''),
+                quick=bool(data.get('quick'))),
+        }.get(action)
+        if not fn:
+            return jsonify({'error': 'Unknown action.'}), 400
+        if action == 'answer' and not str(data.get('answer') or '').strip():
+            return jsonify({'error': 'answer is required'}), 400
+        thread = fn()
+        if not thread:
+            return jsonify({'error': 'Thread not found.'}), 404
+        return jsonify({'success': True, 'thread': thread})
+    except Exception as e:
+        return _safe_error(e, 'engagement_' + action)
+
+
+@app.route('/api/engagement/threads/<thread_id>/<action>', methods=['POST'])
+@require_auth
+def engagement_thread_action(thread_id, action):
+    """confirm / dismiss / drop / reopen / snooze / answer — one route keeps
+    six near-identical handlers out of the route table."""
+    if action not in ('confirm', 'dismiss', 'drop', 'reopen', 'snooze', 'answer'):
+        return jsonify({'error': 'Unknown action.'}), 404
+    return _engagement_action(thread_id, action)
+
+
+@app.route('/api/push-key', methods=['GET'])
+@require_auth
+def app_push_key():
+    """Same VAPID public key as health push — one pair, two subscription stores."""
+    key = health_push.vapid_public_key()
+    if not key:
+        return jsonify({'success': False,
+                        'error': 'Push notifications are not configured on the server.'}), 503
+    return jsonify({'success': True, 'vapid_public_key': key})
+
+
+@app.route('/api/push-subscription', methods=['POST'])
+@require_auth
+def app_push_subscribe():
+    """Main-app push subscription, stored in engagement.db."""
+    try:
+        from ai_compare import engagement
+        data = request.get_json(silent=True) or {}
+        sub = data.get('subscription') if isinstance(data.get('subscription'), dict) else data
+        ep = str((sub or {}).get('endpoint') or '')
+        keys = (sub or {}).get('keys') or {}
+        if not ep.startswith('https://') or not keys.get('p256dh') or not keys.get('auth'):
+            return jsonify({'error': 'Invalid subscription.'}), 400
+        if not engagement.add_push_subscription(str(request.current_user['user_id']), sub):
+            return jsonify({'error': 'Invalid subscription.'}), 400
+        return jsonify({'success': True})
+    except Exception as e:
+        return _safe_error(e, 'app_push_subscribe')
+
+
+@app.route('/api/push-subscription', methods=['DELETE'])
+@require_auth
+def app_push_unsubscribe():
+    try:
+        from ai_compare import engagement
+        data = request.get_json(silent=True) or {}
+        engagement.remove_push_subscription(str(request.current_user['user_id']),
+                                            str(data.get('endpoint') or ''))
+        return jsonify({'success': True})
+    except Exception as e:
+        return _safe_error(e, 'app_push_unsubscribe')
+
+
 @app.route('/api/health-profile/visit-brief', methods=['GET'])
 @require_auth
 def get_visit_brief():
@@ -10607,7 +10741,7 @@ def save_psychological_assessment():
 # Register dynamic character routes for ALL characters with Smart Response and Database
 print("\n=== Registering Character Routes ===")
 register_character_routes(app, all_characters, process_with_smart_response, integrated_db, ai_budget=ai_budget)
-print("✓ Dynamic routes registered for all 10 characters with Smart Response + Database")
+print(f"✓ Dynamic routes registered for {len(all_characters)} characters with Smart Response + Database")
 
 
 # ============================================

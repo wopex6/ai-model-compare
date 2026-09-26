@@ -31,7 +31,11 @@ class CharacterFactory:
         "gentle_companion": {"personality": "gentle_companion", "class": "GentleCompanionChatbot"},
 
         # Medical advisor - general health information companion
-        "medical_advisor": {"personality": "medical_advisor", "class": None}
+        "medical_advisor": {"personality": "medical_advisor", "class": None},
+
+        # The front door: one companion who knows the user's open loops and
+        # hands off to specialists instead of making the user find them
+        "companion": {"personality": "companion", "class": None}
     }
     
     @staticmethod

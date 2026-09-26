@@ -228,6 +228,8 @@
                         <h2>Conversations</h2>
                         <button class="btn btn-primary" id="new-chat-btn">New Conversation</button>
                     </div>
+                    <!-- Open loops: things you said, deciding, tracking — one line each, tap to answer -->
+                    <div id="engagement-strip" style="display:none; margin-bottom:14px;"></div>
                     <div class="chat-layout">
                         <div class="chat-sidebar">
                             <div id="chat-sessions-list">
@@ -325,6 +327,26 @@
                     </div>
                     
                     <div class="characters-grid">
+                        <!-- Milo — the companion/front door, pinned first -->
+                        <div class="character-card" data-character-id="companion" style="border:2px solid #5B6ABF; grid-column: 1 / -1;">
+                            <div style="display:flex;justify-content:center;align-items:flex-end;gap:10px;margin-bottom:4px;">
+                                <div class="char-avatar-badge" id="badge-companion"></div>
+                                <div class="character-icon" style="background: linear-gradient(135deg, #5B6ABF, #8F9BDC);">
+                                    <i class="fas fa-compass"></i>
+                                </div>
+                            </div>
+                            <h3>Milo — Your Companion</h3>
+                            <p class="character-description">The front door. Remembers what you're working on, follows up on things you said, and brings in the right specialist when a question deserves one — no need to pick a character yourself.</p>
+                            <div class="character-features">
+                                <span class="feature-tag"><i class="fas fa-check"></i> Remembers open threads</span>
+                                <span class="feature-tag"><i class="fas fa-check"></i> Specialist handoffs</span>
+                                <span class="feature-tag"><i class="fas fa-check"></i> Follows up</span>
+                            </div>
+                            <button class="btn btn-primary btn-block" onclick="window.location.href='/companion'">
+                                <i class="fas fa-arrow-right"></i> Talk to Milo
+                            </button>
+                        </div>
+
                         <!-- Standard Chat -->
                         <div class="character-card">
                             <div class="character-icon" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">

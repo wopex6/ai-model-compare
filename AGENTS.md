@@ -138,6 +138,46 @@ excludes them. A PythonAnywhere scheduled task (id 1527586, daily 22:00 UTC ≈
 slash** — POST `/schedule` silently becomes a GET through the redirect. iOS
 only delivers web push to apps installed to the home screen.
 
+### Engagement threads
+
+`ai_compare/engagement.py` (SQLite `engagement.db`, gitignored by `*.db`) is
+the app's **open-loop store**: one entity under every "we were talking about
+X" — a commitment, pending decision, habit or health follow-up. Kinds are
+`commitment`/`decision`/`health`/`habit`/`custom`; states
+`open → prompted → answered/done/snoozed/dropped`.
+
+The rules that make it non-annoying, and must not be relaxed:
+
+- **Candidates, never auto-nags.** Chat detectors (`detect_candidates`,
+  phrase regexes — deliberately no LLM call) and `---THREAD---` markers in AI
+  replies create `pending_suggestion` threads that only go live when the user
+  taps "Track this".
+- **Deterministic picker.** `pick_due_prompt` selects at most ONE due thread
+  per `MIN_USER_GAP_HOURS` (18h) per user — that call **mutates** (logs
+  `prompted`, reschedules), so in-app surfaces use the read-only
+  `suggestions()` instead; the mutation is for push dispatch.
+- **Decay, not nagging.** Each unanswered prompt doubles the wait; three
+  unanswered → the thread self-snoozes a week. Per-kind responsiveness is
+  learned from the events log (`_responsiveness` — simple counts, no model).
+- Every prompt quotes the user's own subject verbatim ("You said: X") — a
+  prompt with no real subject is never sent. Silence beats generic.
+
+`Milo` (`companion`, `ai_compare` character) is the front door:
+`_inject_companion_orchestration` in `base_enhanced_chatbot.py` injects the
+specialist roster + the user's open loops into its prompt. Its
+`---HANDOFF---` marker becomes `response['handoff']` in `character_routes.py`
+and renders as a jump-to-specialist chip; `character_suggestion` (the
+need-classifier handoff that existed but was never rendered) renders the same
+chip. `---THREAD---` becomes a `thread_candidate` the user confirms in-chat.
+
+Routes: `GET /api/engagement/suggestions|threads`,
+`POST /api/engagement/threads/<id>/<confirm|dismiss|answer|snooze|drop|reopen>`,
+`POST|DELETE /api/push-subscription` (own store — the health subs file is a
+different scope), `GET /api/push-key`. `engagement_dispatch.py` is the
+scheduled push task (same VAPID pair, same `send_push`). The strip on the
+Conversations tab renders chips: candidates → Track/Dismiss, threads → quick
+replies/Snooze, health follow-ups → deep link. Tests: `tests/test_engagement.py`.
+
 ---
 
 ## 3. Testing
@@ -434,8 +474,9 @@ handoff.py                      session handoff snapshot
 ## 8. Open work (replace this when it ships)
 
 As of 26 Sep 2026, branch `cursor/emergency-card-paramedic-fields`, PWA caches
-`dr-health-shell-v129` and `life-companion-shell-v3`. Report-layouts hub,
-whole-app PWA and the legacy-chat retirement committed on this branch.
+`dr-health-shell-v129` and `life-companion-shell-v4`. Report-layouts hub,
+whole-app PWA, the legacy-chat retirement and the engagement/companion layer
+committed on this branch.
 
 Shipped this session (do not redo):
 
@@ -469,6 +510,10 @@ Shipped this session (do not redo):
 - `GET /api/health-profile/document-result?download=1` — whole reading as a file.
 - Emergency-card hub links: `closeEmergency({ keepHistoryEntry: true })`.
 - `_fill_test_defaults` no longer doubles a single-letter unit (`0.96 L L`).
+- Engagement layer (§2 "Engagement threads"): `engagement.py` store/picker,
+  Milo the front-door companion, `---HANDOFF---`/`---THREAD---` markers,
+  dashboard open-loops strip, `/api/engagement/*` + `/api/push-subscription`,
+  `engagement_dispatch.py` (needs a PA scheduled task — not yet created).
 
 Next, in order:
 

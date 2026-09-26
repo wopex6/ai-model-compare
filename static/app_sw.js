@@ -17,7 +17,7 @@
 //   2. Cached assets are revalidated in the background every time they are
 //      used, so a stale copy survives at most one launch. Bumping CACHE_NAME
 //      forces it sooner.
-const CACHE_NAME = 'life-companion-shell-v3';
+const CACHE_NAME = 'life-companion-shell-v4';
 const APP_SHELL = '/chatchat';
 const SHELL_ASSETS = [
     APP_SHELL,
@@ -34,6 +34,7 @@ const SHELL_ASSETS = [
     '/stoic_philosopher',
     '/gentle_companion',
     '/medical_advisor',
+    '/companion',
     '/static/manifest.json',
     '/static/multi_user_styles.css',
     '/static/responsive.css',
