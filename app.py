@@ -5090,7 +5090,11 @@ def multi_user_redirect():
 # were removed: nothing linked to them after the character system replaced the
 # early chat UI (the only caller, unrouted index.html, went with them). The
 # /chat/* JSON endpoints stay — the dashboard's generic conversation still
-# posts to /chat/message.
+# posts to /chat/message — and /chat redirects to the app so old bookmarks
+# and home-screen icons keep working.
+@app.route('/chat')
+def chat_redirect():
+    return redirect('/chatchat', code=301)
 
 @app.route('/chat/session', methods=['GET', 'POST'])
 def chat_session():
