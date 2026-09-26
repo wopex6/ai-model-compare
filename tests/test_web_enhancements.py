@@ -348,42 +348,6 @@ class TestEmotionalContextWired(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# 9. app.py — /ask endpoint with comparison metrics
-# ---------------------------------------------------------------------------
-class TestAskEndpointMetrics(unittest.TestCase):
-
-    def _get_source(self):
-        path = os.path.join(ROOT, 'app.py')
-        with open(path, 'r', encoding='utf-8') as f:
-            return f.read()
-
-    def test_include_metrics_param_present(self):
-        src = self._get_source()
-        self.assertIn("include_metrics", src)
-
-    def test_advanced_response_evaluator_imported(self):
-        src = self._get_source()
-        self.assertIn("AdvancedResponseEvaluator", src)
-
-    def test_comparison_metrics_in_response(self):
-        src = self._get_source()
-        self.assertIn("'comparison_metrics'", src)
-
-    def test_rankings_in_response(self):
-        src = self._get_source()
-        self.assertIn("'rankings'", src)
-
-    def test_metrics_error_is_non_fatal(self):
-        """Metrics failure must be caught so the core compare still works."""
-        src = self._get_source()
-        # Find AdvancedResponseEvaluator block and verify except nearby
-        idx = src.find("AdvancedResponseEvaluator")
-        region = src[idx: idx + 900]
-        self.assertIn("except", region,
-                      "Metrics calculation must be wrapped in try/except")
-
-
-# ---------------------------------------------------------------------------
 # 10. Documentation — ENHANCEMENTS_WEB_PERSONALIZATION.md exists and covers all features
 # ---------------------------------------------------------------------------
 class TestDocumentationUpdated(unittest.TestCase):

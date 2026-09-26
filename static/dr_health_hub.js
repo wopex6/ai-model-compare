@@ -267,6 +267,7 @@
             items: [
                 { id: 'interactions', kind: 'interactions', title: 'Drug Interactions', icon: 'fa-triangle-exclamation', desc: 'Check meds and supplements' },
                 { id: 'ai_summary', kind: 'summary', title: 'What the AI Sees', icon: 'fa-robot', desc: 'Your health context' },
+                { id: 'formats', kind: 'formats', title: 'Report layouts', icon: 'fa-table-columns', desc: 'How your lab reports are read' },
                 { id: 'settings', kind: 'settings', title: 'Settings', icon: 'fa-gear', desc: 'Upload retention' }
             ]
         }
@@ -757,6 +758,7 @@
             else if (kind === 'digest') html += '<div id="hub-tool" class="hub-tool"><em>Building your review…</em></div>';
             else if (kind === 'visit') html += '<div id="hub-tool" class="hub-tool"><em>Preparing your visit brief…</em></div>';
             else if (kind === 'settings') html += this.settingsBody();
+            else if (kind === 'formats') html += this.formatsBody();
             html += '</div>';
             html += '<div class="hub-status" id="hub-status"></div>';
             return html;
@@ -1448,6 +1450,105 @@
             html += '<div class="hub-form-hint">The export includes your profile and every stored document — it doubles as your backup.</div>';
             html += '</div>';
             return html;
+        },
+
+        formatsBody() {
+            const registry = (this.profile && this.profile.report_formats) || {};
+            const entries = Object.keys(registry).map(function (k) { return registry[k]; })
+                .filter(function (e) { return e && e.structure; })
+                .sort(function (a, b) {
+                    return String(b.last_seen || '').localeCompare(String(a.last_seen || ''));
+                });
+            if (!entries.length) {
+                return '<div class="hub-note">No report layouts learned yet. When you upload a ' +
+                    'lab report the app remembers how its columns are arranged, so the next ' +
+                    'report in the same format is read the same way.</div>';
+            }
+            let html = '<div class="hub-note">How the app reads each kind of report you have ' +
+                'uploaded. To correct a reading, open the document and tap the column chips ' +
+                'in its review — the fix is remembered for next time.</div>';
+            for (let i = 0; i < entries.length; i++) {
+                const e = entries[i];
+                const title = e.section || 'Report table';
+                html += '<div class="hub-row open">';
+                html += '<div class="hub-row-head" style="cursor:default;"><span class="hub-row-main">';
+                html += '<span class="hub-row-title">' + esc(title) + '</span>';
+                const metaBits = [];
+                if (e.layout) metaBits.push(e.layout.replace(/_/g, ' '));
+                if (e.seen_count) metaBits.push('seen ' + e.seen_count + '×');
+                if (e.last_seen) metaBits.push('last ' + String(e.last_seen).slice(0, 10));
+                html += '<span class="hub-row-sub">' + esc(metaBits.join(' · ')) + '</span>';
+                html += '</span><span class="hub-badge' + (e.confirmed ? '' : ' empty') + '">' +
+                    (e.confirmed ? 'confirmed' : 'unconfirmed') + '</span></div>';
+                html += '<div class="hub-row-body">';
+                const roles = e.roles || [];
+                for (let r = 0; r < roles.length; r++) {
+                    const role = String(roles[r] || '');
+                    const eq = role.lastIndexOf('=');
+                    if (eq === -1) continue;
+                    html += '<div class="hub-field"><span class="hub-field-label">' +
+                        esc(role.slice(0, eq)) + '</span><span class="hub-field-value">' +
+                        esc(role.slice(eq + 1).replace(/_/g, ' ')) + '</span></div>';
+                }
+                if (e.last_report_date) {
+                    html += '<div class="hub-field"><span class="hub-field-label">Last report date</span>' +
+                        '<span class="hub-field-value">' + esc(e.last_report_date) + '</span></div>';
+                }
+                if (e.role_changes && e.role_changes.length) {
+                    html += '<div class="hub-note warn">This layout has been read two ways. ' +
+                        'Confirm the correct reading on a stored document.</div>';
+                }
+                html += '<div data-format-docs="' + esc(e.structure) + '">' +
+                    '<em style="color:#78909c;font-size:0.8rem;">Checking stored documents…</em></div>';
+                html += '</div></div>';
+            }
+            return html;
+        },
+
+        async loadFormatsDocs() {
+            const slots = this.root.querySelectorAll('[data-format-docs]');
+            if (!slots.length) return;
+            let docs = [];
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/documents');
+                if (resp.ok) docs = (await resp.json()).documents || [];
+            } catch (e) { /* leave the checking message */ }
+            const byStructure = {};
+            for (let i = 0; i < docs.length; i++) {
+                const d = docs[i];
+                for (const s of d.format_structures || []) {
+                    (byStructure[s] = byStructure[s] || []).push(d);
+                }
+            }
+            for (let i = 0; i < slots.length; i++) {
+                const slot = slots[i];
+                const matched = byStructure[slot.getAttribute('data-format-docs')] || [];
+                if (!matched.length) {
+                    slot.innerHTML = '<div class="hub-form-hint">No stored document is linked ' +
+                        'to this layout — older uploads predate the link. Re-read any document ' +
+                        'from Documents to update it.</div>';
+                    continue;
+                }
+                let html = '<div class="hub-row-actions">';
+                for (let j = 0; j < matched.length; j++) {
+                    const d = matched[j];
+                    const label = d.original_name || d.stored_name || 'document';
+                    const page = d.page_index ? ' (page ' + d.page_index + ')' : '';
+                    html += '<button class="hub-btn" data-format-review="' +
+                        esc(d.stored_name) + '"><i class="fas fa-clipboard-check"></i> ' +
+                        esc(label) + esc(page) + '</button>';
+                }
+                html += '</div>';
+                slot.innerHTML = html;
+            }
+            const btns = this.root.querySelectorAll('[data-format-review]');
+            for (let i = 0; i < btns.length; i++) {
+                btns[i].addEventListener('click', function () {
+                    if (typeof window.openStoredReview === 'function') {
+                        window.openStoredReview(this.getAttribute('data-format-review'));
+                    }
+                });
+            }
         },
 
         async exportRecord() {
@@ -2246,6 +2347,8 @@
                 this.loadDigest();
             } else if (kind === 'visit') {
                 this.loadVisitBrief();
+            } else if (kind === 'formats') {
+                this.loadFormatsDocs();
             } else if (kind === 'advice') {
                 const refresh = this.root.querySelector('#hub-advice-refresh');
                 if (refresh) refresh.addEventListener('click', () => self.refreshAdvice());
