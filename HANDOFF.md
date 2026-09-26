@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-26 13:13 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-26 15:10 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Learning loop committed as 1422c89 on cursor/emergency-card-paramedic-fields. Confirmed layouts key off structure; review chips re-extract; apply-review confirms; sibling_date for same-structure pages within 2h. PWA v126. Not deployed. Next: multi-photo merge when page 2 has a different structure. Leave the leftover credential/test scripts untracked.
+Multi-photo merge done + deployed (v127): batch upload endpoint, parse_report_pages w/ document-date propagation + overlap dedupe + page provenance; website review now preserves provenance keys. Next: surface confirmed layouts in hub; after-visit doc flow.
 
 ## Git
 
@@ -41,14 +41,67 @@ Learning loop committed as 1422c89 on cursor/emergency-card-paramedic-fields. Co
 Recent commits:
 
 ```
+1609f12 Merge multi-photo uploads of one report into a single document.
+0f4c9bc Handoff: report-layout learning loop committed, not deployed.
 1422c89 Remember confirmed report layouts and reuse them on the next scan.
 648c52b Handoff: spirometry-table parsing fix deployed
 ca3e72a Classify report-table column roles before extracting test results
 f7df04e Handoff: read-only emergency icon + security hardening (SW v124)
 1a7c641 Make emergency icon read-only mirror; bilingual crisis signals
 3a2331e Handoff: auto reply-language deployed (SW v123)
-46c64e7 Add 'auto' reply-language mode that mirrors the question's language
-454519c push: send at high urgency so Doze doesn't defer reminders
+```
+
+## Production (PythonAnywhere)
+
+**9 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
+
+```
+ok       tests/test_review_flow.py
+ok       tests/test_ui_features.py
+ok       tests/test_user_logon_shared_modules.py
+ok       tests/test_web_enhancements.py
+ok       token_test.py
+ok       update_database.py
+ok       update_wk_password.py
+ok       upload_database_to_pythonanywhere.ps1
+ok       uploads/ai_a6043c74-8f82-40d8-863c-971ba0f40619.md
+ok       verbosity_system.py
+ok       verify_database_schema.py
+ok       verify_delete.py
+ok       verify_personality_system.py
+ok       verify_production_ready.py
+ok       verify_shared_processing.py
+ok       verify_table_schemas.py
+ok       verify_timestamp_storage.py
+ok       view_phase3_data.py
+ok       web_enhancement_plan.md
+ok       web_enhancement_test_results.json
+ok       web_enhancement_test_runner.py
+ok       webhook_deploy.py
+ok       wisdom_profiles/23.json
+ok       wisdom_profiles/23_hypotheses.json
+9 file(s) stale. Re-run with --push to upload.
+```
+
+Reload often returns `409 slow_startup_error` on the first attempt — retry rather than debug it.
+
+## Tests
+
+All passing.
+
+```
+........................................................................ [ 65%]
+........................................................................ [ 81%]
+........................................................................ [ 97%]
+..........                                                               [100%]
+============================== warnings summary ===============================
+..\..\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37
+  C:\Users\trabc\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
+    EPOCH = datetime.datetime.utcfromtimestamp(0)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+442 passed, 1 warning in 23.15s
+[AutoDoc] Monitoring stopped
 ```
 
 ## Next agent: read first
