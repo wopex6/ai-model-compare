@@ -415,8 +415,12 @@ class BaseEnhancedChatbot(KnowledgeEnhancedMixin, AIChatbot):
         return intro
     
     def _build_enhanced_prompt(self, user_message: str, include_context: bool, user_id: int = None) -> str:
-        """Override to inject health context for medical_advisor"""
+        """Override to inject health context for medical_advisor, and the
+        specialist roster + open loops for companion (the front door)."""
         prompt = super()._build_enhanced_prompt(user_message, include_context, user_id)
+
+        if self.character_id == "companion" and user_id:
+            prompt = self._inject_companion_orchestration(prompt, user_message, user_id)
 
         if self.character_id == "medical_advisor" and user_id:
             health_context = HealthContextManager.get_context_for_prompt(
@@ -469,6 +473,65 @@ Only include keys that have NEW data. Capture EVERYTHING medically relevant: med
                 else:
                     # Fallback: prepend to the end of the prompt if marker is missing.
                     prompt += "\n\n" + profile_instruction
+        return prompt
+
+    def _inject_companion_orchestration(self, prompt: str, user_message: str, user_id: int) -> str:
+        """Companion = front door. Give it the specialist roster and the user's
+        open loops, and teach it the ---HANDOFF--- / ---THREAD--- markers the
+        chat route parses back out."""
+        roster = []
+        try:
+            from ai_compare.character_configs import CHARACTER_CONFIGS
+            for cid, cfg in CHARACTER_CONFIGS.items():
+                if cid in ("companion",):
+                    continue
+                roster.append(f"- {cid} ({cfg.get('display_name', cid)}): {cfg.get('tagline', '')}")
+        except Exception:
+            pass
+        try:
+            from smart_response.characters.configs import DOMAIN_CHARACTER_CONFIGS
+            for did, cfg in DOMAIN_CHARACTER_CONFIGS.items():
+                if did == "coordinator":
+                    continue
+                roster.append(f"- {did} ({cfg.get('display_name', did)}), domain specialist: {cfg.get('description', '')}")
+        except Exception:
+            pass
+
+        open_loops = ""
+        try:
+            from ai_compare import engagement
+            open_loops = engagement.threads_block_for_prompt(str(user_id))
+        except Exception:
+            pass
+
+        block = f"""
+YOU ARE THE FRONT DOOR OF THIS APP:
+The user should never have to figure out which specialist to talk to — that is your job. You answer general things yourself, keep track of what the user is working on, and bring in a specialist only when a question clearly belongs to one.
+
+THE CREW (specialists you can hand off to):
+{chr(10).join(roster) if roster else "(roster unavailable — answer directly)"}
+
+HOW TO ROUTE:
+- Answer what you can well. Do NOT hand off just because a topic exists — hand off when the specialist would clearly do it better (health specifics → medical_advisor, feelings/mental patterns → psychologist, money → finance_guide, etc.).
+- To offer a handoff, say in one sentence why ("this is really Dr. Health's territory") then append EXACTLY this on its own line at the very end:
+---HANDOFF---
+{{"character": "<id from roster>", "kind": "ai_or_domain", "reason": "<one user-facing sentence>"}}
+- At most ONE handoff per reply. Never emit the marker without saying why first.
+
+{open_loops or "No open loops with this user yet."}
+
+CAPTURING NEW LOOPS:
+- When the user clearly states a commitment, plan, decision-in-progress, or habit they want to keep, capture it so the app can follow up. After your reply append:
+---THREAD---
+{{"kind": "commitment|decision|habit|custom", "subject": "<short noun phrase>", "due_in_days": <int or omit>}}
+- At most ONE per reply, only for something the user actually said — never invent one.
+"""
+        marker = f"Current user message: {user_message}"
+        if marker in prompt:
+            pos = prompt.find(marker)
+            prompt = prompt[:pos] + block + "\n\n" + prompt[pos:]
+        else:
+            prompt += "\n\n" + block
         return prompt
 
     def get_daily_insight(self) -> str:

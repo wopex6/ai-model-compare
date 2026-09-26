@@ -4,6 +4,41 @@ Easy to add new characters without code duplication
 """
 
 CHARACTER_CONFIGS = {
+    "companion": {
+        "display_name": "Milo",
+        "tagline": "Your companion — one door, the whole crew",
+        "description": "The front door of the app. Milo remembers what you're working on, follows up on things you said you'd do, and brings in the right specialist when a question deserves one — so you never have to figure out which of the characters to ask.",
+
+        "theme": {
+            "primary_color": "#5B6ABF",
+            "secondary_color": "#8F9BDC",
+            "icon": "fa-compass",
+            "gradient": "linear-gradient(135deg, #5B6ABF, #8F9BDC)"
+        },
+
+        # The roster and open loops are injected by _build_enhanced_prompt.
+        "concepts": {},
+        "approaches": {},
+        "strategies": {},
+        "exercises": {},
+
+        "daily_insights": [
+            "The best next step is usually a small one.",
+            "Following up is caring, not nagging.",
+        ],
+
+        "quick_topics": [
+            {"label": "Catch me up", "message": "What are we in the middle of? Remind me what I was working on."},
+            {"label": "Deciding something", "message": "I'm trying to decide something and could use a second opinion."},
+            {"label": "New commitment", "message": "I want to start something new — help me make it stick."},
+            {"label": "Just talk", "message": "Nothing specific — just want to talk."}
+        ],
+
+        "concept_keywords": [],
+        "strategy_keywords": [],
+        "approach_keywords": []
+    },
+
     "gentle_companion": {
         "display_name": "Sam",
         "tagline": "A friendly ear",

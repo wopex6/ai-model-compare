@@ -547,6 +547,64 @@
                     if (_avatarCtrl) {
                         AvatarWidget.onAIResponse([_avatarCtrl], data.response);
                     }
+                    // Specialist handoff — companion (or any character) flagged
+                    // that this belongs to someone else; offer the jump.
+                    const handoff = data.handoff ||
+                        (data.character_suggestion && data.character_suggestion.character_id
+                            ? { character: data.character_suggestion.character_id,
+                                reason: data.character_suggestion.reason }
+                            : null);
+                    if (handoff && handoff.character) {
+                        const chatBox = document.getElementById('chatMessages') ||
+                            document.getElementById('chat-messages');
+                        if (chatBox) {
+                            const chip = document.createElement('div');
+                            chip.style.cssText = 'margin:6px 0 10px 12px;display:inline-block;';
+                            const btn = document.createElement('button');
+                            btn.style.cssText = 'padding:6px 14px;border-radius:16px;border:1px solid #5B6ABF;background:#f4f6ff;color:#5B6ABF;font-size:0.8rem;cursor:pointer;';
+                            btn.innerHTML = '<i class="fas fa-user-friends"></i> ';
+                            btn.appendChild(document.createTextNode(
+                                `Continue with ${handoff.character}`));
+                            btn.title = handoff.reason || '';
+                            btn.onclick = () => { window.location.href = '/' + handoff.character; };
+                            chip.appendChild(btn);
+                            chatBox.appendChild(chip);
+                            chatBox.scrollTop = chatBox.scrollHeight;
+                        }
+                    }
+                    // 'Track this?' candidate the character captured — the user
+                    // decides whether it becomes a loop the app follows up on.
+                    if (data.thread_candidate && data.thread_candidate.id) {
+                        const tid = data.thread_candidate.id;
+                        const chatBox2 = document.getElementById('chatMessages') ||
+                            document.getElementById('chat-messages');
+                        if (chatBox2) {
+                            const wrap = document.createElement('div');
+                            wrap.style.cssText = 'margin:6px 0 10px 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;';
+                            const lbl = document.createElement('span');
+                            lbl.style.cssText = 'font-size:0.8rem;color:#666;';
+                            lbl.textContent = '📌 Track this? I\'ll follow up on it.';
+                            const act = (action) => {
+                                const tok = localStorage.getItem('authToken');
+                                fetch(`/api/engagement/threads/${tid}/${action}`, {
+                                    method: 'POST',
+                                    headers: tok ? { 'Authorization': 'Bearer ' + tok } : {}
+                                }).catch(() => {});
+                                wrap.remove();
+                            };
+                            const yes = document.createElement('button');
+                            yes.textContent = 'Track';
+                            yes.style.cssText = 'padding:4px 12px;border-radius:14px;border:1px solid #5B6ABF;background:#5B6ABF;color:#fff;font-size:0.75rem;cursor:pointer;';
+                            yes.onclick = () => act('confirm');
+                            const no = document.createElement('button');
+                            no.textContent = 'No';
+                            no.style.cssText = 'padding:4px 12px;border-radius:14px;border:1px solid #ccc;background:#fff;color:#888;font-size:0.75rem;cursor:pointer;';
+                            no.onclick = () => act('dismiss');
+                            wrap.appendChild(lbl); wrap.appendChild(yes); wrap.appendChild(no);
+                            chatBox2.appendChild(wrap);
+                            chatBox2.scrollTop = chatBox2.scrollHeight;
+                        }
+                    }
                 } else if (data.error) {
                     MessageHandler.addMessage({
                         content: 'I apologize, but I encountered an error. Please try again.',

@@ -1643,7 +1643,8 @@ class IntegratedAIChatbot {
                 this.loadPsychologyTraits().catch(err => console.error('Failed to load psychology traits:', err)),
                 this.loadConversations().catch(err => console.error('Failed to load conversations:', err)),
                 this.loadChatSessions().catch(err => console.error('Failed to load chat sessions:', err)),
-                this.loadMessageUsage().catch(err => console.error('Failed to load message usage:', err))
+                this.loadMessageUsage().catch(err => console.error('Failed to load message usage:', err)),
+                this.loadEngagement().catch(err => console.error('Failed to load engagement:', err))
             ]);
         } catch (error) {
             console.error('🔧 LoadUserData Error:', error);
@@ -1660,6 +1661,74 @@ class IntegratedAIChatbot {
             }
         } catch (error) {
             console.error('Failed to load message usage:', error);
+        }
+    }
+
+    // ── Engagement strip: open loops + 'Track this?' candidates ─────────────
+    // Every chip points at a real thread the user started; every action hits
+    // /api/engagement/threads/<id>/<action> so the loop can close.
+    async loadEngagement() {
+        const strip = document.getElementById('engagement-strip');
+        if (!strip) return;
+        const res = await this.apiCall('/api/engagement/suggestions', 'GET');
+        if (!res.ok) return;
+        const chips = (await res.json()).chips || [];
+        if (!chips.length) { strip.style.display = 'none'; return; }
+
+        strip.style.display = 'block';
+        strip.innerHTML = '';
+        const head = document.createElement('div');
+        head.style.cssText = 'font-size:0.78rem;color:#888;margin-bottom:6px;display:flex;align-items:center;gap:6px;';
+        head.innerHTML = '<i class="fas fa-link"></i> Open loops';
+        strip.appendChild(head);
+
+        for (const chip of chips) {
+            const row = document.createElement('div');
+            row.style.cssText = 'background:#f4f6ff;border:1px solid #dde3f7;border-radius:10px;padding:10px 12px;margin-bottom:8px;font-size:0.85rem;';
+            const title = document.createElement('div');
+            const strong = document.createElement('strong');
+            strong.style.color = '#5B6ABF';
+            strong.textContent = chip.title || '';
+            title.appendChild(strong);
+            title.appendChild(document.createTextNode(' '));
+            const text = document.createElement('span');
+            text.style.color = '#333';
+            text.textContent = chip.text || '';
+            title.appendChild(text);
+            row.appendChild(title);
+
+            const btns = document.createElement('div');
+            btns.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;';
+            const mk = (label, fn, primary) => {
+                const b = document.createElement('button');
+                b.textContent = label;
+                b.style.cssText = `padding:4px 12px;border-radius:14px;border:1px solid #5B6ABF;font-size:0.75rem;cursor:pointer;${primary ? 'background:#5B6ABF;color:#fff;' : 'background:#fff;color:#5B6ABF;'}`;
+                b.onclick = () => fn(chip.thread_id, row);
+                return b;
+            };
+            if (chip.type === 'candidate') {
+                btns.appendChild(mk('Track this', (id) => this.engagementAct(id, 'confirm'), true));
+                btns.appendChild(mk('No thanks', (id) => this.engagementAct(id, 'dismiss')));
+            } else if (chip.type === 'link' && chip.url) {
+                btns.appendChild(mk('Open', () => { window.location.href = chip.url; }, true));
+            } else {
+                for (const r of (chip.replies || []).slice(0, 4)) {
+                    const done = /^(done|decided|yes)$/i.test(r);
+                    btns.appendChild(mk(r, (id) => this.engagementAct(id, 'answer', { answer: r, quick: true }), done));
+                }
+                btns.appendChild(mk('Not now', (id) => this.engagementAct(id, 'snooze', { days: 3 })));
+            }
+            row.appendChild(btns);
+            strip.appendChild(row);
+        }
+    }
+
+    async engagementAct(threadId, action, data = {}) {
+        try {
+            const res = await this.apiCall(`/api/engagement/threads/${threadId}/${action}`, 'POST', data);
+            if (res.ok) await this.loadEngagement();
+        } catch (e) {
+            console.error('Engagement action failed:', e);
         }
     }
     

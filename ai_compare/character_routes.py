@@ -455,6 +455,56 @@ def _register_chat_endpoint(app, character_id, characters_dict, smart_response_p
                 except Exception:
                     pass
 
+            # ── Engagement: seed open loops + parse orchestration markers ─────
+            # Deterministic detectors run on every user message; candidates
+            # only become live threads if the user confirms a 'Track this?' chip.
+            if user_id:
+                try:
+                    from ai_compare import engagement as _eng
+                    _eng.seed_from_message(user_id, message)
+                except Exception:
+                    pass
+
+            # ---HANDOFF--- / ---THREAD--- markers (companion emits these; the
+            # parse is generic so any character's output is cleaned the same way)
+            try:
+                import json as _mjson
+                import re as _mre
+                _txt = response.get('response', '') if isinstance(response, dict) else str(response)
+                for _mark in ('HANDOFF', 'THREAD'):
+                    _m = _mre.search(r'---' + _mark + r'---\s*(\{.*?\})\s*$', _txt, _mre.S)
+                    if not _m:
+                        continue
+                    _txt = _mre.sub(r'---' + _mark + r'---\s*.*$', '', _txt, flags=_mre.S).rstrip()
+                    try:
+                        _payload = _mjson.loads(_m.group(1))
+                    except _mjson.JSONDecodeError:
+                        continue
+                    if not isinstance(response, dict):
+                        continue
+                    if _mark == 'HANDOFF' and _payload.get('character'):
+                        response['handoff'] = {
+                            'character': _payload.get('character'),
+                            'reason': _payload.get('reason', ''),
+                        }
+                    elif _mark == 'THREAD' and _payload.get('subject') and user_id:
+                        try:
+                            from ai_compare import engagement as _eng2
+                            _tid = _eng2.create_thread(
+                                user_id, str(_payload['subject'])[:200],
+                                kind=str(_payload.get('kind', 'custom')),
+                                owner=character_id, source='ai_capture',
+                                candidate=True)
+                            response['thread_candidate'] = {'id': _tid, 'subject': _payload['subject']}
+                        except Exception:
+                            pass
+                if isinstance(response, dict):
+                    response['response'] = _txt
+                else:
+                    response = _txt
+            except Exception:
+                pass
+
             return jsonify(response)
         except Exception as e:
             print(f"Error in {character_id} chat: {e}")
