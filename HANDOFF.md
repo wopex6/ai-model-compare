@@ -1,21 +1,31 @@
 # Handoff snapshot
 
-_Generated 2026-09-25 21:10 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-26 13:12 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Report-table parser now classifies column roles (actual/predicted/%pred/%change vs dates) so spirometry-style reports extract correctly — verified on the user's PFT screenshot. Earlier this session: read-only emergency icon w/ #ec= seeding, bilingual crisis keywords, auto reply-language, real PA secrets + rotated '123' passwords. Backlog: backup rotation, 3-way merge done? (partial), rate limits, magic bytes, retention flag, docs cleanup persist, recent-changes endpoint, Chinese drug-name aliases.
+Learning loop for report layouts is in: confirmed column_roles key off structure (not signature), apply_remembered on next scan, review role chips re-extract via POST /api/health-profile/report-format, apply-review confirms, item PUT/DELETE learn conservatively, sibling_date for same-structure pages within 2h. PWA cache v126. Multi-photo merge of different structures is still open. Not deployed. 82 format/safety/emergency tests passed.
 
 ## Git
 
 **Branch:** `cursor/emergency-card-paramedic-fields`  
-**Uncommitted files:** 20
+**Uncommitted files:** 31
 
 > Uncommitted work is the main handoff hazard: the next agent
 > cannot tell finished edits from half-written ones. Commit
 > before switching, even as `wip:`.
 
 ```
+M AGENTS.md
+ M ai_compare/medical_advisor_health_context.py
+ M app.py
+ M handoff.py
+ M static/dr_health_hub.js
+ M static/dr_health_sw.js
+ M templates/dr_health_app.html
+ M tests/test_emergency_home_icon.py
+ M tests/test_health_profile_safety.py
+?? ai_compare/report_format.py
 ?? check_wk_credentials.py
 ?? debug_auth.py
 ?? direct_password_test.py
@@ -35,12 +45,32 @@ Report-table parser now classifies column roles (actual/predicted/%pred/%change 
 ?? test_integrated_system.py
 ?? test_reply_buttons.py
 ?? test_special_characters.py
+?? tests/test_report_format.py
 ?? verify_wai_tse.py
 ```
+
+<details><summary>diff --stat</summary>
+
+```
+AGENTS.md                                    | 151 +++++++-
+ ai_compare/medical_advisor_health_context.py | 405 +++++++++++-----------
+ app.py                                       |  89 ++++-
+ handoff.py                                   |   1 +
+ static/dr_health_hub.js                      |  79 ++++-
+ static/dr_health_sw.js                       |   2 +-
+ templates/dr_health_app.html                 | 229 ++++++++++--
+ tests/test_emergency_home_icon.py            | 136 ++++++++
+ tests/test_health_profile_safety.py          | 498 ++++++++++++++++++++++++++-
+ 9 files changed, 1317 insertions(+), 273 deletions(-)
+warning: LF will be replaced by CRLF in handoff.py.
+The file will have its original line endings in your working directory
+```
+</details>
 
 Recent commits:
 
 ```
+648c52b Handoff: spirometry-table parsing fix deployed
 ca3e72a Classify report-table column roles before extracting test results
 f7df04e Handoff: read-only emergency icon + security hardening (SW v124)
 1a7c641 Make emergency icon read-only mirror; bilingual crisis signals
@@ -48,59 +78,24 @@ f7df04e Handoff: read-only emergency icon + security hardening (SW v124)
 46c64e7 Add 'auto' reply-language mode that mirrors the question's language
 454519c push: send at high urgency so Doze doesn't defer reminders
 2945a3d settings: save preferences even when notification permission is blocked
-f0a346a settings: distinguish unsupported vs denied notification error
 ```
-
-## Production (PythonAnywhere)
-
-**4 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
-
-```
-ok       tests/test_review_flow.py
-ok       tests/test_ui_features.py
-ok       tests/test_user_logon_shared_modules.py
-ok       tests/test_web_enhancements.py
-ok       token_test.py
-ok       update_database.py
-ok       update_wk_password.py
-ok       upload_database_to_pythonanywhere.ps1
-ok       uploads/ai_a6043c74-8f82-40d8-863c-971ba0f40619.md
-ok       verbosity_system.py
-ok       verify_database_schema.py
-ok       verify_delete.py
-ok       verify_personality_system.py
-ok       verify_production_ready.py
-ok       verify_shared_processing.py
-ok       verify_table_schemas.py
-ok       verify_timestamp_storage.py
-ok       view_phase3_data.py
-ok       web_enhancement_plan.md
-ok       web_enhancement_test_results.json
-ok       web_enhancement_test_runner.py
-ok       webhook_deploy.py
-ok       wisdom_profiles/23.json
-ok       wisdom_profiles/23_hypotheses.json
-4 file(s) stale. Re-run with --push to upload.
-```
-
-Reload often returns `409 slow_startup_error` on the first attempt — retry rather than debug it.
 
 ## Tests
 
 All passing.
 
 ```
-........................................................................ [ 52%]
-........................................................................ [ 70%]
-........................................................................ [ 88%]
-.................................................                        [100%]
+........................................................................ [ 66%]
+........................................................................ [ 82%]
+........................................................................ [ 99%]
+...                                                                      [100%]
 ============================== warnings summary ===============================
 ..\..\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37
   C:\Users\trabc\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-409 passed, 1 warning in 21.80s
+435 passed, 1 warning in 19.59s
 [AutoDoc] Monitoring stopped
 ```
 

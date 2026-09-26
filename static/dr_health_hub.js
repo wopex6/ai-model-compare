@@ -391,6 +391,14 @@
     const HIDDEN_KEYS = ['added_at', 'updated_at', 'source', 'id',
         'verified_by_user', 'confidence', 'completed_at'];
 
+    // Bookkeeping the app maintains. It stays visible on the record, but never
+    // gets a free-text box: hand-editing a lifecycle timestamp or a lock flag
+    // corrupts the confirmation queue and the retire/revive history.
+    const MANAGED_KEYS = ['status', 'started_on', 'ended_on', 'last_confirmed_at',
+        'history', 'pending', 'ref_locked', 'unit_locked', 'date_source',
+        'verified_at', 'proposed_by', 'change_note',
+        'format_structure', 'format_signature', 'source_role'];
+
     // Mirrors the vocabulary in ai_compare/health_insights.py.
     const SOURCE_LABELS = {
         user_entered: 'You entered this',
@@ -886,6 +894,19 @@
                 for (const k in item) {
                     if (!Object.prototype.hasOwnProperty.call(item, k)) continue;
                     if (seen[k] || HIDDEN_KEYS.indexOf(k) !== -1) continue;
+                    // Whatever else the report printed, shown one line per
+                    // column under the report's own heading.
+                    if (k === 'fields' && item[k] && typeof item[k] === 'object') {
+                        for (const sub in item[k]) {
+                            if (!Object.prototype.hasOwnProperty.call(item[k], sub)) continue;
+                            const sv = toText(item[k][sub]);
+                            if (!sv) continue;
+                            html += '<div class="hub-field"><span class="hub-field-label">' +
+                                esc(sub) + '</span><span class="hub-field-value">' +
+                                esc(sv) + '</span></div>';
+                        }
+                        continue;
+                    }
                     const v = toText(item[k]);
                     if (!v) continue;
                     html += '<div class="hub-field"><span class="hub-field-label">' + esc(labelFor(k)) +
@@ -932,6 +953,13 @@
             for (let i = 0; i < schema.fields.length; i++) {
                 html += this.inputHtml(schema.fields[i], item[schema.fields[i].key]);
             }
+            const extras = this.extraFields(id, item);
+            if (extras.length) {
+                html += '<div class="hub-form-group">As recorded from the report</div>';
+                for (let i = 0; i < extras.length; i++) {
+                    html += this.inputHtml(extras[i], extras[i].current);
+                }
+            }
             if (id === 'diary' && window.HealthDictation && !HealthDictation.pillAvailable()) {
                 // No pill on this device — point at the OS voice typing.
                 html += '<div class="hub-mic-bar" style="margin:8px 0 12px; padding:10px; background:#f0f4ff; border-radius:8px; font-size:0.85rem; color:#555;">' +
@@ -947,7 +975,9 @@
             if (field.heading) {
                 return '<div class="hub-form-group">' + esc(field.heading) + '</div>';
             }
-            const id = 'hf-' + field.key;
+            // A key can be a report's own column heading ('Pre-Bronch %Pred'),
+            // so the element id is sanitised while data-key keeps the real name.
+            const id = 'hf-' + String(field.key).replace(/[^A-Za-z0-9_-]+/g, '-');
             let html = '<label class="hub-input-label" for="' + id + '">' + esc(field.label) +
                 (field.required ? ' *' : '') + '</label>';
             if (field.hint) {
@@ -1007,6 +1037,7 @@
                 const key = el.getAttribute('data-key');
                 const type = el.getAttribute('data-type');
                 const raw = el.value;
+                let value;
                 if (type === 'list') {
                     const lines = String(raw || '').split('\n');
                     const clean = [];
@@ -1014,9 +1045,51 @@
                         const t = lines[j].trim();
                         if (t) clean.push(t);
                     }
-                    out[key] = clean;
+                    value = clean;
                 } else {
-                    out[key] = String(raw || '').trim();
+                    value = String(raw || '').trim();
+                }
+                // 'fields.<heading>' writes back into the nested bag of whatever
+                // else the report printed, so those boxes edit the record rather
+                // than creating top-level keys named after a column.
+                const dot = key.indexOf('.');
+                if (dot > 0) {
+                    const parent = key.slice(0, dot);
+                    const child = key.slice(dot + 1);
+                    if (!out[parent] || typeof out[parent] !== 'object') out[parent] = {};
+                    out[parent][child] = value;
+                } else {
+                    out[key] = value;
+                }
+            }
+            return out;
+        },
+
+        // Boxes for everything on this record the schema does not declare.
+        // A report kind nobody anticipated arrives with its own columns; those
+        // are stored under the report's own wording, and this is what makes
+        // them editable instead of read-only curiosities.
+        extraFields(sectionId, item) {
+            const schema = meta(sectionId) || { fields: [] };
+            const declared = {};
+            for (let i = 0; i < (schema.fields || []).length; i++) {
+                if (schema.fields[i].key) declared[schema.fields[i].key] = true;
+            }
+            const out = [];
+            for (const k in item) {
+                if (!Object.prototype.hasOwnProperty.call(item, k)) continue;
+                if (declared[k] || k === 'fields') continue;
+                if (HIDDEN_KEYS.indexOf(k) !== -1 || MANAGED_KEYS.indexOf(k) !== -1) continue;
+                const v = item[k];
+                if (v && typeof v === 'object') continue;
+                out.push({ key: k, label: labelFor(k), type: 'text', current: v });
+            }
+            const nested = item.fields;
+            if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+                for (const k in nested) {
+                    if (!Object.prototype.hasOwnProperty.call(nested, k)) continue;
+                    out.push({ key: 'fields.' + k, label: k, type: 'text',
+                               current: nested[k] });
                 }
             }
             return out;

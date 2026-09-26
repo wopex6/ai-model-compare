@@ -22,6 +22,7 @@ from ai_compare.health_insights import (
     DEFAULT_ADVICE_SETTINGS,
     parse_date,
 )
+from ai_compare import report_format
 from ai_compare.health_freshness import (
     STATUS_ACTIVE,
     audit_test_change,
@@ -318,6 +319,104 @@ def _canonicalize_lab_tables(text):
     return '\n'.join(out)
 
 
+def parse_report_tables(text, store=None, now=None, overlays=None):
+    """Extract test_results from markdown tables in OCR text.
+
+    The vision model returns report tables in markdown form. Instead of
+    letting the JSON analysis model re-interpret the numbers, we parse those
+    tables directly. A confirmed layout for the same structure is overlaid
+    before extract, so a correction the user made last time is reused.
+
+    Returns (rows, {'tables': [...]}) — the analysis record is kept with the
+    document and is the only way to tell a reading the numbers confirmed from
+    one that rested on a column heading.
+    """
+    results = []
+    tables = []
+    store = store if store is not None else {}
+    lines = text.splitlines()
+    section = ''
+    i = 0
+    table_index = 0
+    while i < len(lines):
+        if not lines[i].strip().startswith('|'):
+            bare = lines[i].strip().strip('-=_*# ').strip()
+            if (bare and len(bare) <= 60 and not any(c.isdigit() for c in bare)
+                    and not _META_LABEL_RE.search(bare)):
+                section = bare
+            i += 1
+            continue
+        block = []
+        while i < len(lines) and lines[i].strip().startswith('|'):
+            block.append(lines[i])
+            i += 1
+        if len(block) < 3:
+            continue
+
+        rows = []
+        for line in block:
+            cells = [c.strip() for c in line.strip().split('|')[1:-1] if True]
+            rows.append(cells)
+
+        sep_idx = None
+        for idx, row in enumerate(rows):
+            if all(re.match(r'^:?-+:?$', cell) or cell == '' for cell in row):
+                sep_idx = idx
+                break
+        if sep_idx is None or sep_idx == 0:
+            continue
+
+        name_row = rows[sep_idx - 1]
+        for c_idx, cell in enumerate(name_row):
+            if re.search(r'latest', cell, re.I) and not _DATE_RE.search(cell):
+                found = _DATE_RE.search(text)
+                if found:
+                    name_row[c_idx] = found.group(1)
+
+        description = report_format.describe(
+            rows, sep_idx, section=section, skip_name=_META_LABEL_RE)
+        overlay = report_format._overlay_for(table_index, description, overlays)
+        applied = False
+        if overlay:
+            applied = report_format.apply_column_roles(
+                description, overlay, basis='user')
+        elif store:
+            applied = report_format.apply_remembered(description, store)
+        sibling = report_format.sibling_date(
+            store, description.get('structure') or '', now=now)
+        rows_out, skipped = report_format.extract(
+            description, rows[sep_idx + 1:], skip_name=_META_LABEL_RE)
+        if sibling:
+            for row in rows_out:
+                if not row.get('date'):
+                    row['date'] = sibling
+                    row['date_source'] = 'sibling'
+        familiarity = report_format.remember(store, description, now=now)
+        dated = next((r.get('date') for r in rows_out if r.get('date')), '')
+        if dated:
+            report_format.record_report_date(
+                store, description.get('structure') or '', dated, now=now)
+        results.extend(rows_out)
+        tables.append({
+            'section': description['section'],
+            'signature': description['signature'],
+            'structure': description.get('structure') or '',
+            'layout': description['layout'],
+            'headings': description['labels'],
+            'qualifiers': description['qualifiers'],
+            'columns': description['columns'],
+            'relations': description['relations'],
+            'rows_read': description['row_count'],
+            'rows_extracted': len(rows_out),
+            'rows_skipped': skipped,
+            'recognition': familiarity,
+            'applied_confirmed': applied,
+        })
+        table_index += 1
+
+    return results, {'tables': tables}
+
+
 _SPECIMEN_PREFIXES = {
     's': 'S', 'se': 'S', 'ser': 'S', 'serum': 'Serum',
     'p': 'P', 'pl': 'P', 'plasma': 'Plasma',
@@ -599,9 +698,16 @@ def _fill_test_defaults(results):
         # resurrect a default over them.
         if not t.get('reference_range') and g in refs and not t.get('ref_locked'):
             t['reference_range'] = refs[g]
-        if (not _extract_unit_text(t.get('value')) and units.get(g)
-                and not t.get('unit_locked')):
-            t['value'] = (str(t.get('value') or '') + ' ' + units[g]).strip()
+        want = units.get(g)
+        value_text = str(t.get('value') or '')
+        # A single-letter unit such as 'L' or 'g' is not extractable from the
+        # value, because 'L' is also the Low flag — so check for it literally
+        # before appending, or the value grows a second copy ('0.96 L L').
+        already = bool(want) and bool(re.search(
+            r'(?:^|\s)' + re.escape(want) + r'\s*$', value_text, re.I))
+        if (not _extract_unit_text(value_text) and want
+                and not already and not t.get('unit_locked')):
+            t['value'] = (value_text + ' ' + want).strip()
 
 
 def _reference_bounds(text):
@@ -1499,8 +1605,17 @@ class HealthProfile:
         }, start_key="onset")
 
     def add_test_result(self, test_name: str, value: str, reference_range: str = "",
-                       date: str = "", notes: str = "") -> bool:
-        """Add a lab/test result. Returns True if actually added."""
+                       date: str = "", notes: str = "", fields: Dict = None,
+                       unit: str = "", layout: Dict = None) -> bool:
+        """Add a lab/test result. Returns True if actually added.
+
+        `fields` carries whatever else the report printed for this measurement,
+        keyed by the report's own wording (a predicted value, a % of predicted,
+        a specimen, a method). Keeping them as named fields rather than flattening
+        them into `notes` means a report kind nobody anticipated stores its whole
+        reading without a schema change, and the editor can show each one as its
+        own box.
+        """
         # Normalize non-string values (e.g., AI may return dict with value/unit/flag)
         if not isinstance(value, str):
             if isinstance(value, dict):
@@ -1521,6 +1636,11 @@ class HealthProfile:
                 reference_range = str(reference_range)
         value = self._clean_test_value(value, reference_range)
         value = self._reorder_test_value(value)
+        extra_fields = {}
+        for key, item in (fields or {}).items():
+            if not key or item in (None, "", [], {}):
+                continue
+            extra_fields[str(key)] = item if isinstance(item, str) else str(item)
         existing = self.data.get("test_results", [])
         date_val = self._normalize_test_date(date or datetime.now().strftime("%Y-%m-%d"))
         # Detect abbreviation variants every time a test name arrives so
@@ -1542,6 +1662,25 @@ class HealthProfile:
                 if not t.get("date") and date_val:
                     t["date"] = date_val
                     filled["date"] = date_val
+                if not t.get("unit") and unit:
+                    t["unit"] = unit
+                    filled["unit"] = unit
+                # Same rule as the value itself: a field the stored row already
+                # holds was reviewed, so a re-scan only fills the gaps.
+                if extra_fields:
+                    stored_fields = t.setdefault("fields", {})
+                    for key, item in extra_fields.items():
+                        if not stored_fields.get(key):
+                            stored_fields[key] = item
+                            filled["fields." + key] = item
+                    if not stored_fields:
+                        t.pop("fields", None)
+                for key in ("format_structure", "format_signature", "source_role",
+                            "date_source", "qualifier", "section"):
+                    incoming = (layout or {}).get(key)
+                    if incoming not in (None, "", [], {}) and not t.get(key):
+                        t[key] = incoming
+                        filled[key] = incoming
                 if filled:
                     audit_test_change(self.data, "updated", t.get("test_name", test_name),
                                       {"changes": [{"field": f, "from": "", "to": v}
@@ -1556,6 +1695,20 @@ class HealthProfile:
             "notes": notes,
             "added_at": datetime.now().isoformat()
         }
+        if unit:
+            entry["unit"] = unit
+        if extra_fields:
+            entry["fields"] = extra_fields
+        for key in ("format_structure", "format_signature", "source_role",
+                    "date_source", "qualifier", "section"):
+            incoming = (layout or {}).get(key)
+            if incoming not in (None, "", [], {}):
+                entry[key] = incoming
+        if not (date or "").strip() and not entry.get("date_source"):
+            # The report did not state a date, so the row is dated by when it
+            # was filed. Say so on the row: dedup needs a date, but a reader
+            # must not take today's date for the day of the measurement.
+            entry["date_source"] = "filed"
         self.data["test_results"].append(entry)
         audit_test_change(self.data, "added", test_name,
                           {"value": value, "date": date_val,
@@ -1865,11 +2018,27 @@ class HealthProfile:
                     if self.add_test_result(sub_name, sub_value, sub_ref, test.get("date", ""), test.get("notes", "")):
                         actions.append(f"Added test: {sub_name}")
             else:
-                notes = _merge_notes(test.get("notes", ""), _extras(
-                    test, ("test_name", "value", "reference_range", "date", "notes")))
+                # Extras stay named fields on the row instead of being folded
+                # into a notes string, so the editor can show each one and a
+                # later re-scan can tell them apart.
+                core = ("test_name", "value", "reference_range", "date", "notes",
+                        "unit", "fields")
+                layout_keys = ("format_structure", "format_signature",
+                               "source_role", "date_source", "qualifier",
+                               "section")
+                extra_fields = dict(test.get("fields") or {})
+                for key, item in test.items():
+                    if key in core or key in layout_keys or item in (None, "", [], {}):
+                        continue
+                    extra_fields[key] = (item if isinstance(item, str)
+                                         else json.dumps(item, ensure_ascii=False))
+                layout = {k: test.get(k) for k in layout_keys if test.get(k)}
                 if self.add_test_result(
                     test["test_name"], value,
-                    test.get("reference_range", ""), test.get("date", ""), notes
+                    test.get("reference_range", ""), test.get("date", ""),
+                    test.get("notes", ""), fields=extra_fields,
+                    unit=str(test.get("unit") or ""),
+                    layout=layout or None
                 ):
                     actions.append(f"Added test: {test['test_name']}")
 
@@ -3189,10 +3358,13 @@ Rules:
 - Take each value and unit from that test's own row. Do not swap or shift values between adjacent rows and do not drop the unit.
 - Wide tables may wrap: a Reference or Units fragment on the line AFTER a result row belongs to that row, not a new row. Attach it before extracting.
 - Never collapse multiple date columns into a single object or combined string value.
-- Not every result-table column is a date. BEFORE extracting, identify each column's role — test name, actual/result value, predicted value, % of predicted, % change, reference range, units, or date. Verify the reading: a %Pred-style column should be roughly actual ÷ predicted × 100 — if it is not, the column roles were misread; re-examine the table before extracting.
-- Predicted values, % of predicted and % change are context, not measurements: put the predicted value in reference_range as 'predicted X' and the percentages in notes. Never create a test_result whose value is a predicted, %-predicted or %-change figure.
-- Paired phases of one measurement (e.g. pre/post bronchodilator spirometry) are separate results — keep the phase in the test name, e.g. 'FEV1 (L) (Post-Bronch)'.
-- If a table has no date column and the document shows no report date, leave the date empty. Never invent a date or copy a column label into the date field."""
+- FIRST work out the layout, THEN extract. Do not assume any layout. For every column say what its cells actually are — measurement, a baseline/expected/predicted figure the measurement is compared against, a percentage or ratio computed from other columns, a reference range, a unit, an abnormal flag, a date, a specimen or phase, or free text. Decide from the cells; a column heading is a hint, and headings are often abbreviated, mistranslated or missing entirely.
+- Check the arithmetic before trusting your reading: a column that is roughly another column divided by a third and multiplied by 100 is a computed percentage, not a measurement. If the numbers do not support your reading of the columns, re-read the table.
+- Only a measured quantity belongs in `value`. A baseline/predicted/expected figure goes in reference_range, labelled with whatever word the report used for it. Computed percentages and changes go in notes. Never make a test_result whose value is a baseline or a percentage of one.
+- When one row holds several measurements of the same quantity under different group headings, specimens or phases (a sparse heading row spanning several columns is the usual sign), emit one result per group and keep that group's own wording in the test name, e.g. 'FEV1 (L) (Post-Bronch)'.
+- Keep anything else the report printed for a measurement. Report it in notes as 'heading: value', using the report's own heading. Do not drop a column because the schema has no field for it.
+- If the table has no date column and the document shows no report date, leave the date empty. Never invent a date or copy a column heading into the date field.
+- State the layout you settled on in an "insights" entry with category "test_preparation" when the table was anything other than plain test-name-and-value rows, so a person can check the reading."""
 
         user_prompt = f"""EXISTING PATIENT PROFILE:
 - Daily foods: {', '.join(existing_foods)}
@@ -3205,205 +3377,6 @@ Rules:
 
 NEW TEXT TO ANALYZE:
 {raw_text}"""
-
-        def _parse_markdown_tables(text):
-            """Extract test_results from markdown tables in raw OCR text.
-
-            The vision model now returns lab tables in markdown form.  Instead of
-            letting the JSON analysis model re-interpret (and possibly shift or
-            round) the numbers, we parse those tables directly and use them as
-            the test_results list.
-            """
-            results = []
-            lines = text.splitlines()
-            i = 0
-            while i < len(lines):
-                if not lines[i].strip().startswith('|'):
-                    i += 1
-                    continue
-                block = []
-                while i < len(lines) and lines[i].strip().startswith('|'):
-                    block.append(lines[i])
-                    i += 1
-                if len(block) < 3:
-                    continue
-
-                # Split on |, ignoring the leading/trailing empty cells from the outer pipes
-                rows = []
-                for line in block:
-                    cells = [c.strip() for c in line.strip().split('|')[1:-1] if True]
-                    rows.append(cells)
-
-                # Identify the separator/header row (all cells are --- or :---:)
-                sep_idx = None
-                for idx, row in enumerate(rows):
-                    if all(re.match(r'^:?-+:?$', cell) or cell == '' for cell in row):
-                        sep_idx = idx
-                        break
-                if sep_idx is None or sep_idx == 0:
-                    continue
-
-                # Header rows: everything above the separator. Lab tables
-                # have one; grouped reports (e.g. spirometry "Pre-Bronch /
-                # Post-Bronch" spanning Actual/Pred/%Pred) have a sparse
-                # group row above the column-name row — carry each group
-                # label forward over the columns it introduces.
-                header_rows = rows[:sep_idx]
-                name_row = header_rows[-1]
-                span_rows = header_rows[:-1]
-                groups = [''] * len(name_row)
-                cur_group = ''
-                for c in range(len(name_row)):
-                    for sr in span_rows:
-                        if c < len(sr) and sr[c].strip():
-                            cur_group = sr[c].strip()
-                            break
-                    groups[c] = cur_group
-
-                # Classify each column's role before extracting — middle
-                # columns are not always dates. Anything unrecognised still
-                # falls through to the date-column behaviour below.
-                def _role(label):
-                    hl = label.strip().lower()
-                    if re.search(r'%', hl) and re.search(r'pred|predict', hl):
-                        return 'pct_pred'
-                    if re.search(r'%', hl) and re.search(r'ch?n?g|change', hl):
-                        return 'pct_change'
-                    if re.search(r'\b(refer|ref|reference)\b', hl):
-                        return 'ref'
-                    if 'unit' in hl:
-                        return 'unit'
-                    if _DATE_RE.search(label) or re.search(r'latest', hl):
-                        return 'date'
-                    if re.search(r'\b(pred|predicted|expected|target)\b', hl):
-                        return 'pred'
-                    if re.search(r'\b(actual|result|value|measured|observed)\b', hl):
-                        return 'actual'
-                    if re.search(r'\b(flag|abnormal)\b', hl) or re.search(r'\bh/l\b', hl):
-                        return 'flag'
-                    return ''
-
-                roles = [_role(h) for h in name_row]
-                ref_idx = roles.index('ref') if 'ref' in roles else None
-                unit_idx = roles.index('unit') if 'unit' in roles else None
-                end_candidates = [x for x in [ref_idx, unit_idx, len(name_row)] if x is not None]
-                end_idx = min(end_candidates)
-
-                # Unclassified middle columns keep the old behaviour:
-                # one result per column headed by a date.
-                for c in range(1, end_idx):
-                    if roles[c] == '':
-                        roles[c] = 'date'
-                date_cols = [c for c in range(1, end_idx) if roles[c] == 'date']
-                has_semantic = any(
-                    roles[c] in ('actual', 'pred', 'pct_pred', 'pct_change')
-                    for c in range(1, end_idx))
-
-                def _cell(row, idx):
-                    return row[idx].strip() if idx is not None and idx < len(row) else ''
-
-                if has_semantic:
-                    # Role-typed table (Actual/Pred/%Pred/…): one result per
-                    # row per measurement group, predicted → reference_range,
-                    # percentages → notes. No date unless the table has one.
-                    group_order = []
-                    for c in range(1, end_idx):
-                        if groups[c] not in group_order:
-                            group_order.append(groups[c])
-                    for row in rows[sep_idx + 1:]:
-                        if not row or len(row) < 2:
-                            continue
-                        test_name = row[0].strip()
-                        if not test_name or _META_LABEL_RE.search(test_name):
-                            continue
-                        test_name = re.sub(r'^[*+]\s*', '', test_name).strip()
-                        unit = _cell(row, unit_idx)
-                        if not unit:
-                            m = re.search(r'\(([^)]+)\)\s*$', test_name)
-                            if m:
-                                unit = m.group(1)
-                        row_ref = _cell(row, ref_idx)
-                        for gname in group_order:
-                            gcols = [c for c in range(1, end_idx) if groups[c] == gname]
-                            actual = next((c for c in gcols if roles[c] == 'actual'), None)
-                            if actual is None:
-                                # group with no Actual column — take its
-                                # first classified value column instead
-                                actual = next((c for c in gcols
-                                               if roles[c] in ('pred', 'pct_pred', 'pct_change')), None)
-                            if actual is None:
-                                continue
-                            val = _cell(row, actual)
-                            if not val:
-                                continue
-                            notes = []
-                            pred = next((c for c in gcols if roles[c] == 'pred'), None)
-                            pct = next((c for c in gcols if roles[c] == 'pct_pred'), None)
-                            chg = next((c for c in gcols if roles[c] == 'pct_change'), None)
-                            ref = row_ref
-                            if pred is not None and _cell(row, pred):
-                                ref = ('predicted ' + _cell(row, pred) +
-                                       ((' ' + unit) if unit else '')).strip()
-                            if pct is not None and _cell(row, pct):
-                                notes.append(_cell(row, pct).rstrip('%') + '% of predicted')
-                            if chg is not None and _cell(row, chg):
-                                cv = _cell(row, chg).rstrip('%')
-                                notes.append('change ' + (cv if cv.startswith('-') else '+' + cv) + '%')
-                            if unit and not re.search(re.escape(unit), val, re.I):
-                                val = (val + ' ' + unit).strip()
-                            results.append({
-                                "test_name": test_name + (' (' + gname + ')' if gname else ''),
-                                "value": val,
-                                "reference_range": ref,
-                                "date": '',
-                                "notes": ' · '.join(notes)
-                            })
-                    continue
-
-                if not date_cols:
-                    continue
-
-                # Fix "Latest" / "Latest Results" headers: search the full text for
-                # a date pattern near those words and replace the header.
-                full_text = '\n'.join(lines)
-                for d_idx in date_cols:
-                    h = name_row[d_idx].strip()
-                    if re.search(r'latest', h, re.I):
-                        # Look for a date pattern (e.g. 03-Apr-25, 03/04/2025) in the text
-                        # near the word "Latest" or in the column header itself
-                        date_match = re.search(r'(\d{1,2}[-/\s][A-Za-z]{3,9}[-/\s]\d{2,4}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4})', h)
-                        if not date_match:
-                            # Search the full text for dates that appear after the previous column header
-                            date_match = re.search(r'(\d{1,2}[-/\s][A-Za-z]{3,9}[-/\s]\d{2,4}|\d{1,2}[-/]\d{1,2}[-/]\d{2,4})', full_text)
-                        if date_match:
-                            name_row[d_idx] = date_match.group(1)
-
-                for row in rows[sep_idx + 1:]:
-                    if not row or len(row) < 2:
-                        continue
-                    test_name = row[0].strip()
-                    if not test_name or re.search(r'^(Date|Time|Lab|Reference|Unit|Name of|Patient|Request|Collection|Received|Barcode|Page|Report)', test_name, re.I):
-                        continue
-                    test_name = re.sub(r'^[*+]\s*', '', test_name).strip()
-                    reference = row[ref_idx] if ref_idx is not None and ref_idx < len(row) else ''
-                    unit = row[unit_idx] if unit_idx is not None and unit_idx < len(row) else ''
-                    for d_idx in date_cols:
-                        if d_idx >= len(row):
-                            continue
-                        date = name_row[d_idx].strip()
-                        val = row[d_idx].strip()
-                        if not val:
-                            continue
-                        if unit and not re.search(re.escape(unit), val, re.I):
-                            val = (val + ' ' + unit).strip()
-                        results.append({
-                            "test_name": test_name,
-                            "value": val,
-                            "reference_range": reference,
-                            "date": date,
-                            "notes": ""
-                        })
-            return results
 
         def _clean_and_parse(text):
             text = text.strip()
@@ -3446,7 +3419,8 @@ NEW TEXT TO ANALYZE:
             # Prefer the OCR markdown table values over any AI-re-interpreted ones,
             # but keep any (test, date) pair the table parse missed so a dropped row
             # is still recovered from the AI extraction.
-            parsed_from_table = _parse_markdown_tables(raw_text)
+            parsed_from_table, format_analysis = parse_report_tables(
+                raw_text, store=profile.data)
             if parsed_from_table:
                 def _key(t):
                     return (_canonical_test_key(t.get('test_name', '')),
@@ -3476,7 +3450,12 @@ NEW TEXT TO ANALYZE:
             _fill_test_defaults(extracted.get('test_results') or [])
 
             if not save:
-                return {"success": True, "extracted": extracted, "pending_review": extracted, "actions": []}
+                # format_analysis rides alongside the data, not inside it: the
+                # advice prompt below serialises `extracted`, and the layout
+                # record is for the user and the next agent, not for the model.
+                return {"success": True, "extracted": extracted,
+                        "pending_review": extracted, "actions": [],
+                        "format_analysis": format_analysis}
 
         except json.JSONDecodeError:
             # Retry once with a stricter prompt and the stronger gpt-4o model
