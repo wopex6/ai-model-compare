@@ -434,7 +434,7 @@ handoff.py                      session handoff snapshot
 ## 8. Open work (replace this when it ships)
 
 As of 26 Sep 2026, branch `cursor/emergency-card-paramedic-fields`, PWA caches
-`dr-health-shell-v128` and `life-companion-shell-v3`. Report-layouts hub,
+`dr-health-shell-v129` and `life-companion-shell-v3`. Report-layouts hub,
 whole-app PWA and the legacy-chat retirement committed on this branch.
 
 Shipped this session (do not redo):
@@ -512,7 +512,7 @@ aliases at runtime and `pin_test_name` lets the user override, so extend that
 mechanism rather than the tables.
 
 Not verified from a desktop: the emergency-card link fix on a real phone (the
-bug is a history/popstate race, so it needs a device or a real browser), v128 on
+bug is a history/popstate race, so it needs a device or a real browser), v129 on
 an installed phone, the app-wide worker actually installing and controlling
 pages on a real device (needs HTTPS + a browser — verified only by route smoke
 and `node --check` here), the Report layouts card against a profile that has

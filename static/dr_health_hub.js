@@ -1516,6 +1516,7 @@
             const byStructure = {};
             for (let i = 0; i < docs.length; i++) {
                 const d = docs[i];
+                if (!d.has_result) continue;
                 for (const s of d.format_structures || []) {
                     (byStructure[s] = byStructure[s] || []).push(d);
                 }
