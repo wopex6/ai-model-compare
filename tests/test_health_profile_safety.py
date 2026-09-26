@@ -272,8 +272,10 @@ def test_apply_extracted_saves_every_schema_key_and_extras():
         tr = next(t for t in d["test_results"] if t.get("test_name") == "eGFR")
         assert tr["date"] == "2026-09-09"
         assert "45" in tr["value"]
-        # extra field 'flag' preserved in notes
-        assert "flag" in (tr.get("notes") or "")
+        # An extra field the extractor emitted is kept as a named field on the
+        # row, not flattened into notes: a report kind with columns nobody
+        # anticipated stores its whole reading without a schema change.
+        assert (tr.get("fields") or {}).get("flag") == "L"
 
         assert any(p.get("title") == "Reduce salt" for p in d["action_plans"])
         assert any(f.get("title") == "Repeat bloods" for f in d["follow_ups"])
@@ -367,6 +369,269 @@ def test_document_result_serves_stored_analysis(tmp_path):
 
         # Unknown document -> 404; document with no stored analysis -> 404
         assert client.get('/api/health-profile/document-result?stored_name=nope.pdf').status_code == 404
+    finally:
+        _cleanup(user_id)
+
+
+def test_document_analysis_downloads_as_one_readable_file(tmp_path):
+    """Checking why an unfamiliar report read the way it did needs the
+    transcribed text, the extracted rows and the column roles together. No
+    screen has room for that, so it has to come out as a file."""
+    import app as app_mod
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        stored = {
+            'extracted': {'test_results': [{'test_name': 'FEV1 (L) (Pre-Bronch)',
+                                            'value': '0.96 L'}]},
+            'format_analysis': {'tables': [{
+                'signature': 'abc123', 'layout': 'derived', 'recognition': 'new',
+                'columns': [{'index': 1, 'label': 'Actual', 'role': 'measured',
+                             'basis': 'arithmetic'}],
+                'rows_skipped': [{'row': 3, 'reason': 'heading or metadata row',
+                                  'name': 'Reference'}],
+            }]},
+        }
+        result_file = tmp_path / 'hash2_result.json'
+        result_file.write_text(json.dumps(stored), encoding='utf-8')
+        text_file = tmp_path / 'hash2.txt'
+        text_file.write_text('| FEV1 (L) | 0.96 |', encoding='utf-8')
+        profile.data['uploaded_documents'] = [{
+            'original_name': 'lung function.pdf',
+            'stored_name': 's_lung.pdf',
+            'uploaded_at': datetime.now().isoformat(),
+            'result_path': str(result_file),
+            'extracted_text_path': str(text_file),
+        }]
+        profile.save()
+
+        app_mod.app.config['TESTING'] = True
+        client = app_mod.app.test_client()
+        with client.session_transaction() as sess:
+            sess['user_id'] = user_id
+            sess['username'] = 'safety-test'
+
+        resp = client.get('/api/health-profile/document-result'
+                          '?download=1&stored_name=s_lung.pdf')
+        assert resp.status_code == 200
+        disposition = resp.headers.get('Content-Disposition') or ''
+        assert disposition.startswith('attachment;')
+        # The filename is built from the original name, with anything that is
+        # not safe in a filename replaced.
+        assert 'lung_function.pdf.analysis.json' in disposition
+        # Patient data: never cached by a proxy or a service worker.
+        assert resp.headers.get('Cache-Control') == 'no-store'
+
+        body = resp.data.decode('utf-8')
+        assert '\n' in body, 'the file must be indented for reading'
+        parsed = json.loads(body)
+        # All three layers are present in the one file.
+        assert parsed['extracted_text'] == '| FEV1 (L) | 0.96 |'
+        assert parsed['extracted']['test_results'][0]['value'] == '0.96 L'
+        table = parsed['format_analysis']['tables'][0]
+        assert table['columns'][0]['basis'] == 'arithmetic'
+        assert table['rows_skipped'][0]['reason'] == 'heading or metadata row'
+    finally:
+        _cleanup(user_id)
+
+
+def test_document_analysis_download_refuses_another_users_document(tmp_path):
+    """The profile entry is the access check for the download too, not just
+    for viewing the original file."""
+    import app as app_mod
+    owner = _user()
+    other = _user()
+    try:
+        result_file = tmp_path / 'hash3_result.json'
+        result_file.write_text(json.dumps({'extracted': {}}), encoding='utf-8')
+        owner_profile = HealthProfile(owner)
+        owner_profile.data['uploaded_documents'] = [{
+            'original_name': 'private.pdf',
+            'stored_name': 's_private.pdf',
+            'uploaded_at': datetime.now().isoformat(),
+            'result_path': str(result_file),
+        }]
+        owner_profile.save()
+        HealthProfile(other).save()
+
+        app_mod.app.config['TESTING'] = True
+        client = app_mod.app.test_client()
+        with client.session_transaction() as sess:
+            sess['user_id'] = other
+            sess['username'] = 'safety-test'
+
+        resp = client.get('/api/health-profile/document-result'
+                          '?download=1&stored_name=s_private.pdf')
+        assert resp.status_code == 404
+        assert b'private' not in resp.data.lower()
+    finally:
+        _cleanup(owner)
+        _cleanup(other)
+
+
+def test_report_fields_round_trip_through_the_item_editor():
+    """A report column nobody anticipated is stored under the report's own
+    heading and must survive an edit. A box left blank drops that entry rather
+    than storing an empty string."""
+    import app as app_mod
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        profile.add_test_result(
+            'FEV1 (L) (Pre-Bronch)', '0.96 L', 'Pred 1.62 L', '2026-09-20',
+            fields={'Pre-Bronch %Pred': '59', 'Method': 'spirometry'}, unit='L')
+        profile.save()
+
+        app_mod.app.config['TESTING'] = True
+        client = app_mod.app.test_client()
+        with client.session_transaction() as sess:
+            sess['user_id'] = user_id
+            sess['username'] = 'safety-test'
+
+        # The editor posts every box it rendered, including the nested ones.
+        resp = client.put('/api/health-profile/item', json={
+            'category': 'test_results',
+            'index': 0,
+            'updates': {
+                'value': '0.97 L',
+                'fields': {'Pre-Bronch %Pred': '60', 'Method': ''},
+            },
+        })
+        assert resp.status_code == 200, resp.get_json()
+        row = resp.get_json()['item']
+        assert row['value'] == '0.97 L'
+        assert row['fields'] == {'Pre-Bronch %Pred': '60'}, 'blank box must drop the entry'
+    finally:
+        _cleanup(user_id)
+
+
+def test_rescan_fills_gaps_in_report_fields_but_keeps_reviewed_ones():
+    """Same rule as the value itself: the stored row was reviewed, so a
+    re-scan only fills what is missing."""
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        profile.add_test_result('FEV1 (L)', '0.96 L', '', '2026-09-20',
+                                fields={'Method': 'spirometry'}, unit='L')
+        profile.add_test_result('FEV1 (L)', '0.96 L', '', '2026-09-20',
+                                fields={'Method': 'something else',
+                                        'Operator': 'RN'})
+        row = next(t for t in profile.data['test_results']
+                   if t['test_name'] == 'FEV1 (L)')
+        assert row['fields']['Method'] == 'spirometry', 'reviewed field kept'
+        assert row['fields']['Operator'] == 'RN', 'missing field filled'
+        assert row['unit'] == 'L'
+    finally:
+        _cleanup(user_id)
+
+
+def test_undated_row_is_marked_as_dated_by_filing():
+    """Dedup is by name + date, so an undated row still has to carry a date or
+    two undated reports collapse into one and the second one's values are
+    silently discarded. The row says the date is a filing date, not the day of
+    the measurement."""
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        profile.add_test_result('DLCO', '13.37 ml/min/mmHg')
+        profile.add_test_result('FEV1', '0.96 L', date='2026-09-20')
+        filed = next(t for t in profile.data['test_results'] if t['test_name'] == 'DLCO')
+        stated = next(t for t in profile.data['test_results'] if t['test_name'] == 'FEV1')
+        assert filed['date'], 'an undated row still needs a date for dedup'
+        assert filed['date_source'] == 'filed'
+        assert 'date_source' not in stated
+    finally:
+        _cleanup(user_id)
+
+
+def test_analyze_records_the_layout_and_recognises_it_next_time(monkeypatch):
+    """The point of the format stage: an unfamiliar layout is described, and the
+    same layout next time is recognised instead of looking brand new."""
+    import ai_compare.medical_advisor_health_context as m
+    raw = '''
+| Measure | Got | Norm | Ratio % |
+| --- | --- | --- | --- |
+| Alpha | 0.96 | 1.62 | 59 |
+| Beta | 1.47 | 2.03 | 72 |
+'''
+    user_id = _user()
+    monkeypatch.setattr(m, '_health_ai_chat', lambda *a, **k: '{}')
+    try:
+        first = m.HealthContextManager.analyze_and_store(user_id, raw, save=False)
+        assert first.get('success'), first
+        # The layout record rides alongside the data, never inside it: the
+        # advice prompt serialises `extracted`.
+        assert 'format_analysis' not in first['extracted']
+        table = first['format_analysis']['tables'][0]
+        assert table['recognition'] == 'new'
+        assert table['layout'] == 'derived'
+        roles = [c['role'] for c in table['columns']]
+        assert roles == ['name', 'measured', 'baseline', 'percent_of']
+        # No heading here says 'predicted' in any form the code knows, so the
+        # roles can only have come from the arithmetic.
+        assert all(c['basis'] == 'arithmetic' for c in table['columns'][1:])
+
+        profile = m.HealthContextManager.get_profile(user_id)
+        stored = profile.data['report_formats'][table['signature']]
+        assert stored['seen_count'] == 1 and stored['confirmed'] is False
+
+        second = m.HealthContextManager.analyze_and_store(user_id, raw, save=False)
+        assert second['format_analysis']['tables'][0]['recognition'] == 'known'
+        assert profile.data['report_formats'][table['signature']]['seen_count'] == 2
+    finally:
+        _cleanup(user_id)
+
+
+def test_confirmed_layout_is_reused_and_sibling_dates_a_later_page(monkeypatch):
+    """A user correction must stick, and a second photo of the same layout
+    minutes later should inherit the date that was only on page 1."""
+    import ai_compare.medical_advisor_health_context as m
+    from datetime import datetime
+    from ai_compare import report_format as rf
+
+    page1 = '''
+| Test | 05-Aug-24 | Reference |
+| --- | --- | --- |
+| S CHOL | 6.7 | 3.0 - 5.5 |
+'''
+    page2 = '''
+| Test | Result | Reference |
+| --- | --- | --- |
+| S TRIG | 1.9 | < 2.0 |
+'''
+    user_id = _user()
+    monkeypatch.setattr(m, '_health_ai_chat', lambda *a, **k: '{}')
+    try:
+        first = m.HealthContextManager.analyze_and_store(user_id, page1, save=False)
+        table = first['format_analysis']['tables'][0]
+        profile = m.HealthContextManager.get_profile(user_id)
+        rf.confirm(profile.data, table, [
+            {'index': 1, 'role': 'dated'},
+            {'index': 2, 'role': 'range'},
+        ])
+        # Same layout again: the confirmed roles win over a fresh describe.
+        again = m.HealthContextManager.analyze_and_store(user_id, page1, save=False)
+        again_table = again['format_analysis']['tables'][0]
+        assert again_table['applied_confirmed'] is True
+        assert [c['role'] for c in again_table['columns']][1:] == ['dated', 'range']
+
+        # A later page with no date, but the same grid the user just dated.
+        now = datetime(2026, 9, 26, 13, 0, 0)
+        undated = '''
+| Test | Result | Reference |
+| --- | --- | --- |
+| S CHOL | 6.7 | 3.0 - 5.5 |
+'''
+        parsed1, analysis1 = m.parse_report_tables(
+            undated, store=profile.data, now=now)
+        struct = analysis1['tables'][0]['structure']
+        rf.record_report_date(profile.data, struct, '2024-08-05', now=now)
+        later = datetime(2026, 9, 26, 13, 15, 0)
+        parsed2, analysis2 = m.parse_report_tables(
+            page2, store=profile.data, now=later)
+        assert analysis2['tables'][0]['structure'] == struct
+        assert parsed2[0].get('date_source') == 'sibling'
+        assert parsed2[0]['date'] == '2024-08-05'
     finally:
         _cleanup(user_id)
 
@@ -938,6 +1203,74 @@ def test_push_dispatch_prunes_dead_subscription(tmp_path, monkeypatch):
     assert health_push.subscriptions_for('21') == []
 
 
+def test_analyze_reads_transposed_lab_table(monkeypatch):
+    """Dates as row labels and tests as column headers must still become one
+    result per test per date after the format reader replaced the old
+    keyword classifier."""
+    import ai_compare.medical_advisor_health_context as m
+
+    raw = '''
+| Date | S CHOL | S TRIG |
+| --- | --- | --- |
+| 05-Aug-24 | 6.7 H | 0.8 |
+| 29-Oct-24 | 4.2 | 0.5 |
+| Reference | (3.0-5.5) | (0.5-2.0) |
+| Units | mmol/L | mmol/L |
+'''
+    user_id = _user()
+    monkeypatch.setattr(m, '_health_ai_chat', lambda *a, **k: '{}')
+    try:
+        out = m.HealthContextManager.analyze_and_store(user_id, raw, save=False)
+        assert out.get('success'), out
+        rows = out['extracted']['test_results']
+        def _named(part):
+            return [r for r in rows if part.lower() in r['test_name'].lower()]
+
+        chol = _named('chol')
+        trig = _named('trig')
+        assert chol and trig, [r['test_name'] for r in rows]
+        dates = {r['date'] for r in chol}
+        assert any(d.startswith('2024-08') or '05-Aug-24' in str(d) for d in dates)
+        assert any('6.7' in r['value'] and 'mmol/L' in r['value'] for r in chol)
+        assert any('3.0' in (r.get('reference_range') or '') for r in chol)
+        assert any('0.8' in r['value'] for r in trig)
+        assert any('0.5' in r['value'] for r in trig)
+    finally:
+        _cleanup(user_id)
+
+
+def test_analyze_reads_wrapped_unlabelled_lab_table(monkeypatch):
+    """Phone-width OCR wraps Reference and Units onto the next line, and the
+    last two columns have no English headings. Both stages — rejoin, then
+    role-from-cells — have to agree or the values land in the wrong field."""
+    import ai_compare.medical_advisor_health_context as m
+
+    raw = (
+        '| 检验 | 05-Aug-24 | 29-Oct-24 | | |\n'
+        '| --- | --- | --- | --- | --- |\n'
+        '| S CHOL | 6.7 H | 4.2 |\n'
+        '(3.0-5.5) | mmol/L |\n'
+    )
+    user_id = _user()
+    monkeypatch.setattr(m, '_health_ai_chat', lambda *a, **k: '{}')
+    try:
+        out = m.HealthContextManager.analyze_and_store(user_id, raw, save=False)
+        assert out.get('success'), out
+        rows = out['extracted']['test_results']
+        chol = [r for r in rows if 'CHOL' in r['test_name'].upper()
+                or r['test_name'] == 'Cholesterol']
+        assert len(chol) == 2, rows
+        values = sorted(r['value'] for r in chol)
+        assert any('6.7' in v and 'mmol/L' in v for v in values)
+        assert any('4.2' in v and 'mmol/L' in v for v in values)
+        assert all('3.0' in (r.get('reference_range') or '') for r in chol)
+        # The wrap must not invent a third date or store the range as a value.
+        assert all('3.0-5.5' not in r['value'] for r in chol)
+        assert all(r.get('date') for r in chol)
+    finally:
+        _cleanup(user_id)
+
+
 def test_analyze_parses_spirometry_style_table(monkeypatch):
     """Pre/Post-bronchodilator reports have Actual/Pred/%Pred columns, not
     dates — the parser must classify column roles instead of storing the
@@ -975,5 +1308,166 @@ def test_analyze_parses_spirometry_style_table(monkeypatch):
         assert all(r['value'] not in ('1.62', '59', '80', '36.2') for r in rows)
         dlco = next(r for r in rows if r['test_name'] == 'DLCOunc (ml/min/mmHg)')
         assert dlco['value'].lower() == '13.37 ml/min/mmhg'
+    finally:
+        _cleanup(user_id)
+
+
+# The five sample reports used to check that a new layout is read, presented,
+# edited and saved without anyone adding that report's vocabulary to the code.
+_SAMPLE_PACK = '''
+Full Blood Count
+| Test | Result | Units | Reference Range |
+| --- | --- | --- | --- |
+| Haemoglobin | 142 | g/L | 130-175 |
+| Haematocrit | 0.42 | ratio | 0.38-0.50 |
+| RBC Count | 4.8 | x10^12/L | 4.2-5.8 |
+| WBC Count | 6.1 | x10^9/L | 4.0-11.0 |
+| Platelets | 250 | x10^9/L | 150-400 |
+
+Biochemistry Panel
+| Test | Result | Units | Reference Range |
+| --- | --- | --- | --- |
+| Total Cholesterol | 5.8 | mmol/L | <5.5 |
+| LDL Cholesterol | 3.7 | mmol/L | <3.0 |
+| HDL Cholesterol | 1.2 | mmol/L | >1.0 |
+| Triglycerides | 1.9 | mmol/L | <1.7 |
+| ALT | 32 | U/L | <40 |
+| AST | 28 | U/L | <40 |
+| Ferritin | 180 | ug/L | 30-300 |
+| Transferrin Saturation | 35 | % | 20-45 |
+
+Radiology Structured Findings
+| Region | Finding | Severity | Notes |
+| --- | --- | --- | --- |
+| Lungs | Clear | None | No consolidation |
+| Heart | Normal size | None | Normal silhouette |
+| Mediastinum | Normal contours | None | No widening |
+| Pleura | No effusion | None | Symmetric |
+| Bones | No acute abnormality | None | Ribs intact |
+
+Clinic Visit Summary
+| Category | Value | Notes |
+| --- | --- | --- |
+| Reason for Visit | Dyslipidaemia review | Routine follow-up |
+| BP | 130/80 mmHg | Sitting |
+| BMI | 28 kg/m2 | Overweight range |
+| Symptoms | None | Asymptomatic |
+| Assessment | Dyslipidaemia | Primary |
+| Plan | Start statin | Review in 3 months |
+
+Hospital Discharge Summary
+| Field | Value | Notes |
+| --- | --- | --- |
+| Admission Diagnosis | Pneumonia | Right lower lobe |
+| Discharge Diagnosis | Resolved pneumonia | Completed antibiotics |
+| Length of Stay | 4 days | Uncomplicated |
+| Key Investigation | Chest X-ray | Consolidation resolved |
+| Medication on Discharge | Amoxicillin-clavulanate | 5-day course |
+| Follow-up | GP in 1 week | Routine |
+'''
+
+
+def test_sample_reports_are_read_presented_edited_and_saved(monkeypatch):
+    """Lab numbers, inequality ranges, radiology findings, a clinic visit and
+    a discharge summary all have to land as editable rows. Extra columns stay
+    named as the report named them; a later edit of one of those boxes must
+    persist."""
+    import ai_compare.medical_advisor_health_context as m
+    import app as app_mod
+
+    user_id = _user()
+    monkeypatch.setattr(m, '_health_ai_chat', lambda *a, **k: '{}')
+    try:
+        out = m.HealthContextManager.analyze_and_store(user_id, _SAMPLE_PACK, save=False)
+        assert out.get('success'), out
+        rows = out['extracted']['test_results']
+        names = {r['test_name'] for r in rows}
+        # Canonicalisation folds 'Total Cholesterol' onto 'Cholesterol'; the
+        # row is still there, under the name the profile already uses.
+        assert {'Haemoglobin', 'Cholesterol', 'Lungs', 'BP',
+                'Medication on Discharge'} <= names
+        assert len(rows) == 5 + 8 + 5 + 6 + 6
+
+        tables = out['format_analysis']['tables']
+        layouts = {t['layout'] for t in tables}
+        assert 'measured' in layouts and 'stated' in layouts
+        # FBC and biochemistry share the same four-column layout, so the
+        # second is recognised rather than treated as a brand-new format.
+        measured = [t for t in tables if t['layout'] == 'measured']
+        assert measured[0]['recognition'] == 'new'
+        assert measured[1]['recognition'] == 'known'
+        assert measured[0]['signature'] == measured[1]['signature']
+        assert all(t['recognition'] == 'new' for t in tables if t['layout'] == 'stated')
+
+        hb = next(r for r in rows if r['test_name'] == 'Haemoglobin')
+        assert hb['value'] == '142 g/L' and hb['reference_range'] == '130-175'
+        chol = next(r for r in rows if r['test_name'] == 'Cholesterol')
+        assert chol['reference_range'] == '<5.5'
+        lungs = next(r for r in rows if r['test_name'] == 'Lungs')
+        assert lungs['value'] == 'Clear'
+        assert lungs['fields'] == {'Severity': 'None', 'Notes': 'No consolidation'}
+        bp = next(r for r in rows if r['test_name'] == 'BP')
+        assert bp['value'] == '130/80 mmHg' and bp['fields']['Notes'] == 'Sitting'
+        med = next(r for r in rows if r['test_name'] == 'Medication on Discharge')
+        assert med['value'] == 'Amoxicillin-clavulanate'
+
+        # Save, then the editor must offer a box for every extra column.
+        profile = HealthProfile(user_id)
+        actions = profile.apply_extracted_data(out['extracted'])
+        profile.save()
+        assert any('Haemoglobin' in a or 'test' in a.lower() for a in actions)
+        stored = profile.data['test_results']
+        lungs_i = next(i for i, r in enumerate(stored) if r['test_name'] == 'Lungs')
+        lungs_row = stored[lungs_i]
+        assert lungs_row['fields']['Severity'] == 'None'
+        assert lungs_row.get('format_structure')
+        assert 'format_structure' not in (lungs_row.get('fields') or {})
+
+        import shutil, subprocess
+        if shutil.which('node'):
+            script = r"""
+const fs = require('fs');
+const vm = require('vm');
+const code = fs.readFileSync('static/dr_health_hub.js', 'utf8');
+const ctx = { window: {}, document: { getElementById: () => null },
+              localStorage: { getItem: () => null, setItem: () => {} } };
+ctx.window = ctx;
+vm.runInNewContext(code, ctx);
+const extras = ctx.DrHealthHub.extraFields('test_results', %s);
+const keys = extras.map((f) => f.key);
+if (keys.indexOf('fields.Severity') === -1) { console.error(keys); process.exit(1); }
+if (keys.indexOf('fields.Notes') === -1) { console.error(keys); process.exit(1); }
+const html = ctx.DrHealthHub.formHtml('test_results', %s, 0);
+if (html.indexOf('As recorded from the report') === -1) process.exit(2);
+if (html.indexOf('data-key="fields.Severity"') === -1) process.exit(3);
+console.log('PASS');
+""" % (json.dumps(lungs_row), json.dumps(lungs_row))
+            result = subprocess.run(
+                ['node', '-e', script],
+                cwd=os.path.join(os.path.dirname(__file__), '..'),
+                capture_output=True, text=True, timeout=30,
+            )
+            assert result.returncode == 0, result.stdout + result.stderr
+            assert 'PASS' in result.stdout
+
+        # Edit the extra field through the same endpoint the hub uses.
+        app_mod.app.config['TESTING'] = True
+        client = app_mod.app.test_client()
+        with client.session_transaction() as sess:
+            sess['user_id'] = user_id
+            sess['username'] = 'safety-test'
+        resp = client.put('/api/health-profile/item', json={
+            'category': 'test_results',
+            'index': lungs_i,
+            'updates': {
+                'value': 'Clear',
+                'fields': {'Severity': 'None', 'Notes': 'No consolidation — confirmed'},
+            },
+        })
+        assert resp.status_code == 200, resp.get_json()
+        HealthContextManager._profiles.pop(str(user_id), None)
+        reloaded = HealthProfile(user_id).data['test_results'][lungs_i]
+        assert reloaded['fields']['Notes'] == 'No consolidation — confirmed'
+        assert reloaded['value'] == 'Clear'
     finally:
         _cleanup(user_id)

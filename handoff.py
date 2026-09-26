@@ -40,6 +40,7 @@ QUICK_TESTS = [
     'tests/test_health_advice_api.py',
     'tests/test_health_insights.py',
     'tests/test_web_enhancements.py',
+    'tests/test_report_format.py',
 ]
 
 

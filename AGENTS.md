@@ -147,6 +147,8 @@ Takes ~9 minutes. For a fast check, run only the files you touched.
 | --- | --- |
 | `test_web_enhancements.py::TestModelsRetryAndSession` (3 tests) | `asyncio.run()` inside an already-running loop. Test pollution from another test; all 278 pass when the file runs alone. |
 | `test_character_insights_e2e.py` | Playwright E2E; needs a live server and real model calls. |
+| `test_production` in `test_moltbook_integration.py`, `test_phase4`…`test_phase8` (6 tests) | They log into **live production** with the password `"123"`, which was rotated. They also hard-code a credential in a tracked file; fix that rather than restoring the password. |
+| `test_comprehensive.py::test_life_companion[chromium]` | Playwright; needs a live server. |
 
 Confirm a suspicious failure in isolation before trying to fix it.
 
@@ -179,12 +181,105 @@ template:
 
 | Module | Owns |
 | --- | --- |
+| `ai_compare/report_format.py` | report-table layout: column roles from cell evidence, arithmetic relations, format signatures |
 | `static/lab_results.js` | test-result grouping, sorting, reference ranges, abnormal flags, units, medical date parsing |
 | `static/health_review.js` | item lifecycle: confirmation queue UI, current-vs-past partitioning, change notes, retire/revive |
 
 Adding a feature to one page? Put the logic in the shared module and let each
 page render it. Three copies of this logic existed before; consolidating them
 was deliberate work, easily undone by accident.
+
+### Report layouts are derived, not recognised by wording
+
+`ai_compare/report_format.py` works out what each column of a report table
+means **from the cells**, not from the heading. Adding an English keyword to a
+list is how this went wrong before: a spirometry report with
+Actual/Pred/%Pred columns produced 36 junk rows with `Pred` stored as a date,
+and the fix at the time was to match the words `pred` and `%chng` — which only
+ever covers the reports someone already thought of.
+
+What the module actually does, and must keep doing:
+
+- a column whose cells parse as dates is a date column; ranges (`a - b`,
+ `< x`) are a reference column; short symbols with `/`, `%`, `^` are units;
+ `H`/`L`/`N` are flags. All unlabelled columns work.
+- a column that is ~100 x one column divided by another is a **derived
+ percentage**, found by arithmetic. That is what '%Pred' means, so '% of
+ expected' or a Chinese heading parses identically.
+- `c = 100a/b` rearranges to `b = 100a/c`, so a ratio triple fits three ways
+ and arithmetic alone cannot say which column is derived. The **per-cent
+ sign** breaks the tie (notation, not vocabulary), then whichever column sits
+ on a different scale from the other two.
+- arithmetic needs two rows, so a one-row table falls back to the heading.
+ Every column therefore carries a `basis` — `cells`, `arithmetic`, `heading`,
+ `default` — and it travels into the saved analysis. A reading that rested on
+ a heading is weaker than one the numbers confirmed; do not drop `basis`.
+- a sparse heading row spanning several columns is a **qualifier** (Pre-Bronch,
+ a specimen, a fasting state) carried forward over the columns it introduces.
+ Structural, so it needs no knowledge of what the label says.
+- rows matching the metadata pattern are excluded from the column profile as
+ well as from the output — a report that prints ranges on their own
+ `Reference` row would otherwise make a results column look like ranges.
+- a table of findings, visit facts or discharge fields has no numeric
+ measurement column. The first payload column becomes `stated` (not skipped).
+ Extra columns stay in `fields` under the report's own headings. `None` on a
+ Severity column is a word, not a unit.
+
+Each layout gets a **signature** (roles included) and a **structure** (cell
+shapes only), stored per profile in `report_formats` with
+`seen_count`/`first_seen`/`last_seen`. Date headings collapse to `<date>` in
+both, so the same laboratory's report next month is recognised rather
+than looking brand new. `remember()` returns `known` or `new`, and that lands
+in the extraction record. Two readings of one layout that disagree both get
+kept in `role_changes` — overwriting would hide which one is wrong.
+
+A format the user has accepted or corrected is `confirmed`. Confirmed
+`column_roles` key off **structure**, not signature: Pred vs %Pred disagree on
+role but share a grid, and the user's reading must apply to both. The next
+scan overlays those roles before extract (`apply_remembered`). Changing a
+role chip in the review modal re-extracts the same stored grid
+(`POST /api/health-profile/report-format`) without a model call. Saving the
+review calls `confirm()`. Dating a filed row records `last_report_date` so a
+sibling page of the same structure uploaded within two hours inherits it.
+Deleting every row that came from one column demotes that column to `text`.
+`format_structure` / `source_role` stay on the row (and in `MANAGED_KEYS`) so
+those edits can find the layout; they are never free-text extras.
+
+Heading keywords survive only in `_HINTS`, as a tie-break and a fallback. Every
+role they suggest is reachable from the cells alone. **Do not promote a hint
+into a decision, and do not add a new report's vocabulary to that list to make
+one report work** — if the cells cannot distinguish it, fix the evidence test.
+
+### Nothing is dropped for want of a schema field
+
+A test-result row may carry a `fields` dict keyed by **the report's own column
+headings** (`'Pre-Bronch %Pred'`, `'Method'`). `add_test_result(..., fields=)`
+stores it; a re-scan only fills gaps in it, like the value itself. The hub
+editor renders a box for every key the schema does not declare, including each
+`fields` entry, via `extraFields()` and the `fields.<heading>` convention in
+`readForm()`. So a new report kind stores and edits its whole reading with no
+schema change and no migration.
+
+`MANAGED_KEYS` in `dr_health_hub.js` is the exception: `status`,
+`last_confirmed_at`, `history`, `ref_locked`, `date_source`,
+`format_structure`, `format_signature`, `source_role` and friends stay
+visible but never get a free-text box. Hand-editing a lifecycle timestamp
+or a layout id corrupts the confirmation queue and the learning loop.
+
+A row with no date in the document is still dated (dedup is by name + date, and
+two undated reports would otherwise collapse into one), but it is marked
+`date_source: 'filed'`. Do not present a filed date as the day of the
+measurement.
+
+### The full reading of a document is inspectable
+
+`analyze_and_store` returns `format_analysis` **alongside** `extracted`, never
+inside it — the advice prompt serialises `extracted`, and the layout record is
+for people. It reaches the user through
+`GET /api/health-profile/document-result?download=1`, which writes one file
+holding the transcribed text, every extracted row, every skipped row **with the
+reason**, and the role and basis of each column. `<hash>_result.json` is
+indented for the same reason. Never add that path to `SHELL_ASSETS`.
 
 ### Duplicate test results keep the stored value
 
@@ -274,6 +369,7 @@ during a backfill — it hides stale data instead of surfacing it.
 app.py                          Flask app and all HTTP routes (large)
 ai_compare/
   medical_advisor_health_context.py   HealthProfile: atomic save, ingest, AI context
+  report_format.py                    report-table layout from cell evidence, not headings
   health_insights.py                  provenance, reminders, observations, advice
   health_freshness.py                 lifecycle, change history, confirmation queue
   character_routes.py                 per-character chat endpoints
@@ -318,31 +414,56 @@ handoff.py                      session handoff snapshot
 
 ## 8. Open work (replace this when it ships)
 
-As of 20 Sep 2026, branch `cursor/emergency-card-paramedic-fields`, commit
-`4277472`, PWA cache `dr-health-shell-v93`, deployed.
+As of 26 Sep 2026, branch `cursor/emergency-card-paramedic-fields`, PWA cache
+`dr-health-shell-v126`. Learning loop is committed on this branch. Not
+deployed — only `pa_sync.py --push` if asked.
 
-Shipped in that commit: question-packed chat context (whole sections dropped,
-allergies/current meds kept); Chat photo/PDF attach plus the confirmation
-queue in the thread; observation-based quick topics; one-page GP visit brief;
-lab-row “Explain this result” (citations only, daily cap, does not overwrite
-weekly `ai_advice`); weekly digest as a Chat line; replies follow Personal
-Details language / Settings locale.
+Shipped this session (do not redo):
+
+- `ai_compare/report_format.py` — cell/arithmetic layout, not heading keywords.
+  See section 4. `describe()` returns `signature` **and** `structure`.
+- Confirmed layouts: `confirm()` / `apply_remembered()` / `learn_from_edit()` /
+  `learn_from_delete()` / `sibling_date()`. Review role chips re-extract via
+  `POST /api/health-profile/report-format`. Apply-review confirms the reading.
+- `add_test_result(..., fields=, unit=, layout=)` stores extra columns and the
+  format ids. Hub editor renders extras; `MANAGED_KEYS` hides the ids.
+- `GET /api/health-profile/document-result?download=1` — whole reading as a file.
+- Emergency-card hub links: `closeEmergency({ keepHistoryEntry: true })`.
+- `_fill_test_defaults` no longer doubles a single-letter unit (`0.96 L L`).
 
 Next, in order:
 
-1. After-visit return — photograph the new script or letter, park extracted
+1. **Several images for one report.** `sibling_date` only helps when the later
+   page shares **structure** (same headings/shapes). A photo of page 2 that
+   dropped the date heading is a *different* structure and still loses the
+   date and patient header from page 1. Overlapping screenshots still
+   duplicate rows. Merge pages that arrive together, not just inherit a date.
+2. Surface `confirmed` in the hub so the user can edit a stored layout
+   without re-uploading. The flag is set; there is no format-editor page.
+3. After-visit return — photograph the new script or letter, park extracted
    meds as proposals, offer to mark visit questions answered. Never retire or
    add a drug as fact until the user confirms.
-2. Chat “I stopped X / my GP started Y” as confirmation-queue proposals.
+4. Chat “I stopped X / my GP started Y” as confirmation-queue proposals.
    `---PROFILE_UPDATE---` already writes `ai_inferred`; if the model skips
    that block the record still shows the old current meds.
-3. Deterministic drug-interaction flags in chat context. The hub tool exists;
+5. Deterministic drug-interaction flags in chat context. The hub tool exists;
    the model does not see it.
 
-Not verified from a desktop: v93 on an installed phone, airplane-mode
-emergency card, a live Cantonese reply. Local Flask on :5050/:5051 may still
-be a process started before the new routes — a 404 there is a stale process,
-not a missing feature.
+Still hard-coded, and worth knowing before adding more: 186 test-name aliases
+in `_TEST_NAME_CANONICAL`, 31 unit aliases, 14 specimen prefixes,
+`_DIMENSIONLESS_TESTS`, `_CONCENTRATION_UNITS`, `COMMON_PANELS` and 25
+`_ANTICOAGULANT_MARKERS`. These are vocabulary, not layout, and the layout was
+the part that broke on every new report. `_resolve_test_name` already learns
+aliases at runtime and `pin_test_name` lets the user override, so extend that
+mechanism rather than the tables.
+
+Not verified from a desktop: the emergency-card link fix on a real phone (the
+bug is a history/popstate race, so it needs a device or a real browser), v126 on
+an installed phone, role-chip re-extract in a real review modal, the analysis
+download against a real stored document — there is no patient data on this
+machine, so those paths were only exercised at source/test level. Local Flask
+on :5050/:5051 may still be a process started before these routes existed; a
+404 there is a stale process, not a missing feature.
 
 Do not revive `/static/emergency_sw.js`, a second emergency-card editor, or
 password-in-localStorage. Do not commit AutoDoc leftovers (`README.md`,

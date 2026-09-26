@@ -6463,10 +6463,14 @@ from ai_compare.medical_advisor_health_context import (
     HealthContextManager,
     find_profile_by_pair_token,
     medication_card_labels,
+    parse_report_tables,
+    _canonical_test_name,
+    _fill_test_defaults,
 )
 from ai_compare import health_insights
 from ai_compare import health_freshness
 from ai_compare import health_push
+from ai_compare import report_format
 
 HEALTH_UPLOADS_DIR = Path(__file__).parent / "health_uploaded_documents"
 
@@ -7616,7 +7620,8 @@ def upload_health_document():
 
         result = HealthContextManager.analyze_and_store(user_id, analyzed_text, save=False)
         with open(result_path, 'w', encoding='utf-8') as f:
-            json.dump(result, f, ensure_ascii=False)
+            # Indented: this file is read by people when a reading looks wrong.
+            json.dump(result, f, ensure_ascii=False, indent=2, default=str)
         stored_doc['result_path'] = str(result_path)
         if retain:
             profile.save()
@@ -7713,7 +7718,9 @@ def reparse_uploaded_document():
             analyzed_text = extracted_text
 
         result = HealthContextManager.analyze_and_store(user_id, analyzed_text, save=False)
-        result_path.write_text(json.dumps(result, ensure_ascii=False), encoding='utf-8')
+        result_path.write_text(
+            json.dumps(result, ensure_ascii=False, indent=2, default=str),
+            encoding='utf-8')
         doc['result_path'] = str(result_path)
         profile.save()
 
@@ -7731,6 +7738,51 @@ def reparse_uploaded_document():
             'size_bytes': doc.get('size_bytes')
         }
         return jsonify(result)
+    except Exception as e:
+        return _safe_error(e, 'api')
+
+
+@app.route('/api/health-profile/report-format', methods=['POST'])
+@require_auth
+def apply_health_report_format():
+    """Re-extract a stored grid after the user changes a column role.
+
+    Deterministic: no model call. The markdown table is parsed again with the
+    supplied roles overlaid, then that reading is confirmed so the next scan
+    of the same structure is read the user's way.
+    """
+    try:
+        user_id = str(request.current_user['user_id'])
+        profile = HealthContextManager.get_profile(user_id)
+        data = request.get_json() or {}
+        text = str(data.get('extracted_text') or '').strip()
+        if not text:
+            stored_name = data.get('stored_name')
+            if stored_name:
+                doc = next((d for d in profile.data.get('uploaded_documents', [])
+                            if d.get('stored_name') == stored_name), None)
+                path = (doc or {}).get('extracted_text_path')
+                if path and Path(path).exists():
+                    text = Path(path).read_text(encoding='utf-8')
+        if not text:
+            return jsonify({'error': 'extracted_text is required'}), 400
+        overlays = data.get('tables') if isinstance(data.get('tables'), list) else []
+        parsed, format_analysis = parse_report_tables(
+            text, store=profile.data, overlays=overlays)
+        if data.get('confirm', True):
+            for table in format_analysis.get('tables') or []:
+                if table.get('columns'):
+                    report_format.confirm(profile.data, table)
+        for t in parsed:
+            t['test_name'] = _canonical_test_name(t.get('test_name', '')) or t.get('test_name', '')
+            t['date'] = profile._normalize_test_date(str(t.get('date') or ''))
+        _fill_test_defaults(parsed)
+        profile.save()
+        return jsonify({
+            'success': True,
+            'test_results': parsed,
+            'format_analysis': format_analysis,
+        })
     except Exception as e:
         return _safe_error(e, 'api')
 
@@ -7758,6 +7810,16 @@ def apply_health_review():
         before_texts = {c: set(profile.data.get(c) or [])
                         for c in _IMPORT_TEXT_LISTS}
         actions = profile.apply_extracted_data(extracted)
+        analysis = data.get('format_analysis')
+        if isinstance(analysis, dict):
+            for table in analysis.get('tables') or []:
+                if table.get('columns'):
+                    report_format.confirm(profile.data, table)
+        for test in extracted.get('test_results') or []:
+            structure = (test or {}).get('format_structure')
+            date = str((test or {}).get('date') or '').strip()
+            if structure and date and (test or {}).get('date_source') != 'filed':
+                report_format.record_report_date(profile.data, structure, date)
         health_insights.apply_provenance_defaults(profile.data, health_insights.SOURCE_DOCUMENT)
         batch_id = uuid.uuid4().hex[:12]
         added = 0
@@ -7926,6 +7988,21 @@ def get_health_document_result():
             'stored_name': doc.get('stored_name'),
             'uploaded_at': doc.get('uploaded_at'),
         }
+        if request.args.get('download') in ('1', 'true', 'yes'):
+            # One readable file holding the transcribed text, everything the
+            # extraction produced (including rows that were skipped and why),
+            # and how each table's columns were read. Reviewing the reading of
+            # an unfamiliar report needs all three side by side.
+            base = re.sub(r'[^A-Za-z0-9._-]+', '_',
+                          str(doc.get('original_name') or 'report'))
+            body = json.dumps(result, ensure_ascii=False, indent=2, default=str)
+            response = make_response(body)
+            response.headers['Content-Type'] = 'application/json; charset=utf-8'
+            response.headers['Content-Disposition'] = (
+                'attachment; filename="%s.analysis.json"' % base)
+            # Patient data: never cached by a proxy or the service worker.
+            response.headers['Cache-Control'] = 'no-store'
+            return response
         return jsonify(result)
     except Exception as e:
         return _safe_error(e, 'api')
@@ -8151,6 +8228,7 @@ def delete_health_profile_item():
                 {'value': removed.get('value', ''),
                  'date': removed.get('date', ''),
                  'reference_range': removed.get('reference_range', '')})
+            report_format.learn_from_delete(profile.data, removed, items)
         profile.save()
         return jsonify({'success': True, 'item': removed, 'profile': profile.to_dict()})
     except Exception as e:
@@ -8173,6 +8251,12 @@ def update_health_profile_item():
             return jsonify({'error': 'Invalid index'}), 400
         if not isinstance(updates, dict):
             return jsonify({'error': 'updates must be an object'}), 400
+        if isinstance(updates.get('fields'), dict):
+            # `fields` holds whatever a report printed beyond the schema, keyed
+            # by its own wording. A box left blank means drop that entry, not
+            # store an empty string.
+            updates['fields'] = {k: v for k, v in updates['fields'].items()
+                                 if str(v or '').strip()}
         items = profile.data.get(category, [])
         if index >= len(items):
             return jsonify({'error': 'Index out of range'}), 400
@@ -8202,6 +8286,7 @@ def update_health_profile_item():
                 health_freshness.audit_test_change(
                     profile.data, 'updated', items[index].get('test_name', ''),
                     {'changes': changes, 'date': items[index].get('date', '')})
+            report_format.learn_from_edit(profile.data, before, items[index])
         else:
             items[index].update(updates)
         # Editing an item by hand confirms it, even if AI originally suggested
