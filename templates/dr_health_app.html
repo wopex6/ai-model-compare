@@ -2705,11 +2705,9 @@
     // row's field block, ahead of its trailing buttons.
     function addFieldBox(fieldsEl, heading, bagPrefix, rowEl) {
         const key = (bagPrefix ? 'fields.' : '') + heading;
-        if (fieldsEl.querySelector('input[data-field], textarea[data-field]')) {
-            const dupe = Array.from(fieldsEl.querySelectorAll('input[data-field], textarea[data-field]'))
-                .some(el => el.dataset.field === key);
-            if (dupe) return;
-        }
+        const existing = Array.from(fieldsEl.querySelectorAll('input[data-field], textarea[data-field]'))
+            .find(el => el.dataset.field === key);
+        if (existing) return existing;
         const label = document.createElement('label');
         label.textContent = heading;
         const input = document.createElement('input');
@@ -2719,6 +2717,7 @@
         const anchor = fieldsEl.querySelector(':scope > button');
         fieldsEl.insertBefore(label, anchor);
         fieldsEl.insertBefore(input, anchor);
+        return input;
     }
 
     // The per-row tools — '+ field' adds the column to every row of this
@@ -2763,6 +2762,12 @@
                         const f = r.querySelector('.review-item-fields');
                         if (f) addFieldBox(f, heading, true, r);
                     });
+                    // Land the cursor in the new column's value input on the
+                    // row the user was working on — no extra tap needed.
+                    const f = row.querySelector('.review-item-fields');
+                    const valIn = f && Array.from(f.querySelectorAll('input[data-field], textarea[data-field]'))
+                        .find(el => el.dataset.field === 'fields.' + heading);
+                    if (valIn) valIn.focus();
                 };
                 ok.addEventListener('click', commit);
                 cancel.addEventListener('click', done);

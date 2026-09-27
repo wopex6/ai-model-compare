@@ -1265,6 +1265,7 @@ Examples:
             del.addEventListener('click', () => delTestResultColumn(del));
             th.appendChild(del);
             headRow.insertBefore(th, headRow.lastElementChild);
+            let firstInput = null;
             table.querySelectorAll('tbody tr').forEach(tr => {
                 const td = document.createElement('td');
                 td.style.padding = '4px';
@@ -1274,7 +1275,10 @@ Examples:
                 input.style = 'width:100%;border:1px solid #ccc;border-radius:4px;padding:3px;font-size:0.78rem;box-sizing:border-box;';
                 td.appendChild(input);
                 tr.insertBefore(td, tr.lastElementChild);
+                if (!firstInput) firstInput = input;
             });
+            // Cursor straight into the new column's first cell.
+            if (firstInput) firstInput.focus();
         }
 
         // Remove a whole column: the header and that cell in every row.

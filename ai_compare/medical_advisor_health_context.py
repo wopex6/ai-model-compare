@@ -1921,9 +1921,14 @@ class HealthProfile:
         if manual:
             entry["manual"] = True
         self.data["test_results"].append(entry)
-        audit_test_change(self.data, "added", test_name,
-                          {"value": value, "date": date_val,
-                           "reference_range": reference_range},
+        # The full fields bag rides in the audit detail — "Test Data Changes"
+        # then holds everything entered, so a report-native column is
+        # recoverable from the audit alone, not just the stored row.
+        detail = {"value": value, "date": date_val,
+                  "reference_range": reference_range}
+        if fields:
+            detail["fields"] = dict(fields)
+        audit_test_change(self.data, "added", test_name, detail,
                           self.ingest_source)
 
         # Auto-refresh critical test interpretation so latest values supersede older analysis.

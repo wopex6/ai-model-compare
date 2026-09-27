@@ -2523,6 +2523,8 @@
                         const form = btn.closest('.hub-form');
                         const anchor = form ? form.querySelector('.hub-row-actions') : null;
                         if (!anchor) { done(); return; }
+                        const existing = form.querySelector('[data-key="' + key + '"]');
+                        if (existing) { done(); existing.focus(); return; }
                         const wrap = document.createElement('div');
                         const label = document.createElement('label');
                         label.className = 'hub-input-label';
@@ -2536,6 +2538,7 @@
                         wrap.appendChild(input);
                         anchor.parentElement.insertBefore(wrap, anchor);
                         done();
+                        input.focus();
                     };
                     ok.addEventListener('click', commit);
                     inp.addEventListener('keydown', ev => {

@@ -44,6 +44,15 @@ commit before handing over.
 Production is PythonAnywhere: <https://trabcd.pythonanywhere.com>
 (remote root `/home/trabcd/ai-model-compare`).
 
+**Local server trap:** the dev server is usually started with `debug=True` but
+`use_reloader=False` — templates recompile per request (fresh JS) while the
+Python modules stay frozen at process start. A page loaded today can therefore
+talk to API code from a week ago, and the mismatch is silent: new request
+fields are dropped, not rejected. **Restart the server after any Python
+change** — a user's `fields` bag was once discarded this way and the data was
+unrecoverable. Check `netstat -ano` for leftover `python app.py` listeners on
+other ports; more than one stale server may be running at once.
+
 ```bash
 python pa_sync.py           # report drift only, uploads nothing
 python pa_sync.py --push    # upload stale files, verify, reload
@@ -353,7 +362,9 @@ stores it; a re-scan only fills gaps in it, like the value itself. The hub
 editor renders a box for every key the schema does not declare, including each
 `fields` entry, via `extraFields()` and the `fields.<heading>` convention in
 `readForm()`. So a new report kind stores and edits its whole reading with no
-schema change and no migration.
+schema change and no migration. `added`/`updated` entries in `test_audit`
+("Test Data Changes") carry the full `fields` bag in `detail`, so a review
+session's report-native columns are recoverable from the audit alone.
 
 `MANAGED_KEYS` in `dr_health_hub.js` is the exception: `status`,
 `last_confirmed_at`, `history`, `ref_locked`, `date_source`,

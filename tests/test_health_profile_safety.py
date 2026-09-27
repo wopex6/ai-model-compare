@@ -1769,3 +1769,20 @@ def test_apply_review_manual_rows_format_analysis_and_edit_learning():
         assert roles[1] == 'unit'
     finally:
         _cleanup(user_id)
+
+
+def test_audit_added_carries_fields_bag():
+    # An 'added' audit entry records the full fields bag — the audit is the
+    # recovery source for report-native columns entered in review.
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        assert profile.add_test_result(
+            'FEV1 (L) Pre-Bronch Actual', '0.96', '', '2026-09-20', '',
+            fields={'Method': 'Spirometry', 'Pre-Bronch %Pred': '59'})
+        audit = profile.data.get('test_audit') or []
+        added = [e for e in audit if e.get('action') == 'added']
+        assert added and added[-1]['detail']['fields'] == {
+            'Method': 'Spirometry', 'Pre-Bronch %Pred': '59'}
+    finally:
+        _cleanup(user_id)
