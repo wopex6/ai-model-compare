@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-27 12:43 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-27 15:25 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Report learning: manual rows stay separate, fields merge on dedup, learn_from_edit retrains column roles, website review sends format_analysis, duplicate buttons in PWA/website/hub. Tests pass (86 safety+format). Ready to deploy.
+Fixed review UX bugs: dup rows now get +field/dup buttons, field-delete buttons (not test_name/value), deleted columns can't resurrect via merge-back, manual rows never merge and keep blank dates, name_style learning (FEV1 (L) Pre-Bronch Actual). 89 focused tests pass. Deploying next.
 
 ## Git
 
@@ -41,19 +41,19 @@ Report learning: manual rows stay separate, fields merge on dedup, learn_from_ed
 Recent commits:
 
 ```
+52c47f1 Dr. Health review: duplicate-row tools, field delete, blank-date manual rows, name-style learning
+d7fddea Handoff: report learning + duplicate records deployed (SW v131).
 a0e8e6e Dr. Health: learn from row edits, keep manual rows separate, duplicate records
 fd316ba Handoff: dynamic report fields deployed-ready.
 e5f0ce2 Dr. Health: render report-native fields in review, overview and export
 79d1ded Handoff: engagement layer + Milo companion deployed (app SW v4).
 58b19a3 Add engagement layer + Milo companion: open loops, not broadcasts
 48fb94b Handoff: /chat redirect + layout-doc filter deployed (SW v129).
-f981075 Redirect /chat to /chatchat; only link analysable documents to layouts
-8f5abd4 Handoff: report layouts hub + app PWA deployed (SW v128, life-companion-shell-v3).
 ```
 
 ## Production (PythonAnywhere)
 
-**14 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
+**13 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
 
 ```
 ok       tests/test_review_flow.py
@@ -80,7 +80,7 @@ ok       web_enhancement_test_runner.py
 ok       webhook_deploy.py
 ok       wisdom_profiles/23.json
 ok       wisdom_profiles/23_hypotheses.json
-14 file(s) stale. Re-run with --push to upload.
+13 file(s) stale. Re-run with --push to upload.
 ```
 
 Reload often returns `409 slow_startup_error` on the first attempt — retry rather than debug it.
@@ -93,14 +93,14 @@ All passing.
 ........................................................................ [ 65%]
 ........................................................................ [ 81%]
 ........................................................................ [ 97%]
-.........                                                                [100%]
+...........                                                              [100%]
 ============================== warnings summary ===============================
 ..\..\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37
   C:\Users\trabc\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-441 passed, 1 warning in 19.44s
+443 passed, 1 warning in 20.46s
 [AutoDoc] Monitoring stopped
 ```
 
