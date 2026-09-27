@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-27 20:58 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-27 22:31 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Field-alias + name_pattern learning, _deleted_fields, manual blank-date fix, inline field capture — deployed SW v133
+Fixed PWA '+ field' focus + verified fields persistence. ROOT CAUSE of user's lost data: local server on :5051 ran week-old Python (debug reloads templates, not Python) and silently dropped the fields bag — restarted it, verified fields persist via Playwright repro. User's 10 typed records are NOT recoverable: never reached any store (profile/backups/audit/uploads/chat all checked). test_audit now carries the fields bag for future recovery. Port 5050 also runs stale Sep-26 code — user should restart it too. Not deployed (local-only request; SW bumped to v134 for next deploy).
 
 ## Git
 
@@ -41,19 +41,19 @@ Field-alias + name_pattern learning, _deleted_fields, manual blank-date fix, inl
 Recent commits:
 
 ```
+372cac8 Dr. Health: focus new-field input after '+ field'; audit detail carries fields bag
+8f9e14c Handoff: field-alias + name-pattern learning deployed (SW v133).
 d1205aa Dr. Health: learn field aliases and name composition positionally
 743bc49 Handoff: positional integrity + rejection learning deployed (SW v132).
 a6cefd4 Dr. Health: positional integrity + rejection learning for report grids
 beb9796 Handoff: review UX fixes + name-style learning deployed.
 52c47f1 Dr. Health review: duplicate-row tools, field delete, blank-date manual rows, name-style learning
 d7fddea Handoff: report learning + duplicate records deployed (SW v131).
-a0e8e6e Dr. Health: learn from row edits, keep manual rows separate, duplicate records
-fd316ba Handoff: dynamic report fields deployed-ready.
 ```
 
 ## Production (PythonAnywhere)
 
-**14 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
+**11 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
 
 ```
 ok       tests/test_review_flow.py
@@ -80,7 +80,7 @@ ok       web_enhancement_test_runner.py
 ok       webhook_deploy.py
 ok       wisdom_profiles/23.json
 ok       wisdom_profiles/23_hypotheses.json
-14 file(s) stale. Re-run with --push to upload.
+11 file(s) stale. Re-run with --push to upload.
 ```
 
 Reload often returns `409 slow_startup_error` on the first attempt — retry rather than debug it.
@@ -100,7 +100,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-453 passed, 1 warning in 33.28s
+453 passed, 1 warning in 19.34s
 [AutoDoc] Monitoring stopped
 ```
 
