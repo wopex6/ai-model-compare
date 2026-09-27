@@ -2557,6 +2557,16 @@
                             fields.insertBefore(label, addFieldBtn);
                             fields.insertBefore(input, addFieldBtn);
                         });
+                        // Duplicate this row — a second reading of the same
+                        // test (e.g. repeat spirometry) without retyping.
+                        const dupBtn = document.createElement('button');
+                        dupBtn.type = 'button';
+                        dupBtn.className = 'btn-secondary';
+                        dupBtn.title = 'Duplicate this record';
+                        dupBtn.style.cssText = 'font-size:0.72rem;padding:2px 10px;margin-top:4px;';
+                        dupBtn.innerHTML = '<i class="fas fa-copy"></i> duplicate';
+                        dupBtn.addEventListener('click', () => duplicateReviewRow(key, row));
+                        fields.appendChild(dupBtn);
                         fields.appendChild(addFieldBtn);
                         row.appendChild(fields);
                     } else if (typeof item === 'object' && item !== null) {
@@ -2581,6 +2591,14 @@
                             fields.appendChild(label);
                             fields.appendChild(input);
                         });
+                        const dupBtn = document.createElement('button');
+                        dupBtn.type = 'button';
+                        dupBtn.className = 'btn-secondary';
+                        dupBtn.title = 'Duplicate this record';
+                        dupBtn.style.cssText = 'font-size:0.72rem;padding:2px 10px;margin-top:4px;';
+                        dupBtn.innerHTML = '<i class="fas fa-copy"></i> duplicate';
+                        dupBtn.addEventListener('click', () => duplicateReviewRow(key, row));
+                        fields.appendChild(dupBtn);
                         row.appendChild(fields);
                     } else {
                         const wrap = document.createElement('div');
@@ -2716,24 +2734,62 @@
                 fields.appendChild(input);
             });
         } else {
-            const source = list.querySelector('.review-item .review-item-fields');
-            if (source) {
-                source.querySelectorAll('input, textarea').forEach(src => {
-                    const label = document.createElement('label');
-                    label.textContent = src.dataset.field;
-                    const input = document.createElement(src.tagName === 'TEXTAREA' ? 'textarea' : 'input');
-                    if (src.tagName !== 'TEXTAREA') input.type = src.type || 'text';
-                    input.value = '';
-                    input.dataset.field = src.dataset.field;
-                    if (src.rows) input.rows = src.rows;
-                    fields.appendChild(label);
-                    fields.appendChild(input);
+            // Union of fields across all existing rows — a column added to
+            // one row ('+ field') belongs on new rows too.
+            const seen = new Map();
+            list.querySelectorAll('.review-item .review-item-fields').forEach(f => {
+                f.querySelectorAll('input, textarea').forEach(src => {
+                    if (src.dataset.field && !seen.has(src.dataset.field)) {
+                        seen.set(src.dataset.field, src);
+                    }
                 });
-            }
+            });
+            seen.forEach((src, name) => {
+                const prev = src.previousElementSibling;
+                const label = document.createElement('label');
+                label.textContent = (prev && prev.tagName === 'LABEL') ? prev.textContent : name;
+                const input = document.createElement(src.tagName === 'TEXTAREA' ? 'textarea' : 'input');
+                if (src.tagName !== 'TEXTAREA') input.type = src.type || 'text';
+                input.value = '';
+                input.dataset.field = name;
+                if (src.rows) input.rows = src.rows;
+                fields.appendChild(label);
+                fields.appendChild(input);
+            });
         }
 
         newRow.appendChild(fields);
         list.appendChild(newRow);
+    }
+
+    // Duplicate the row under the cursor: same fields, current values —
+    // checked in as a new record (no index, so saveReview marks it manual).
+    function duplicateReviewRow(key, rowEl) {
+        const fields = rowEl.querySelector('.review-item-fields');
+        if (!fields) return;
+        const newRow = document.createElement('div');
+        newRow.className = 'review-item';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.checked = true;
+        cb.dataset.category = key;
+        newRow.appendChild(cb);
+        const newFields = document.createElement('div');
+        newFields.className = 'review-item-fields';
+        fields.querySelectorAll('input, textarea').forEach(src => {
+            const prev = src.previousElementSibling;
+            const label = document.createElement('label');
+            label.textContent = (prev && prev.tagName === 'LABEL') ? prev.textContent : src.dataset.field;
+            const input = document.createElement(src.tagName === 'TEXTAREA' ? 'textarea' : 'input');
+            if (src.tagName !== 'TEXTAREA') input.type = src.type || 'text';
+            input.value = src.value;
+            input.dataset.field = src.dataset.field;
+            if (src.rows) input.rows = src.rows;
+            newFields.appendChild(label);
+            newFields.appendChild(input);
+        });
+        newRow.appendChild(newFields);
+        rowEl.after(newRow);
     }
 
     function setReviewAll(checked) {
@@ -2762,6 +2818,7 @@
                 const idx = parseInt(cb.dataset.index, 10);
                 const original = ((currentReviewPending || {}).test_results || [])[idx];
                 if (original && typeof original === 'object') {
+                    item._orig_index = idx;
                     ['format_structure', 'format_signature', 'source_role',
                      'date_source', 'unit', 'fields', 'qualifier', 'section',
                      'source_page', 'source_file'].forEach(k => {
@@ -2771,6 +2828,11 @@
                             && item.date !== String(original.date || '')) {
                         item.date_source = 'user';
                     }
+                } else {
+                    // A row added or duplicated in review is a deliberate
+                    // entry — same name + date is a second measurement, not a
+                    // re-scan of the same one.
+                    item._manual = true;
                 }
                 extracted[cat].push(item);
             } else {
@@ -2848,7 +2910,8 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     extracted,
-                    format_analysis: currentMeta && currentMeta.format_analysis
+                    format_analysis: currentMeta && currentMeta.format_analysis,
+                    original_test_results: (currentReviewPending || {}).test_results || []
                 })
             });
             const data = await resp.json();

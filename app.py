@@ -8103,12 +8103,28 @@ def apply_health_review():
                       for c in _IMPORT_LISTS}
         before_texts = {c: set(profile.data.get(c) or [])
                         for c in _IMPORT_TEXT_LISTS}
+        # Rows the user corrected in review teach the layout: pairing each
+        # edited row with its pre-edit original shows which column a moved or
+        # deleted field came from. Collect the pairs now — apply pops the
+        # markers — but learn AFTER confirm(), because confirm rewrites
+        # column_roles wholesale and would erase the fresher correction.
+        originals = data.get('original_test_results') or []
+        edit_pairs = []
+        for test in extracted.get('test_results') or []:
+            idx = (test or {}).get('_orig_index')
+            if isinstance(idx, int) and 0 <= idx < len(originals):
+                edit_pairs.append((originals[idx], test))
         actions = profile.apply_extracted_data(extracted)
         analysis = data.get('format_analysis')
         if isinstance(analysis, dict):
             for table in analysis.get('tables') or []:
                 if table.get('columns'):
                     report_format.confirm(profile.data, table)
+        learned = []
+        for before_row, after_row in edit_pairs:
+            what = report_format.learn_from_edit(profile.data, before_row, after_row)
+            if what:
+                learned.append(what)
         for test in extracted.get('test_results') or []:
             structure = (test or {}).get('format_structure')
             date = str((test or {}).get('date') or '').strip()
@@ -8138,6 +8154,7 @@ def apply_health_review():
         profile.save()
         return jsonify({'success': True, 'actions': actions,
                         'added_count': added,
+                        'learned': learned,
                         'last_import': profile.data['last_import'],
                         'extracted': extracted})
     except Exception as e:
@@ -8618,25 +8635,36 @@ def add_health_profile_item():
         if category == 'test_results':
             if not item.get('test_name'):
                 return jsonify({'error': 'test_name is required'}), 400
+            fields = item.get('fields') if isinstance(item.get('fields'), dict) else None
+            # manual=True: a hand-entered row is a deliberate record — it only
+            # merges with an identical reading, never a same-day one with a
+            # different value.
             if not profile.add_test_result(
                 item.get('test_name', ''),
                 item.get('value', ''),
                 item.get('reference_range', ''),
                 item.get('date', ''),
-                item.get('notes', '')
+                item.get('notes', ''),
+                fields=fields,
+                unit=str(item.get('unit') or ''),
+                manual=True
             ):
                 return jsonify({'error': 'Duplicate or invalid test result'}), 400
-            # add_test_result only takes the core fields — carry the rest
-            # (unit, source, verified_by_user) onto the row it wrote or the
-            # duplicate it matched, so a hand-entered unit is not dropped.
-            core = {'test_name', 'value', 'reference_range', 'date', 'notes'}
+            # Carry the rest (source, verified_by_user) onto the row it wrote
+            # or the duplicate it matched. Undated requests were stamped with
+            # today's filed date, so match on the normalized date — a raw ''
+            # would never find the row and the extras would silently drop.
+            core = {'test_name', 'value', 'reference_range', 'date', 'notes',
+                    'fields', 'unit'}
             extras = {k: v for k, v in item.items()
                       if k not in core and v not in (None, '')}
             if extras:
+                date_norm = profile._normalize_test_date(
+                    item.get('date') or datetime.now().strftime('%Y-%m-%d'))
                 for t in reversed(profile.data.get('test_results', [])):
                     if profile._is_duplicate_test_result(
                             t, item.get('test_name', ''), item.get('value', ''),
-                            item.get('date', ''), item.get('reference_range', '')):
+                            date_norm, item.get('reference_range', '')):
                         before = {k: t.get(k) for k in extras}
                         t.update(extras)
                         # Filling blanks on the row this request just wrote is

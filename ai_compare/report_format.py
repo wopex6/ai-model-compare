@@ -718,12 +718,37 @@ def sibling_date(store: Dict, structure: str, now: Optional[datetime] = None,
     return date
 
 
+def _extra_key_of(spec: Dict) -> str:
+    """The `fields` heading a column produces — mirrors extract's _extra_key."""
+    key = ' '.join(x for x in (spec.get('qualifier'), spec.get('label')) if x).strip()
+    return key or 'column {}'.format(spec.get('index'))
+
+
+# Where a `fields.<heading>` value lands when the user moves it into a
+# canonical slot. Anything else it could move to is free text, which maps to
+# 'text' only by demotion — never promoted into a real reading.
+_SLOT_ROLES = {
+    'unit': 'unit',
+    'reference_range': 'range',
+    'date': 'dated',
+    'value': 'measured',
+    'test_name': 'name',
+}
+
+
 def learn_from_edit(store: Dict, before: Dict, after: Dict,
                     now: Optional[datetime] = None) -> Optional[str]:
     """Infer a layout fact from a row the user edited. Returns what was learned.
 
-    Only edits that are hard to misread count. A single free-text tweak does
-    not rewrite the format.
+    Only edits that are hard to misread count:
+
+    - dating a filed row tells us the layout's report date;
+    - a `fields.<heading>` value moved into a canonical slot (unit, range,
+      date, value, name) tells us that column's real role — the heading is how
+      the column is found again;
+    - a `fields.<heading>` emptied or deleted tells us the column is not data
+      for this layout — the same demotion learn_from_delete applies at row
+      level, but at column granularity.
     """
     structure = (after or {}).get('format_structure') or (before or {}).get('format_structure')
     if not structure:
@@ -731,6 +756,8 @@ def learn_from_edit(store: Dict, before: Dict, after: Dict,
     entry = find_by_structure(store, structure)
     if entry is None:
         return None
+    stamp = (now or datetime.now()).isoformat()
+    learned = []
     # They dated an undated filing: this layout has no date column.
     before_source = (before or {}).get('date_source')
     new_date = str((after or {}).get('date') or '').strip()
@@ -738,10 +765,41 @@ def learn_from_edit(store: Dict, before: Dict, after: Dict,
     if before_source == 'filed' and new_date and new_date != old_date:
         record_report_date(store, structure, new_date, now=now)
         entry.setdefault('learned', []).append(
-            {'at': (now or datetime.now()).isoformat(), 'kind': 'report_date',
-             'date': new_date})
-        return 'report_date'
-    return None
+            {'at': stamp, 'kind': 'report_date', 'date': new_date})
+        learned.append('report_date')
+    # Field moves and deletions teach column roles.
+    bfields = (before or {}).get('fields') or {}
+    afields = (after or {}).get('fields') or {}
+    roles = entry.get('column_roles') or []
+    changed = False
+    for spec in roles:
+        key = _extra_key_of(spec)
+        if key not in bfields:
+            continue
+        old_val = str(bfields[key] or '').strip()
+        if key in afields and str(afields[key] or '').strip() == old_val:
+            continue  # untouched
+        # The value moved to a canonical slot only if the slot now holds that
+        # exact value and did not before — otherwise the user just retyped.
+        moved_to = None
+        if old_val:
+            for slot, role in _SLOT_ROLES.items():
+                if (str((after or {}).get(slot) or '').strip() == old_val
+                        and str((before or {}).get(slot) or '').strip() != old_val):
+                    moved_to = role
+                    break
+        new_role = moved_to or 'text'
+        if spec.get('role') != new_role:
+            spec['role'] = new_role
+            spec['basis'] = 'user'
+            changed = True
+            learned.append('column {} -> {}'.format(key, new_role))
+    if changed:
+        entry['column_roles'] = roles
+        entry['confirmed'] = True
+        entry.setdefault('learned', []).append(
+            {'at': stamp, 'kind': 'edited_columns'})
+    return '+'.join(learned) if learned else None
 
 
 def learn_from_delete(store: Dict, removed: Dict, remaining: List[Dict],

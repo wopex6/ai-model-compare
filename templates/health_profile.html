@@ -1107,7 +1107,7 @@ Examples:
                     cols.forEach(c => {
                         html += `<th data-key='${escapeHtml(c.key)}' style='text-align:left;padding:4px;'>${escapeHtml(c.label)}</th>`;
                     });
-                    html += "</tr></thead><tbody>";
+                    html += "<th style='width:30px;'></th></tr></thead><tbody>";
                     for (let i = 0; i < items.length; i++) {
                         const t = items[i];
                         html += `<tr style='border-bottom:1px solid #eee;' data-cat='test_results' data-idx='${i}'>`;
@@ -1117,10 +1117,12 @@ Examples:
                                 : (t[c.key] || '');
                             html += `<td style='padding:4px;'><input type='text' data-field='${escapeHtml(c.key)}' value='${escapeHtml(v)}' style='width:100%;border:1px solid #ccc;border-radius:4px;padding:3px;font-size:0.78rem;box-sizing:border-box;'></td>`;
                         });
+                        html += `<td style='padding:4px;'><button type='button' class='btn-add' title='Duplicate this record' style='background:#90a4ae;padding:3px 7px;font-size:0.72rem;' onclick='dupTestResultRow(this)'><i class='fas fa-copy'></i></button></td>`;
                         html += `</tr>`;
                     }
                     html += "</tbody></table>";
                     html += `<button class='btn-add' style='background:#666;margin:6px 0 10px 0;padding:5px 10px;font-size:0.78rem;' onclick='addTestResultRow(this)'><i class='fas fa-plus'></i> Add test result row</button>`;
+                    html += ` <button class='btn-add' style='background:#666;margin:6px 0 10px 0;padding:5px 10px;font-size:0.78rem;' onclick='addTestResultColumn(this)'><i class='fas fa-plus'></i> Add column</button>`;
                 } else {
                     html += "<ul style='margin:0 0 8px;padding-left:18px;'>";
                     for (const item of items) {
@@ -1155,13 +1157,73 @@ Examples:
                 td.appendChild(input);
                 tr.appendChild(td);
             });
+            const act = document.createElement('td');
+            act.style.padding = '4px';
+            act.innerHTML = `<button type='button' class='btn-add' title='Duplicate this record' style='background:#90a4ae;padding:3px 7px;font-size:0.72rem;' onclick='dupTestResultRow(this)'><i class='fas fa-copy'></i></button>`;
+            tr.appendChild(act);
             tbody.appendChild(tr);
             tr.scrollIntoView({behavior:'smooth', block:'nearest'});
+        }
+
+        // Duplicate a row: copies every input's current value into a new row
+        // with no data-idx, so saving treats it as a newly added record.
+        function dupTestResultRow(btn) {
+            const row = btn.closest('tr');
+            if (!row) return;
+            const tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid #eee';
+            tr.dataset.cat = 'test_results';
+            row.querySelectorAll('input[data-field]').forEach(inp => {
+                const td = document.createElement('td');
+                td.style.padding = '4px';
+                const copy = document.createElement('input');
+                copy.type = 'text';
+                copy.dataset.field = inp.dataset.field;
+                copy.value = inp.value;
+                copy.style = 'width:100%;border:1px solid #ccc;border-radius:4px;padding:3px;font-size:0.78rem;box-sizing:border-box;';
+                td.appendChild(copy);
+                tr.appendChild(td);
+            });
+            const act = document.createElement('td');
+            act.style.padding = '4px';
+            act.innerHTML = btn.closest('td').innerHTML;
+            tr.appendChild(act);
+            row.after(tr);
+        }
+
+        // A column the scan didn't model: the heading becomes a `fields.<name>`
+        // key on every row, saved back into each row's fields bag.
+        function addTestResultColumn(btn) {
+            const heading = (prompt('Column heading (as printed on the report):') || '').trim();
+            if (!heading) return;
+            const table = btn.parentElement.querySelector('table');
+            if (!table) return;
+            const headRow = table.querySelector('thead tr');
+            const th = document.createElement('th');
+            th.dataset.key = 'fields.' + heading;
+            th.textContent = heading;
+            th.style.cssText = 'text-align:left;padding:4px;';
+            headRow.insertBefore(th, headRow.lastElementChild);
+            table.querySelectorAll('tbody tr').forEach(tr => {
+                const td = document.createElement('td');
+                td.style.padding = '4px';
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.dataset.field = 'fields.' + heading;
+                input.style = 'width:100%;border:1px solid #ccc;border-radius:4px;padding:3px;font-size:0.78rem;box-sizing:border-box;';
+                td.appendChild(input);
+                tr.insertBefore(td, tr.lastElementChild);
+            });
         }
 
         async function confirmPendingReview(btn) {
             const card = btn.closest('.pending-review-card');
             const extracted = JSON.parse(decodeURIComponent(btn.dataset.extracted));
+            // Pre-edit rows are the 'before' for layout learning — keep them
+            // before we overwrite extracted.test_results.
+            const originals = extracted.test_results || [];
+            const analysis = card.dataset.analysis
+                ? JSON.parse(decodeURIComponent(card.dataset.analysis)) : null;
             const testResults = [];
             card.querySelectorAll('tr[data-cat=test_results]').forEach(row => {
                 const flat = {};
@@ -1171,8 +1233,9 @@ Examples:
                 // fields.<heading> inputs fold back into the row's fields bag.
                 const obj = window.HealthReview ? HealthReview.splitReviewFields(flat) : flat;
                 const idx = parseInt(row.dataset.idx, 10);
-                const original = (extracted.test_results || [])[idx];
+                const original = originals[idx];
                 if (original && typeof original === 'object') {
+                    obj._orig_index = idx;
                     ['format_structure', 'format_signature', 'source_role',
                      'date_source', 'unit', 'fields', 'qualifier', 'section',
                      'source_page', 'source_file'].forEach(k => {
@@ -1182,6 +1245,10 @@ Examples:
                             && obj.date !== String(original.date || '')) {
                         obj.date_source = 'user';
                     }
+                } else {
+                    // Added or duplicated in review — a deliberate second
+                    // record, not a re-scan; it must not merge away.
+                    obj._manual = true;
                 }
                 testResults.push(obj);
             });
@@ -1192,7 +1259,8 @@ Examples:
                 const resp = await AuthHelper.authenticatedFetch('/api/health-profile/apply-review', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ extracted })
+                    body: JSON.stringify({ extracted, format_analysis: analysis,
+                                           original_test_results: originals })
                 });
                 const data = await resp.json();
                 if (resp.ok && data.success !== false) {
@@ -1274,7 +1342,9 @@ Examples:
                 const pending = result.pending_review;
                 if (pending && Object.keys(pending).length > 0) {
                     const encoded = encodeURIComponent(JSON.stringify(pending));
-                    let allHtml = `<div class='pending-review-card' data-extracted='${encoded}'>`;
+                    const analysisAttr = result.format_analysis
+                        ? ` data-analysis='${encodeURIComponent(JSON.stringify(result.format_analysis))}'` : '';
+                    let allHtml = `<div class='pending-review-card' data-extracted='${encoded}'${analysisAttr}>`;
                     allHtml += `<h4 style='margin:0 0 10px;color:#1565c0;font-size:0.9rem;'><i class='fas fa-clipboard-check'></i> Review before saving: ${result.source_file || stored_name}</h4>`;
                     if (result.stored_document) {
                         const sd = result.stored_document;
@@ -1402,7 +1472,9 @@ Examples:
                     const pending = result.pending_review;
                     if (pending && Object.keys(pending).length > 0) {
                         const encoded = encodeURIComponent(JSON.stringify(pending));
-                        allHtml += `<div style='margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #e0e0e0;' class='pending-review-card'>`;
+                        const analysisAttr = result.format_analysis
+                            ? ` data-analysis='${encodeURIComponent(JSON.stringify(result.format_analysis))}'` : '';
+                        allHtml += `<div style='margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #e0e0e0;' class='pending-review-card'${analysisAttr}>`;
                         allHtml += `<h4 style='margin:0 0 10px;color:#1565c0;font-size:0.9rem;'><i class='fas fa-clipboard-check'></i> Review before saving: ${label}</h4>`;
                         if (result.stored_document) {
                             const sd = result.stored_document;

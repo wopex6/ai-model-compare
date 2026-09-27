@@ -397,7 +397,7 @@
     // corrupts the confirmation queue and the retire/revive history.
     const MANAGED_KEYS = ['status', 'started_on', 'ended_on', 'last_confirmed_at',
         'history', 'pending', 'ref_locked', 'unit_locked', 'date_source',
-        'verified_at', 'proposed_by', 'change_note',
+        'verified_at', 'proposed_by', 'change_note', 'manual',
         'format_structure', 'format_signature', 'source_role',
         'source_page', 'source_file'];
 
@@ -550,6 +550,7 @@
             this.openIndex = null;
             this.editIndex = null;
             this.adding = false;
+            this.dupItem = null;
             this.filter = '';
             this.render();
             const scroller = this.root ? this.root.querySelector('.hub-scroll') : null;
@@ -570,6 +571,7 @@
             if (this.adding || this.editIndex !== null) {
                 this.adding = false;
                 this.editIndex = null;
+                this.dupItem = null;
                 this.render();
                 return;
             }
@@ -779,7 +781,7 @@
             const arr = (this.profile && Array.isArray(this.profile[id])) ? this.profile[id] : [];
             let html = '';
 
-            if (this.adding) html += this.formHtml(id, {}, -1);
+            if (this.adding) html += this.formHtml(id, this.dupItem || {}, -1);
 
             const rows = [];
             for (let i = 0; i < arr.length; i++) {
@@ -926,6 +928,7 @@
                     html += '<button class="hub-btn primary" data-verify="' + index + '"><i class="fas fa-check-double"></i> Confirm</button>';
                 }
                 html += '<button class="hub-btn" data-edit="' + index + '"><i class="fas fa-pen"></i> Edit</button>';
+                html += '<button class="hub-btn" data-dup="' + index + '" title="Copy this record into a new one you can edit"><i class="fas fa-copy"></i></button>';
                 if (id === 'test_results') {
                     html += '<button class="hub-btn" data-explain="' + index + '"><i class="fas fa-comment-medical"></i> Explain this result</button>';
                 }
@@ -962,6 +965,13 @@
                 for (let i = 0; i < extras.length; i++) {
                     html += this.inputHtml(extras[i], extras[i].current);
                 }
+            }
+            // A column the scan didn't model can still be added by hand —
+            // it lands in the row's `fields` bag under the report's own
+            // heading, so no schema change is ever needed.
+            if (id === 'test_results' || extras.length) {
+                html += '<button type="button" class="hub-btn" data-addfield ' +
+                    'style="margin-bottom:8px;"><i class="fas fa-plus"></i> Add field</button>';
             }
             if (id === 'diary' && window.HealthDictation && !HealthDictation.pillAvailable()) {
                 // No pill on this device — point at the OS voice typing.
@@ -2312,6 +2322,7 @@
                 if (add) {
                     add.addEventListener('click', () => {
                         self.adding = true;
+                        self.dupItem = null;
                         self.openIndex = null;
                         self.editIndex = null;
                         self.render();
@@ -2391,6 +2402,7 @@
             if (emptyAdd) {
                 emptyAdd.addEventListener('click', () => {
                     self.adding = true;
+                    self.dupItem = null;
                     self.render();
                 });
             }
@@ -2410,6 +2422,23 @@
                 edits[i].addEventListener('click', function () {
                     self.editIndex = parseInt(this.getAttribute('data-edit'), 10);
                     self.adding = false;
+                    self.dupItem = null;
+                    self.render();
+                });
+            }
+
+            // Duplicate: open the add form prefilled with this record's
+            // values. formHtml renders only schema + extra fields, so managed
+            // bookkeeping (status, history, layout ids) never copies over —
+            // the new row earns its own lifecycle.
+            const dups = root.querySelectorAll('[data-dup]');
+            for (let i = 0; i < dups.length; i++) {
+                dups[i].addEventListener('click', function () {
+                    const idx = parseInt(this.getAttribute('data-dup'), 10);
+                    const items = (self.profile && self.profile[id]) || [];
+                    self.dupItem = items[idx] || null;
+                    self.adding = true;
+                    self.editIndex = null;
                     self.render();
                 });
             }
@@ -2441,6 +2470,7 @@
                 cancels[i].addEventListener('click', () => {
                     self.adding = false;
                     self.editIndex = null;
+                    self.dupItem = null;
                     self.render();
                 });
             }
@@ -2451,6 +2481,32 @@
                     const idx = parseInt(this.getAttribute('data-save'), 10);
                     const form = this.closest('.hub-form');
                     if (form) self.saveItem(id, idx, form);
+                });
+            }
+
+            const addFields = root.querySelectorAll('[data-addfield]');
+            for (let i = 0; i < addFields.length; i++) {
+                addFields[i].addEventListener('click', function () {
+                    const heading = (window.prompt('Field name (as printed on the report):') || '').trim();
+                    if (!heading) return;
+                    // test_results extras live in the `fields` bag; other
+                    // sections take a plain top-level key.
+                    const key = (id === 'test_results') ? 'fields.' + heading : heading;
+                    const form = this.closest('.hub-form');
+                    const anchor = form ? form.querySelector('.hub-row-actions') : null;
+                    if (!anchor) return;
+                    const wrap = document.createElement('div');
+                    const label = document.createElement('label');
+                    label.className = 'hub-input-label';
+                    label.textContent = heading;
+                    const input = document.createElement('input');
+                    input.className = 'hub-input';
+                    input.type = 'text';
+                    input.setAttribute('data-key', key);
+                    input.setAttribute('data-type', 'text');
+                    wrap.appendChild(label);
+                    wrap.appendChild(input);
+                    anchor.parentElement.insertBefore(wrap, anchor);
                 });
             }
 
@@ -2514,6 +2570,7 @@
                 if (data.profile) this.profile = data.profile;
                 this.adding = false;
                 this.editIndex = null;
+                this.dupItem = null;
                 this.openIndex = null;
                 this.busy = false;
                 this.render();

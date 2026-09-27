@@ -286,7 +286,15 @@ role but share a grid, and the user's reading must apply to both. The next
 scan overlays those roles before extract (`apply_remembered`). Changing a
 role chip in the review modal re-extracts the same stored grid
 (`POST /api/health-profile/report-format`) without a model call. Saving the
-review calls `confirm()`. Dating a filed row records `last_report_date` so a
+review calls `confirm()` — **both** review UIs must send `format_analysis`
+(the website stores it in `data-analysis` on the pending card); without it
+nothing is learned. Row-level edits also teach: `learn_from_edit` pairs the
+pre-edit row (`_orig_index` into `original_test_results` in apply-review, or
+the hub's PUT before/after) with the saved one — a `fields.<heading>` value
+moved into a canonical slot retrains that column's role, and an emptied
+`fields` key demotes its column to `text`. Learning runs AFTER `confirm()`,
+which rewrites `column_roles` wholesale — earlier and the correction is
+erased. Dating a filed row records `last_report_date` so a
 sibling page of the same structure uploaded within two hours inherits it.
 Deleting every row that came from one column demotes that column to `text`.
 `format_structure` / `source_role` stay on the row (and in `MANAGED_KEYS`) so
@@ -346,6 +354,12 @@ Same canonical test name + same normalized date = the same measurement, and
 the stored row wins: `add_test_result` discards an incoming differing value
 and only backfills empty `reference_range`/`notes`/`date`. The stored value
 was reviewed (by the user or a prior import); a re-scan must not clobber it.
+The merge also gap-fills `unit` and the `fields` bag — dropping them was a
+real data-loss bug. **Exception for `manual` rows**: a row the user typed or
+duplicated in review (client marks it `_manual`, stored as `manual: true`)
+is a deliberate second measurement — it merges only with an *identical*
+value, so three same-name same-day entries typed by hand stay three rows.
+`_deduplicate_test_results` honours the same flag in both directions.
 Exception: merging requires the same **reference range and unit** — when both
 are determinable and either disagrees, they are not the same measurement. The
 name key strips qualifiers like '(NGSP)'/'(IFCC)', so 'HbA1c (IFCC)' in

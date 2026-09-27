@@ -1537,3 +1537,127 @@ def test_upload_tags_document_with_layout_structures():
         assert listing[0]['format_structures'] == ['struct-abc']
     finally:
         _cleanup(user_id)
+
+
+def test_dedup_merge_keeps_report_native_fields_and_unit():
+    """Two rows the parser made from one measurement must not lose the
+    report-native columns when they collapse."""
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        profile.data['test_results'] = [
+            {'test_name': 'FVC', 'value': '2.1', 'date': '2026-01-05',
+             'fields': {'Pre-Bronch %Pred': '80'}},
+            {'test_name': 'FVC', 'value': '2.1', 'date': '2026-01-05',
+             'unit': 'L', 'fields': {'Method': 'Spirometry'}},
+        ]
+        removed = profile._deduplicate_test_results()
+        assert removed == 1
+        row = profile.data['test_results'][0]
+        assert row['unit'] == 'L'
+        assert row['fields'] == {'Pre-Bronch %Pred': '80', 'Method': 'Spirometry'}
+    finally:
+        _cleanup(user_id)
+
+
+def test_manual_rows_with_different_values_both_survive():
+    """A user typing three same-name rows is recording three readings —
+    they must not collapse into one the way a re-scan would."""
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        assert profile.add_test_result('FVC', '2.1', date='2026-01-05')
+        # An identical re-scan still merges (stored value wins).
+        profile.add_test_result('FVC', '2.1', date='2026-01-05')
+        assert len(profile.data['test_results']) == 1
+        # A different value typed by hand is a second reading — kept.
+        profile.add_test_result('FVC', '2.4', date='2026-01-05', manual=True)
+        assert len(profile.data['test_results']) == 2
+        # The batch dedup sweep must not collapse them afterwards either.
+        profile._deduplicate_test_results()
+        assert len(profile.data['test_results']) == 2
+        # An identical manual row still merges.
+        profile.add_test_result('FVC', '2.4', date='2026-01-05', manual=True)
+        assert len(profile.data['test_results']) == 2
+    finally:
+        _cleanup(user_id)
+
+
+def test_manual_row_keeps_its_fields_bag():
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        profile.add_test_result('FVC', '2.4', date='2026-01-05', manual=True,
+                                fields={'Method': 'Spirometry', 'Post %Chng': '12'})
+        row = profile.data['test_results'][-1]
+        assert row['manual'] is True
+        assert row['fields'] == {'Method': 'Spirometry', 'Post %Chng': '12'}
+    finally:
+        _cleanup(user_id)
+
+
+def test_apply_review_manual_rows_format_analysis_and_edit_learning():
+    """The whole review-save contract: rows added in review survive as
+    separate records, format_analysis confirms the layout, and per-row edits
+    teach the column roles."""
+    import app as app_mod
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        profile.data['report_formats'] = {'sigX': {
+            'signature': 'sigX', 'structure': 'struct-x', 'confirmed': False,
+            'column_roles': [
+                {'index': 0, 'label': 'Name', 'qualifier': '', 'role': 'name'},
+                {'index': 1, 'label': 'Odd', 'qualifier': '', 'role': 'text'},
+            ]}}
+        profile.save()
+        app_mod.app.config['TESTING'] = True
+        client = app_mod.app.test_client()
+        with client.session_transaction() as sess:
+            sess['user_id'] = user_id
+            sess['username'] = 'safety-test'
+
+        resp = client.post('/api/health-profile/apply-review', json={
+            'extracted': {'test_results': [
+                # Edited row: the user moved a fields value into the unit box.
+                {'test_name': 'FVC', 'value': '2.1', 'unit': 'Run A',
+                 'format_structure': 'struct-x', '_orig_index': 0},
+                # Two hand-added rows, same name and date, different values.
+                {'test_name': 'ManualA', 'value': '1', 'date': '2026-01-05',
+                 '_manual': True},
+                {'test_name': 'ManualA', 'value': '2', 'date': '2026-01-05',
+                 '_manual': True},
+            ]},
+            'original_test_results': [
+                {'test_name': 'FVC', 'value': '2.1',
+                 'format_structure': 'struct-x', 'fields': {'Odd': 'Run A'}},
+            ],
+            'format_analysis': {'tables': [{
+                'structure': 'struct-x',
+                'columns': [
+                    {'index': 0, 'label': 'Name', 'qualifier': '', 'role': 'name'},
+                    {'index': 1, 'label': 'Odd', 'qualifier': '', 'role': 'text'},
+                ]}]},
+        })
+        data = resp.get_json()
+        assert resp.status_code == 200, data
+        assert data['added_count'] == 3
+        assert any('unit' in l for l in data.get('learned', []))
+
+        p = HealthProfile(user_id)
+        rows = p.data['test_results']
+        manual = [r for r in rows if r.get('test_name') == 'ManualA']
+        assert len(manual) == 2
+        assert all(r.get('manual') for r in manual)
+        # '_manual'/'_orig_index' never became stored fields.
+        for r in rows:
+            assert '_manual' not in (r.get('fields') or {})
+            assert '_orig_index' not in r and '_orig_index' not in (r.get('fields') or {})
+
+        # The layout was confirmed and the edited column's role corrected.
+        fmt = p.data['report_formats']['sigX']
+        assert fmt['confirmed'] is True
+        roles = {c['index']: c['role'] for c in fmt['column_roles']}
+        assert roles[1] == 'unit'
+    finally:
+        _cleanup(user_id)

@@ -1789,8 +1789,14 @@ class HealthProfile:
 
     def add_test_result(self, test_name: str, value: str, reference_range: str = "",
                        date: str = "", notes: str = "", fields: Dict = None,
-                       unit: str = "", layout: Dict = None) -> bool:
+                       unit: str = "", layout: Dict = None, manual: bool = False) -> bool:
         """Add a lab/test result. Returns True if actually added.
+
+        `manual` marks a row the user typed in by hand. A manual row still
+        merges with an identical reading, but a *different* value under the
+        same name and date is kept as its own row — the user deliberately
+        recorded a second measurement, unlike a re-scan where a differing
+        value is just a misread of the same one.
 
         `fields` carries whatever else the report printed for this measurement,
         keyed by the report's own wording (a predicted value, a % of predicted,
@@ -1831,6 +1837,10 @@ class HealthProfile:
         test_name = self._resolve_test_name(test_name, reference_range, value, date_val)
         for t in existing:
             if self._is_duplicate_test_result(t, test_name, value, date_val, reference_range):
+                if (manual
+                        and self._normalize_value_for_compare(t.get("value", ""))
+                        != self._normalize_value_for_compare(value)):
+                    continue
                 # Same test on the same date: the stored value was already
                 # reviewed/verified, so a differing incoming value is
                 # discarded — only fill in metadata the stored row lacks.
@@ -1894,6 +1904,8 @@ class HealthProfile:
             # was filed. Say so on the row: dedup needs a date, but a reader
             # must not take today's date for the day of the measurement.
             entry["date_source"] = "filed"
+        if manual:
+            entry["manual"] = True
         self.data["test_results"].append(entry)
         audit_test_change(self.data, "added", test_name,
                           {"value": value, "date": date_val,
@@ -1976,10 +1988,18 @@ class HealthProfile:
             row_name = row.get("test_name", "")
 
             for kept in deduped:
-                if self._is_duplicate_test_result(kept, row_name, row_value, normalized_date,
-                                                  row.get("reference_range", "")):
-                    duplicate = kept
-                    break
+                if not self._is_duplicate_test_result(kept, row_name, row_value,
+                                                      normalized_date,
+                                                      row.get("reference_range", "")):
+                    continue
+                # A row the user typed in is a deliberate second measurement:
+                # merge only an identical reading, never a different value.
+                if (row.get("manual")
+                        and self._normalize_value_for_compare(kept.get("value", ""))
+                        != self._normalize_value_for_compare(row_value)):
+                    continue
+                duplicate = kept
+                break
 
             if duplicate is None:
                 if normalized_date:
@@ -1994,6 +2014,16 @@ class HealthProfile:
                 duplicate["reference_range"] = row["reference_range"]
             if not duplicate.get("notes") and row.get("notes"):
                 duplicate["notes"] = row["notes"]
+            if not duplicate.get("unit") and row.get("unit"):
+                duplicate["unit"] = row["unit"]
+            # Report-native fields are data, not metadata: gap-fill them too
+            # so merging never drops a column the report actually printed.
+            row_fields = row.get("fields") or {}
+            if row_fields:
+                kept_fields = duplicate.setdefault("fields", {})
+                for key, item in row_fields.items():
+                    if not str(kept_fields.get(key) or '').strip():
+                        kept_fields[key] = item
 
         if removed:
             self.data["test_results"] = deduped
@@ -2190,8 +2220,13 @@ class HealthProfile:
                     actions.append(f"Added condition: {cond['name']}" + (f" ({cond['diagnosed_date']})" if cond.get('diagnosed_date') else ""))
 
         # Test results
+        skipped_tests = 0
         for test in extracted.get("test_results", []) + extracted.get("new_test_results", []):
+            # Client-only transport markers — never stored.
+            manual_row = bool(test.pop("_manual", None))
+            test.pop("_orig_index", None)
             if not test.get("test_name"):
+                skipped_tests += 1
                 continue
             value = test.get("value", "")
             if isinstance(value, dict):
@@ -2213,7 +2248,8 @@ class HealthProfile:
                                "section", "source_page", "source_file")
                 extra_fields = dict(test.get("fields") or {})
                 for key, item in test.items():
-                    if key in core or key in layout_keys or item in (None, "", [], {}):
+                    if (key in core or key in layout_keys or key.startswith("_")
+                            or item in (None, "", [], {})):
                         continue
                     extra_fields[key] = (item if isinstance(item, str)
                                          else json.dumps(item, ensure_ascii=False))
@@ -2223,9 +2259,13 @@ class HealthProfile:
                     test.get("reference_range", ""), test.get("date", ""),
                     test.get("notes", ""), fields=extra_fields,
                     unit=str(test.get("unit") or ""),
-                    layout=layout or None
+                    layout=layout or None, manual=manual_row
                 ):
                     actions.append(f"Added test: {test['test_name']}")
+        if skipped_tests:
+            actions.append(
+                f"Skipped {skipped_tests} row(s) with no test name — give the "
+                "row a name to save it")
 
         # Collapse duplicate test rows after applying extracted results
         self._deduplicate_test_results()

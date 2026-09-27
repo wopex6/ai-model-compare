@@ -489,6 +489,85 @@ def test_dating_a_filed_row_records_the_report_date():
     assert store['report_formats']['sig1']['last_report_date'] == '2024-08-05'
 
 
+def test_moving_a_field_value_to_a_slot_teaches_the_column_role():
+    """User re-types a wrong column's value into the right box: the layout
+    learns that column was really the unit."""
+    store = {'report_formats': {
+        'sig1': {'signature': 'sig1', 'structure': 'struct1', 'confirmed': False,
+                 'column_roles': [
+                     {'index': 0, 'label': 'Name', 'qualifier': '', 'role': 'name'},
+                     {'index': 1, 'label': 'Reading', 'qualifier': '', 'role': 'measured'},
+                     {'index': 2, 'label': 'O2', 'qualifier': '', 'role': 'text'},
+                 ]}
+    }}
+    before = {'format_structure': 'struct1', 'fields': {'O2': 'mmHg'}}
+    after = {'format_structure': 'struct1', 'unit': 'mmHg', 'fields': {}}
+    learned = rf.learn_from_edit(store, before, after)
+    assert learned and 'O2' in learned
+    roles = {c['index']: c['role'] for c in store['report_formats']['sig1']['column_roles']}
+    assert roles[2] == 'unit'
+    assert store['report_formats']['sig1']['confirmed'] is True
+
+
+def test_clearing_a_field_demotes_its_column_to_text():
+    """Emptying a bogus column's value means it was never data."""
+    store = {'report_formats': {
+        'sig1': {'signature': 'sig1', 'structure': 'struct1', 'confirmed': False,
+                 'column_roles': [
+                     {'index': 0, 'label': 'Name', 'qualifier': '', 'role': 'name'},
+                     {'index': 1, 'label': 'Spurious', 'qualifier': '', 'role': 'stated'},
+                 ]}
+    }}
+    before = {'format_structure': 'struct1', 'fields': {'Spurious': 'junk'}}
+    after = {'format_structure': 'struct1', 'fields': {}}
+    learned = rf.learn_from_edit(store, before, after)
+    assert learned and 'Spurious' in learned
+    roles = {c['index']: c['role'] for c in store['report_formats']['sig1']['column_roles']}
+    assert roles[1] == 'text'
+
+
+def test_untouched_fields_teach_nothing():
+    store = {'report_formats': {
+        'sig1': {'signature': 'sig1', 'structure': 'struct1', 'confirmed': False,
+                 'column_roles': [
+                     {'index': 0, 'label': 'Name', 'qualifier': '', 'role': 'name'},
+                     {'index': 1, 'label': 'Extra', 'qualifier': '', 'role': 'text'},
+                 ]}
+    }}
+    row = {'format_structure': 'struct1', 'fields': {'Extra': 'abc'}}
+    assert rf.learn_from_edit(store, row, dict(row)) is None
+    roles = {c['index']: c['role'] for c in store['report_formats']['sig1']['column_roles']}
+    assert roles == {0: 'name', 1: 'text'}
+
+
+def test_learned_role_is_applied_on_the_next_scan():
+    """End to end: a user moves a fields value into a canonical slot, and the
+    next scan of the same grid reads that column with its new role."""
+    rows, sep = _table('''
+        | Analyte | Got | Note |
+        | --- | --- | --- |
+        | Alpha | 0.96 | Run A |
+        | Beta | 1.47 | Run B |
+    ''')
+    description = rf.describe(rows, sep)
+    store = {}
+    rf.remember(store, description)
+    results, _ = rf.extract(description, rows[sep + 1:])
+    assert 'Note' in (results[0].get('fields') or {})
+    # The user's edit: the value sat under 'Note' but belongs to 'unit'.
+    before = dict(results[0])
+    after = dict(results[0])
+    after['fields'] = {}
+    after['unit'] = before['fields']['Note']
+    assert rf.learn_from_edit(store, before, after)
+    # Rescan the identical grid: the learned role applies before extract.
+    again = rf.describe(rows, sep)
+    assert rf.apply_remembered(again, store) is True
+    results2, _ = rf.extract(again, rows[sep + 1:])
+    assert 'Note' not in (results2[0].get('fields') or {})
+    assert results2[0]['unit'] == 'Run A' or 'Run A' in results2[0]['value']
+
+
 def test_deleting_every_row_from_a_column_drops_that_role():
     store = {'report_formats': {
         'sig1': {'signature': 'sig1', 'structure': 'struct1', 'confirmed': False,
