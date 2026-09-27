@@ -1601,6 +1601,92 @@ def test_manual_row_keeps_the_blank_date_the_user_left():
         scanned = profile.data['test_results'][-1]
         assert scanned['date']
         assert scanned['date_source'] == 'filed'
+        # Dedup must not stamp the manual row's blank date with added_at.
+        profile._deduplicate_test_results()
+        row = profile.data['test_results'][0]
+        assert row['date'] == ''
+        # …and neither does a save + reload cycle.
+        profile.save()
+        reloaded = HealthProfile(user_id)
+        manual = next(r for r in reloaded.data['test_results']
+                      if r.get('test_name') == 'FVC')
+        assert manual['date'] == ''
+        assert 'date_source' not in manual
+    finally:
+        _cleanup(user_id)
+
+
+def test_deleted_fields_do_not_come_back_on_merge():
+    """Fields the user removed in review stay removed — merging a re-scan into
+    the stored row must not resurrect them."""
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        profile.add_test_result('FVC', '2.4', date='2026-01-05',
+                                fields={'Method': 'Spirometry', 'Bogus': 'x'})
+        profile.apply_extracted_data({'test_results': [
+            {'test_name': 'FVC', 'value': '2.4', 'date': '2026-01-05',
+             'fields': {'Method': 'Spirometry', 'Extra': 'new'},
+             '_deleted_fields': ['Bogus']},
+        ]})
+        row = profile.data['test_results'][0]
+        fields = row.get('fields') or {}
+        assert fields.get('Method') == 'Spirometry'
+        assert fields.get('Extra') == 'new'
+        assert 'Bogus' not in fields
+    finally:
+        _cleanup(user_id)
+
+
+def test_apply_review_carries_deleted_fields_into_the_stored_row():
+    """End to end: a fields column the user deleted in review is dropped from
+    the stored row it merges into, and the column demotes to text."""
+    import app as app_mod
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        profile.data['report_formats'] = {'sigD': {
+            'signature': 'sigD', 'structure': 'struct-d', 'confirmed': False,
+            'column_roles': [
+                {'index': 0, 'label': 'Name', 'qualifier': '', 'role': 'name'},
+                {'index': 1, 'label': 'Got', 'qualifier': '', 'role': 'measured'},
+                {'index': 2, 'label': 'Odd', 'qualifier': '', 'role': 'text'},
+            ]}}
+        profile.save()
+        app_mod.app.config['TESTING'] = True
+        client = app_mod.app.test_client()
+        with client.session_transaction() as sess:
+            sess['user_id'] = user_id
+            sess['username'] = 'safety-test'
+        resp = client.post('/api/health-profile/apply-review', json={
+            'extracted': {'test_results': [
+                {'test_name': 'FVC', 'value': '2.4', 'date': '2026-01-05',
+                 'format_structure': 'struct-d', '_orig_index': 0,
+                 '_deleted_fields': ['Odd'],
+                 'fields': {'Method': 'Spirometry'}},
+            ]},
+            'original_test_results': [
+                {'test_name': 'FVC', 'value': '2.4', 'date': '2026-01-05',
+                 'format_structure': 'struct-d',
+                 'fields': {'Odd': 'junk', 'Method': 'Spirometry'}},
+            ],
+            'format_analysis': {'tables': [{
+                'structure': 'struct-d',
+                'columns': [
+                    {'index': 0, 'label': 'Name', 'qualifier': '', 'role': 'name'},
+                    {'index': 1, 'label': 'Got', 'qualifier': '', 'role': 'measured'},
+                    {'index': 2, 'label': 'Odd', 'qualifier': '', 'role': 'text'},
+                ]}]},
+        })
+        data = resp.get_json()
+        assert resp.status_code == 200, data
+        p = HealthProfile(user_id)
+        row = p.data['test_results'][0]
+        assert 'Odd' not in (row.get('fields') or {})
+        assert (row.get('fields') or {}).get('Method') == 'Spirometry'
+        roles = {c['index']: c['role']
+                 for c in p.data['report_formats']['sigD']['column_roles']}
+        assert roles[2] == 'text'
     finally:
         _cleanup(user_id)
 

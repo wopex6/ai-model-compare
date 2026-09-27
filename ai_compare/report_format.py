@@ -601,9 +601,14 @@ ALLOWED_ROLES = (
 
 
 def column_roles_of(description: Dict) -> List[Dict]:
-    return [{'index': c['index'], 'label': c.get('label') or '',
-             'qualifier': c.get('qualifier') or '', 'role': c['role']}
-            for c in description.get('columns') or []]
+    out = []
+    for c in description.get('columns') or []:
+        spec = {'index': c['index'], 'label': c.get('label') or '',
+                'qualifier': c.get('qualifier') or '', 'role': c['role']}
+        if c.get('alias'):
+            spec['alias'] = c['alias']
+        out.append(spec)
+    return out
 
 
 def find_by_structure(store: Dict, structure: str) -> Optional[Dict]:
@@ -644,6 +649,14 @@ def apply_column_roles(description: Dict, column_roles: List[Dict],
         elif col.get('basis') != basis and basis == 'user':
             col['basis'] = basis
             changed = True
+        # A heading the user renamed rides on the role spec — the position is
+        # the identity, the printed words are not.
+        if col.get('alias') != spec.get('alias'):
+            if spec.get('alias'):
+                col['alias'] = spec['alias']
+            else:
+                col.pop('alias', None)
+            changed = True
     if changed:
         description['layout'] = _layout_from_roles(description['columns'])
         description['from_user'] = True
@@ -660,6 +673,9 @@ def apply_remembered(description: Dict, store: Dict) -> bool:
     applied = False
     if entry.get('name_style'):
         description['name_style'] = entry['name_style']
+        applied = True
+    if entry.get('name_pattern'):
+        description['name_pattern'] = entry['name_pattern']
         applied = True
     roles = entry.get('column_roles') or []
     if roles:
@@ -724,7 +740,11 @@ def sibling_date(store: Dict, structure: str, now: Optional[datetime] = None,
 
 
 def _extra_key_of(spec: Dict) -> str:
-    """The `fields` heading a column produces — mirrors extract's _extra_key."""
+    """The `fields` heading a column produces — mirrors extract's _extra_key.
+    A learned `alias` (the heading the user prefers over the report's own
+    wording) wins over the printed qualifier+label."""
+    if spec.get('alias'):
+        return spec['alias']
     key = ' '.join(x for x in (spec.get('qualifier'), spec.get('label')) if x).strip()
     return key or 'column {}'.format(spec.get('index'))
 
@@ -758,6 +778,71 @@ def _join_name(name: str, suffix: str, style: str = 'parens') -> str:
     if style == 'dash':
         return name + ' \u2014 ' + suffix
     return name + ' ({})'.format(suffix)
+
+
+# Separators a name part can be joined with, tried in order — parens first
+# because ' (' is distinctive, bare space last as the catch-all.
+_NAME_SEPS = ((' (', ')'), (' \u2014 ', ''), (' - ', ''), (' ', ''))
+
+
+def _learn_name_pattern(before: Dict, after_name: str,
+                        roles: List[Dict]) -> Optional[List[Dict]]:
+    """Decompose a user-typed test name into the parts this layout offers —
+    name cell, unit, qualifier, measured-column label — so sibling rows get
+    the same composition. 'FEV1 (L) Pre-Bronch Actual' on the row whose name
+    cell reads 'FEV1' teaches [{'part':'name'}, {'part':'unit','pre':' (',
+    'post':')'}, {'part':'qualifier','pre':' '}, {'part':'label','pre':' '}],
+    which then composes 'FVC (L) Pre-Bronch Actual' on the FVC row.
+
+    Returns None when the typed name is not fully explained by the layout's
+    parts — a partially-understood pattern would misname every sibling.
+    """
+    base = str(before.get('name_base') or '').strip()
+    if not base or not after_name.startswith(base):
+        return None
+    unit = str(before.get('unit') or '').strip()
+    qualifier = str(before.get('qualifier') or '').strip()
+    label = ''
+    col = before.get('source_column')
+    if isinstance(col, int):
+        spec = next((s for s in roles or [] if s.get('index') == col), None)
+        if spec:
+            label = str(spec.get('label') or '').strip()
+    candidates = {'unit': unit, 'qualifier': qualifier, 'label': label}
+    order = [{'part': 'name', 'pre': '', 'post': ''}]
+    pos = len(base)
+    while pos < len(after_name):
+        matched = False
+        for part, text in candidates.items():
+            if not text or any(p['part'] == part for p in order):
+                continue
+            for pre, post in _NAME_SEPS:
+                seg = pre + text + post
+                if after_name.startswith(seg, pos):
+                    order.append({'part': part, 'pre': pre, 'post': post})
+                    pos += len(seg)
+                    matched = True
+                    break
+            if matched:
+                break
+        if not matched:
+            return None
+    return order if len(order) > 1 else None
+
+
+def _compose_name(pattern: List[Dict], parts: Dict[str, str]) -> str:
+    """Build a test name from a learned pattern; parts that are empty for
+    this column (or look like a date heading) are skipped."""
+    out = ''
+    for spec in pattern or []:
+        text = str(parts.get(spec.get('part')) or '').strip()
+        if not text or looks_like_date(text):
+            continue
+        if not out:
+            out = text
+        else:
+            out += (spec.get('pre') or ' ') + text + (spec.get('post') or '')
+    return out
 
 
 # Where a `fields.<heading>` value lands when the user moves it into a
@@ -803,22 +888,67 @@ def learn_from_edit(store: Dict, before: Dict, after: Dict,
         entry.setdefault('learned', []).append(
             {'at': stamp, 'kind': 'report_date', 'date': new_date})
         learned.append('report_date')
-    # A renamed qualified test teaches the name style: 'FEV1 (L) (Pre-Bronch
-    # Actual)' retyped 'FEV1 (L) Pre-Bronch Actual' means this layout joins
-    # qualifier parts bare, not in parens.
-    style = _name_style(str((before or {}).get('test_name') or ''),
-                        str((after or {}).get('test_name') or ''))
-    if style and entry.get('name_style') != style:
-        entry['name_style'] = style
+    roles = entry.get('column_roles') or []
+    # A retyped qualified name teaches how this layout composes names:
+    # 'FEV1 (L) Pre-Bronch Actual' decomposes into name cell + unit +
+    # qualifier + column label with the user's separators, and the pattern
+    # then names every sibling row ('FVC (L) Pre-Bronch Actual' for 1.47).
+    after_name = str((after or {}).get('test_name') or '').strip()
+    before_name = str((before or {}).get('test_name') or '').strip()
+    pattern = (_learn_name_pattern(before or {}, after_name, roles)
+               if after_name and after_name != before_name else None)
+    if pattern and entry.get('name_pattern') != pattern:
+        entry['name_pattern'] = pattern
         entry['confirmed'] = True
         entry.setdefault('learned', []).append(
-            {'at': stamp, 'kind': 'name_style', 'style': style})
-        learned.append('name_style=' + style)
+            {'at': stamp, 'kind': 'name_pattern'})
+        learned.append('name_pattern')
+    elif not pattern:
+        # A renamed qualified test teaches the name style: 'FEV1 (L)
+        # (Pre-Bronch Actual)' retyped 'FEV1 (L) Pre-Bronch Actual' means this
+        # layout joins qualifier parts bare, not in parens.
+        style = _name_style(before_name, after_name)
+        if style and entry.get('name_style') != style:
+            entry['name_style'] = style
+            entry['confirmed'] = True
+            entry.setdefault('learned', []).append(
+                {'at': stamp, 'kind': 'name_style', 'style': style})
+            learned.append('name_style=' + style)
     # Field moves and deletions teach column roles.
     bfields = (before or {}).get('fields') or {}
     afields = (after or {}).get('fields') or {}
-    roles = entry.get('column_roles') or []
+    # Names the user deleted explicitly ride along as _deleted_fields — treat
+    # them as gone even when merge-back left the key in the bag.
+    for gone in (after or {}).get('_deleted_fields') or []:
+        afields.pop(gone, None)
     changed = False
+    # A renamed heading relates to its source column by value, not wording:
+    # the report's 'Pre-Bronch %Pred' may be retyped '% of predicted'. The
+    # value carried over identifies which column the new name belongs to.
+    # Position settles what value cannot: one name out and one name in is a
+    # rename even when the value was retyped with it.
+    new_keys = [k for k in afields if k not in bfields]
+    unpaired = []
+    for spec in roles:
+        key = _extra_key_of(spec)
+        if key not in bfields or key in afields:
+            continue
+        old_val = str(bfields[key] or '').strip()
+        renamed = next((k for k in new_keys
+                        if str(afields[k] or '').strip() == old_val), None)
+        if renamed is not None:
+            spec['alias'] = renamed
+            new_keys.remove(renamed)
+            changed = True
+            learned.append('field {} renamed to {}'.format(key, renamed))
+        else:
+            unpaired.append(spec)
+    if len(unpaired) == 1 and len(new_keys) == 1:
+        spec = unpaired.pop()
+        old_key = _extra_key_of(spec)
+        spec['alias'] = new_keys.pop()
+        changed = True
+        learned.append('field {} renamed to {}'.format(old_key, spec['alias']))
     for spec in roles:
         key = _extra_key_of(spec)
         if key not in bfields:
@@ -1001,6 +1131,8 @@ def _contradicts(col: Dict, cell: str) -> bool:
 
 
 def _extra_key(col: Dict) -> str:
+    if col.get('alias'):
+        return col['alias']
     key = ' '.join(x for x in (col['qualifier'], col['label']) if x).strip()
     return key or 'column {}'.format(col['index'])
 
@@ -1102,11 +1234,20 @@ def extract(description: Dict, data_rows: List[List[str]],
             if not value:
                 continue
             qualifier = col['qualifier']
-            if col['role'] == 'dated' or qualifier_tells_apart:
-                suffix = qualifier
+            pattern = description.get('name_pattern')
+            if pattern and col['role'] != 'dated':
+                # A name composition the user taught this layout — parts and
+                # separators exactly as they typed them, applied by position.
+                test_name = _compose_name(pattern, {
+                    'name': name, 'unit': unit,
+                    'qualifier': qualifier, 'label': col.get('label') or ''})
             else:
-                suffix = ' '.join(b for b in (qualifier, col['label']) if b)
-            test_name = _join_name(name, suffix, description.get('name_style') or 'parens')
+                if col['role'] == 'dated' or qualifier_tells_apart:
+                    suffix = qualifier
+                else:
+                    suffix = ' '.join(b for b in (qualifier, col['label']) if b)
+                test_name = _join_name(
+                    name, suffix, description.get('name_style') or 'parens')
 
             reference = row_range
             notes: List[str] = []
@@ -1180,6 +1321,9 @@ def extract(description: Dict, data_rows: List[List[str]],
             # rejection learn per column, and relative position is what makes
             # a 2-D report readable in the first place.
             record['source_column'] = col['index']
+            # The name cell as printed, before suffixes are joined on — edits
+            # to test_name decompose against this to learn the composition.
+            record['name_base'] = name
             if len(row) < width:
                 # A short row is usually just trimmed trailing empties, but it
                 # can also be a dropped mid-row cell — flag it so review can

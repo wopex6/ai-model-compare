@@ -399,7 +399,7 @@
         'history', 'pending', 'ref_locked', 'unit_locked', 'date_source',
         'verified_at', 'proposed_by', 'change_note', 'manual',
         'format_structure', 'format_signature', 'source_role',
-        'source_column', 'misaligned', 'source_page', 'source_file'];
+        'source_column', 'misaligned', 'name_base', 'source_page', 'source_file'];
 
     // Mirrors the vocabulary in ai_compare/health_insights.py.
     const SOURCE_LABELS = {
@@ -2487,26 +2487,62 @@
             const addFields = root.querySelectorAll('[data-addfield]');
             for (let i = 0; i < addFields.length; i++) {
                 addFields[i].addEventListener('click', function () {
-                    const heading = (window.prompt('Field name (as printed on the report):') || '').trim();
-                    if (!heading) return;
-                    // test_results extras live in the `fields` bag; other
-                    // sections take a plain top-level key.
-                    const key = (id === 'test_results') ? 'fields.' + heading : heading;
-                    const form = this.closest('.hub-form');
-                    const anchor = form ? form.querySelector('.hub-row-actions') : null;
-                    if (!anchor) return;
-                    const wrap = document.createElement('div');
-                    const label = document.createElement('label');
-                    label.className = 'hub-input-label';
-                    label.textContent = heading;
-                    const input = document.createElement('input');
-                    input.className = 'hub-input';
-                    input.type = 'text';
-                    input.setAttribute('data-key', key);
-                    input.setAttribute('data-type', 'text');
-                    wrap.appendChild(label);
-                    wrap.appendChild(input);
-                    anchor.parentElement.insertBefore(wrap, anchor);
+                    const btn = this;
+                    // window.prompt() is suppressed in installed PWAs — swap
+                    // the button for an inline name box instead.
+                    if (btn.dataset.capturing) return;
+                    btn.dataset.capturing = '1';
+                    const holder = document.createElement('div');
+                    holder.style.cssText = 'display:flex;gap:6px;align-items:center;margin:6px 0;';
+                    const inp = document.createElement('input');
+                    inp.className = 'hub-input';
+                    inp.type = 'text';
+                    inp.placeholder = 'Field name (as printed on the report)';
+                    inp.style.flex = '1';
+                    const ok = document.createElement('button');
+                    ok.type = 'button';
+                    ok.className = 'hub-btn';
+                    ok.style.cssText = 'background:#2e7d32;color:#fff;padding:4px 10px;';
+                    ok.innerHTML = '<i class="fas fa-check"></i>';
+                    const no = document.createElement('button');
+                    no.type = 'button';
+                    no.className = 'hub-btn';
+                    no.style.cssText = 'background:#90a4ae;color:#fff;padding:4px 10px;';
+                    no.innerHTML = '<i class="fas fa-times"></i>';
+                    holder.appendChild(inp); holder.appendChild(ok); holder.appendChild(no);
+                    btn.parentElement.insertBefore(holder, btn);
+                    btn.style.display = 'none';
+                    const done = () => { holder.remove(); btn.style.display = ''; delete btn.dataset.capturing; };
+                    no.addEventListener('click', done);
+                    const commit = () => {
+                        const heading = inp.value.trim();
+                        if (!heading) { inp.focus(); return; }
+                        // test_results extras live in the `fields` bag; other
+                        // sections take a plain top-level key.
+                        const key = (id === 'test_results') ? 'fields.' + heading : heading;
+                        const form = btn.closest('.hub-form');
+                        const anchor = form ? form.querySelector('.hub-row-actions') : null;
+                        if (!anchor) { done(); return; }
+                        const wrap = document.createElement('div');
+                        const label = document.createElement('label');
+                        label.className = 'hub-input-label';
+                        label.textContent = heading;
+                        const input = document.createElement('input');
+                        input.className = 'hub-input';
+                        input.type = 'text';
+                        input.setAttribute('data-key', key);
+                        input.setAttribute('data-type', 'text');
+                        wrap.appendChild(label);
+                        wrap.appendChild(input);
+                        anchor.parentElement.insertBefore(wrap, anchor);
+                        done();
+                    };
+                    ok.addEventListener('click', commit);
+                    inp.addEventListener('keydown', ev => {
+                        if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
+                        if (ev.key === 'Escape') done();
+                    });
+                    inp.focus();
                 });
             }
 

@@ -1210,10 +1210,46 @@ Examples:
         }
 
         // A column the scan didn't model: the heading becomes a `fields.<name>`
-        // key on every row, saved back into each row's fields bag.
+        // key on every row, saved back into each row's fields bag. The heading
+        // is captured inline — window.prompt() is suppressed in some embedded
+        // webviews, so the button swaps itself for a text box.
         function addTestResultColumn(btn) {
-            const heading = (prompt('Column heading (as printed on the report):') || '').trim();
-            if (!heading) return;
+            if (btn.dataset.capturing) return;
+            btn.dataset.capturing = '1';
+            const holder = document.createElement('span');
+            holder.style.cssText = 'display:inline-block;margin:6px 0 10px 0;';
+            const inp = document.createElement('input');
+            inp.type = 'text';
+            inp.placeholder = 'Column heading (as printed)';
+            inp.style.cssText = 'border:1px solid #90a4ae;border-radius:4px;padding:4px 6px;font-size:0.78rem;width:180px;';
+            const ok = document.createElement('button');
+            ok.type = 'button';
+            ok.className = 'btn-add';
+            ok.style.cssText = 'background:#2e7d32;padding:4px 8px;font-size:0.78rem;margin-left:4px;';
+            ok.innerHTML = '<i class="fas fa-check"></i>';
+            const no = document.createElement('button');
+            no.type = 'button';
+            no.className = 'btn-add';
+            no.style.cssText = 'background:#90a4ae;padding:4px 8px;font-size:0.78rem;margin-left:4px;';
+            no.innerHTML = '<i class="fas fa-times"></i>';
+            holder.appendChild(inp); holder.appendChild(ok); holder.appendChild(no);
+            btn.parentElement.insertBefore(holder, btn);
+            btn.style.display = 'none';
+            const done = () => { holder.remove(); btn.style.display = ''; delete btn.dataset.capturing; };
+            no.addEventListener('click', done);
+            ok.addEventListener('click', () => {
+                const heading = inp.value.trim();
+                if (heading) { _addTestResultColumn(btn, heading); done(); }
+                else inp.focus();
+            });
+            inp.addEventListener('keydown', ev => {
+                if (ev.key === 'Enter') { ev.preventDefault(); ok.click(); }
+                if (ev.key === 'Escape') done();
+            });
+            inp.focus();
+        }
+
+        function _addTestResultColumn(btn, heading) {
             const table = btn.parentElement.querySelector('table');
             if (!table) return;
             const headRow = table.querySelector('thead tr');
@@ -1289,7 +1325,7 @@ Examples:
                 if (original && typeof original === 'object') {
                     obj._orig_index = idx;
                     ['format_structure', 'format_signature', 'source_role',
-                     'source_column', 'misaligned',
+                     'source_column', 'misaligned', 'name_base',
                      'date_source', 'unit', 'fields', 'qualifier', 'section',
                      'source_page', 'source_file'].forEach(k => {
                         if (obj[k] === undefined && original[k] != null) obj[k] = original[k];
@@ -1312,6 +1348,11 @@ Examples:
                 }
                 // Deleted columns stay deleted — merge-back above re-adds
                 // canonical keys (date, unit, …) from the original row.
+                // fields.* names also ride along as _deleted_fields so a
+                // merge into a stored row drops them there too.
+                const _removedBags = deletedCols
+                    .filter(k => k.indexOf('fields.') === 0).map(k => k.slice(7));
+                if (_removedBags.length) obj._deleted_fields = _removedBags;
                 deletedCols.forEach(k => {
                     if (k.indexOf('fields.') === 0) {
                         if (obj.fields && typeof obj.fields === 'object')

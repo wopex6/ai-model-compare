@@ -300,6 +300,15 @@ which rewrites `column_roles` wholesale — earlier and the correction is
 erased. Dating a filed row records `last_report_date` so a
 sibling page of the same structure uploaded within two hours inherits it.
 Deleting every row that came from one column demotes that column to `text`.
+A `fields` heading the user renamed maps back to its column by value first,
+then by position (one-out/one-in), and is kept as `alias` on the role spec —
+`_extra_key` prefers it, so the user's wording survives a rescan. A retyped
+test name that decomposes fully into name cell + unit + qualifier + label is
+learned as `name_pattern` on the layout and applied to every sibling row
+(`_learn_name_pattern`/`_compose_name`); `name_base` rides the row as
+provenance so the decomposition knows the printed base. `_deleted_fields`
+names the user removed drop out of the stored `fields` bag on merge — gap-fill
+must never resurrect them.
 
 **Position is the data.** A 2-D report is read by coordinates, not by token
 order: each emitted row carries `source_column` (its column index) so

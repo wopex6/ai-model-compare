@@ -314,7 +314,7 @@
     // not inputs — hand-editing them corrupts the confirmation queue.
 
     const ROW_META_KEYS = ['format_structure', 'format_signature', 'source_role',
-        'source_column', 'misaligned', 'source_page', 'source_file',
+        'source_column', 'misaligned', 'name_base', 'source_page', 'source_file',
         'date_source', 'status', 'history',
         'last_confirmed_at', 'ref_locked', 'auto_filled'];
     const ROW_FIELD_ORDER = ['test_name', 'value', 'unit', 'reference_range',

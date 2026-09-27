@@ -586,10 +586,12 @@ def test_renamed_qualified_row_teaches_the_layouts_name_style():
     after = dict(before_row)
     after['test_name'] = 'Alpha Before'
     learned = rf.learn_from_edit(store, before_row, after)
-    assert learned and 'name_style=bare' in learned
+    assert learned
     assert store['report_formats']
     entry = next(iter(store['report_formats'].values()))
-    assert entry['name_style'] == 'bare'
+    # 'Alpha' + bare ' Before' decomposes into the richer name pattern —
+    # name cell then qualifier with a bare join.
+    assert entry.get('name_pattern') or entry.get('name_style') == 'bare'
     # Rescan the identical grid: names come out bare for every row.
     again = rf.describe(rows, sep)
     assert rf.apply_remembered(again, store) is True
@@ -924,3 +926,115 @@ def test_rejected_name_column_is_never_demoted():
     roles = {c['index']: c['role']
              for c in rf.find_by_structure(store, structure)['column_roles']}
     assert roles[0] == 'name'
+
+
+# --- renaming a field maps back by value and position ------------------------
+
+def test_renamed_field_heading_maps_back_by_value():
+    """The user prefers a different name than the report printed. The rename
+    is matched to its column by the value that carried over, so the next scan
+    of this layout emits the user's heading — not the report's."""
+    rows, sep = _table('''
+        | Analyte | Got | Note |
+        | --- | --- | --- |
+        | Alpha | 0.96 | Run A |
+        | Beta | 1.47 | Run B |
+    ''')
+    description = rf.describe(rows, sep)
+    store = {}
+    rf.remember(store, description)
+    results, _ = rf.extract(description, rows[sep + 1:])
+    assert 'Note' in (results[0].get('fields') or {})
+    before = dict(results[0])
+    after = dict(results[0])
+    after['fields'] = {'Batch': 'Run A'}
+    learned = rf.learn_from_edit(store, before, after)
+    assert learned and 'renamed' in learned
+    entry = next(iter(store['report_formats'].values()))
+    spec = next(c for c in entry['column_roles'] if c['label'] == 'Note')
+    assert spec.get('alias') == 'Batch'
+    # The role stays 'text' — it was renamed, not deleted.
+    assert spec['role'] == 'text'
+    # Rescan the identical grid: the field arrives under the user's heading.
+    again = rf.describe(rows, sep)
+    assert rf.apply_remembered(again, store) is True
+    results2, _ = rf.extract(again, rows[sep + 1:])
+    fields2 = results2[0].get('fields') or {}
+    assert fields2.get('Batch') == 'Run A'
+    assert 'Note' not in fields2
+
+
+def test_renamed_field_with_retyped_value_maps_by_position():
+    """One heading out, one heading in — a rename even when the value was
+    retyped along with the name."""
+    store = {'report_formats': {
+        'sig1': {'signature': 'sig1', 'structure': 'struct1', 'confirmed': False,
+                 'column_roles': [
+                     {'index': 0, 'label': 'Name', 'qualifier': '', 'role': 'name'},
+                     {'index': 1, 'label': 'Odd', 'qualifier': '', 'role': 'text'},
+                 ]}
+    }}
+    before = {'format_structure': 'struct1', 'fields': {'Odd': 'Run A'}}
+    after = {'format_structure': 'struct1', 'fields': {'Batch': 'Run A2'}}
+    learned = rf.learn_from_edit(store, before, after)
+    assert learned and 'renamed' in learned
+    spec = store['report_formats']['sig1']['column_roles'][1]
+    assert spec.get('alias') == 'Batch'
+    assert spec['role'] == 'text'  # renamed, not demoted
+
+
+# --- learned name composition ------------------------------------------------
+
+def test_retyped_name_teaches_the_layouts_name_pattern():
+    """'FEV1 (L) Pre-Bronch Actual' typed over the extracted 'FEV1 (Pre-Bronch)'
+    teaches the whole composition — name cell + unit in parens + qualifier +
+    label, joined bare — and the sibling FVC row is named the same way."""
+    rows, sep = _table('''
+        | | | Pre-Bronch | |
+        | Analyte | Units | Actual | Norm |
+        | --- | --- | --- | --- |
+        | FEV1 | L | 0.96 | 1.62 |
+        | FVC | mL | 1.47 | 2.03 |
+        | PEF | L/s | 4.10 | 5.00 |
+    ''')
+    description = rf.describe(rows, sep)
+    store = {}
+    rf.remember(store, description)
+    results, _ = rf.extract(description, rows[sep + 1:])
+    before_row = next(r for r in results
+                      if r['test_name'] == 'FEV1 (Pre-Bronch Actual)')
+    assert before_row['name_base'] == 'FEV1'
+    assert before_row['unit'] == 'L'
+    after = dict(before_row)
+    after['test_name'] = 'FEV1 (L) Pre-Bronch Actual'
+    learned = rf.learn_from_edit(store, before_row, after)
+    assert learned and 'name_pattern' in learned
+    entry = next(iter(store['report_formats'].values()))
+    pattern = entry.get('name_pattern')
+    assert [p['part'] for p in pattern] == ['name', 'unit', 'qualifier', 'label']
+    # Rescan the identical grid: every sibling row is named the learned way.
+    again = rf.describe(rows, sep)
+    assert rf.apply_remembered(again, store) is True
+    results2, _ = rf.extract(again, rows[sep + 1:])
+    names2 = [r['test_name'] for r in results2]
+    assert 'FEV1 (L) Pre-Bronch Actual' in names2
+    assert 'FVC (mL) Pre-Bronch Actual' in names2
+    assert 'FEV1 (Pre-Bronch Actual)' not in names2
+
+
+def test_an_unexplained_rename_teaches_no_name_pattern():
+    """A typed name that cannot be rebuilt from the layout's parts is not
+    learned — a half-understood pattern would misname every sibling."""
+    store = {'report_formats': {
+        'sig1': {'signature': 'sig1', 'structure': 'struct1', 'confirmed': False,
+                 'column_roles': [
+                     {'index': 0, 'label': 'Name', 'qualifier': '', 'role': 'name'},
+                     {'index': 1, 'label': 'Got', 'qualifier': '', 'role': 'measured'},
+                 ]}
+    }}
+    before = {'format_structure': 'struct1', 'test_name': 'FEV1 (Pre)',
+              'name_base': 'FEV1', 'qualifier': 'Pre', 'unit': 'L',
+              'source_column': 1}
+    after = {'format_structure': 'struct1', 'test_name': 'FEV1 something else'}
+    assert rf.learn_from_edit(store, before, after) is None
+    assert 'name_pattern' not in store['report_formats']['sig1']

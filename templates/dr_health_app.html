@@ -2732,13 +2732,50 @@
             addFieldBtn.style.cssText = 'font-size:0.72rem;padding:2px 10px;margin-top:4px;';
             addFieldBtn.textContent = '+ field';
             addFieldBtn.addEventListener('click', () => {
-                const heading = (prompt('Field name (as printed on the report):') || '').trim();
-                if (!heading) return;
-                const scope = list || row.parentElement;
-                scope.querySelectorAll(':scope > .review-item').forEach(r => {
-                    const f = r.querySelector('.review-item-fields');
-                    if (f) addFieldBox(f, heading, true, r);
+                // window.prompt() is silently suppressed in installed PWAs —
+                // the name is captured by an inline input instead. It lives
+                // outside .review-item-fields so saveReview never picks it up.
+                if (row.querySelector('.new-field-capture')) return;
+                const wrap = document.createElement('span');
+                wrap.className = 'new-field-capture';
+                wrap.style.cssText = 'display:inline-flex;gap:4px;align-items:center;margin-top:4px;';
+                const nameIn = document.createElement('input');
+                nameIn.type = 'text';
+                nameIn.placeholder = 'field name';
+                nameIn.style.cssText = 'width:120px;font-size:0.78rem;padding:2px 6px;';
+                const ok = document.createElement('button');
+                ok.type = 'button';
+                ok.className = 'btn-secondary';
+                ok.style.cssText = 'font-size:0.72rem;padding:2px 8px;';
+                ok.innerHTML = '<i class="fas fa-check"></i>';
+                const cancel = document.createElement('button');
+                cancel.type = 'button';
+                cancel.className = 'btn-secondary';
+                cancel.style.cssText = 'font-size:0.72rem;padding:2px 8px;';
+                cancel.innerHTML = '&times;';
+                const done = () => { wrap.remove(); addFieldBtn.style.display = ''; };
+                const commit = () => {
+                    const heading = nameIn.value.trim();
+                    done();
+                    if (!heading) return;
+                    const scope = list || row.parentElement;
+                    scope.querySelectorAll(':scope > .review-item').forEach(r => {
+                        const f = r.querySelector('.review-item-fields');
+                        if (f) addFieldBox(f, heading, true, r);
+                    });
+                };
+                ok.addEventListener('click', commit);
+                cancel.addEventListener('click', done);
+                nameIn.addEventListener('keydown', e => {
+                    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+                    if (e.key === 'Escape') done();
                 });
+                wrap.appendChild(nameIn);
+                wrap.appendChild(ok);
+                wrap.appendChild(cancel);
+                addFieldBtn.style.display = 'none';
+                fields.after(wrap);
+                nameIn.focus();
             });
             fields.appendChild(addFieldBtn);
         }
@@ -2874,7 +2911,7 @@
             if (cat === 'test_results') {
                 const flat = {};
                 row.querySelectorAll('.review-item-fields input, .review-item-fields textarea').forEach(el => {
-                    flat[el.dataset.field] = el.value;
+                    if (el.dataset.field) flat[el.dataset.field] = el.value;
                 });
                 // fields.<heading> inputs fold back into the row's fields bag.
                 const item = window.HealthReview ? HealthReview.splitReviewFields(flat) : flat;
@@ -2883,7 +2920,7 @@
                 if (original && typeof original === 'object') {
                     item._orig_index = idx;
                     ['format_structure', 'format_signature', 'source_role',
-                     'source_column', 'misaligned',
+                     'source_column', 'misaligned', 'name_base',
                      'date_source', 'unit', 'fields', 'qualifier', 'section',
                      'source_page', 'source_file'].forEach(k => {
                         if (item[k] === undefined && original[k] != null) item[k] = original[k];
@@ -2900,8 +2937,13 @@
                 }
                 // Fields the user removed with × are dropped from the item —
                 // and, for fields.<heading>, teach the layout the column was
-                // not data.
-                (row.dataset.cleared || '').split('\u0001').filter(Boolean).forEach(k => {
+                // not data. The names ride along as _deleted_fields so a merge
+                // into an existing stored row drops them there too.
+                const _cleared = (row.dataset.cleared || '').split('\u0001').filter(Boolean);
+                const _removedBags = _cleared.filter(k => k.indexOf('fields.') === 0)
+                    .map(k => k.slice(7));
+                if (_removedBags.length) item._deleted_fields = _removedBags;
+                _cleared.forEach(k => {
                     if (k.indexOf('fields.') === 0) {
                         if (!item.fields || typeof item.fields !== 'object') item.fields = {};
                         delete item.fields[k.slice(7)];
@@ -2915,7 +2957,7 @@
                 const fields = row.querySelector('.review-item-fields');
                 if (fields) {
                     fields.querySelectorAll('input, textarea').forEach(el => {
-                        item[el.dataset.field] = el.value;
+                        if (el.dataset.field) item[el.dataset.field] = el.value;
                     });
                     (row.dataset.cleared || '').split('\u0001').filter(Boolean)
                         .forEach(k => { delete item[k]; });

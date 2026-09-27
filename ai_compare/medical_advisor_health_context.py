@@ -1789,7 +1789,8 @@ class HealthProfile:
 
     def add_test_result(self, test_name: str, value: str, reference_range: str = "",
                        date: str = "", notes: str = "", fields: Dict = None,
-                       unit: str = "", layout: Dict = None, manual: bool = False) -> bool:
+                       unit: str = "", layout: Dict = None, manual: bool = False,
+                       deleted_fields: List[str] = None) -> bool:
         """Add a lab/test result. Returns True if actually added.
 
         `manual` marks a row the user typed in or duplicated by hand. Manual
@@ -1825,9 +1826,10 @@ class HealthProfile:
                 reference_range = str(reference_range)
         value = self._clean_test_value(value, reference_range)
         value = self._reorder_test_value(value)
+        deleted = {str(k) for k in (deleted_fields or [])}
         extra_fields = {}
         for key, item in (fields or {}).items():
-            if not key or item in (None, "", [], {}):
+            if not key or key in deleted or item in (None, "", [], {}):
                 continue
             extra_fields[str(key)] = item if isinstance(item, str) else str(item)
         existing = self.data.get("test_results", [])
@@ -1865,8 +1867,12 @@ class HealthProfile:
                     filled["unit"] = unit
                 # Same rule as the value itself: a field the stored row already
                 # holds was reviewed, so a re-scan only fills the gaps.
-                if extra_fields:
+                # _deleted_fields names the user removed on purpose — they
+                # drop out of the stored bag and are never refilled.
+                if extra_fields or deleted:
                     stored_fields = t.setdefault("fields", {})
+                    for key in deleted:
+                        stored_fields.pop(key, None)
                     for key, item in extra_fields.items():
                         if not stored_fields.get(key):
                             stored_fields[key] = item
@@ -1874,7 +1880,7 @@ class HealthProfile:
                     if not stored_fields:
                         t.pop("fields", None)
                 for key in ("format_structure", "format_signature", "source_role",
-                            "source_column", "misaligned",
+                            "source_column", "misaligned", "name_base",
                             "date_source", "qualifier", "section",
                             "source_page", "source_file"):
                     incoming = (layout or {}).get(key)
@@ -1900,7 +1906,7 @@ class HealthProfile:
         if extra_fields:
             entry["fields"] = extra_fields
         for key in ("format_structure", "format_signature", "source_role",
-                    "source_column", "misaligned",
+                    "source_column", "misaligned", "name_base",
                     "date_source", "qualifier", "section",
                     "source_page", "source_file"):
             incoming = (layout or {}).get(key)
@@ -1948,7 +1954,11 @@ class HealthProfile:
         if existing_key != incoming_key:
             return False
 
-        existing_date = self._normalize_test_date(existing_entry.get("date", ""), existing_entry.get("added_at", ""))
+        # A manual row's blank date means "no measurement date", not "filed
+        # on added_at" — only scanned rows fall back to the filing date.
+        existing_date = self._normalize_test_date(
+            existing_entry.get("date", ""),
+            "" if existing_entry.get("manual") else existing_entry.get("added_at", ""))
         incoming_date = self._normalize_test_date(date_text)
         if existing_date and incoming_date and existing_date != incoming_date:
             return False
@@ -1991,7 +2001,11 @@ class HealthProfile:
 
         for row in results:
             duplicate = None
-            normalized_date = self._normalize_test_date(row.get("date", ""), row.get("added_at", ""))
+            # Manual rows keep a deliberately blank date — the added_at
+            # fallback exists only so scanned rows can dedupe.
+            normalized_date = self._normalize_test_date(
+                row.get("date", ""),
+                "" if row.get("manual") else row.get("added_at", ""))
             row_value = row.get("value", "")
             row_name = row.get("test_name", "")
 
@@ -2231,6 +2245,7 @@ class HealthProfile:
             # Client-only transport markers — never stored.
             manual_row = bool(test.pop("_manual", None))
             test.pop("_orig_index", None)
+            deleted_fields = [str(k) for k in (test.pop("_deleted_fields", None) or [])]
             if not test.get("test_name"):
                 skipped_tests += 1
                 continue
@@ -2251,9 +2266,11 @@ class HealthProfile:
                         "unit", "fields")
                 layout_keys = ("format_structure", "format_signature",
                                "source_role", "source_column", "misaligned",
-                               "date_source", "qualifier",
+                               "name_base", "date_source", "qualifier",
                                "section", "source_page", "source_file")
                 extra_fields = dict(test.get("fields") or {})
+                for key in deleted_fields:
+                    extra_fields.pop(key, None)
                 for key, item in test.items():
                     if (key in core or key in layout_keys or key.startswith("_")
                             or item in (None, "", [], {})):
@@ -2266,7 +2283,8 @@ class HealthProfile:
                     test.get("reference_range", ""), test.get("date", ""),
                     test.get("notes", ""), fields=extra_fields,
                     unit=str(test.get("unit") or ""),
-                    layout=layout or None, manual=manual_row
+                    layout=layout or None, manual=manual_row,
+                    deleted_fields=deleted_fields or None
                 ):
                     actions.append(f"Added test: {test['test_name']}")
         if skipped_tests:
