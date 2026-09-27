@@ -1,25 +1,21 @@
 # Handoff snapshot
 
-_Generated 2026-09-27 09:34 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-27 12:43 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Dynamic report fields now render everywhere: review modal, pending-review table, overview extras lines, export. All 6 screens derive fields from actual row data + fields bag, not fixed schema. SW v130. 78+22 tests pass. Next: deploy (pa_sync --push), then backlog items.
+Report learning: manual rows stay separate, fields merge on dedup, learn_from_edit retrains column roles, website review sends format_analysis, duplicate buttons in PWA/website/hub. Tests pass (86 safety+format). Ready to deploy.
 
 ## Git
 
 **Branch:** `cursor/emergency-card-paramedic-fields`  
-**Uncommitted files:** 24
+**Uncommitted files:** 20
 
 > Uncommitted work is the main handoff hazard: the next agent
 > cannot tell finished edits from half-written ones. Commit
 > before switching, even as `wip:`.
 
 ```
-M AI_REGENERATION_SPEC.md
- M ENHANCEMENTS.md
- M README.md
- M SYSTEM_REGENERATION_GUIDE.md
 ?? check_wk_credentials.py
 ?? debug_auth.py
 ?? direct_password_test.py
@@ -42,33 +38,22 @@ M AI_REGENERATION_SPEC.md
 ?? verify_ken.py
 ```
 
-<details><summary>diff --stat</summary>
-
-```
-AI_REGENERATION_SPEC.md      |  2 +-
- ENHANCEMENTS.md              | 24 ++++++++++++++++++++++++
- README.md                    |  2 +-
- SYSTEM_REGENERATION_GUIDE.md |  2 +-
- 4 files changed, 27 insertions(+), 3 deletions(-)
-```
-</details>
-
 Recent commits:
 
 ```
+a0e8e6e Dr. Health: learn from row edits, keep manual rows separate, duplicate records
+fd316ba Handoff: dynamic report fields deployed-ready.
 e5f0ce2 Dr. Health: render report-native fields in review, overview and export
 79d1ded Handoff: engagement layer + Milo companion deployed (app SW v4).
 58b19a3 Add engagement layer + Milo companion: open loops, not broadcasts
 48fb94b Handoff: /chat redirect + layout-doc filter deployed (SW v129).
 f981075 Redirect /chat to /chatchat; only link analysable documents to layouts
 8f5abd4 Handoff: report layouts hub + app PWA deployed (SW v128, life-companion-shell-v3).
-8d0a729 Surface learned report layouts in the hub + whole-app PWA; retire dead chat stack
-268c09b Handoff: multi-photo merge committed and deployed (SW v127).
 ```
 
 ## Production (PythonAnywhere)
 
-**10 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
+**14 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
 
 ```
 ok       tests/test_review_flow.py
@@ -95,7 +80,7 @@ ok       web_enhancement_test_runner.py
 ok       webhook_deploy.py
 ok       wisdom_profiles/23.json
 ok       wisdom_profiles/23_hypotheses.json
-10 file(s) stale. Re-run with --push to upload.
+14 file(s) stale. Re-run with --push to upload.
 ```
 
 Reload often returns `409 slow_startup_error` on the first attempt — retry rather than debug it.
@@ -105,17 +90,17 @@ Reload often returns `409 slow_startup_error` on the first attempt — retry rat
 All passing.
 
 ```
-automated_greeting_system.py:416
-automated_greeting_system.py:416
-  C:\Users\trabc\CascadeProjects\ai-model-compare - Claude\automated_greeting_system.py:416: DeprecationWarning: The default datetime adapter is deprecated as of Python 3.12; see the sqlite3 documentation for suggested replacement recipes
-    cursor.execute('''
-
+........................................................................ [ 65%]
+........................................................................ [ 81%]
+........................................................................ [ 97%]
+.........                                                                [100%]
+============================== warnings summary ===============================
 ..\..\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37
   C:\Users\trabc\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-437 passed, 5 warnings in 20.84s
+441 passed, 1 warning in 19.44s
 [AutoDoc] Monitoring stopped
 ```
 
