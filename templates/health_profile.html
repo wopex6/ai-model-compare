@@ -1119,7 +1119,7 @@ Examples:
                                 : (t[c.key] || '');
                             html += `<td style='padding:4px;'><input type='text' data-field='${escapeHtml(c.key)}' value='${escapeHtml(v)}' style='width:100%;border:1px solid #ccc;border-radius:4px;padding:3px;font-size:0.78rem;box-sizing:border-box;'></td>`;
                         });
-                        html += `<td style='padding:4px;'><button type='button' class='btn-add' title='Duplicate this record' style='background:#90a4ae;padding:3px 7px;font-size:0.72rem;' onclick='dupTestResultRow(this)'><i class='fas fa-copy'></i></button></td>`;
+                        html += `<td style='padding:4px;white-space:nowrap;'><button type='button' class='btn-add' title='Duplicate this record' style='background:#90a4ae;padding:3px 7px;font-size:0.72rem;' onclick='dupTestResultRow(this)'><i class='fas fa-copy'></i></button> <button type='button' class='btn-add' title='Remove this record' style='background:#c62828;padding:3px 7px;font-size:0.72rem;' onclick='delTestResultRow(this)'>&times;</button></td>`;
                         html += `</tr>`;
                     }
                     html += "</tbody></table>";
@@ -1161,7 +1161,8 @@ Examples:
             });
             const act = document.createElement('td');
             act.style.padding = '4px';
-            act.innerHTML = `<button type='button' class='btn-add' title='Duplicate this record' style='background:#90a4ae;padding:3px 7px;font-size:0.72rem;' onclick='dupTestResultRow(this)'><i class='fas fa-copy'></i></button>`;
+            act.style.whiteSpace = 'nowrap';
+            act.innerHTML = `<button type='button' class='btn-add' title='Duplicate this record' style='background:#90a4ae;padding:3px 7px;font-size:0.72rem;' onclick='dupTestResultRow(this)'><i class='fas fa-copy'></i></button> <button type='button' class='btn-add' title='Remove this record' style='background:#c62828;padding:3px 7px;font-size:0.72rem;' onclick='delTestResultRow(this)'>&times;</button>`;
             tr.appendChild(act);
             tbody.appendChild(tr);
             tr.scrollIntoView({behavior:'smooth', block:'nearest'});
@@ -1191,6 +1192,21 @@ Examples:
             act.innerHTML = btn.closest('td').innerHTML;
             tr.appendChild(act);
             row.after(tr);
+        }
+
+        // Remove a row entirely. When it was an original scanned row the
+        // rejection is remembered on the table: declining every row a column
+        // produced teaches the layout that column was misread.
+        function delTestResultRow(btn) {
+            const row = btn.closest('tr');
+            const table = row && row.closest('table');
+            if (!row || !table) return;
+            if (row.dataset.idx !== undefined) {
+                const rej = (table.dataset.rejectedIdxs || '').split(',').filter(Boolean);
+                if (rej.indexOf(row.dataset.idx) < 0) rej.push(row.dataset.idx);
+                table.dataset.rejectedIdxs = rej.join(',');
+            }
+            row.remove();
         }
 
         // A column the scan didn't model: the heading becomes a `fields.<name>`
@@ -1258,6 +1274,9 @@ Examples:
             const reviewTable = card.querySelector('table');
             const deletedCols = ((reviewTable && reviewTable.dataset.deletedCols) || '')
                 .split(',').filter(Boolean);
+            const rejected = ((reviewTable && reviewTable.dataset.rejectedIdxs) || '')
+                .split(',').filter(Boolean)
+                .map(i => originals[parseInt(i, 10)]).filter(Boolean);
             card.querySelectorAll('tr[data-cat=test_results]').forEach(row => {
                 const flat = {};
                 row.querySelectorAll('input[data-field]').forEach(inp => {
@@ -1270,6 +1289,7 @@ Examples:
                 if (original && typeof original === 'object') {
                     obj._orig_index = idx;
                     ['format_structure', 'format_signature', 'source_role',
+                     'source_column', 'misaligned',
                      'date_source', 'unit', 'fields', 'qualifier', 'section',
                      'source_page', 'source_file'].forEach(k => {
                         if (obj[k] === undefined && original[k] != null) obj[k] = original[k];
@@ -1310,7 +1330,8 @@ Examples:
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({ extracted, format_analysis: analysis,
-                                           original_test_results: originals })
+                                           original_test_results: originals,
+                                           rejected_test_results: rejected })
                 });
                 const data = await resp.json();
                 if (resp.ok && data.success !== false) {

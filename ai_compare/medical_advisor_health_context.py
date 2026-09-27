@@ -1874,6 +1874,7 @@ class HealthProfile:
                     if not stored_fields:
                         t.pop("fields", None)
                 for key in ("format_structure", "format_signature", "source_role",
+                            "source_column", "misaligned",
                             "date_source", "qualifier", "section",
                             "source_page", "source_file"):
                     incoming = (layout or {}).get(key)
@@ -1899,6 +1900,7 @@ class HealthProfile:
         if extra_fields:
             entry["fields"] = extra_fields
         for key in ("format_structure", "format_signature", "source_role",
+                    "source_column", "misaligned",
                     "date_source", "qualifier", "section",
                     "source_page", "source_file"):
             incoming = (layout or {}).get(key)
@@ -2248,7 +2250,8 @@ class HealthProfile:
                 core = ("test_name", "value", "reference_range", "date", "notes",
                         "unit", "fields")
                 layout_keys = ("format_structure", "format_signature",
-                               "source_role", "date_source", "qualifier",
+                               "source_role", "source_column", "misaligned",
+                               "date_source", "qualifier",
                                "section", "source_page", "source_file")
                 extra_fields = dict(test.get("fields") or {})
                 for key, item in test.items():

@@ -814,3 +814,113 @@ def test_sibling_date_fills_an_undated_page_of_the_same_layout():
     assert rf.sibling_date(store, description['structure'], now=later) == '2024-08-05'
     too_late = datetime(2026, 9, 26, 16, 0, 0)
     assert rf.sibling_date(store, description['structure'], now=too_late) == ''
+
+
+# --- positional integrity ----------------------------------------------------
+# A report is a 2-D grid: a cell means what its position means. When the
+# transcription drops a cell, the rest of the row slides left — the check
+# below is what stops a shifted reading from being filed as data.
+
+def test_a_row_with_a_dropped_cell_is_skipped_not_shifted():
+    """The middle row is short: its measured cell is gone and the range/unit
+    cells slid into earlier positions. The unit text sitting in the measured
+    position contradicts the column's shape — the row must not produce a
+    value, or 'mmol/L' would be filed as a result."""
+    description, results, skipped = _read('''
+        | Analyte | | | |
+        | --- | --- | --- | --- |
+        | Potassium | 5.9 | 3.5 - 5.5 | mmol/L |
+        | Sodium | mmol/L | 135 - 145 |
+        | Chloride | 102 | 98 - 107 | mmol/L |
+    ''')
+    names = [r['test_name'] for r in results]
+    assert 'Sodium' not in names
+    assert 'Potassium' in names and 'Chloride' in names
+    assert any('misaligned' in s['reason'] for s in skipped)
+
+
+def test_a_row_with_a_date_in_the_value_position_is_skipped():
+    description, results, skipped = _read('''
+        | Analyte | | | |
+        | --- | --- | --- | --- |
+        | Potassium | 5.9 | 3.5 - 5.5 | mmol/L |
+        | Sodium | 05-Aug-2024 | 135 - 145 | mmol/L |
+    ''')
+    assert [r['test_name'] for r in results] == ['Potassium']
+    assert any('misaligned' in s['reason'] for s in skipped)
+
+
+def test_a_short_row_is_still_extracted_but_flagged():
+    """A short row is usually just trimmed trailing empties, so it still
+    extracts — but each record it emits carries `misaligned` so the review
+    can badge it for a position check."""
+    description, results, skipped = _read('''
+        | Analyte | | | |
+        | --- | --- | --- | --- |
+        | Potassium | 5.9 | 3.5 - 5.5 | mmol/L |
+        | Sodium | 139 | 135 - 145 |
+    ''')
+    sodium = next(r for r in results if r['test_name'] == 'Sodium')
+    assert sodium['value'] == '139'
+    assert sodium.get('misaligned') is True
+    potassium = next(r for r in results if r['test_name'] == 'Potassium')
+    assert not potassium.get('misaligned')
+
+
+# --- rejection teaches -------------------------------------------------------
+
+def _store_with_confirmed_roles():
+    """A remembered layout with confirmed roles for a 4-column lab grid."""
+    rows, sep = _table('''
+        | Analyte | | | |
+        | --- | --- | --- | --- |
+        | Potassium | 5.9 | 3.5 - 5.5 | mmol/L |
+        | Sodium | 139 | 135 - 145 | mmol/L |
+    ''')
+    description = rf.describe(rows, sep)
+    store = {}
+    rf.remember(store, description)
+    rf.confirm(store, description)
+    return store, description['structure']
+
+
+def test_rejecting_every_row_of_a_column_demotes_it():
+    """User declined all three rows a measured column produced — the layout
+    learns that position is not data."""
+    store, structure = _store_with_confirmed_roles()
+    rejected = [
+        {'format_structure': structure, 'source_column': 1, 'test_name': 'A'},
+        {'format_structure': structure, 'source_column': 1, 'test_name': 'B'},
+    ]
+    kept = [
+        {'format_structure': structure, 'source_column': 3, 'test_name': 'A'},
+        {'format_structure': structure, 'source_column': 3, 'test_name': 'B'},
+    ]
+    what = rf.learn_from_reject(store, rejected, kept)
+    assert 'rejected column 1' in (what or '')
+    roles = {c['index']: c['role']
+             for c in rf.find_by_structure(store, structure)['column_roles']}
+    assert roles[1] == 'text'
+    assert roles[3] != 'text'  # its rows were kept — untouched
+
+
+def test_partial_rejection_changes_no_roles():
+    """User kept some rows of a column and declined others — that is picking
+    rows, not a misread column, so nothing demotes."""
+    store, structure = _store_with_confirmed_roles()
+    rejected = [{'format_structure': structure, 'source_column': 1}]
+    kept = [{'format_structure': structure, 'source_column': 1}]
+    what = rf.learn_from_reject(store, rejected, kept)
+    assert what is None
+    roles = {c['index']: c['role']
+             for c in rf.find_by_structure(store, structure)['column_roles']}
+    assert roles[1] != 'text'
+
+
+def test_rejected_name_column_is_never_demoted():
+    store, structure = _store_with_confirmed_roles()
+    rejected = [{'format_structure': structure, 'source_column': 0}]
+    what = rf.learn_from_reject(store, rejected, [])
+    roles = {c['index']: c['role']
+             for c in rf.find_by_structure(store, structure)['column_roles']}
+    assert roles[0] == 'name'

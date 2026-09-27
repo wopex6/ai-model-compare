@@ -8125,6 +8125,15 @@ def apply_health_review():
             what = report_format.learn_from_edit(profile.data, before_row, after_row)
             if what:
                 learned.append(what)
+        # Rows declined in review are evidence too: a column whose every row
+        # was rejected was misread — the layout demotes it for next time.
+        rejected = data.get('rejected_test_results') or []
+        if rejected:
+            what = report_format.learn_from_reject(
+                profile.data, rejected,
+                extracted.get('test_results') or [])
+            if what:
+                learned.append(what)
         for test in extracted.get('test_results') or []:
             structure = (test or {}).get('format_structure')
             date = str((test or {}).get('date') or '').strip()

@@ -2854,10 +2854,20 @@
         const extracted = {};
 
         // Arrays
+        const rejected = [];
         const rows = Array.from(document.querySelectorAll('#review-content .review-item'));
         for (const row of rows) {
             const cb = row.querySelector('input[type="checkbox"]');
-            if (!cb || !cb.checked) continue;
+            if (!cb) continue;
+            if (!cb.checked) {
+                // An unchecked original is evidence too: if every row a
+                // column produced was declined, the layout learns the column
+                // was misread. Send the originals so the server can tell.
+                const rIdx = parseInt(cb.dataset.index, 10);
+                const rOrig = ((currentReviewPending || {}).test_results || [])[rIdx];
+                if (cb.dataset.category === 'test_results' && rOrig) rejected.push(rOrig);
+                continue;
+            }
             const cat = cb.dataset.category;
             if (!Array.isArray(extracted[cat])) extracted[cat] = [];
 
@@ -2873,6 +2883,7 @@
                 if (original && typeof original === 'object') {
                     item._orig_index = idx;
                     ['format_structure', 'format_signature', 'source_role',
+                     'source_column', 'misaligned',
                      'date_source', 'unit', 'fields', 'qualifier', 'section',
                      'source_page', 'source_file'].forEach(k => {
                         if (item[k] === undefined && original[k] != null) item[k] = original[k];
@@ -2959,7 +2970,7 @@
             if (span) extracted[cat] = span.textContent;
         });
 
-        if (!Object.keys(extracted).length) {
+        if (!Object.keys(extracted).length && !rejected.length) {
             // Everything was rejected: nothing to save, just drop the review.
             status.textContent = 'Nothing selected — review discarded.';
             reportReviewOutcome('Nothing selected — review discarded.');
@@ -2969,6 +2980,7 @@
             return;
         }
 
+        if (!Object.keys(extracted).length) extracted.test_results = [];
         status.textContent = 'Saving accepted items...';
         try {
             const resp = await AuthHelper.authenticatedFetch('/api/health-profile/apply-review', {
@@ -2977,7 +2989,8 @@
                 body: JSON.stringify({
                     extracted,
                     format_analysis: currentMeta && currentMeta.format_analysis,
-                    original_test_results: (currentReviewPending || {}).test_results || []
+                    original_test_results: (currentReviewPending || {}).test_results || [],
+                    rejected_test_results: rejected
                 })
             });
             const data = await resp.json();

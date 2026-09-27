@@ -399,7 +399,7 @@
         'history', 'pending', 'ref_locked', 'unit_locked', 'date_source',
         'verified_at', 'proposed_by', 'change_note', 'manual',
         'format_structure', 'format_signature', 'source_role',
-        'source_page', 'source_file'];
+        'source_column', 'misaligned', 'source_page', 'source_file'];
 
     // Mirrors the vocabulary in ai_compare/health_insights.py.
     const SOURCE_LABELS = {

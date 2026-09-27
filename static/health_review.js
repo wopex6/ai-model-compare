@@ -314,7 +314,8 @@
     // not inputs — hand-editing them corrupts the confirmation queue.
 
     const ROW_META_KEYS = ['format_structure', 'format_signature', 'source_role',
-        'source_page', 'source_file', 'date_source', 'status', 'history',
+        'source_column', 'misaligned', 'source_page', 'source_file',
+        'date_source', 'status', 'history',
         'last_confirmed_at', 'ref_locked', 'auto_filled'];
     const ROW_FIELD_ORDER = ['test_name', 'value', 'unit', 'reference_range',
         'date', 'qualifier', 'section', 'notes'];
@@ -378,6 +379,8 @@
             out.push({ label: 'date = filed', title: 'No date in the document — filed date used' });
         if (item.source_role)
             out.push({ label: item.source_role, title: 'Column role the report layout gave this cell' });
+        if (item.misaligned)
+            out.push({ label: 'check alignment', title: 'This row was shorter than the report grid — a cell may have been dropped, so check the values against the report' });
         return out;
     }
 

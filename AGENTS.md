@@ -300,8 +300,24 @@ which rewrites `column_roles` wholesale — earlier and the correction is
 erased. Dating a filed row records `last_report_date` so a
 sibling page of the same structure uploaded within two hours inherits it.
 Deleting every row that came from one column demotes that column to `text`.
-`format_structure` / `source_role` stay on the row (and in `MANAGED_KEYS`) so
-those edits can find the layout; they are never free-text extras. `source_page`
+
+**Position is the data.** A 2-D report is read by coordinates, not by token
+order: each emitted row carries `source_column` (its column index) so
+learning can target the position it came from. Two integrity rules guard the
+grid in `extract`: a row whose cell contradicts its column's shape (a date
+or bare unit in a measured position, a number in a flag position) means a
+cell was dropped mid-row and everything after slid left — the row is
+skipped into `skipped` with a `misaligned` reason rather than filed
+shifted; a row simply shorter than the grid still extracts (usually just
+trimmed trailing empties) but its records carry `misaligned: true`, which
+the review badges as "check alignment". Rejection is evidence too:
+`learn_from_reject` (fed by `rejected_test_results` in apply-review — the
+PWA's unchecked rows, the website's row-remove button) demotes a column to
+`text` when every row it produced was declined and none were kept; partial
+rejection just logs an event. Learning still runs after `confirm()`.
+`format_structure` / `source_role` / `source_column` stay on the row (and in
+`MANAGED_KEYS`) so those edits can find the layout; they are never free-text
+extras. `source_page`
 / `source_file` ride along the same way for multi-photo batches.
 
 Multi-photo uploads are one document, not N documents: `parse_report_pages`

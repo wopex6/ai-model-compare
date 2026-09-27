@@ -882,6 +882,61 @@ def learn_from_delete(store: Dict, removed: Dict, remaining: List[Dict],
     return 'dropped_column'
 
 
+def learn_from_reject(store: Dict, rejected: List[Dict], kept: List[Dict],
+                      now: Optional[datetime] = None) -> Optional[str]:
+    """Rows the user declined in review are evidence too.
+
+    Same rule as learn_from_delete, applied to review-time rejections: when
+    every row a column produced was left unchecked — and none of that
+    column's rows survived into `kept` — the column was misread and is
+    demoted to 'text' for this structure. A partial rejection is just the
+    user picking rows, so it is logged but changes nothing.
+    """
+    rej_by_struct: Dict[str, Dict[int, int]] = {}
+    for r in rejected or []:
+        st = (r or {}).get('format_structure')
+        col = (r or {}).get('source_column')
+        if st and isinstance(col, int):
+            rej_by_struct.setdefault(st, {}).setdefault(col, 0)
+            rej_by_struct[st][col] += 1
+    if not rej_by_struct:
+        return None
+    kept_cols: Dict[str, set] = {}
+    for r in kept or []:
+        st = (r or {}).get('format_structure')
+        col = (r or {}).get('source_column')
+        if st and isinstance(col, int):
+            kept_cols.setdefault(st, set()).add(col)
+    stamp = (now or datetime.now()).isoformat()
+    learned = []
+    for structure, cols in rej_by_struct.items():
+        entry = find_by_structure(store, structure)
+        if entry is None:
+            continue
+        entry.setdefault('learned', []).append(
+            {'at': stamp, 'kind': 'rejected_rows',
+             'count': sum(cols.values()),
+             'columns': sorted(cols)})
+        survived = kept_cols.get(structure, set())
+        roles = entry.get('column_roles') or []
+        changed = False
+        for col_index in cols:
+            if col_index == 0 or col_index in survived:
+                continue  # name column, or rows of this column were kept
+            for spec in roles:
+                if spec.get('index') == col_index and spec.get('role') != 'text':
+                    spec['role'] = 'text'
+                    spec['basis'] = 'user'
+                    changed = True
+                    learned.append('rejected column {}'.format(col_index))
+        if changed:
+            entry['column_roles'] = roles
+            entry['confirmed'] = True
+            entry.setdefault('learned', []).append(
+                {'at': stamp, 'kind': 'rejected_column'})
+    return '+'.join(learned) if learned else None
+
+
 # --- extraction -------------------------------------------------------------
 
 def _unit_for_row(description: Dict, row: List[str], name: str) -> str:
@@ -900,6 +955,49 @@ def _cell(row: List[str], idx: Optional[int]) -> str:
     if idx is None or idx >= len(row):
         return ''
     return (row[idx] or '').strip()
+
+
+def _contradicts(col: Dict, cell: str) -> bool:
+    """A cell that clearly belongs to a different column shape means the row
+    dropped a cell mid-row and everything after it shifted left.
+
+    Position is the only thing that makes a 2-D report readable: a value is
+    what it is because of where it sits. When the transcription loses a cell,
+    the values that follow slide into the wrong columns — a range string
+    landing in a measured position, a date landing in a unit position. The
+    row is untrustworthy, so extract skips it (it lands in `skipped` with the
+    reason) rather than file shifted numbers.
+    """
+    role = col.get('role')
+    if role == 'name':
+        return looks_like_date(cell) or (
+            looks_like_measurement(cell) and not re.search(r'[A-Za-z]', cell))
+    if role == 'dated':
+        # Two kinds: a column *headed* by a date holds that date's readings
+        # (cells are measurements), while a column of literal date cells
+        # holds the date itself. The check differs accordingly.
+        if col.get('date'):
+            return looks_like_date(cell) or (
+                looks_like_unit(cell) and not looks_like_measurement(cell))
+        return not looks_like_date(cell)
+    if role in ('measured', 'percent_of', 'percent_change', 'baseline'):
+        return looks_like_date(cell) or (
+            looks_like_unit(cell) and not looks_like_measurement(cell))
+    if role == 'range':
+        return looks_like_date(cell)
+    if role == 'unit':
+        # Only a cell that fails as a unit can contradict — '10^9/L' parses
+        # as both unit and measurement, and 'L' is also a flag shape; either
+        # would false-positive on a legitimate unit cell.
+        return not looks_like_unit(cell) and (
+            looks_like_date(cell) or looks_like_range(cell)
+            or looks_like_measurement(cell))
+    if role == 'flag':
+        return (looks_like_date(cell) or looks_like_range(cell)
+                or looks_like_measurement(cell))
+    # 'stated', 'text', 'empty' and unknown roles hold free text — any shape
+    # is legitimate, so nothing contradicts them.
+    return False
 
 
 def _extra_key(col: Dict) -> str:
@@ -970,6 +1068,7 @@ def extract(description: Dict, data_rows: List[List[str]],
     results: List[Dict] = []
     skipped: List[Dict] = []
 
+    width = len(columns)
     for row_no, row in enumerate(data_rows):
         name = _cell(row, 0)
         if not name:
@@ -979,6 +1078,19 @@ def extract(description: Dict, data_rows: List[List[str]],
         if skip_name is not None and skip_name.search(name):
             skipped.append({'row': row_no, 'reason': 'heading or metadata row',
                             'name': name})
+            continue
+        # Alignment is what gives each cell its meaning. A row whose cells
+        # contradict their column's shape almost certainly lost a cell mid-row
+        # — the values slid left — so it is skipped rather than filed shifted.
+        off = next((c for c in columns
+                    if _cell(row, c['index']) and
+                    _contradicts(c, _cell(row, c['index']))), None)
+        if off is not None:
+            skipped.append({'row': row_no, 'name': name,
+                            'reason': 'misaligned row — "{}" does not fit '
+                                      'column "{}" (probable dropped cell)'.format(
+                                          _cell(row, off['index']),
+                                          off.get('label') or off['index'])})
             continue
         unit = _unit_for_row(description, row, name)
         row_range = _cell(row, range_col).strip('()[]')
@@ -1064,6 +1176,15 @@ def extract(description: Dict, data_rows: List[List[str]],
             if fields:
                 record['fields'] = fields
             record['source_role'] = col['role']
+            # The column position that produced this record — acceptance and
+            # rejection learn per column, and relative position is what makes
+            # a 2-D report readable in the first place.
+            record['source_column'] = col['index']
+            if len(row) < width:
+                # A short row is usually just trimmed trailing empties, but it
+                # can also be a dropped mid-row cell — flag it so review can
+                # check the alignment instead of trusting it blindly.
+                record['misaligned'] = True
             record['format_structure'] = description.get('structure') or ''
             record['format_signature'] = description.get('signature') or ''
             results.append(record)
