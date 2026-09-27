@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-27 16:58 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-27 20:58 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Positional integrity: misaligned-row skip + short-row flag, source_column provenance, learn_from_reject on declined rows (PWA checkboxes + website row-remove). 95 tests pass, SW v132. Deploying.
+Field-alias + name_pattern learning, _deleted_fields, manual blank-date fix, inline field capture — deployed SW v133
 
 ## Git
 
@@ -41,14 +41,14 @@ Positional integrity: misaligned-row skip + short-row flag, source_column proven
 Recent commits:
 
 ```
+d1205aa Dr. Health: learn field aliases and name composition positionally
+743bc49 Handoff: positional integrity + rejection learning deployed (SW v132).
 a6cefd4 Dr. Health: positional integrity + rejection learning for report grids
 beb9796 Handoff: review UX fixes + name-style learning deployed.
 52c47f1 Dr. Health review: duplicate-row tools, field delete, blank-date manual rows, name-style learning
 d7fddea Handoff: report learning + duplicate records deployed (SW v131).
 a0e8e6e Dr. Health: learn from row edits, keep manual rows separate, duplicate records
 fd316ba Handoff: dynamic report fields deployed-ready.
-e5f0ce2 Dr. Health: render report-native fields in review, overview and export
-79d1ded Handoff: engagement layer + Milo companion deployed (app SW v4).
 ```
 
 ## Production (PythonAnywhere)
@@ -90,17 +90,17 @@ Reload often returns `409 slow_startup_error` on the first attempt — retry rat
 All passing.
 
 ```
-........................................................................ [ 64%]
-........................................................................ [ 80%]
-........................................................................ [ 96%]
-.................                                                        [100%]
+........................................................................ [ 63%]
+........................................................................ [ 79%]
+........................................................................ [ 95%]
+.....................                                                    [100%]
 ============================== warnings summary ===============================
 ..\..\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37
   C:\Users\trabc\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-449 passed, 1 warning in 20.62s
+453 passed, 1 warning in 33.28s
 [AutoDoc] Monitoring stopped
 ```
 
