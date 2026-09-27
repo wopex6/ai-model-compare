@@ -251,20 +251,18 @@ def run():
                     timeout=TIMEOUT, json={'index': 0, 'status': 'bogus'}).status_code == 400,
             'expected 400')
 
-    # Same test + same date is an intentional dedup: the stored value was
-    # already reviewed, so a differing incoming value is discarded rather
-    # than overwriting — re-scanning a report can neither duplicate rows
-    # nor clobber a verified number.
+    # Manual POSTs are deliberate records: a second same-name same-date row
+    # with a different value is a second reading, kept as its own row.
+    # (Dedup still applies to *scanned* rows — manual=False merges.)
     dup = dict(LIST_CATEGORIES['test_results'])
     dup['value'] = '61 ug/L'
     resp = s.post(f'{BASE_URL}/api/health-profile/item', headers=auth, timeout=TIMEOUT,
                   json={'category': 'test_results', 'item': dup})
     rows = body(resp).get('profile', {}).get('test_results', [])
-    r.check('test_results dedups same test on same date',
-            resp.status_code == 200 and len(rows) == 1, f'{resp.status_code} len={len(rows)}')
-    r.check('test_results dedup keeps the stored value',
-            rows and '55' in str(rows[0].get('value')) and '61' not in str(rows[0].get('value')),
-            str(rows[:1]))
+    r.check('test_results manual add keeps second same-day reading',
+            resp.status_code == 200 and len(rows) == 2, f'{resp.status_code} len={len(rows)}')
+    r.check('manual rows are marked manual',
+            all(r2.get('manual') for r2 in rows), str(rows[:2]))
 
     resp = s.post(f'{BASE_URL}/api/health-profile/item', headers=auth, timeout=TIMEOUT,
                   json={'category': 'test_results', 'item': {'value': '1'}})

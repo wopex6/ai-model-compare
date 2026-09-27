@@ -1576,9 +1576,31 @@ def test_manual_rows_with_different_values_both_survive():
         # The batch dedup sweep must not collapse them afterwards either.
         profile._deduplicate_test_results()
         assert len(profile.data['test_results']) == 2
-        # An identical manual row still merges.
+        # Even an identical manual row stays — the user deliberately created
+        # it (e.g. duplicated in review to start a second record).
         profile.add_test_result('FVC', '2.4', date='2026-01-05', manual=True)
-        assert len(profile.data['test_results']) == 2
+        assert len(profile.data['test_results']) == 3
+        profile._deduplicate_test_results()
+        assert len(profile.data['test_results']) == 3
+    finally:
+        _cleanup(user_id)
+
+
+def test_manual_row_keeps_the_blank_date_the_user_left():
+    """Manual rows skip dedup, so the filed-date stamp isn't needed — a date
+    the user deliberately left empty stays empty."""
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        profile.add_test_result('FVC', '2.4', manual=True)
+        row = profile.data['test_results'][-1]
+        assert row['date'] == ''
+        assert 'date_source' not in row
+        # A scanned row still gets the filed stamp — dedup needs a date.
+        profile.add_test_result('FEV1', '0.9')
+        scanned = profile.data['test_results'][-1]
+        assert scanned['date']
+        assert scanned['date_source'] == 'filed'
     finally:
         _cleanup(user_id)
 

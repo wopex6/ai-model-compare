@@ -568,6 +568,47 @@ def test_learned_role_is_applied_on_the_next_scan():
     assert results2[0]['unit'] == 'Run A' or 'Run A' in results2[0]['value']
 
 
+def test_renamed_qualified_row_teaches_the_layouts_name_style():
+    """'Alpha (Before)' retyped as 'Alpha Before' teaches this layout to join
+    the qualifier bare — the rescan names every row that way."""
+    rows, sep = _table('''
+        | | Before | | | After | | |
+        | | Got | Norm | Ratio % | Got | Ratio % | Shift % |
+        | --- | --- | --- | --- | --- | --- | --- |
+        | Alpha | 0.96 | 1.62 | 59 | 1.30 | 80 | 35.4 |
+        | Beta | 1.47 | 2.03 | 72 | 1.37 | 67 | -6.8 |
+    ''')
+    description = rf.describe(rows, sep)
+    store = {}
+    rf.remember(store, description)
+    results, _ = rf.extract(description, rows[sep + 1:])
+    before_row = next(r for r in results if r['test_name'] == 'Alpha (Before)')
+    after = dict(before_row)
+    after['test_name'] = 'Alpha Before'
+    learned = rf.learn_from_edit(store, before_row, after)
+    assert learned and 'name_style=bare' in learned
+    assert store['report_formats']
+    entry = next(iter(store['report_formats'].values()))
+    assert entry['name_style'] == 'bare'
+    # Rescan the identical grid: names come out bare for every row.
+    again = rf.describe(rows, sep)
+    assert rf.apply_remembered(again, store) is True
+    results2, _ = rf.extract(again, rows[sep + 1:])
+    names2 = [r['test_name'] for r in results2]
+    assert 'Alpha Before' in names2 and 'Alpha After' in names2
+    assert 'Alpha (Before)' not in names2
+
+
+def test_unrelated_renames_teach_no_name_style():
+    store = {'report_formats': {
+        'sig1': {'signature': 'sig1', 'structure': 'struct1', 'confirmed': False}
+    }}
+    before = {'format_structure': 'struct1', 'test_name': 'Alpha (Before)'}
+    after = {'format_structure': 'struct1', 'test_name': 'Lung capacity'}
+    assert rf.learn_from_edit(store, before, after) is None
+    assert 'name_style' not in store['report_formats']['sig1']
+
+
 def test_deleting_every_row_from_a_column_drops_that_role():
     store = {'report_formats': {
         'sig1': {'signature': 'sig1', 'structure': 'struct1', 'confirmed': False,

@@ -8659,8 +8659,9 @@ def add_health_profile_item():
             extras = {k: v for k, v in item.items()
                       if k not in core and v not in (None, '')}
             if extras:
-                date_norm = profile._normalize_test_date(
-                    item.get('date') or datetime.now().strftime('%Y-%m-%d'))
+                # Manual rows keep a blank date (no filed stamp) — normalize
+                # what was typed, never today's date.
+                date_norm = profile._normalize_test_date(item.get('date') or '')
                 for t in reversed(profile.data.get('test_results', [])):
                     if profile._is_duplicate_test_result(
                             t, item.get('test_name', ''), item.get('value', ''),

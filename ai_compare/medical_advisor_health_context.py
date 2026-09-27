@@ -1792,11 +1792,11 @@ class HealthProfile:
                        unit: str = "", layout: Dict = None, manual: bool = False) -> bool:
         """Add a lab/test result. Returns True if actually added.
 
-        `manual` marks a row the user typed in by hand. A manual row still
-        merges with an identical reading, but a *different* value under the
-        same name and date is kept as its own row — the user deliberately
-        recorded a second measurement, unlike a re-scan where a differing
-        value is just a misread of the same one.
+        `manual` marks a row the user typed in or duplicated by hand. Manual
+        rows never merge — the user deliberately created each one, unlike a
+        re-scan where a near-identical row is a misread of the same
+        measurement. A manual row with no date keeps it blank: the filed-date
+        stamp exists only so scanned rows can dedupe.
 
         `fields` carries whatever else the report printed for this measurement,
         keyed by the report's own wording (a predicted value, a % of predicted,
@@ -1831,15 +1831,20 @@ class HealthProfile:
                 continue
             extra_fields[str(key)] = item if isinstance(item, str) else str(item)
         existing = self.data.get("test_results", [])
-        date_val = self._normalize_test_date(date or datetime.now().strftime("%Y-%m-%d"))
+        if (date or "").strip():
+            date_val = self._normalize_test_date(date)
+        elif manual:
+            # User left it blank on purpose — keep it blank. The filed-date
+            # stamp exists so scanned rows dedupe; manual rows don't need it.
+            date_val = ""
+        else:
+            date_val = self._normalize_test_date(datetime.now().strftime("%Y-%m-%d"))
         # Detect abbreviation variants every time a test name arrives so
         # 'S BICARB' and 'S Bicarbonate' land in the same table.
         test_name = self._resolve_test_name(test_name, reference_range, value, date_val)
         for t in existing:
             if self._is_duplicate_test_result(t, test_name, value, date_val, reference_range):
-                if (manual
-                        and self._normalize_value_for_compare(t.get("value", ""))
-                        != self._normalize_value_for_compare(value)):
+                if manual:
                     continue
                 # Same test on the same date: the stored value was already
                 # reviewed/verified, so a differing incoming value is
@@ -1899,10 +1904,11 @@ class HealthProfile:
             incoming = (layout or {}).get(key)
             if incoming not in (None, "", [], {}):
                 entry[key] = incoming
-        if not (date or "").strip() and not entry.get("date_source"):
+        if not (date or "").strip() and not entry.get("date_source") and not manual:
             # The report did not state a date, so the row is dated by when it
             # was filed. Say so on the row: dedup needs a date, but a reader
             # must not take today's date for the day of the measurement.
+            # Manual rows keep the blank — the user left it empty on purpose.
             entry["date_source"] = "filed"
         if manual:
             entry["manual"] = True
@@ -1992,11 +1998,9 @@ class HealthProfile:
                                                       normalized_date,
                                                       row.get("reference_range", "")):
                     continue
-                # A row the user typed in is a deliberate second measurement:
-                # merge only an identical reading, never a different value.
-                if (row.get("manual")
-                        and self._normalize_value_for_compare(kept.get("value", ""))
-                        != self._normalize_value_for_compare(row_value)):
+                # A row the user typed or duplicated is a deliberate record —
+                # it is never merged away, even when identical.
+                if row.get("manual"):
                     continue
                 duplicate = kept
                 break

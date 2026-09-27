@@ -651,15 +651,20 @@ def apply_column_roles(description: Dict, column_roles: List[Dict],
 
 
 def apply_remembered(description: Dict, store: Dict) -> bool:
-    """If the user has confirmed this structure, read it their way."""
+    """If the user has confirmed this structure, read it their way — column
+    roles and the qualifier-name style they taught."""
     structure = description.get('structure') or structure_of(description)
     entry = find_by_structure(store, structure)
     if not entry or not entry.get('confirmed'):
         return False
+    applied = False
+    if entry.get('name_style'):
+        description['name_style'] = entry['name_style']
+        applied = True
     roles = entry.get('column_roles') or []
-    if not roles:
-        return False
-    return apply_column_roles(description, roles, basis='user')
+    if roles:
+        applied = apply_column_roles(description, roles, basis='user') or applied
+    return applied
 
 
 def confirm(store: Dict, description: Dict, column_roles: Optional[List[Dict]] = None,
@@ -724,6 +729,37 @@ def _extra_key_of(spec: Dict) -> str:
     return key or 'column {}'.format(spec.get('index'))
 
 
+def _name_style(before_name: str, after_name: str) -> Optional[str]:
+    """How the user writes a qualified name: 'FEV1 (L) (Pre-Bronch Actual)'
+    retyped as 'FEV1 (L) Pre-Bronch Actual' means this layout's qualifier
+    suffix is appended bare, not parenthesised. Returns 'bare'|'dash'|'parens'
+    or None when the edit doesn't resolve to a suffix style."""
+    m = re.match(r'^(.*?) \(([^()]*)\)$', before_name or '')
+    if m and m.group(1) and m.group(2):
+        base, suffix = m.group(1), m.group(2)
+        if after_name == base + ' ' + suffix:
+            return 'bare'
+        if after_name in (base + ' - ' + suffix, base + ' \u2014 ' + suffix):
+            return 'dash'
+        return None
+    m = re.match(r'^(.*?) \(([^()]*)\)$', after_name or '')
+    if m and m.group(1) and m.group(2):
+        base, suffix = m.group(1), m.group(2)
+        if before_name == base + ' ' + suffix:
+            return 'parens'
+    return None
+
+
+def _join_name(name: str, suffix: str, style: str = 'parens') -> str:
+    if not suffix:
+        return name
+    if style == 'bare':
+        return name + ' ' + suffix
+    if style == 'dash':
+        return name + ' \u2014 ' + suffix
+    return name + ' ({})'.format(suffix)
+
+
 # Where a `fields.<heading>` value lands when the user moves it into a
 # canonical slot. Anything else it could move to is free text, which maps to
 # 'text' only by demotion — never promoted into a real reading.
@@ -767,6 +803,17 @@ def learn_from_edit(store: Dict, before: Dict, after: Dict,
         entry.setdefault('learned', []).append(
             {'at': stamp, 'kind': 'report_date', 'date': new_date})
         learned.append('report_date')
+    # A renamed qualified test teaches the name style: 'FEV1 (L) (Pre-Bronch
+    # Actual)' retyped 'FEV1 (L) Pre-Bronch Actual' means this layout joins
+    # qualifier parts bare, not in parens.
+    style = _name_style(str((before or {}).get('test_name') or ''),
+                        str((after or {}).get('test_name') or ''))
+    if style and entry.get('name_style') != style:
+        entry['name_style'] = style
+        entry['confirmed'] = True
+        entry.setdefault('learned', []).append(
+            {'at': stamp, 'kind': 'name_style', 'style': style})
+        learned.append('name_style=' + style)
     # Field moves and deletions teach column roles.
     bfields = (before or {}).get('fields') or {}
     afields = (after or {}).get('fields') or {}
@@ -947,7 +994,7 @@ def extract(description: Dict, data_rows: List[List[str]],
                 suffix = qualifier
             else:
                 suffix = ' '.join(b for b in (qualifier, col['label']) if b)
-            test_name = name + (' ({})'.format(suffix) if suffix else '')
+            test_name = _join_name(name, suffix, description.get('name_style') or 'parens')
 
             reference = row_range
             notes: List[str] = []

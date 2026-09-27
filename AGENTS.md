@@ -292,7 +292,10 @@ nothing is learned. Row-level edits also teach: `learn_from_edit` pairs the
 pre-edit row (`_orig_index` into `original_test_results` in apply-review, or
 the hub's PUT before/after) with the saved one — a `fields.<heading>` value
 moved into a canonical slot retrains that column's role, and an emptied
-`fields` key demotes its column to `text`. Learning runs AFTER `confirm()`,
+`fields` key demotes its column to `text`. A renamed qualified test teaches
+`name_style` (`parens`/`bare`/`dash` — 'Alpha (Before)' retyped 'Alpha
+Before' makes rescan names bare; `_join_name`/`_name_style` in
+report_format). Learning runs AFTER `confirm()`,
 which rewrites `column_roles` wholesale — earlier and the correction is
 erased. Dating a filed row records `last_report_date` so a
 sibling page of the same structure uploaded within two hours inherits it.
@@ -357,9 +360,11 @@ was reviewed (by the user or a prior import); a re-scan must not clobber it.
 The merge also gap-fills `unit` and the `fields` bag — dropping them was a
 real data-loss bug. **Exception for `manual` rows**: a row the user typed or
 duplicated in review (client marks it `_manual`, stored as `manual: true`)
-is a deliberate second measurement — it merges only with an *identical*
-value, so three same-name same-day entries typed by hand stay three rows.
-`_deduplicate_test_results` honours the same flag in both directions.
+is a deliberate second measurement and **never merges**, even when identical
+— three same-name same-day entries typed by hand stay three rows.
+`_deduplicate_test_results` honours the same flag in both directions. A
+manual row also keeps a deliberately blank `date`: the `filed` stamp exists
+so scanned rows can dedupe, and manual rows don't need it.
 Exception: merging requires the same **reference range and unit** — when both
 are determinable and either disagrees, they are not the same measurement. The
 name key strips qualifiers like '(NGSP)'/'(IFCC)', so 'HbA1c (IFCC)' in

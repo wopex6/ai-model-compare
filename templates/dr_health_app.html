@@ -2536,38 +2536,11 @@
                             }
                             input.dataset.field = field;
                             if (def.long) input.rows = 2;
+                            removableFieldPair(label, input, field, row);
                             fields.appendChild(label);
                             fields.appendChild(input);
                         });
-                        // New-format columns the scan didn't model — the user
-                        // can add a box under any heading name.
-                        const addFieldBtn = document.createElement('button');
-                        addFieldBtn.type = 'button';
-                        addFieldBtn.className = 'btn-secondary';
-                        addFieldBtn.style.cssText = 'font-size:0.72rem;padding:2px 10px;margin-top:4px;';
-                        addFieldBtn.textContent = '+ field';
-                        addFieldBtn.addEventListener('click', () => {
-                            const heading = (prompt('Field name (as printed on the report):') || '').trim();
-                            if (!heading) return;
-                            const label = document.createElement('label');
-                            label.textContent = heading;
-                            const input = document.createElement('input');
-                            input.type = 'text';
-                            input.dataset.field = 'fields.' + heading;
-                            fields.insertBefore(label, addFieldBtn);
-                            fields.insertBefore(input, addFieldBtn);
-                        });
-                        // Duplicate this row — a second reading of the same
-                        // test (e.g. repeat spirometry) without retyping.
-                        const dupBtn = document.createElement('button');
-                        dupBtn.type = 'button';
-                        dupBtn.className = 'btn-secondary';
-                        dupBtn.title = 'Duplicate this record';
-                        dupBtn.style.cssText = 'font-size:0.72rem;padding:2px 10px;margin-top:4px;';
-                        dupBtn.innerHTML = '<i class="fas fa-copy"></i> duplicate';
-                        dupBtn.addEventListener('click', () => duplicateReviewRow(key, row));
-                        fields.appendChild(dupBtn);
-                        fields.appendChild(addFieldBtn);
+                        attachRowTools(fields, key, row, list);
                         row.appendChild(fields);
                     } else if (typeof item === 'object' && item !== null) {
                         const fields = document.createElement('div');
@@ -2588,17 +2561,11 @@
                             }
                             input.dataset.field = field;
                             if (isLong) input.rows = 3;
+                            removableFieldPair(label, input, field, row);
                             fields.appendChild(label);
                             fields.appendChild(input);
                         });
-                        const dupBtn = document.createElement('button');
-                        dupBtn.type = 'button';
-                        dupBtn.className = 'btn-secondary';
-                        dupBtn.title = 'Duplicate this record';
-                        dupBtn.style.cssText = 'font-size:0.72rem;padding:2px 10px;margin-top:4px;';
-                        dupBtn.innerHTML = '<i class="fas fa-copy"></i> duplicate';
-                        dupBtn.addEventListener('click', () => duplicateReviewRow(key, row));
-                        fields.appendChild(dupBtn);
+                        attachRowTools(fields, key, row, list);
                         row.appendChild(fields);
                     } else {
                         const wrap = document.createElement('div');
@@ -2708,6 +2675,83 @@
     }
     window.openLatestReview = openLatestReview;
 
+    // A small × beside a field's label — removing it drops the field from
+    // the saved record (and teaches the layout this column wasn't data).
+    // test_name and value are the record's identity and never removable.
+    function removableFieldPair(label, input, fieldKey, rowEl) {
+        if (fieldKey === 'test_name' || fieldKey === 'value') return label;
+        label.style.display = 'flex';
+        label.style.alignItems = 'center';
+        label.style.justifyContent = 'space-between';
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'btn-secondary';
+        del.innerHTML = '&times;';
+        del.title = 'Remove this field';
+        del.style.cssText = 'padding:0 8px;font-size:0.85rem;line-height:1.2;color:#c62828;';
+        del.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            const cleared = (rowEl.dataset.cleared || '').split('\u0001').filter(Boolean);
+            cleared.push(fieldKey);
+            rowEl.dataset.cleared = cleared.join('\u0001');
+            label.remove();
+            input.remove();
+        });
+        label.appendChild(del);
+        return label;
+    }
+
+    // Add a 'fields.<heading>' (test_results) or plain top-level input to a
+    // row's field block, ahead of its trailing buttons.
+    function addFieldBox(fieldsEl, heading, bagPrefix, rowEl) {
+        const key = (bagPrefix ? 'fields.' : '') + heading;
+        if (fieldsEl.querySelector('input[data-field], textarea[data-field]')) {
+            const dupe = Array.from(fieldsEl.querySelectorAll('input[data-field], textarea[data-field]'))
+                .some(el => el.dataset.field === key);
+            if (dupe) return;
+        }
+        const label = document.createElement('label');
+        label.textContent = heading;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.dataset.field = key;
+        removableFieldPair(label, input, key, rowEl);
+        const anchor = fieldsEl.querySelector(':scope > button');
+        fieldsEl.insertBefore(label, anchor);
+        fieldsEl.insertBefore(input, anchor);
+    }
+
+    // The per-row tools — '+ field' adds the column to every row of this
+    // table (it is a report column, not a per-row field); 'duplicate' copies
+    // the row into a new editable record.
+    function attachRowTools(fields, key, row, list) {
+        if (key === 'test_results') {
+            const addFieldBtn = document.createElement('button');
+            addFieldBtn.type = 'button';
+            addFieldBtn.className = 'btn-secondary';
+            addFieldBtn.style.cssText = 'font-size:0.72rem;padding:2px 10px;margin-top:4px;';
+            addFieldBtn.textContent = '+ field';
+            addFieldBtn.addEventListener('click', () => {
+                const heading = (prompt('Field name (as printed on the report):') || '').trim();
+                if (!heading) return;
+                const scope = list || row.parentElement;
+                scope.querySelectorAll(':scope > .review-item').forEach(r => {
+                    const f = r.querySelector('.review-item-fields');
+                    if (f) addFieldBox(f, heading, true, r);
+                });
+            });
+            fields.appendChild(addFieldBtn);
+        }
+        const dupBtn = document.createElement('button');
+        dupBtn.type = 'button';
+        dupBtn.className = 'btn-secondary';
+        dupBtn.title = 'Duplicate this record';
+        dupBtn.style.cssText = 'font-size:0.72rem;padding:2px 10px;margin-top:4px;';
+        dupBtn.innerHTML = '<i class="fas fa-copy"></i> duplicate';
+        dupBtn.addEventListener('click', () => duplicateReviewRow(key, row));
+        fields.appendChild(dupBtn);
+    }
+
     function addReviewRow(list, key) {
         const newRow = document.createElement('div');
         newRow.className = 'review-item';
@@ -2747,18 +2791,23 @@
             seen.forEach((src, name) => {
                 const prev = src.previousElementSibling;
                 const label = document.createElement('label');
-                label.textContent = (prev && prev.tagName === 'LABEL') ? prev.textContent : name;
+                // The label may carry a × button — use its first text node.
+                const labelText = (prev && prev.tagName === 'LABEL')
+                    ? (prev.firstChild && prev.firstChild.nodeValue || prev.textContent) : name;
+                label.textContent = labelText;
                 const input = document.createElement(src.tagName === 'TEXTAREA' ? 'textarea' : 'input');
                 if (src.tagName !== 'TEXTAREA') input.type = src.type || 'text';
                 input.value = '';
                 input.dataset.field = name;
                 if (src.rows) input.rows = src.rows;
+                removableFieldPair(label, input, name, newRow);
                 fields.appendChild(label);
                 fields.appendChild(input);
             });
         }
 
         newRow.appendChild(fields);
+        attachRowTools(fields, key, newRow, list);
         list.appendChild(newRow);
     }
 
@@ -2779,17 +2828,21 @@
         fields.querySelectorAll('input, textarea').forEach(src => {
             const prev = src.previousElementSibling;
             const label = document.createElement('label');
-            label.textContent = (prev && prev.tagName === 'LABEL') ? prev.textContent : src.dataset.field;
+            const labelText = (prev && prev.tagName === 'LABEL')
+                ? (prev.firstChild && prev.firstChild.nodeValue || prev.textContent) : src.dataset.field;
+            label.textContent = labelText;
             const input = document.createElement(src.tagName === 'TEXTAREA' ? 'textarea' : 'input');
             if (src.tagName !== 'TEXTAREA') input.type = src.type || 'text';
             input.value = src.value;
             input.dataset.field = src.dataset.field;
             if (src.rows) input.rows = src.rows;
+            removableFieldPair(label, input, src.dataset.field, newRow);
             newFields.appendChild(label);
             newFields.appendChild(input);
         });
         newRow.appendChild(newFields);
         rowEl.after(newRow);
+        attachRowTools(newFields, key, newRow, rowEl.parentElement);
     }
 
     function setReviewAll(checked) {
@@ -2834,6 +2887,17 @@
                     // re-scan of the same one.
                     item._manual = true;
                 }
+                // Fields the user removed with × are dropped from the item —
+                // and, for fields.<heading>, teach the layout the column was
+                // not data.
+                (row.dataset.cleared || '').split('\u0001').filter(Boolean).forEach(k => {
+                    if (k.indexOf('fields.') === 0) {
+                        if (!item.fields || typeof item.fields !== 'object') item.fields = {};
+                        delete item.fields[k.slice(7)];
+                    } else {
+                        delete item[k];
+                    }
+                });
                 extracted[cat].push(item);
             } else {
                 const item = {};
@@ -2842,6 +2906,8 @@
                     fields.querySelectorAll('input, textarea').forEach(el => {
                         item[el.dataset.field] = el.value;
                     });
+                    (row.dataset.cleared || '').split('\u0001').filter(Boolean)
+                        .forEach(k => { delete item[k]; });
                     extracted[cat].push(item);
                 } else {
                     const ta = row.querySelector('textarea');
