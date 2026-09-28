@@ -1023,12 +1023,14 @@ def learn_from_reject(store: Dict, rejected: List[Dict], kept: List[Dict],
     user picking rows, so it is logged but changes nothing.
     """
     rej_by_struct: Dict[str, Dict[int, int]] = {}
+    rej_rows: Dict[str, Dict[int, List[Dict]]] = {}
     for r in rejected or []:
         st = (r or {}).get('format_structure')
         col = (r or {}).get('source_column')
         if st and isinstance(col, int):
             rej_by_struct.setdefault(st, {}).setdefault(col, 0)
             rej_by_struct[st][col] += 1
+            rej_rows.setdefault(st, {}).setdefault(col, []).append(r)
     if not rej_by_struct:
         return None
     kept_cols: Dict[str, set] = {}
@@ -1037,6 +1039,23 @@ def learn_from_reject(store: Dict, rejected: List[Dict], kept: List[Dict],
         col = (r or {}).get('source_column')
         if st and isinstance(col, int):
             kept_cols.setdefault(st, set()).add(col)
+    # A rejected row the user re-entered by hand is a *value* correction, not
+    # a verdict on the column — a garbled scan must not demote real columns.
+    manual_stems = set()
+    for r in kept or []:
+        if not isinstance(r, dict):
+            continue
+        if r.get('_manual') or r.get('manual'):
+            stem = _name_stem(str(r.get('test_name') or ''))
+            if stem:
+                manual_stems.add(stem)
+    def _re_entered(rows: List[Dict]) -> bool:
+        for r in rows:
+            stem = _name_stem(str((r or {}).get('name_base')
+                                  or (r or {}).get('test_name') or ''))
+            if stem and stem in manual_stems:
+                return True
+        return False
     stamp = (now or datetime.now()).isoformat()
     learned = []
     for structure, cols in rej_by_struct.items():
@@ -1053,6 +1072,8 @@ def learn_from_reject(store: Dict, rejected: List[Dict], kept: List[Dict],
         for col_index in cols:
             if col_index == 0 or col_index in survived:
                 continue  # name column, or rows of this column were kept
+            if _re_entered(rej_rows.get(structure, {}).get(col_index, [])):
+                continue  # user retyped these rows — values were wrong, not the column
             for spec in roles:
                 if spec.get('index') == col_index and spec.get('role') != 'text':
                     spec['role'] = 'text'
@@ -1065,6 +1086,13 @@ def learn_from_reject(store: Dict, rejected: List[Dict], kept: List[Dict],
             entry.setdefault('learned', []).append(
                 {'at': stamp, 'kind': 'rejected_column'})
     return '+'.join(learned) if learned else None
+
+
+def _name_stem(name: str) -> str:
+    """First alphanumeric token of a test name, lowercased — 'FEV1 (L)' and
+    'FEV1' share 'fev1'. Used to tell a re-typed row from a rejected one."""
+    m = re.match(r'[a-z0-9/%]+', (name or '').strip().lower())
+    return m.group(0) if m else ''
 
 
 # --- extraction -------------------------------------------------------------

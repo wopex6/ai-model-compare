@@ -928,6 +928,31 @@ def test_rejected_name_column_is_never_demoted():
     assert roles[0] == 'name'
 
 
+def test_mass_rejection_with_manual_reentry_demotes_nothing():
+    """Real case: a garbled spirometry scan produced 19 wrong rows; the user
+    rejected them all and retyped ten manual rows with the same test stems.
+    Declining every row of a column usually means 'not data' — but re-entered
+    rows mean the values were wrong, so no column is demoted."""
+    store, structure = _store_with_confirmed_roles()
+    rejected = [
+        {'format_structure': structure, 'source_column': 1,
+         'test_name': 'Potassium (mmol/L) (Pre-Bronch Actual)',
+         'name_base': 'Potassium (mmol/L)'},
+        {'format_structure': structure, 'source_column': 1,
+         'test_name': 'Sodium (mmol/L) (Pre-Bronch Actual)',
+         'name_base': 'Sodium (mmol/L)'},
+    ]
+    kept = [
+        {'test_name': 'Potassium', 'value': '5.9', '_manual': True},
+        {'test_name': 'Sodium', 'value': '139', '_manual': True},
+    ]
+    what = rf.learn_from_reject(store, rejected, kept)
+    assert not (what or '').startswith('rejected column')
+    roles = {c['index']: c['role']
+             for c in rf.find_by_structure(store, structure)['column_roles']}
+    assert roles[1] != 'text'
+
+
 # --- renaming a field maps back by value and position ------------------------
 
 def test_renamed_field_heading_maps_back_by_value():
