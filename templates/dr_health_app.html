@@ -2744,6 +2744,30 @@
                 nameIn.type = 'text';
                 nameIn.placeholder = 'field name';
                 nameIn.style.cssText = 'width:120px;font-size:0.78rem;padding:2px 6px;';
+                // A photo may hold several tables — a field is normally a
+                // column of THIS table, but sometimes belongs to one row only.
+                const scopeCb = document.createElement('input');
+                scopeCb.type = 'checkbox';
+                scopeCb.checked = true;
+                scopeCb.title = 'Add to every row of this table';
+                const scopeLbl = document.createElement('label');
+                scopeLbl.style.cssText = 'font-size:0.72rem;color:#666;display:inline-flex;align-items:center;gap:2px;';
+                scopeLbl.appendChild(scopeCb);
+                scopeLbl.appendChild(document.createTextNode('all rows'));
+                // This row's table = its format_structure; rows without one
+                // (manual rows) just scope to the whole list.
+                const rowCb = row.querySelector('input[type="checkbox"]');
+                const rowIdx = rowCb ? parseInt(rowCb.dataset.index, 10) : NaN;
+                const rowStruct = Number.isInteger(rowIdx)
+                    ? ((((currentReviewPending || {}).test_results) || [])[rowIdx] || {}).format_structure : null;
+                const sameTable = r => {
+                    if (r === row) return true;
+                    const c = r.querySelector('input[type="checkbox"]');
+                    const i = c ? parseInt(c.dataset.index, 10) : NaN;
+                    const s = Number.isInteger(i)
+                        ? ((((currentReviewPending || {}).test_results) || [])[i] || {}).format_structure : null;
+                    return rowStruct ? s === rowStruct : true;
+                };
                 const ok = document.createElement('button');
                 ok.type = 'button';
                 ok.className = 'btn-secondary';
@@ -2757,10 +2781,13 @@
                 const done = () => { wrap.remove(); addFieldBtn.style.display = ''; };
                 const commit = () => {
                     const heading = nameIn.value.trim();
+                    const allRows = scopeCb.checked;
                     done();
                     if (!heading) return;
-                    const scope = list || row.parentElement;
-                    scope.querySelectorAll(':scope > .review-item').forEach(r => {
+                    const targets = allRows
+                        ? Array.from((list || row.parentElement).querySelectorAll(':scope > .review-item')).filter(sameTable)
+                        : [row];
+                    targets.forEach(r => {
                         const f = r.querySelector('.review-item-fields');
                         if (f) addFieldBox(f, heading, true, r);
                     });
@@ -2778,6 +2805,7 @@
                     if (e.key === 'Escape') done();
                 });
                 wrap.appendChild(nameIn);
+                wrap.appendChild(scopeLbl);
                 wrap.appendChild(ok);
                 wrap.appendChild(cancel);
                 addFieldBtn.style.display = 'none';
