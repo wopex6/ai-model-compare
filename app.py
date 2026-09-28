@@ -8160,6 +8160,13 @@ def apply_health_review():
                 extracted.get('test_results') or [])
             if what:
                 learned.append(what)
+            # Composed rows declined in favour of plain name+fields rows teach
+            # the layout a compact emission — same grid, user's row shape.
+            what = report_format.learn_compact_emission(
+                profile.data, rejected,
+                extracted.get('test_results') or [])
+            if what:
+                learned.append(what)
         # A layout this user just confirmed is now shared knowledge — the
         # next profile scanning the same grid inherits the corrected roles.
         _promote_shared_report_formats(profile)

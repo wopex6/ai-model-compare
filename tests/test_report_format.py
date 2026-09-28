@@ -1122,3 +1122,86 @@ def test_unconfirmed_layouts_never_seed_or_promote():
     assert rf.promote_to_shared(store, shared) is False
     other = {'x': {'structure': description['structure'], 'confirmed': False}}
     assert rf.seed_from_shared(store, other) == 0
+
+
+# --- compact emission: "one row per test, columns into fields" ---------------
+
+def _spiro_table():
+    return _table('''
+        |  | Pre-Bronch Pred | Pre-Bronch Actual | Pre-Bronch %Pred | Post-Bronch Actual | Post-Bronch %Pred | Post-Bronch %Chng | Reference Range | Units |
+        | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+        | FEV1 (L) | 1.62 | 0.96 | 59 | 1.30 | 80 | 36.2 | > 1.0 | L |
+        | FVC (L) | 2.03 | 1.47 | 73 | 1.37 | 68 | -6.8 | > 1.5 | L |
+        | FEF25-75% (L/s) | 1.52 | 1.13 | 75 | 3.19 | 210 | 181.9 | > 0.5 | L/s |
+    ''')
+
+
+def _confirmed_spiro_store():
+    rows, sep = _spiro_table()
+    description = rf.describe(rows, sep)
+    store = {}
+    rf.remember(store, description)
+    rf.confirm(store, description)
+    # As on the confirmed production layout: the Units column is 'unit',
+    # not 'flag' — describe reads pure L/L/… cells as flag letters.
+    entry = next(iter(store['report_formats'].values()))
+    for c in entry['column_roles']:
+        if c.get('label') == 'Units':
+            c['role'] = 'unit'
+    return store, description['structure']
+
+
+def test_rejecting_composed_rows_for_manual_compact_rows_learns_emission():
+    """Sau Tse's case: the scan emitted 'FEV1 (L) (Pre-Bronch Actual)' rows,
+    the user declined them all and typed 'FEV1' with Pred/%Pred/Post fields.
+    The layout must learn emission='compact' and the user's headings."""
+    store, structure = _confirmed_spiro_store()
+    rejected = [
+        {'format_structure': structure,
+         'test_name': 'FEV1 (L) (Pre-Bronch Actual)', 'name_base': 'FEV1 (L)'},
+        {'format_structure': structure,
+         'test_name': 'FVC (L) (Pre-Bronch Actual)', 'name_base': 'FVC (L)'},
+    ]
+    kept = [
+        {'test_name': 'FEV1', 'value': '0.96', '_manual': True,
+         'fields': {'Pred': '1.62', 'Pre-Bronch %Pred': '59',
+                    'Post-Bronch Actual': '1.30',
+                    'Post-Bronch %Pred': '80', '%Chng': '36.2'}},
+        {'test_name': 'FVC', 'value': '1.47', '_manual': True},
+    ]
+    what = rf.learn_compact_emission(store, rejected, kept)
+    assert 'compact emission' in (what or '')
+    entry = rf.find_by_structure(store, structure)
+    assert entry['emission'] == 'compact'
+    aliases = {c['index']: c.get('alias')
+               for c in entry['column_roles'] if c.get('alias')}
+    assert aliases == {1: 'Pred', 3: 'Pre-Bronch %Pred',
+                       4: 'Post-Bronch Actual', 5: 'Post-Bronch %Pred',
+                       6: '%Chng'}
+
+
+def test_compact_emission_extracts_one_row_per_test_with_user_headings():
+    """Rescanning the same grid after the lesson emits Sau Tse's saved shape:
+    'FEV1' value from Pre-Bronch Actual, everything else in fields."""
+    store, structure = _confirmed_spiro_store()
+    entry = rf.find_by_structure(store, structure)
+    entry['emission'] = 'compact'
+    for c in entry['column_roles']:
+        c['alias'] = {1: 'Pred', 3: 'Pre-Bronch %Pred',
+                      4: 'Post-Bronch Actual', 5: 'Post-Bronch %Pred',
+                      6: '%Chng'}.get(c['index'])
+
+    rows, sep = _spiro_table()
+    description = rf.describe(rows, sep)
+    assert rf.apply_remembered(description, store) is True
+    assert description.get('emission') == 'compact'
+    results, skipped = rf.extract(description, rows[sep + 1:])
+    fev1 = next(r for r in results if r['test_name'] == 'FEV1')
+    assert fev1['value'] == '0.96'
+    assert fev1['unit'] == 'L'
+    assert fev1['fields'] == {'Pred': '1.62', 'Pre-Bronch %Pred': '59',
+                             'Post-Bronch Actual': '1.30',
+                             'Post-Bronch %Pred': '80', '%Chng': '36.2'}
+    fvc = next(r for r in results if r['test_name'] == 'FVC')
+    assert fvc['fields']['%Chng'] == '-6.8'
+    assert len(results) == 3  # one per grid row, not one per measured column

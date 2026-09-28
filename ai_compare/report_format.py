@@ -734,6 +734,9 @@ def apply_remembered(description: Dict, store: Dict) -> bool:
     if entry.get('name_pattern'):
         description['name_pattern'] = entry['name_pattern']
         applied = True
+    if entry.get('emission'):
+        description['emission'] = entry['emission']
+        applied = True
     roles = entry.get('column_roles') or []
     if roles:
         applied = apply_column_roles(description, roles, basis='user') or applied
@@ -1152,6 +1155,67 @@ def _name_stem(name: str) -> str:
     return m.group(0) if m else ''
 
 
+def learn_compact_emission(store: Dict, rejected: List[Dict], kept: List[Dict],
+                           now: Optional[datetime] = None) -> Optional[str]:
+    """The user declined composed rows ('FEV1 (L) (Pre-Bronch Actual)') and
+    re-entered one plain row per test ('FEV1') with every other column folded
+    into `fields`. That is an emission preference, not a data correction:
+    the layout learns `emission: 'compact'` so the next scan of this grid
+    emits a single row per test with the user's field headings — learned here
+    positionally as column aliases — instead of one row per measured column.
+    """
+    rej: Dict[str, Dict[str, Dict]] = {}
+    for r in rejected or []:
+        structure = (r or {}).get('format_structure')
+        if not structure:
+            continue
+        stem = _name_stem(str((r or {}).get('name_base')
+                              or (r or {}).get('test_name') or ''))
+        if stem:
+            rej.setdefault(structure, {})[stem] = r
+    if not rej:
+        return None
+    manuals = [r for r in (kept or [])
+               if isinstance(r, dict) and (r.get('_manual') or r.get('manual'))]
+    stamp = (now or datetime.now()).isoformat()
+    learned = []
+    for structure, stems in rej.items():
+        entry = find_by_structure(store, structure)
+        if entry is None:
+            continue
+        hit = next((m for m in manuals
+                    if _name_stem(str(m.get('test_name') or '')) in stems), None)
+        if hit is None:
+            continue
+        if entry.get('emission') != 'compact':
+            entry['emission'] = 'compact'
+            entry.setdefault('learned', []).append(
+                {'at': stamp, 'kind': 'compact_emission'})
+            learned.append('compact emission')
+        # Field headings teach positionally: the columns the user folded into
+        # `fields` line up with the grid's payload columns minus the one that
+        # became the value (the first measured column).
+        specs = sorted((c for c in (entry.get('column_roles') or [])
+                        if c.get('role') not in
+                        ('name', 'unit', 'range', 'flag', 'date')),
+                       key=lambda c: c['index'])
+        first_measured = next((c for c in specs if c.get('role') == 'measured'),
+                              None)
+        payload = [c for c in specs if c is not first_measured]
+        for m in manuals:
+            if _name_stem(str(m.get('test_name') or '')) not in stems:
+                continue
+            keys = [k for k, v in (m.get('fields') or {}).items()
+                    if str(v or '').strip()]
+            if len(keys) == len(payload):
+                for spec, key in zip(payload, keys):
+                    if spec.get('alias') != key:
+                        spec['alias'] = key
+                        learned.append('field heading {}'.format(key))
+                break
+    return '+'.join(learned) if learned else None
+
+
 # --- extraction -------------------------------------------------------------
 
 def _unit_for_row(description: Dict, row: List[str], name: str) -> str:
@@ -1313,6 +1377,19 @@ def extract(description: Dict, data_rows: List[List[str]],
         row_range = _cell(row, range_col).strip('()[]')
         flag = _cell(row, flag_col)
 
+        if description.get('emission') == 'compact':
+            # The user taught this layout a compact row: one record per test,
+            # every other column folded into fields under their own headings.
+            rec = _extract_compact_row(description, row, name, unit,
+                                       row_range, flag, measured_columns,
+                                       columns, width)
+            if rec is None:
+                skipped.append({'row': row_no, 'name': name,
+                                'reason': 'no value in any measured column'})
+            else:
+                results.append(rec)
+            continue
+
         emitted_before = len(results)
         for col in measured_columns:
             value = _cell(row, col['index'])
@@ -1422,6 +1499,61 @@ def extract(description: Dict, data_rows: List[List[str]],
                             'name': name})
 
     return results, skipped
+
+
+def _extract_compact_row(description: Dict, row: List[str], name: str,
+                         unit: str, row_range: str, flag: str,
+                         measured_columns: List[Dict], columns: List[Dict],
+                         width: int) -> Optional[Dict]:
+    """One record per grid row: the value comes from the first measured
+    column (the reading the user kept as 'the result'), and every other
+    payload column folds into `fields` under its alias-aware heading."""
+    if not measured_columns:
+        return None
+    first = sorted(measured_columns, key=lambda c: c['index'])[0]
+    value = _cell(row, first['index'])
+    if not value:
+        return None
+    display = name
+    if unit:
+        # 'FEV1 (L)' with a Units column of 'L' files as 'FEV1' — the user
+        # keeps the unit in its slot, not glued to the name.
+        stripped = re.sub(r'\s*\(\s*' + re.escape(unit) + r'\s*\)\s*$',
+                          '', display).strip()
+        if stripped:
+            display = stripped
+    if flag and flag.lower() not in value.lower():
+        value = (value + ' ' + flag).strip()
+    # Unit has its own slot on the row — the user files it there, not glued
+    # onto the value.
+    fields: Dict[str, str] = {}
+    for other in columns:
+        if other['role'] in ('name', 'unit', 'range', 'flag') or other is first:
+            continue
+        cell = _cell(row, other['index'])
+        if cell:
+            fields[_extra_key(other)] = cell
+    record: Dict = {
+        'test_name': display,
+        'value': value,
+        'reference_range': row_range,
+        'date': first.get('date', '') if first['role'] == 'dated' else '',
+        'notes': '',
+        'source_role': first['role'],
+        'source_column': first['index'],
+        'name_base': name,
+        'format_structure': description.get('structure') or '',
+        'format_signature': description.get('signature') or '',
+    }
+    if unit:
+        record['unit'] = unit
+    if fields:
+        record['fields'] = fields
+    if description.get('section'):
+        record['section'] = description['section']
+    if len(row) < width:
+        record['misaligned'] = True
+    return record
 
 
 def parse_tables(tables: List[Dict], store: Optional[Dict] = None,
