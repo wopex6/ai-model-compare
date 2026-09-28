@@ -7533,28 +7533,34 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
         """
         from ai_compare.table_consensus import strip_code_fences as _strip
         headers = report_format.expected_headers(entry)
-        if len(headers) < 2:
-            return ''
         labels = list(entry.get('row_labels') or [])[:30]
+        if not headers and not labels:
+            return ''
+        # Ask for a faithful transcription, not the stored schema verbatim —
+        # dictating the header row made the model invent columns the report
+        # never had and squeeze real values to fit. The row labels are the
+        # part scans keep losing; the confirmed roles are overlaid later by
+        # label identity, whatever order the columns come back in.
         lines = [
-            'Re-read the results table in this document image. The table is '
-            'known to have exactly {} columns. Emit it as a markdown table '
-            'with exactly this header row:'.format(len(headers)),
+            'Re-read the results table in this document image and emit it as '
+            'a markdown table, exactly as printed.',
             '',
-            '| ' + ' | '.join(headers) + ' |',
-            '',
-            'The first column is the test name printed at the start of each '
-            'row.',
+            'Rules:',
+            '- Reproduce the column headers exactly as printed. If a heading '
+            'spans several columns (a section or band heading), emit it as '
+            'its own table row above the column header row, in the column '
+            'where it starts, leaving the other cells empty.',
+            '- The first column holds the label printed at the start of '
+            'each row.',
         ]
         if labels:
-            lines.append('Its data rows are labelled: '
+            lines.append('- Its data rows are labelled, in order: '
                          + ', '.join(labels) + '.')
         lines += [
-            'Rules:',
-            '- Copy every row label exactly as printed; a data row must never '
-            'have a blank first cell.',
-            '- A heading that spans several columns belongs to those columns, '
-            'not to a row - never emit it as a data row.',
+            '- Copy every row label exactly as printed; a data row must '
+            'never have a blank first cell.',
+            '- A heading that spans several columns belongs to those '
+            'columns, not to a row - never emit it as a data row.',
             '- Place each value in the column it is printed under; when a '
             'cell is empty emit an empty cell - never shift values sideways '
             'and never duplicate a value into two columns.',
@@ -7635,7 +7641,21 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
                        sum(1 for r in grid[1:]
                            if not str((r or [''])[0] or '').strip())
                        > (len(grid) - 1) // 2)
-            if len(grid[0]) == expected and not missing and not unnamed:
+            covered = False
+            if not missing and not unnamed:
+                # Every payload column identified against the confirmed
+                # schema means nothing is lost, whatever order they printed
+                # in — the label-identity overlay reads it; no re-read needed.
+                desc = report_format.describe(
+                    [grid[0], ['---'] * len(grid[0])] + grid[1:], 1)
+                remapped = report_format._remap_by_labels(schema, desc)
+                if remapped is not None:
+                    payload = [c for c in (desc.get('columns') or [])
+                               if c.get('role') != 'name']
+                    covered = sum(1 for s in remapped
+                                  if s.get('role') != 'name') >= len(payload)
+            if (len(grid[0]) == expected or covered) \
+                    and not missing and not unnamed:
                 continue  # right shape — the parse-layer overlay handles it
             if sig not in guided_cache:
                 guided_cache[sig] = _guided_table_call(schema)
@@ -7646,7 +7666,7 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
             if not new_grids:
                 continue
             new_grid = max(new_grids, key=len)
-            if len(new_grid) < 2 or len(new_grid[0]) != expected:
+            if len(new_grid) < 2 or len(new_grid[0]) < 2:
                 continue
             new_stems = {report_format._name_stem(str((r or [''])[0] or ''))
                          for r in new_grid[1:]}

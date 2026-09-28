@@ -1228,17 +1228,21 @@ def test_apply_remembered_falls_back_to_column_vocabulary():
     assert roles[4] == 'measured' and roles[6] == 'percent_change'
 
 
-def test_vocabulary_match_needs_width_and_confirmed():
-    """A different-width grid or an unconfirmed layout gets no overlay —
-    the fallback is the user's confirmed reading, not any similar table."""
+def test_vocabulary_match_needs_identifiable_columns_and_confirmed():
+    """A same-vocabulary grid at a different width takes the confirmed
+    reading — the columns identify by label, not by position. An unrelated
+    vocabulary or an unconfirmed layout still gets no overlay."""
     store, structure = _confirmed_spiro_store()
     rows, sep = _table('''
         | Test | Pred | Actual | %Pred | %Chng | Reference Range | Units |
         | --- | --- | --- | --- | --- | --- | --- |
         | FEV1 | 1.62 | 0.96 | 59 | 36.2 | > 1.0 | L |
     ''')
-    description = rf.describe(rows, sep)  # 7 columns, confirmed wants 9
-    assert rf.apply_remembered(description, store) is False
+    description = rf.describe(rows, sep)  # 7 columns, confirmed stores 9
+    assert rf.apply_remembered(description, store) is True
+    by_index = {c['index']: c for c in description['columns']}
+    assert by_index[2]['role'] == 'measured'      # 'Actual'
+    assert by_index[2].get('basis') == 'user'
 
     fresh = rf.describe(*_table('''
         | Analyte | Result | Flag | Reference | Units |
@@ -1323,3 +1327,115 @@ def test_vocabulary_prefers_richer_entry_only_when_confirmed():
     }
     picked = rf.find_by_vocabulary(store, ['', 'Pred', 'Actual', '%Pred', '%Chng'])
     assert picked is rich
+
+
+def test_richer_layout_outranks_same_vocabulary_plain_one():
+    """Two confirmed entries cover the same column words; the one carrying
+    the fuller user decision (emission + row labels) ranks first even when a
+    plain entry's smaller vocabulary scores a touch higher."""
+    store, structure = _confirmed_spiro_store()
+    rich = rf.find_by_structure(store, structure)
+    rich['emission'] = 'compact'
+    rich['row_labels'] = ['FEV1', 'FVC']
+    store['report_formats']['plain'] = {
+        'signature': 'plain', 'structure': 'plain', 'confirmed': True,
+        'column_roles': [
+            {'index': 0, 'label': '', 'role': 'name'},
+            {'index': 1, 'label': 'Pred', 'role': 'baseline'},
+            {'index': 2, 'label': 'Actual', 'role': 'measured'},
+            {'index': 3, 'label': '%Pred', 'role': 'percent_of'},
+            {'index': 4, 'label': '%Chng', 'role': 'percent_change'}],
+    }
+    ranked = rf.ranked_by_vocabulary(store,
+                                   ['', 'Pred', 'Actual', '%Pred', '%Chng'])
+    assert ranked and ranked[0] is rich
+
+
+def test_reordered_columns_get_confirmed_roles_by_label():
+    """The report prints Pre-Bronch Actual before Pre-Bronch Pred; the
+    confirmed layout stored Pred first. Overlaying by position swaps the
+    readings — mapping by which column it IS keeps '0.96' as the value and
+    '1.62' under the user's Pred field."""
+    store, structure = _confirmed_spiro_store()
+    entry = rf.find_by_structure(store, structure)
+    entry['emission'] = 'compact'
+    for c in entry['column_roles']:
+        c['alias'] = {1: 'Pred', 3: 'Pre-Bronch %Pred',
+                      4: 'Post-Bronch Actual', 5: 'Post-Bronch %Pred',
+                      6: '%Chng'}.get(c['index'])
+    rows, sep = _table('''
+        | Test | Pre-Bronch Actual | Pre-Bronch Pred | Pre-Bronch %Pred | Post-Bronch Actual | Post-Bronch %Pred | Post-Bronch %Chng |
+        | --- | --- | --- | --- | --- | --- | --- |
+        | FEV1 (L) | 0.96 | 1.62 | 59 | 1.30 | 80 | 36.2 |
+        | FVC (L) | 1.47 | 2.03 | 73 | 1.37 | 68 | -6.8 |
+    ''')
+    description = rf.describe(rows, sep)
+    assert rf.apply_remembered(description, store) is True
+    results, _ = rf.extract(description, rows[sep + 1:])
+    fev1 = next(r for r in results if r['test_name'] == 'FEV1')
+    assert fev1['value'] == '0.96'
+    assert fev1['fields'] == {'Pred': '1.62', 'Pre-Bronch %Pred': '59',
+                             'Post-Bronch Actual': '1.30',
+                             'Post-Bronch %Pred': '80', '%Chng': '36.2'}
+
+
+def test_richest_confirmed_layout_reads_a_reshaped_same_report():
+    """Several confirmed layouts can describe one report (earlier scans
+    confirmed different mis-shapings). The one the user shaped most —
+    compact emission and row labels — reads any grid it can identify,
+    and empty cells stay empty rather than inheriting phantom fields."""
+    flat_rows, flat_sep = _table('''
+        | Test | Pred | Actual | %Pred | %Chng | Reference Range | Units |
+        | --- | --- | --- | --- | --- | --- | --- |
+        | FEV1 | 1.62 | 0.96 | 59 | | 73 | |
+        | FVC | 2.03 | 1.47 | 73 | -6.8 | | L |
+    ''')
+    flat_desc = rf.describe(flat_rows, flat_sep)
+    store = {}
+    rf.remember(store, flat_desc)
+    rf.confirm(store, flat_desc)
+    rich_store, _ = _confirmed_spiro_store()
+    rich = next(iter(rich_store['report_formats'].values()))
+    rich['emission'] = 'compact'
+    rich['row_labels'] = ['FEV1', 'FVC', 'FEV1/FVC']
+    for c in rich['column_roles']:
+        c['alias'] = {1: 'Pred', 3: 'Pre-Bronch %Pred',
+                      4: 'Post-Bronch Actual', 5: 'Post-Bronch %Pred',
+                      6: '%Chng'}.get(c['index'])
+    store['report_formats'].update(rich_store['report_formats'])
+
+    rows, sep = _table('''
+        | Test | Actual | Pred | %Pred | Actual | %Pred | %Chng |
+        | --- | --- | --- | --- | --- | --- | --- |
+        | FEV1 (L) | 0.96 | 1.62 | 59 | 1.30 | 80 | 36.2 |
+        | FVC (L) | 1.47 | 2.03 | 73 | 1.37 | 68 | -6.8 |
+        | DLCOunc | 13.37 | 16.93 | 79 | | | |
+    ''')
+    description = rf.describe(rows, sep)
+    assert rf.apply_remembered(description, store) is True
+    assert description.get('emission') == 'compact'
+    results, _ = rf.extract(description, rows[sep + 1:])
+    fev1 = next(r for r in results if r['test_name'] == 'FEV1')
+    assert fev1['value'] == '0.96'
+    assert fev1['fields'] == {'Pred': '1.62', 'Pre-Bronch %Pred': '59',
+                             'Post-Bronch Actual': '1.30',
+                             'Post-Bronch %Pred': '80', '%Chng': '36.2'}
+    dlco = next(r for r in results if r['test_name'] == 'DLCOunc')
+    assert dlco['fields'] == {'Pred': '16.93', 'Pre-Bronch %Pred': '79'}
+
+
+def test_unrelated_report_is_not_claimed_by_the_confirmed_layout():
+    """A blood panel shares 'Reference Range'/'Units' vocabulary but is not
+    this report — coverage stays below the gate and nothing is overlaid."""
+    store, structure = _confirmed_spiro_store()
+    entry = rf.find_by_structure(store, structure)
+    entry['emission'] = 'compact'
+    entry['row_labels'] = ['FEV1', 'FVC']
+    rows, sep = _table('''
+        | Test | Result | Flag | Reference Range | Units |
+        | --- | --- | --- | --- | --- |
+        | Haemoglobin | 152 | | 130-170 | g/L |
+        | MCV | 88.2 | | 80-99 | fL |
+    ''')
+    description = rf.describe(rows, sep)
+    assert rf.apply_remembered(description, store) is False

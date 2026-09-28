@@ -670,6 +670,18 @@ def find_by_vocabulary(store: Dict, headings: List[str],
     vocabulary is sturdier — what a laboratory prints changes far less than
     what a model transcribes. Only confirmed entries qualify: this is the
     user's reading being applied, never another machine guess."""
+    return (ranked_by_vocabulary(store, headings, qualifiers) or [None])[0]
+
+
+def ranked_by_vocabulary(store: Dict, headings: List[str],
+                         qualifiers: Optional[List[str]] = None
+                         ) -> List[Dict]:
+    """Confirmed layouts speaking this grid's column language, best first.
+
+    Vocabulary coverage gates candidacy (this is the same report's words);
+    ranking then prefers the entry carrying the most user shaping — a learned
+    emission or recorded row labels mean a fuller decision than a bare roles
+    confirmation — then coverage, then vocabulary size."""
     fresh = set()
     for h in headings or []:
         fresh |= _label_variants(h)
@@ -680,8 +692,8 @@ def find_by_vocabulary(store: Dict, headings: List[str],
             fresh |= _label_variants(' '.join(x for x in (q, h) if x))
     fresh.discard('')
     if not fresh:
-        return None
-    best, best_key = None, (0.0, 0, 0)
+        return []
+    cands = []
     for e in (store.get('report_formats') or {}).values():
         if not (e or {}).get('confirmed'):
             continue
@@ -690,13 +702,10 @@ def find_by_vocabulary(store: Dict, headings: List[str],
             continue
         common = len(fresh & vocab)
         score = common / max(1, min(len(fresh), len(vocab)))
-        # Equal coverage goes to the entry the user shaped most — recorded
-        # row labels mean the confirmed schema can also vouch for which rows
-        # belong, which is what a mis-shaped rescan needs.
-        key = (score, 1 if e.get('row_labels') else 0, len(vocab))
-        if common >= 3 and score >= 0.6 and key > best_key:
-            best, best_key = e, key
-    return best
+        if common >= 3 and score >= 0.6:
+            cands.append((_richness(e) + (score, len(vocab)), e))
+    cands.sort(key=lambda kv: kv[0], reverse=True)
+    return [e for _, e in cands]
 
 
 def _positions_agree(entry: Dict, description: Dict) -> bool:
@@ -724,6 +733,84 @@ def _positions_agree(entry: Dict, description: Dict) -> bool:
         if printed & expected:
             agree += 1
     return agree >= max(1, int(len(roles) * 0.6))
+
+
+def _full_label_key(spec: Dict) -> str:
+    """'Pre-Bronch' band + 'Actual' label and a flattened 'Pre-Bronch Actual'
+    key the same printed column."""
+    return _label_key(' '.join(
+        x for x in (spec.get('qualifier'), spec.get('label')) if x))
+
+
+def _spec_variants(spec: Dict) -> set:
+    return (_label_variants(spec.get('label') or '')
+            | _label_variants(' '.join(x for x in
+                    (spec.get('qualifier'), spec.get('label')) if x)))
+
+
+def _remap_by_labels(entry: Dict, description: Dict) -> Optional[List[Dict]]:
+    """Confirmed roles for the same report's columns at fresh positions.
+
+    A rescan of the same layout can print 'Actual' before 'Pred', drop a
+    column, or flatten a band heading — the columns are the user's confirmed
+    columns, just not where that transcription left them. Matching each fresh
+    column to a confirmed spec by (qualifier + label) identity — exact full
+    label first, then last-word variants, each spec used at most once — puts
+    the user's roles on the columns that actually carry them. A purely
+    positional overlay swaps roles the moment two columns trade places.
+
+    Returns a role overlay in the fresh grid's own indexing, or None when the
+    grids do not describe the same columns."""
+    specs = entry.get('column_roles') or []
+    cols = description.get('columns') or []
+    if not specs or not cols:
+        return None
+    taken = set()
+    overlay: List[Dict] = []
+    mapped = 0
+    payload = [c for c in cols if c.get('role') != 'name']
+    for col in cols:
+        idx = col.get('index')
+        pick = None
+        full = _full_label_key(col)
+        if full:
+            for s in specs:
+                if s.get('index') not in taken \
+                        and _full_label_key(s) == full:
+                    pick = s
+                    break
+        if pick is None:
+            fresh = (_label_variants(col.get('label') or '')
+                     | _label_variants(' '.join(
+                         x for x in (col.get('qualifier'), col.get('label'))
+                         if x)))
+            for s in specs:
+                if s.get('index') not in taken \
+                        and _spec_variants(s) & fresh:
+                    pick = s
+                    break
+        if pick is None:
+            if col.get('role') == 'name':
+                overlay.append({'index': idx, 'role': 'name'})
+            continue
+        taken.add(pick.get('index'))
+        overlay.append({'index': idx, 'role': pick.get('role'),
+                        'alias': pick.get('alias')})
+        if pick.get('role') != 'name':
+            mapped += 1
+    # A couple of lucky word hits do not make this the same report — most of
+    # the payload must find its confirmed column.
+    if mapped < 2 or mapped * 5 < len(payload) * 3:
+        return None
+    return overlay
+
+
+def _richness(entry: Dict) -> tuple:
+    """How much of the user's shaping a confirmed entry carries — a learned
+    emission style or recorded row labels mean they worked this one
+    further than a bare roles confirmation."""
+    return (1 if (entry or {}).get('emission') else 0,
+            1 if (entry or {}).get('row_labels') else 0)
 
 
 def expected_headers(entry: Dict) -> List[str]:
@@ -862,13 +949,37 @@ def apply_remembered(description: Dict, store: Dict) -> bool:
         # A rescan can transcribe the same report into a different grid —
         # a band heading flattened into labels, a column split or merged.
         # The user's confirmed reading still wins over a fresh guess when
-        # the column vocabulary matches and the width is compatible.
-        alt = find_by_vocabulary(store, description.get('labels') or [],
-                                 description.get('qualifiers') or [])
-        if alt and _positions_agree(alt, description):
-            entry = alt
+        # the column vocabulary matches and the columns can be identified.
+        # Walk the ranked candidates: the fullest user decision that can
+        # name this grid's columns reads it.
+        entry = None
+        fallback = None
+        for cand in ranked_by_vocabulary(store,
+                                         description.get('labels') or [],
+                                         description.get('qualifiers') or []):
+            if _remap_by_labels(cand, description) is not None:
+                entry = cand
+                break
+            if fallback is None and _positions_agree(cand, description):
+                fallback = cand
         else:
+            entry = fallback
+        if entry is None:
             return False
+    else:
+        # A same-shape confirmed layout still yields to a fuller decision —
+        # learned emission or recorded row labels — that identifies every
+        # column too.
+        for cand in ranked_by_vocabulary(store,
+                                         description.get('labels') or [],
+                                         description.get('qualifiers') or []):
+            if cand is entry:
+                break
+            if _richness(cand) <= _richness(entry):
+                break
+            if _remap_by_labels(cand, description) is not None:
+                entry = cand
+                break
     applied = False
     if entry.get('name_style'):
         description['name_style'] = entry['name_style']
@@ -879,9 +990,15 @@ def apply_remembered(description: Dict, store: Dict) -> bool:
     if entry.get('emission'):
         description['emission'] = entry['emission']
         applied = True
-    roles = entry.get('column_roles') or []
-    if roles:
-        applied = apply_column_roles(description, roles, basis='user') or applied
+    # Identity beats position: two columns trading places must not trade the
+    # user's roles. The positional overlay stays for a structure match whose
+    # headings were themselves corrected away from the print.
+    overlay = _remap_by_labels(entry, description)
+    if overlay is None and _positions_agree(entry, description):
+        overlay = entry.get('column_roles') or []
+    if overlay:
+        applied = apply_column_roles(description, overlay,
+                                     basis='user') or applied
     return applied
 
 
