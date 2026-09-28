@@ -629,21 +629,35 @@ def _label_key(text: str) -> str:
     return re.sub(r'[^a-z0-9%]+', '', (text or '').lower())
 
 
+def _label_variants(text: str) -> set:
+    """Every way this label might be printed.
+
+    A rescan can split a band heading differently: the confirmed layout may
+    store 'Pre-Bronch Pred' while the fresh grid prints the band in its own
+    header row and labels the column just 'Pred'. The last word carries the
+    meaning, so it is a variant too."""
+    out = set()
+    key = _label_key(text)
+    if key:
+        out.add(key)
+    toks = re.findall(r'[a-z0-9%]+', (text or '').lower())
+    if len(toks) > 1:
+        out.add(_label_key(toks[-1]))
+    out.discard('')
+    return out
+
+
 def entry_vocabulary(entry: Dict) -> set:
-    """Column labels a confirmed layout knows — bare and qualifier-joined —
-    so a scan that flattens a band heading into its column labels still
-    speaks this layout's language."""
+    """Column labels a confirmed layout knows — bare, qualifier-joined and
+    last-word variants — so a scan that flattens or splits a band heading
+    differently still speaks this layout's language."""
     vocab = set()
     for c in (entry or {}).get('column_roles') or []:
         if c.get('role') == 'name':
             continue
-        bare = _label_key(c.get('label') or '')
-        full = _label_key(' '.join(x for x in (c.get('qualifier'),
-                                             c.get('label')) if x))
-        if bare:
-            vocab.add(bare)
-        if full:
-            vocab.add(full)
+        vocab |= _label_variants(c.get('label') or '')
+        vocab |= _label_variants(' '.join(x for x in (c.get('qualifier'),
+                                                    c.get('label')) if x))
     return vocab
 
 
@@ -656,11 +670,14 @@ def find_by_vocabulary(store: Dict, headings: List[str],
     vocabulary is sturdier — what a laboratory prints changes far less than
     what a model transcribes. Only confirmed entries qualify: this is the
     user's reading being applied, never another machine guess."""
-    fresh = {_label_key(h) for h in (headings or [])}
-    fresh.update(_label_key(q) for q in (qualifiers or []))
+    fresh = set()
+    for h in headings or []:
+        fresh |= _label_variants(h)
+    for q in qualifiers or []:
+        fresh |= _label_variants(q)
     if headings and qualifiers:
         for h, q in zip(headings, qualifiers):
-            fresh.add(_label_key(' '.join(x for x in (q, h) if x)))
+            fresh |= _label_variants(' '.join(x for x in (q, h) if x))
     fresh.discard('')
     if not fresh:
         return None
@@ -692,12 +709,14 @@ def _positions_agree(entry: Dict, description: Dict) -> bool:
         if not isinstance(idx, int) or idx >= len(cols):
             continue
         col = cols[idx]
-        printed = {_label_key(col.get('label') or ''),
-                   _label_key(' '.join(x for x in (col.get('qualifier'),
-                                                   col.get('label')) if x))}
-        expected = {_label_key(spec.get('label') or ''),
-                    _label_key(' '.join(x for x in (spec.get('qualifier'),
-                                                    spec.get('label')) if x))}
+        printed = (_label_variants(col.get('label') or '')
+                   | _label_variants(' '.join(
+                       x for x in (col.get('qualifier'), col.get('label'))
+                       if x)))
+        expected = (_label_variants(spec.get('label') or '')
+                    | _label_variants(' '.join(
+                        x for x in (spec.get('qualifier'), spec.get('label'))
+                        if x)))
         if printed & expected:
             agree += 1
     return agree >= max(1, int(len(roles) * 0.6))

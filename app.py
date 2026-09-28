@@ -7593,13 +7593,18 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
         if not grids:
             return ''
         changed = False
+        guided_cache = {}   # one re-read per layout — the model re-reads the
+                            # whole page, so a second call would just re-emit
+                            # the same table
+        drop = set()
         for gi, grid in enumerate(grids):
-            if not grid:
+            if not grid or gi in drop:
                 continue
             entry = report_format.find_by_vocabulary(
                 store, [str(c or '') for c in grid[0]])
             if not entry:
                 continue
+            sig = entry.get('signature') or str(id(entry))
             expected = len(entry.get('column_roles') or [])
             labels = [l for l in (entry.get('row_labels') or [])][:30]
             stems = {report_format._name_stem(str((r or [''])[0] or ''))
@@ -7611,7 +7616,9 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
                        < max(1, len(labels) // 2))
             if len(grid[0]) == expected and not missing:
                 continue  # right shape — the parse-layer overlay handles it
-            guided = _guided_table_call(entry)
+            if sig not in guided_cache:
+                guided_cache[sig] = _guided_table_call(entry)
+            guided = guided_cache[sig]
             if not guided:
                 continue
             new_grids = parse_markdown_grids(guided)
@@ -7620,20 +7627,38 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
             new_grid = max(new_grids, key=len)
             if len(new_grid) < 2 or len(new_grid[0]) != expected:
                 continue
+            new_stems = {report_format._name_stem(str((r or [''])[0] or ''))
+                         for r in new_grid[1:]}
+            new_stems.discard('')
             if labels:
-                new_stems = {report_format._name_stem(
-                                 str((r or [''])[0] or ''))
-                             for r in new_grid[1:]}
-                new_stems.discard('')
                 hit = sum(1 for l in labels
                           if report_format._name_stem(l) in new_stems)
                 if hit < max(1, len(labels) // 2):
                     continue
             grids[gi] = new_grid
             changed = True
+            # A model that splits one physical table into two grids emits the
+            # same rows twice; after the re-read, a later grid whose labels
+            # are all inside the guided grid is that same table duplicated.
+            for gj in range(gi + 1, len(grids)):
+                other = grids[gj]
+                if not other or gj in drop:
+                    continue
+                if report_format.find_by_vocabulary(
+                        store, [str(c or '') for c in other[0]]) is not entry:
+                    continue
+                other_stems = {report_format._name_stem(
+                                   str((r or [''])[0] or ''))
+                               for r in other[1:]}
+                other_stems.discard('')
+                # At most one stray label (a mis-OCR'd name) — anything more
+                # and it is a genuinely different table sharing vocabulary.
+                if other_stems and len(other_stems - new_stems) <= 1:
+                    drop.add(gj)
         if not changed:
             return ''
-        return '\n\n'.join(grid_to_markdown(g) for g in grids)
+        return '\n\n'.join(grid_to_markdown(g)
+                           for gi, g in enumerate(grids) if gi not in drop)
 
     # Vision OCR misreads dense text in random, uncorrelated ways, so read the
     # document more than once and let the passes vote on each cell.  The first pass

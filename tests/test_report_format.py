@@ -1269,3 +1269,14 @@ def test_expected_headers_flatten_qualifier_and_label():
     assert headers[1] == 'Pre-Bronch Pred'
     assert headers[8] == 'Units'
     assert len(headers) == 9
+
+
+def test_vocabulary_matches_bare_labels_against_flattened_ones():
+    """ST's rescan printed bare column names ('Pred', 'Actual') while the
+    confirmed layout stored flattened ones ('Pre-Bronch Pred'). The last word
+    carries the meaning — 'Pre-Bronch Pred' must still answer to 'pred'."""
+    store, structure = _confirmed_spiro_store()
+    rescan_headings = ['Test', 'Pred', 'Actual', '%Pred', '%Chng',
+                       'Reference Range', 'Units']
+    entry = rf.find_by_vocabulary(store, rescan_headings)
+    assert entry is not None and entry['structure'] == structure
