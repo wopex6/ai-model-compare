@@ -346,6 +346,26 @@ the expected labels never made it into the name column. The guided grid is
 validated (width, label coverage) before it replaces anything. Upload
 callers seed shared formats *before* OCR so the guided read sees them.
 
+**Photos can be physically rotated.** `exif_transpose` cannot fix rotation
+baked into the pixels, and a sideways page transcribes transposed or
+scrambled — every mis-shaped grid above traces back to one rotated photo.
+Asking the model which way up the page is does not work (it answers
+confidently and wrongly). Instead the guided re-read retries the image at
+90/-90/180 and keeps the candidate the *report's own arithmetic* prefers:
+`_grid_score` counts rows where detected relations hold (e.g.
+`%Pred = 100·Actual/Pred`) and charges known `row_labels` rows that came
+back empty as failures. Asking the model for the confirmed schema verbatim
+made it invent columns the page never had — the guided prompt asks for a
+faithful transcription instead, guided only by the row labels.
+
+**Rows above `---` are all headers.** `split_tables` / `table_to_markdown` /
+`promote_header_rows` in `table_consensus.py` keep the separator position:
+a band heading (Pre-Bronch / Post-Bronch) is a header row, not the column
+header and not data. When a model emits the two header rows but skips the
+separator, leading non-numeric rows get promoted back to headers. Grids
+inside the guided-read path are `(headers, data)` pairs for exactly this
+reason — do not flatten them through `parse_markdown_grids`.
+
 **Position is the data.** A 2-D report is read by coordinates, not by token
 order: each emitted row carries `source_column` (its column index) so
 learning can target the position it came from. Two integrity rules guard the
