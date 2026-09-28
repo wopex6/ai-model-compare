@@ -1,44 +1,21 @@
 # Handoff snapshot
 
-_Generated 2026-09-28 21:33 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-28 22:32 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-ST scan fixed for real this time: the sideways grid kept 5/10 row labels which passed the old half-labels gate, so guided re-read never fired and a confirmed 7-col layout applied positionally. Gate now fires on ANY missing expected label. Local harness on the actual sideways photo produces all 10 golden rows again. Deployed + verified. Next: user to hit re-analyse on ST's stored doc.
+Fixed the last ST spirometry discrepancy: _fill_test_defaults was gluing each compact row's own unit onto the bare value ('5.30 ml/min/mmHg/L'). Compact rows now stamp emission='compact' (managed provenance key, registered everywhere format_structure is) and the backfill skips them; composed/AI-path rows still embed units. Deployed + verified. Next: user re-analyses ST's doc — expect Kco/DL/VA value='5.30' with unit in its slot.
 
 ## Git
 
 **Branch:** `cursor/emergency-card-paramedic-fields`  
-**Uncommitted files:** 43
+**Uncommitted files:** 20
 
 > Uncommitted work is the main handoff hazard: the next agent
 > cannot tell finished edits from half-written ones. Commit
 > before switching, even as `wip:`.
 
 ```
-M AI_REGENERATION_SPEC.md
- M ENHANCEMENTS.md
- M README.md
- M SYSTEM_REGENERATION_GUIDE.md
-?? _append_shared_tests.py
-?? _iter_sp.py
-?? _last_text.md
-?? _merge_dupes.py
-?? _prod17_backup.json
-?? _prod17_now.json
-?? _prod17_now2.json
-?? _prod_result.json
-?? _st_photo_080524.jpeg
-?? _st_photo_084600.jpeg
-?? _st_photo_084858.jpeg
-?? _st_prod_result.json
-?? _st_rescan.json
-?? _st_rescan.txt
-?? _st_rescan2.json
-?? _st_rescan3.json
-?? _st_rescan4.json
-?? _st_result.json
-?? _st_spiro.json
 ?? check_wk_credentials.py
 ?? debug_auth.py
 ?? direct_password_test.py
@@ -56,30 +33,22 @@ M AI_REGENERATION_SPEC.md
 ?? test_contact_admin_visibility.py
 ?? test_email_banner_playwright.py
 ?? test_integrated_system.py
+?? test_reply_buttons.py
+?? test_special_characters.py
+?? verify_ken.py
 ```
-
-<details><summary>diff --stat</summary>
-
-```
-AI_REGENERATION_SPEC.md      |  2 +-
- ENHANCEMENTS.md              | 16 ++++++++++++++++
- README.md                    |  2 +-
- SYSTEM_REGENERATION_GUIDE.md |  2 +-
- 4 files changed, 19 insertions(+), 3 deletions(-)
-```
-</details>
 
 Recent commits:
 
 ```
+d653636 Keep compact-emission values bare of their slotted unit
+def89d2 Don't glue a slotted unit onto the value in _fill_test_defaults
+16fdb6a Handoff + autodoc updates
 de0d959 Guided re-read: any missing expected row is a mis-shape
 21a7342 Handoff: ST rotated-photo scan solved end-to-end
 56120b6 AGENTS: note rotated-photo guided retry and multi-row headers
 5caf895 Guided re-read: retry rotated photos, keep multi-row headers
 69ffdcf Dr. Health: read a same-report grid by column identity, not position
-af22eb5 Handoff: ST rescan diagnosis â€” mis-shape detection + role repair shipped
-41fafc3 Guided re-read: prefer the fullest confirmed schema, detect mis-shape
-4a258a2 Handoff: Sau Tse restored; label-variant matching shipped
 ```
 
 ## Production (PythonAnywhere)
@@ -131,7 +100,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-474 passed, 1 warning in 23.46s
+474 passed, 1 warning in 24.01s
 [AutoDoc] Monitoring stopped
 ```
 
