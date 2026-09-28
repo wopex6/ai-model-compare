@@ -1,21 +1,25 @@
 # Handoff snapshot
 
-_Generated 2026-09-28 22:32 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-29 09:35 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Fixed the last ST spirometry discrepancy: _fill_test_defaults was gluing each compact row's own unit onto the bare value ('5.30 ml/min/mmHg/L'). Compact rows now stamp emission='compact' (managed provenance key, registered everywhere format_structure is) and the backfill skips them; composed/AI-path rows still embed units. Deployed + verified. Next: user re-analyses ST's doc — expect Kco/DL/VA value='5.30' with unit in its slot.
+Spiro rescan: 14 local cycles on ST's sideways photo, last 5 consecutive golden. Added 3 misread gates to _layout_guided_read (blank measured cells, interior holes in a labelled row, 3+ consecutive rows echoing Actual==Pred). Qualifier repair via label remap; compact measured column survives mass delete/reject (profile 17 layout was self-poisoned, repaired). Committed f0272a3, deployed + digest-verified, /dr-health 200. Next: user re-analyses ST's doc in prod.
 
 ## Git
 
 **Branch:** `cursor/emergency-card-paramedic-fields`  
-**Uncommitted files:** 20
+**Uncommitted files:** 24
 
 > Uncommitted work is the main handoff hazard: the next agent
 > cannot tell finished edits from half-written ones. Commit
 > before switching, even as `wip:`.
 
 ```
+M AI_REGENERATION_SPEC.md
+ M ENHANCEMENTS.md
+ M README.md
+ M SYSTEM_REGENERATION_GUIDE.md
 ?? check_wk_credentials.py
 ?? debug_auth.py
 ?? direct_password_test.py
@@ -38,17 +42,28 @@ Fixed the last ST spirometry discrepancy: _fill_test_defaults was gluing each co
 ?? verify_ken.py
 ```
 
+<details><summary>diff --stat</summary>
+
+```
+AI_REGENERATION_SPEC.md      |   2 +-
+ ENHANCEMENTS.md              | 176 +++++++++++++++++++++++++++++++++++++++++++
+ README.md                    |   2 +-
+ SYSTEM_REGENERATION_GUIDE.md |   2 +-
+ 4 files changed, 179 insertions(+), 3 deletions(-)
+```
+</details>
+
 Recent commits:
 
 ```
+f0272a3 Re-read grids that are shaped right but read wrong
+abb800f Handoff: compact-emission unit fix deployed
 d653636 Keep compact-emission values bare of their slotted unit
 def89d2 Don't glue a slotted unit onto the value in _fill_test_defaults
 16fdb6a Handoff + autodoc updates
 de0d959 Guided re-read: any missing expected row is a mis-shape
 21a7342 Handoff: ST rotated-photo scan solved end-to-end
 56120b6 AGENTS: note rotated-photo guided retry and multi-row headers
-5caf895 Guided re-read: retry rotated photos, keep multi-row headers
-69ffdcf Dr. Health: read a same-report grid by column identity, not position
 ```
 
 ## Production (PythonAnywhere)
@@ -90,17 +105,17 @@ Reload often returns `409 slow_startup_error` on the first attempt — retry rat
 All passing.
 
 ```
-........................................................................ [ 60%]
-........................................................................ [ 75%]
-........................................................................ [ 91%]
-..........................................                               [100%]
-============================== warnings summary ===============================
+automated_greeting_system.py:416
+automated_greeting_system.py:416
+  C:\Users\trabc\CascadeProjects\ai-model-compare - Claude\automated_greeting_system.py:416: DeprecationWarning: The default datetime adapter is deprecated as of Python 3.12; see the sqlite3 documentation for suggested replacement recipes
+    cursor.execute('''
+
 ..\..\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37
   C:\Users\trabc\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-474 passed, 1 warning in 24.01s
+476 passed, 5 warnings in 23.16s
 [AutoDoc] Monitoring stopped
 ```
 
