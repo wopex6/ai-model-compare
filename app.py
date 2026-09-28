@@ -8092,6 +8092,13 @@ def apply_health_review():
         extracted = data.get('extracted')
         if not extracted or not isinstance(extracted, dict):
             return jsonify({'error': 'Missing or invalid extracted data'}), 400
+        # Echo how many report-native fields the request carried — the client
+        # checks this key exists to detect a stale server that would silently
+        # drop them (a frozen local dev server did exactly that once).
+        fields_received = sum(
+            len(t.get('fields') or {})
+            for t in extracted.get('test_results') or []
+            if isinstance(t, dict))
         # The user reviewed and edited this on screen before applying it, so it
         # counts as report-derived data they have already confirmed.
         profile.ingest_source = health_insights.SOURCE_DOCUMENT
@@ -8163,6 +8170,7 @@ def apply_health_review():
         profile.save()
         return jsonify({'success': True, 'actions': actions,
                         'added_count': added,
+                        'fields_received': fields_received,
                         'learned': learned,
                         'last_import': profile.data['last_import'],
                         'extracted': extracted})

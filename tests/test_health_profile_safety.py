@@ -1085,6 +1085,34 @@ def test_apply_review_then_undo_removes_only_imported_rows():
         _cleanup(user_id)
 
 
+def test_apply_review_echoes_fields_received():
+    # The response must echo how many report-native fields the request
+    # carried — the client treats a missing echo as a stale server that
+    # would drop them silently.
+    import app as app_mod
+    user_id = _user()
+    try:
+        HealthProfile(user_id).save()
+        app_mod.app.config['TESTING'] = True
+        client = app_mod.app.test_client()
+        with client.session_transaction() as sess:
+            sess['user_id'] = user_id
+            sess['username'] = 'safety-test'
+        resp = client.post('/api/health-profile/apply-review', json={
+            'extracted': {'test_results': [
+                {'test_name': 'FEV1', 'value': '0.96', 'date': '2026-09-20',
+                 'fields': {'Method': 'Spirometry', 'Pre-Bronch %Pred': '59'}},
+            ]}
+        })
+        data = resp.get_json()
+        assert resp.status_code == 200, data
+        assert data.get('fields_received') == 2
+        row = HealthProfile(user_id).data['test_results'][0]
+        assert row['fields']['Method'] == 'Spirometry'
+    finally:
+        _cleanup(user_id)
+
+
 def test_dimensionless_test_drops_misattributed_concentration_unit():
     """OCR sometimes puts a neighbouring row's unit on Hct — a ratio test
     that can never carry g/L. The guard strips it; real units stay."""

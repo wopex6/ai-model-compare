@@ -2394,9 +2394,10 @@
     }
 
     function openReviewModal(extracted, meta = {}) {
+        let container = null;
         try {
         setReviewState(extracted, meta);
-        const container = document.getElementById('review-content');
+        container = document.getElementById('review-content');
         if (!container) throw new Error('review-content not found');
         container.innerHTML = '';
 
@@ -2641,6 +2642,7 @@
             console.error('openReviewModal error', e);
             container.innerHTML = '<p style="color:#c62828">Could not build review view: ' + escapeHtml(String(e && e.message || e)) + '</p>';
         } finally {
+            if (container) maybeOfferReviewDraft(container, extracted);
             const modal = document.getElementById('review-modal');
             if (modal) {
                 const already = modal.classList.contains('active');
@@ -2891,6 +2893,115 @@
         document.querySelectorAll('#review-content input[type="checkbox"]').forEach(cb => cb.checked = checked);
     }
 
+    // --- Review draft: typed values survive a failed save, a crash or an
+    // accidental close. Snapshot on every edit (debounced); cleared only on
+    // a confirmed save or an explicit discard — never silently.
+    const REVIEW_DRAFT_KEY = 'drHealth.reviewDraft.v1';
+    let _reviewDraftTimer = null;
+    function _reviewDraftSig(pending) {
+        return JSON.stringify(((pending || {}).test_results || [])
+            .map(t => [t.test_name, t.value, t.date]));
+    }
+    function snapshotReviewDraft() {
+        clearTimeout(_reviewDraftTimer);
+        _reviewDraftTimer = setTimeout(() => {
+            try {
+                const rows = [];
+                document.querySelectorAll('#review-content .review-item').forEach(row => {
+                    const cb = row.querySelector('input[type="checkbox"]');
+                    const values = {};
+                    row.querySelectorAll('.review-item-fields input, .review-item-fields textarea')
+                        .forEach(el => { if (el.dataset.field) values[el.dataset.field] = el.value; });
+                    rows.push({
+                        category: cb ? (cb.dataset.category || '') : '',
+                        index: cb && cb.dataset.index !== undefined ? cb.dataset.index : null,
+                        checked: cb ? cb.checked : true,
+                        values
+                    });
+                });
+                sessionStorage.setItem(REVIEW_DRAFT_KEY, JSON.stringify({
+                    at: Date.now(), sig: _reviewDraftSig(currentReviewPending), rows
+                }));
+            } catch (e) {}
+        }, 400);
+    }
+    function clearReviewDraft() {
+        try { sessionStorage.removeItem(REVIEW_DRAFT_KEY); } catch (e) {}
+    }
+
+    // After the modal renders, offer to restore a draft whose pending payload
+    // matches this report (same rows in the same order). A different report's
+    // draft is dropped — restoring it would misapply values.
+    function maybeOfferReviewDraft(container, pending) {
+        let draft = null;
+        try { draft = JSON.parse(sessionStorage.getItem(REVIEW_DRAFT_KEY) || 'null'); } catch (e) {}
+        if (!draft || !Array.isArray(draft.rows) || !draft.rows.length) return;
+        if (draft.sig !== _reviewDraftSig(pending)) { clearReviewDraft(); return; }
+        const banner = document.createElement('div');
+        banner.style.cssText = 'background:#fff8e1;border:1px solid #ffcc80;border-radius:6px;'
+            + 'padding:8px 10px;margin-bottom:10px;font-size:0.85rem;';
+        const when = draft.at ? new Date(draft.at).toLocaleString() : '';
+        banner.innerHTML = '<i class="fas fa-clock-rotate-left"></i> Unsaved draft from '
+            + escapeHtml(when) + ' — ';
+        const restore = document.createElement('button');
+        restore.type = 'button';
+        restore.className = 'btn-secondary';
+        restore.style.cssText = 'font-size:0.78rem;padding:2px 10px;margin-left:6px;';
+        restore.textContent = 'Restore it';
+        const discard = document.createElement('button');
+        discard.type = 'button';
+        discard.className = 'btn-secondary';
+        discard.style.cssText = 'font-size:0.78rem;padding:2px 10px;margin-left:4px;';
+        discard.textContent = 'Discard';
+        restore.addEventListener('click', () => { applyReviewDraft(draft); banner.remove(); });
+        discard.addEventListener('click', () => { clearReviewDraft(); banner.remove(); });
+        banner.appendChild(restore);
+        banner.appendChild(discard);
+        container.insertBefore(banner, container.firstChild);
+    }
+    function applyReviewDraft(draft) {
+        const domRows = Array.from(document.querySelectorAll('#review-content .review-item'));
+        const manualPos = {};
+        (draft.rows || []).forEach(d => {
+            let target = null;
+            if (d.index !== null && d.index !== undefined && d.index !== '') {
+                target = domRows.find(r => {
+                    const c = r.querySelector('input[type="checkbox"]');
+                    return c && c.dataset.category === d.category && c.dataset.index === String(d.index);
+                });
+            } else {
+                const pos = manualPos[d.category] || 0;
+                manualPos[d.category] = pos + 1;
+                const free = domRows.filter(r => {
+                    const c = r.querySelector('input[type="checkbox"]');
+                    return c && c.dataset.category === d.category && c.dataset.index === undefined;
+                });
+                target = free[pos];
+            }
+            if (!target) return;
+            const cb = target.querySelector('input[type="checkbox"]');
+            if (cb) cb.checked = d.checked !== false;
+            const fieldsEl = target.querySelector('.review-item-fields');
+            Object.entries(d.values || {}).forEach(([key, val]) => {
+                let el = target.querySelector('[data-field="' + CSS.escape(key) + '"]');
+                // A 'fields.<heading>' column added in the lost session is a
+                // column — recreate it on every row, then set this row's value.
+                if (!el && key.indexOf('fields.') === 0 && fieldsEl) {
+                    const list = target.parentElement;
+                    const scope = list || target;
+                    (scope.querySelectorAll(':scope > .review-item').length
+                        ? scope.querySelectorAll(':scope > .review-item') : [target]
+                    ).forEach(r => {
+                        const f = r.querySelector('.review-item-fields');
+                        if (f) addFieldBox(f, key.slice(7), true, r);
+                    });
+                    el = target.querySelector('[data-field="' + CSS.escape(key) + '"]');
+                }
+                if (el) el.value = val;
+            });
+        });
+    }
+
     async function saveReview() {
         const status = document.getElementById('review-status');
         const extracted = {};
@@ -3021,6 +3132,7 @@
             // Everything was rejected: nothing to save, just drop the review.
             status.textContent = 'Nothing selected — review discarded.';
             reportReviewOutcome('Nothing selected — review discarded.');
+            clearReviewDraft();
             currentReviewPending = null;
             currentReviewMeta = {};
             setTimeout(() => closeReviewModal(), 600);
@@ -3028,6 +3140,14 @@
         }
 
         if (!Object.keys(extracted).length) extracted.test_results = [];
+        // Count the report-native fields going out — the response must echo
+        // the same count, or the server is running code too old to keep them.
+        let fieldsSent = 0;
+        document.querySelectorAll('#review-content .review-item-fields input, #review-content .review-item-fields textarea')
+            .forEach(el => {
+                if (el.dataset.field && el.dataset.field.indexOf('fields.') === 0 && el.value.trim()) fieldsSent++;
+            });
+        status.style.color = '';
         status.textContent = 'Saving accepted items...';
         try {
             const resp = await AuthHelper.authenticatedFetch('/api/health-profile/apply-review', {
@@ -3041,6 +3161,16 @@
                 })
             });
             const data = await resp.json();
+            if (resp.ok && data.success !== false
+                    && fieldsSent && (data.fields_received == null || data.fields_received < fieldsSent)) {
+                // Success reply but no fields echo = a stale server that saved
+                // the rows and dropped the fields. Keep everything editable —
+                // after a restart, pressing Save again merges and backfills.
+                status.style.color = '#c62828';
+                status.textContent = `WARNING: ${fieldsSent} report field(s) were not acknowledged by the server — it may be running old code. Restart the server, then Save again. Your entries are still here and the draft is kept.`;
+                reportReviewOutcome('Save may have dropped fields — stale server?');
+                return;
+            }
             if (resp.ok && data.success !== false) {
                 const added = (data.added_count != null) ? data.added_count
                     : (data.actions || []).filter(a => String(a).startsWith('Added')).length;
@@ -3049,14 +3179,17 @@
                     : 'Saved — no new records added.';
                 status.textContent = msg;
                 reportReviewOutcome(msg);
+                clearReviewDraft();
                 setTimeout(() => { closeReviewModal(); loadHealthProfile(); }, 600);
                 currentReviewPending = null;
                 currentReviewMeta = {};
             } else {
-                status.textContent = data.error || 'Save failed.';
+                status.style.color = '#c62828';
+                status.textContent = data.error || 'Save failed — your entries are still here.';
             }
         } catch (e) {
-            status.textContent = 'Network error.';
+            status.style.color = '#c62828';
+            status.textContent = 'Network error — nothing was saved. Your entries are still here; try again.';
         }
     }
 
@@ -3092,8 +3225,21 @@
     document.getElementById('review-accept-all').addEventListener('click', () => setReviewAll(true));
     // "Reject all" means discard the review — just close, don't leave the
     // user staring at unchecked boxes.
-    document.getElementById('review-reject-all').addEventListener('click', closeReviewModal);
+    document.getElementById('review-reject-all').addEventListener('click', () => {
+        clearReviewDraft();
+        closeReviewModal();
+    });
     document.getElementById('review-save').addEventListener('click', saveReview);
+    // Draft the form as it is typed — a failed save, crash or stray reload
+    // must not lose entered values again.
+    const reviewContent = document.getElementById('review-content');
+    if (reviewContent) {
+        reviewContent.addEventListener('input', snapshotReviewDraft);
+        reviewContent.addEventListener('change', snapshotReviewDraft);
+        // ×-removals delete inputs — no input/change fires, so snapshot on
+        // click too (debounced).
+        reviewContent.addEventListener('click', snapshotReviewDraft);
+    }
     const undoImportBtn = document.getElementById('undo-import-btn');
     if (undoImportBtn) undoImportBtn.addEventListener('click', async () => {
         const status = document.getElementById('profile-status');

@@ -1368,6 +1368,11 @@ Examples:
                 testResults.push(obj);
             });
             extracted.test_results = testResults;
+            // Report-native fields going out — the response must echo the
+            // same count, or the server is too old to keep them.
+            const fieldsSent = testResults.reduce(
+                (n, t) => n + Object.keys(t.fields || {}).length, 0);
+            const btnLabel = btn.innerHTML;
             btn.disabled = true;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
             try {
@@ -1379,14 +1384,36 @@ Examples:
                                            rejected_test_results: rejected })
                 });
                 const data = await resp.json();
-                if (resp.ok && data.success !== false) {
+                if (resp.ok && data.success !== false
+                        && fieldsSent && (data.fields_received == null || data.fields_received < fieldsSent)) {
+                    // A stale server saved the rows and silently dropped the
+                    // fields — warn instead of declaring success; the form
+                    // stays editable so a restart + Save backfills them.
+                    const warn = document.createElement('div');
+                    warn.style.cssText = 'padding:10px;background:#fff3e0;border:1px solid #ffb74d;border-radius:6px;color:#bf360c;margin-bottom:8px;';
+                    warn.innerHTML = `<i class='fas fa-exclamation-triangle'></i> Rows saved, but ${fieldsSent} report field(s) were not acknowledged — the server may be running old code. Restart it and press Save again; your entries are still here.`;
+                    card.insertBefore(warn, card.firstChild);
+                    btn.disabled = false;
+                    btn.innerHTML = btnLabel;
+                } else if (resp.ok && data.success !== false) {
                     card.innerHTML = `<div style='padding:10px;background:#e8f5e9;border-radius:6px;color:#2e7d32;'><i class='fas fa-check-circle'></i> Saved. ${data.actions ? data.actions.join('; ') : ''}</div>`;
                     loadProfile();
                 } else {
-                    card.innerHTML = `<div style='padding:10px;background:#ffebee;border-radius:6px;color:#c62828;'>Save failed: ${data.error || 'Unknown error'}</div>`;
+                    // Keep the form — an error banner must not wipe entries.
+                    const err = document.createElement('div');
+                    err.style.cssText = 'padding:10px;background:#ffebee;border-radius:6px;color:#c62828;margin-bottom:8px;';
+                    err.innerHTML = `<i class='fas fa-exclamation-triangle'></i> Save failed: ${escapeHtml(data.error || 'Unknown error')} — your entries are still here; try again.`;
+                    card.insertBefore(err, card.firstChild);
+                    btn.disabled = false;
+                    btn.innerHTML = btnLabel;
                 }
             } catch (e) {
-                card.innerHTML = `<div style='padding:10px;background:#ffebee;border-radius:6px;color:#c62828;'>Network error: ${e.message}</div>`;
+                const err = document.createElement('div');
+                err.style.cssText = 'padding:10px;background:#ffebee;border-radius:6px;color:#c62828;margin-bottom:8px;';
+                err.innerHTML = `<i class='fas fa-exclamation-triangle'></i> Network error: ${escapeHtml(e.message)} — nothing was saved, your entries are still here; try again.`;
+                card.insertBefore(err, card.firstChild);
+                btn.disabled = false;
+                btn.innerHTML = btnLabel;
             }
         }
 
