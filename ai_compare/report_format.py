@@ -765,20 +765,49 @@ def _remap_by_labels(entry: Dict, description: Dict) -> Optional[List[Dict]]:
     cols = description.get('columns') or []
     if not specs or not cols:
         return None
+
+    def _terminal(text: str) -> str:
+        toks = re.findall(r'[a-z0-9%]+', (text or '').lower())
+        return _label_key(toks[-1]) if toks else ''
+
+    # Same-labelled columns pair in print order: a band heading transcribed
+    # one column early gives two fresh columns the same qualifier+label, so
+    # which '%Pred' a column is must come from its ordinal among '%Pred'
+    # columns, never from the broken qualifier.
+    fresh_groups: Dict[str, List[Dict]] = {}
+    for c in cols:
+        if c.get('role') == 'name':
+            continue
+        fresh_groups.setdefault(_terminal(c.get('label') or ''),
+                                []).append(c)
+    spec_groups: Dict[str, List[Dict]] = {}
+    for s in specs:
+        spec_groups.setdefault(_terminal(s.get('label') or ''),
+                               []).append(s)
+    ordinal: Dict[int, Dict] = {}
+    for key, group in fresh_groups.items():
+        spec_group = spec_groups.get(key) or []
+        if key and len(spec_group) == len(group):
+            for c, s in zip(group, spec_group):
+                ordinal[c['index']] = s
+
     taken = set()
     overlay: List[Dict] = []
     mapped = 0
     payload = [c for c in cols if c.get('role') != 'name']
     for col in cols:
         idx = col.get('index')
-        pick = None
-        full = _full_label_key(col)
-        if full:
-            for s in specs:
-                if s.get('index') not in taken \
-                        and _full_label_key(s) == full:
-                    pick = s
-                    break
+        pick = ordinal.get(idx)
+        if pick is not None and pick.get('index') in taken:
+            pick = None
+        if pick is None:
+            full = _full_label_key(col)
+            if full:
+                for s in specs:
+                    if s.get('index') not in taken \
+                            and _full_label_key(s) == full:
+                        pick = s
+                        break
         if pick is None:
             fresh = (_label_variants(col.get('label') or '')
                      | _label_variants(' '.join(
@@ -794,8 +823,21 @@ def _remap_by_labels(entry: Dict, description: Dict) -> Optional[List[Dict]]:
                 overlay.append({'index': idx, 'role': 'name'})
             continue
         taken.add(pick.get('index'))
-        overlay.append({'index': idx, 'role': pick.get('role'),
-                        'alias': pick.get('alias')})
+        # The confirmed column's qualifier is part of its identity — a band
+        # heading printed one column off corrupts the fresh qualifiers. The
+        # spec's own qualifier wins: stored, or the prefix a flattened label
+        # ('Pre-Bronch Actual') carries over the fresh column's own label.
+        spec_qual = (pick.get('qualifier') or '').strip()
+        fresh_label = (col.get('label') or '').strip()
+        flat = (pick.get('label') or '').strip()
+        if (not spec_qual and fresh_label and len(flat) > len(fresh_label)
+                and _label_key(flat).endswith(_label_key(fresh_label))):
+            spec_qual = flat[:len(flat) - len(fresh_label)].strip(' -_%')
+        spec_out = {'index': idx, 'role': pick.get('role'),
+                    'alias': pick.get('alias')}
+        if spec_qual:
+            spec_out['set_qualifier'] = spec_qual
+        overlay.append(spec_out)
         if pick.get('role') != 'name':
             mapped += 1
     # A couple of lucky word hits do not make this the same report — most of
@@ -933,6 +975,14 @@ def apply_column_roles(description: Dict, column_roles: List[Dict],
                 col['alias'] = spec['alias']
             else:
                 col.pop('alias', None)
+            changed = True
+        # A label-remapped overlay also carries the confirmed column's
+        # qualifier: a band heading printed one column off mislabels whole
+        # column groups, and 'Pre-Bronch' vs 'Post-Bronch' decide which
+        # measurement a cell is.
+        if 'set_qualifier' in spec \
+                and col.get('qualifier') != spec['set_qualifier']:
+            col['qualifier'] = spec['set_qualifier']
             changed = True
     if changed:
         description['layout'] = _layout_from_roles(description['columns'])
@@ -1314,6 +1364,12 @@ def learn_from_delete(store: Dict, removed: Dict, remaining: List[Dict],
             if r.get('format_structure') == structure and r.get('source_role') == role]
     if left:
         return None
+    # Under compact emission every row derives from the one measured column,
+    # so deleting all its rows can only ever hit that column — and demoting it
+    # permanently breaks the layout. Deleting a bad scan's rows is a verdict
+    # on the reading, not on the role.
+    if role == 'measured' and entry.get('emission') == 'compact':
+        return None
     # Demote that role on this structure. Name/range/unit stay put.
     roles = list(entry.get('column_roles') or [])
     changed = False
@@ -1387,8 +1443,18 @@ def learn_from_reject(store: Dict, rejected: List[Dict], kept: List[Dict],
              'columns': sorted(cols)})
         survived = kept_cols.get(structure, set())
         roles = entry.get('column_roles') or []
+        # Under compact emission every row derives from the one measured
+        # column; rejecting a garbled scan's rows can only ever demote that
+        # column, which would permanently break the layout. A rejection there
+        # is a verdict on the reading, not on the role.
+        compact_measured = set()
+        if entry.get('emission') == 'compact':
+            compact_measured = {s.get('index') for s in roles
+                                if s.get('role') == 'measured'}
         changed = False
         for col_index in cols:
+            if col_index in compact_measured:
+                continue  # compact value column — never demote on rejection
             if col_index == 0 or col_index in survived:
                 continue  # name column, or rows of this column were kept
             if _re_entered(rej_rows.get(structure, {}).get(col_index, [])):

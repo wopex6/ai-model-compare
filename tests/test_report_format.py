@@ -630,6 +630,50 @@ def test_deleting_every_row_from_a_column_drops_that_role():
     assert store['report_formats']['sig1']['confirmed'] is True
 
 
+def test_compact_measured_column_survives_mass_delete():
+    """Real case: every compact row comes from the layout's one measured
+    column, so deleting a bad scan's rows can only ever hit that column —
+    demoting it bricked Sau Tse's spirometry layout ('Actual' -> 'text',
+    zero rows extracted forever). Deleting the reading must not demote it."""
+    store = {'report_formats': {
+        'sig1': {'signature': 'sig1', 'structure': 'struct1', 'confirmed': True,
+                 'emission': 'compact',
+                 'column_roles': [
+                     {'index': 0, 'role': 'name'},
+                     {'index': 1, 'role': 'measured'},
+                     {'index': 2, 'role': 'baseline'},
+                 ]}
+    }}
+    removed = {'format_structure': 'struct1', 'source_role': 'measured',
+               'test_name': 'FEV1'}
+    remaining = []
+    assert rf.learn_from_delete(store, removed, remaining) is None
+    roles = [c['role'] for c in store['report_formats']['sig1']['column_roles']]
+    assert roles == ['name', 'measured', 'baseline']
+
+
+def test_compact_measured_column_survives_mass_rejection():
+    """Same guard on the review-reject path: declining every compact row of
+    a garbled scan rejects the reading, not the value column's role."""
+    store = {'report_formats': {
+        'sig1': {'signature': 'sig1', 'structure': 'struct1', 'confirmed': True,
+                 'emission': 'compact',
+                 'column_roles': [
+                     {'index': 0, 'role': 'name'},
+                     {'index': 1, 'role': 'measured'},
+                     {'index': 2, 'role': 'baseline'},
+                 ]}
+    }}
+    rejected = [{'format_structure': 'struct1', 'source_column': 1,
+                 'test_name': 'FEV1'},
+                {'format_structure': 'struct1', 'source_column': 1,
+                 'test_name': 'FVC'}]
+    what = rf.learn_from_reject(store, rejected, [])
+    roles = {c['index']: c['role']
+             for c in rf.find_by_structure(store, 'struct1')['column_roles']}
+    assert roles[1] == 'measured'
+
+
 # --- several photos of one report -------------------------------------------
 # parse_report_pages lives in medical_advisor_health_context (it owns the
 # metadata regexes); the merge rules below are what make pages one document.

@@ -7738,6 +7738,7 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
                            if not str((r or [''])[0] or '').strip())
                        > len(data) // 2)
             covered = False
+            content_empty = False
             if not missing and not unnamed:
                 # Every payload column identified against the confirmed
                 # schema means nothing is lost, whatever order they printed
@@ -7751,8 +7752,83 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
                                if c.get('role') != 'name']
                     covered = sum(1 for s in remapped
                                   if s.get('role') != 'name') >= len(payload)
+                # But coverage says nothing about the cells: a scan that
+                # shifts a block sideways leaves an expected row's measured
+                # cell empty while every column still maps. A labelled row
+                # with no value where the confirmed layout keeps the reading
+                # is a mis-shape too.
+                if labels:
+                    measured = [s['index'] for s in (remapped or [])
+                                if s.get('role') == 'measured']
+                    if not measured and len(head) == expected:
+                        measured = [s.get('index') for s in
+                                    (schema.get('column_roles') or [])
+                                    if s.get('role') == 'measured']
+                    label_stems = {report_format._name_stem(l)
+                                   for l in labels}
+                    if measured:
+                        for r in data:
+                            stem = report_format._name_stem(
+                                str((r or [''])[0] or ''))
+                            if stem not in label_stems:
+                                continue
+                            if all(mi >= len(r)
+                                   or not str(r[mi] or '').strip()
+                                   for mi in measured):
+                                content_empty = True
+                                break
+                    # A block shifted sideways leaves holes: blank payload
+                    # cells *inside* the populated span of a labelled row
+                    # (the real report prints contiguous values). Trailing
+                    # blanks are fine — some tests simply have no Post-Bronch
+                    # readings.
+                    if not content_empty:
+                        for r in data:
+                            stem = report_format._name_stem(
+                                str((r or [''])[0] or ''))
+                            if stem not in label_stems:
+                                continue
+                            filled = [i for i in range(1, len(r))
+                                      if str(r[i] or '').strip()]
+                            if len(filled) >= 2 and \
+                                    any(not str(r[i] or '').strip()
+                                        for i in range(filled[0],
+                                                       filled[-1])):
+                                content_empty = True
+                                break
+                    # A subtler misread drops a row's measurement and shifts
+                    # the predicted value left into its place — the cells then
+                    # repeat themselves (Actual == Pred, %Pred = 100) and every
+                    # arithmetic check passes. One row of that is a
+                    # coincidence; three in a row is the model losing its
+                    # place, so re-read.
+                    if not content_empty:
+                        streak = 0
+                        for r in data:
+                            stem = report_format._name_stem(
+                                str((r or [''])[0] or ''))
+                            if stem not in label_stems:
+                                streak = 0
+                                continue
+                            echo = False
+                            for rel in desc.get('relations') or []:
+                                if rel.get('kind') != 'percent_of':
+                                    continue
+                                a, b = rel.get('measured'), rel.get('baseline')
+                                x = report_format.number_in(r[a]) \
+                                    if a is not None and a < len(r) else None
+                                y = report_format.number_in(r[b]) \
+                                    if b is not None and b < len(r) else None
+                                if x is not None and y is not None \
+                                        and abs(x - y) < 1e-9:
+                                    echo = True
+                                    break
+                            streak = streak + 1 if echo else 0
+                            if streak >= 3:
+                                content_empty = True
+                                break
             if (len(head) == expected or covered) \
-                    and not missing and not unnamed:
+                    and not missing and not unnamed and not content_empty:
                 continue  # right shape — the parse-layer overlay handles it
             if sig not in guided_cache:
                 guided_cache[sig] = None
