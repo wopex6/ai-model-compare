@@ -1,26 +1,30 @@
 # Handoff snapshot
 
-_Generated 2026-09-28 14:54 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-28 17:17 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Fixed real cause of [object Object]: editDataItem edit form String()'d the fields bag (was live bug, not stale shell). Now per-heading inputs; provenance keys no longer editable; heading renamed 'Manage Data' (v135, deployed+verified). Scrubbed real name/address/phone/Medicare from test fixture — still in git history (commit 36d068a) on GitHub; history rewrite needs user approval. Guarded PUT /item against non-dict fields. Duplicates cleaned on prod 17; layout roles repaired.
+Confirmed-layout precedence over fresh AI readings: apply_remembered vocabulary fallback + _layout_guided_read re-reads a mis-shaped scan against the user's confirmed schema (expected_headers + row_labels recorded at apply-review). Prod shared store + profile 17 entry a7e37dfc patched with emission=compact, aliases, row_labels. ST's rescan had produced structure 45f2dfdc (band headings flattened into rows, test names dropped) — next rescan should hit the guided re-read. Left: verify ST's next rescan reproduces Sau Tse's compact format end-to-end.
 
 ## Git
 
 **Branch:** `cursor/emergency-card-paramedic-fields`  
-**Uncommitted files:** 25
+**Uncommitted files:** 29
 
 > Uncommitted work is the main handoff hazard: the next agent
 > cannot tell finished edits from half-written ones. Commit
 > before switching, even as `wip:`.
 
 ```
-M HANDOFF.md
+?? _append_shared_tests.py
 ?? _merge_dupes.py
 ?? _prod17_backup.json
 ?? _prod17_now.json
 ?? _prod_result.json
+?? _st_rescan.json
+?? _st_rescan.txt
+?? _st_result.json
+?? _st_spiro.json
 ?? check_wk_credentials.py
 ?? debug_auth.py
 ?? direct_password_test.py
@@ -43,25 +47,17 @@ M HANDOFF.md
 ?? verify_ken.py
 ```
 
-<details><summary>diff --stat</summary>
-
-```
-HANDOFF.md | 29 +++++++++++++++--------------
- 1 file changed, 15 insertions(+), 14 deletions(-)
-```
-</details>
-
 Recent commits:
 
 ```
+839842f Dr. Health: confirmed layout outranks a fresh mis-shaped reading
+7984a17 Dr. Health: learn compact row emission from reject-and-retype edits
+43ea936 Dr. Health: share confirmed report layouts across users
+a2a6e5d Handoff: [object Object] fixed in edit form; PII scrubbed; prod 17 cleaned
 5cdb09c Dr. Health: fix '[object Object]' in Manage Data edit form; scrub real PII from test
 837461e Dr. Health: never let a non-dict 'fields' update clobber the stored bag
 efad9df Dr. Health: render the fields bag as 'k: v' pairs in Manage My Data
 f7daf03 Dr. Health learning: manual re-entry shields columns from rejection demotion
-6128ca1 Dr. Health review: '+ field' gains an all-rows/this-row scope choice
-4992331 Handoff: review draft autosave + stale-server echo; ready for user report ground-truth session.
-f5420be Dr. Health: review draft autosave + stale-server field echo
-79218e1 Handoff: stale local server was dropping review fields; fixed + focus UX (SW v134 pending deploy).
 ```
 
 ## Production (PythonAnywhere)
@@ -103,17 +99,17 @@ Reload often returns `409 slow_startup_error` on the first attempt — retry rat
 All passing.
 
 ```
-........................................................................ [ 63%]
-........................................................................ [ 79%]
-........................................................................ [ 95%]
-......................                                                   [100%]
+........................................................................ [ 62%]
+........................................................................ [ 77%]
+........................................................................ [ 93%]
+...............................                                          [100%]
 ============================== warnings summary ===============================
 ..\..\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37
   C:\Users\trabc\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-454 passed, 1 warning in 20.37s
+463 passed, 1 warning in 24.01s
 [AutoDoc] Monitoring stopped
 ```
 
