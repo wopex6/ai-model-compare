@@ -8585,12 +8585,18 @@ def update_health_profile_item():
             return jsonify({'error': 'Invalid index'}), 400
         if not isinstance(updates, dict):
             return jsonify({'error': 'updates must be an object'}), 400
-        if isinstance(updates.get('fields'), dict):
-            # `fields` holds whatever a report printed beyond the schema, keyed
-            # by its own wording. A box left blank means drop that entry, not
-            # store an empty string.
-            updates['fields'] = {k: v for k, v in updates['fields'].items()
-                                 if str(v or '').strip()}
+        if 'fields' in updates:
+            if isinstance(updates['fields'], dict):
+                # `fields` holds whatever a report printed beyond the schema,
+                # keyed by its own wording. A box left blank means drop that
+                # entry, not store an empty string.
+                updates['fields'] = {k: v for k, v in updates['fields'].items()
+                                     if str(v or '').strip()}
+            else:
+                # A stale client renders the bag as one box and can PUT back
+                # '[object Object]'. A non-dict must never replace the stored
+                # report-native fields — keep the bag as it stands.
+                updates.pop('fields')
         items = profile.data.get(category, [])
         if index >= len(items):
             return jsonify({'error': 'Index out of range'}), 400

@@ -1113,6 +1113,33 @@ def test_apply_review_echoes_fields_received():
         _cleanup(user_id)
 
 
+def test_item_update_with_string_fields_keeps_stored_bag():
+    # A stale client renders the fields bag as one box whose value is
+    # '[object Object]'. PUT-ing that back must not clobber the stored bag.
+    import app as app_mod
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        profile.add_test_result('FEV1', '0.96', unit='L', date='2026-09-20',
+                              fields={'Pred': '1.62', 'Pre-Bronch %Pred': '59'})
+        profile.save()
+        app_mod.app.config['TESTING'] = True
+        client = app_mod.app.test_client()
+        with client.session_transaction() as sess:
+            sess['user_id'] = user_id
+            sess['username'] = 'safety-test'
+        resp = client.put('/api/health-profile/item', json={
+            'category': 'test_results', 'index': 0,
+            'updates': {'notes': 'checked', 'fields': '[object Object]'},
+        })
+        assert resp.status_code == 200, resp.get_json()
+        row = HealthProfile(user_id).data['test_results'][0]
+        assert row['notes'] == 'checked'
+        assert row['fields'] == {'Pred': '1.62', 'Pre-Bronch %Pred': '59'}
+    finally:
+        _cleanup(user_id)
+
+
 def test_dimensionless_test_drops_misattributed_concentration_unit():
     """OCR sometimes puts a neighbouring row's unit on Hct — a ratio test
     that can never carry g/L. The guard strips it; real units stay."""
