@@ -1,21 +1,26 @@
 # Handoff snapshot
 
-_Generated 2026-09-28 10:27 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-28 14:54 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Closed the remaining data-loss paths: apply-review now echoes fields_received (missing echo = stale server = loud warning, form stays editable), PWA review autosaves a sessionStorage draft with restore banner, website review errors no longer wipe the form. Verified end-to-end with Playwright: +field focus, draft survives reload, restored value persists, draft clears on save. Ready for the user's report + typed records to derive a verified layout.
+Fixed real cause of [object Object]: editDataItem edit form String()'d the fields bag (was live bug, not stale shell). Now per-heading inputs; provenance keys no longer editable; heading renamed 'Manage Data' (v135, deployed+verified). Scrubbed real name/address/phone/Medicare from test fixture — still in git history (commit 36d068a) on GitHub; history rewrite needs user approval. Guarded PUT /item against non-dict fields. Duplicates cleaned on prod 17; layout roles repaired.
 
 ## Git
 
 **Branch:** `cursor/emergency-card-paramedic-fields`  
-**Uncommitted files:** 20
+**Uncommitted files:** 25
 
 > Uncommitted work is the main handoff hazard: the next agent
 > cannot tell finished edits from half-written ones. Commit
 > before switching, even as `wip:`.
 
 ```
+M HANDOFF.md
+?? _merge_dupes.py
+?? _prod17_backup.json
+?? _prod17_now.json
+?? _prod_result.json
 ?? check_wk_credentials.py
 ?? debug_auth.py
 ?? direct_password_test.py
@@ -38,22 +43,30 @@ Closed the remaining data-loss paths: apply-review now echoes fields_received (m
 ?? verify_ken.py
 ```
 
+<details><summary>diff --stat</summary>
+
+```
+HANDOFF.md | 29 +++++++++++++++--------------
+ 1 file changed, 15 insertions(+), 14 deletions(-)
+```
+</details>
+
 Recent commits:
 
 ```
+5cdb09c Dr. Health: fix '[object Object]' in Manage Data edit form; scrub real PII from test
+837461e Dr. Health: never let a non-dict 'fields' update clobber the stored bag
+efad9df Dr. Health: render the fields bag as 'k: v' pairs in Manage My Data
+f7daf03 Dr. Health learning: manual re-entry shields columns from rejection demotion
+6128ca1 Dr. Health review: '+ field' gains an all-rows/this-row scope choice
+4992331 Handoff: review draft autosave + stale-server echo; ready for user report ground-truth session.
 f5420be Dr. Health: review draft autosave + stale-server field echo
 79218e1 Handoff: stale local server was dropping review fields; fixed + focus UX (SW v134 pending deploy).
-372cac8 Dr. Health: focus new-field input after '+ field'; audit detail carries fields bag
-8f9e14c Handoff: field-alias + name-pattern learning deployed (SW v133).
-d1205aa Dr. Health: learn field aliases and name composition positionally
-743bc49 Handoff: positional integrity + rejection learning deployed (SW v132).
-a6cefd4 Dr. Health: positional integrity + rejection learning for report grids
-beb9796 Handoff: review UX fixes + name-style learning deployed.
 ```
 
 ## Production (PythonAnywhere)
 
-**14 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
+**4 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
 
 ```
 ok       tests/test_review_flow.py
@@ -80,7 +93,7 @@ ok       web_enhancement_test_runner.py
 ok       webhook_deploy.py
 ok       wisdom_profiles/23.json
 ok       wisdom_profiles/23_hypotheses.json
-14 file(s) stale. Re-run with --push to upload.
+4 file(s) stale. Re-run with --push to upload.
 ```
 
 Reload often returns `409 slow_startup_error` on the first attempt — retry rather than debug it.
@@ -90,17 +103,17 @@ Reload often returns `409 slow_startup_error` on the first attempt — retry rat
 All passing.
 
 ```
-automated_greeting_system.py:416
-automated_greeting_system.py:416
-  C:\Users\trabc\CascadeProjects\ai-model-compare - Claude\automated_greeting_system.py:416: DeprecationWarning: The default datetime adapter is deprecated as of Python 3.12; see the sqlite3 documentation for suggested replacement recipes
-    cursor.execute('''
-
+........................................................................ [ 63%]
+........................................................................ [ 79%]
+........................................................................ [ 95%]
+......................                                                   [100%]
+============================== warnings summary ===============================
 ..\..\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37
   C:\Users\trabc\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-453 passed, 5 warnings in 23.92s
+454 passed, 1 warning in 20.37s
 [AutoDoc] Monitoring stopped
 ```
 
