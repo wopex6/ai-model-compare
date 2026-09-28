@@ -3356,6 +3356,11 @@
             }).join('\n');
         }
         if (Array.isArray(val)) return val.map(v => String(v)).join(', ');
+        // The report-native `fields` bag — one 'heading: value' pair each,
+        // matching the sub-line under test results rather than a JSON blob.
+        if (key === 'fields' && val && !Array.isArray(val)) {
+            return Object.keys(val).map(k => k + ': ' + val[k]).join(' · ');
+        }
         if (typeof val === 'object') return JSON.stringify(val, null, 2);
         return String(val);
     }
