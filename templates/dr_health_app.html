@@ -3066,7 +3066,7 @@
                     ['format_structure', 'format_signature', 'source_role',
                      'source_column', 'misaligned', 'name_base',
                      'date_source', 'unit', 'fields', 'qualifier', 'section',
-                     'source_page', 'source_file'].forEach(k => {
+                     'source_page', 'source_file', 'emission'].forEach(k => {
                         if (item[k] === undefined && original[k] != null) item[k] = original[k];
                     });
                     if (original.date_source === 'filed' && item.date
@@ -3467,7 +3467,7 @@
         'format_structure', 'format_signature', 'source_role', 'source_column',
         'name_base', 'date_source', 'qualifier', 'section',
         'source_page', 'source_file', 'ref_locked', 'unit_locked',
-        'last_confirmed_at',
+        'last_confirmed_at', 'emission',
     ]);
     const DM_PREFERRED = {
         conditions: ['name', 'status', 'diagnosed_date', 'details'],

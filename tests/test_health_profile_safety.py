@@ -937,6 +937,39 @@ def test_fill_test_defaults_backfills_blank_ref_and_unit():
     assert '%' not in results[3]['value']
 
 
+def test_fill_test_defaults_keeps_compact_values_bare():
+    """Compact-emission rows file the unit in its own slot — the sibling-unit
+    backfill must not glue it onto the value ('5.30', not '5.30 ml/min/mmHg/L').
+    Rows without the emission marker still inherit the unit as before."""
+    results = [
+        {'test_name': 'DLCOunc', 'value': '13.37', 'unit': 'ml/min/mmHg',
+         'emission': 'compact'},
+        {'test_name': 'Kco', 'value': '5.30', 'unit': 'ml/min/mmHg/L',
+         'emission': 'compact'},
+        {'test_name': 'S GLU (Fast)', 'value': '5.3 mmol/L'},
+        {'test_name': 'S GLU (Fast)', 'value': '5.4'},
+    ]
+    _fill_test_defaults(results)
+    assert results[0]['value'] == '13.37'
+    assert results[1]['value'] == '5.30'
+    assert results[1]['unit'] == 'ml/min/mmHg/L'
+    # The AI-path row has no emission marker — backfill still applies.
+    assert results[3]['value'] == '5.4 mmol/L'
+
+
+def test_fill_test_defaults_compact_row_with_missing_unit_stays_bare():
+    """A compact row with no unit of its own must not pick up a same-name
+    sibling's unit either — the compact format files units only via the
+    layout's own unit derivation, never glued onto the value."""
+    results = [
+        {'test_name': 'Kco', 'value': '5.30', 'unit': 'ml/min/mmHg/L',
+         'emission': 'compact'},
+        {'test_name': 'Kco', 'value': '5.31', 'emission': 'compact'},
+    ]
+    _fill_test_defaults(results)
+    assert results[1]['value'] == '5.31'
+
+
 def test_uploaded_at_parse_normalizes_to_naive_utc():
     """uploaded_at may be naive UTC (old rows) or offset-aware (new rows).
     _parse_iso_datetime must normalise aware values to naive UTC so internal

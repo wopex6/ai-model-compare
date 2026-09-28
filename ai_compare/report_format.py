@@ -1803,6 +1803,9 @@ def _extract_compact_row(description: Dict, row: List[str], name: str,
         'name_base': name,
         'format_structure': description.get('structure') or '',
         'format_signature': description.get('signature') or '',
+        # Compact rows keep a bare value with the unit in its own slot —
+        # downstream defaults must not glue a sibling unit onto the value.
+        'emission': 'compact',
     }
     if unit:
         record['unit'] = unit

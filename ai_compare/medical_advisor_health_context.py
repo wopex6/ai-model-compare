@@ -916,11 +916,12 @@ def _fill_test_defaults(results):
         # before appending, or the value grows a second copy ('0.96 L L').
         already = bool(want) and bool(re.search(
             r'(?:^|\s)' + re.escape(want) + r'\s*$', value_text, re.I))
-        # Rows that already carry `unit` in its own slot keep a bare value —
-        # appending would just store the same unit twice ('5.30 ml/min/mmHg/L').
+        # Compact-emission rows keep a bare value — the unit lives in its own
+        # slot, so appending would store it twice ('5.30 ml/min/mmHg/L').
+        # Composed and AI-path rows embed the unit in the value by convention.
         if (not _extract_unit_text(value_text) and want
                 and not already and not t.get('unit_locked')
-                and not t.get('unit')):
+                and t.get('emission') != 'compact'):
             t['value'] = (value_text + ' ' + want).strip()
 
 
@@ -1913,7 +1914,7 @@ class HealthProfile:
                 for key in ("format_structure", "format_signature", "source_role",
                             "source_column", "misaligned", "name_base",
                             "date_source", "qualifier", "section",
-                            "source_page", "source_file"):
+                            "source_page", "source_file", "emission"):
                     incoming = (layout or {}).get(key)
                     if incoming not in (None, "", [], {}) and not t.get(key):
                         t[key] = incoming
@@ -1939,7 +1940,7 @@ class HealthProfile:
         for key in ("format_structure", "format_signature", "source_role",
                     "source_column", "misaligned", "name_base",
                     "date_source", "qualifier", "section",
-                    "source_page", "source_file"):
+                    "source_page", "source_file", "emission"):
             incoming = (layout or {}).get(key)
             if incoming not in (None, "", [], {}):
                 entry[key] = incoming
@@ -2303,7 +2304,8 @@ class HealthProfile:
                 layout_keys = ("format_structure", "format_signature",
                                "source_role", "source_column", "misaligned",
                                "name_base", "date_source", "qualifier",
-                               "section", "source_page", "source_file")
+                               "section", "source_page", "source_file",
+                               "emission")
                 extra_fields = dict(test.get("fields") or {})
                 for key in deleted_fields:
                     extra_fields.pop(key, None)
