@@ -681,7 +681,7 @@ def find_by_vocabulary(store: Dict, headings: List[str],
     fresh.discard('')
     if not fresh:
         return None
-    best, best_score = None, 0.0
+    best, best_key = None, (0.0, 0, 0)
     for e in (store.get('report_formats') or {}).values():
         if not (e or {}).get('confirmed'):
             continue
@@ -690,8 +690,12 @@ def find_by_vocabulary(store: Dict, headings: List[str],
             continue
         common = len(fresh & vocab)
         score = common / max(1, min(len(fresh), len(vocab)))
-        if common >= 3 and score >= 0.6 and score > best_score:
-            best, best_score = e, score
+        # Equal coverage goes to the entry the user shaped most — recorded
+        # row labels mean the confirmed schema can also vouch for which rows
+        # belong, which is what a mis-shaped rescan needs.
+        key = (score, 1 if e.get('row_labels') else 0, len(vocab))
+        if common >= 3 and score >= 0.6 and key > best_key:
+            best, best_key = e, key
     return best
 
 

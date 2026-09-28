@@ -7604,9 +7604,26 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
                 store, [str(c or '') for c in grid[0]])
             if not entry:
                 continue
-            sig = entry.get('signature') or str(id(entry))
-            expected = len(entry.get('column_roles') or [])
-            labels = [l for l in (entry.get('row_labels') or [])][:30]
+            schema = entry
+            if not schema.get('row_labels'):
+                # The matching entry carries no recorded row labels — but a
+                # sibling confirmed layout of the same report may, and this
+                # grid's headings are those labels (a transposed fragment).
+                head_stems = {report_format._name_stem(str(c or ''))
+                              for c in grid[0]}
+                head_stems.discard('')
+                for other in (store.get('report_formats') or {}).values():
+                    if not isinstance(other, dict) \
+                            or not other.get('confirmed'):
+                        continue
+                    overlap = {report_format._name_stem(l) for l in
+                               (other.get('row_labels') or [])} & head_stems
+                    if len(overlap) >= 3:
+                        schema = other
+                        break
+            sig = schema.get('signature') or str(id(schema))
+            expected = len(schema.get('column_roles') or [])
+            labels = [l for l in (schema.get('row_labels') or [])][:30]
             stems = {report_format._name_stem(str((r or [''])[0] or ''))
                      for r in grid[1:]}
             stems.discard('')
@@ -7614,10 +7631,14 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
                        sum(1 for l in labels
                            if report_format._name_stem(l) in stems)
                        < max(1, len(labels) // 2))
-            if len(grid[0]) == expected and not missing:
+            unnamed = (len(grid) > 3 and
+                       sum(1 for r in grid[1:]
+                           if not str((r or [''])[0] or '').strip())
+                       > (len(grid) - 1) // 2)
+            if len(grid[0]) == expected and not missing and not unnamed:
                 continue  # right shape — the parse-layer overlay handles it
             if sig not in guided_cache:
-                guided_cache[sig] = _guided_table_call(entry)
+                guided_cache[sig] = _guided_table_call(schema)
             guided = guided_cache[sig]
             if not guided:
                 continue
@@ -7644,16 +7665,21 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
                 other = grids[gj]
                 if not other or gj in drop:
                     continue
-                if report_format.find_by_vocabulary(
-                        store, [str(c or '') for c in other[0]]) is not entry:
-                    continue
                 other_stems = {report_format._name_stem(
                                    str((r or [''])[0] or ''))
                                for r in other[1:]}
                 other_stems.discard('')
-                # At most one stray label (a mis-OCR'd name) — anything more
-                # and it is a genuinely different table sharing vocabulary.
-                if other_stems and len(other_stems - new_stems) <= 1:
+                other_heads = {report_format._name_stem(str(c or ''))
+                               for c in other[0]}
+                other_heads.discard('')
+                # A repeated grid shares the row labels; a transposed
+                # fragment carries them as column headings instead. Either
+                # is the guided table emitted again — drop it, tolerating
+                # one stray label (a mis-OCR'd name), but never a grid whose
+                # content is genuinely elsewhere.
+                if ((other_stems and len(other_stems - new_stems) <= 1)
+                        or (len(other_heads & new_stems) >= 2
+                            and len(other_heads - new_stems) <= 1)):
                     drop.add(gj)
         if not changed:
             return ''

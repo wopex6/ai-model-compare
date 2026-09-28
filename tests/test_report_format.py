@@ -1280,3 +1280,46 @@ def test_vocabulary_matches_bare_labels_against_flattened_ones():
                        'Reference Range', 'Units']
     entry = rf.find_by_vocabulary(store, rescan_headings)
     assert entry is not None and entry['structure'] == structure
+
+
+def test_vocabulary_prefers_entry_with_row_labels_on_tie():
+    """A 5-column rescan ('Pred','Actual','%Pred','%Chng') vocabulary-matches
+    both the bare 5-col layout and the fuller 9-col layout the user shaped
+    (row_labels recorded). Same coverage — the richer schema must win so a
+    guided re-read targets it."""
+    store, structure = _confirmed_spiro_store()
+    rich = rf.find_by_structure(store, structure)
+    rich['row_labels'] = ['FEV1', 'FVC', 'FEV1/FVC', 'DLCOunc']
+    # a second confirmed entry covering the same vocabulary, no labels
+    store['report_formats']['bare'] = {
+        'signature': 'bare', 'structure': 'bare', 'confirmed': True,
+        'column_roles': [
+            {'index': 0, 'label': '', 'role': 'name'},
+            {'index': 1, 'label': 'Pred', 'role': 'baseline'},
+            {'index': 2, 'label': 'Actual', 'role': 'measured'},
+            {'index': 3, 'label': '%Pred', 'role': 'percent_of'},
+            {'index': 4, 'label': '%Chng', 'role': 'percent_change'}],
+    }
+    store['report_formats']['bare2'] = dict(store['report_formats']['bare'])
+    store['report_formats']['bare2']['signature'] = 'bare2'
+    picked = rf.find_by_vocabulary(store, ['', 'Pred', 'Actual', '%Pred', '%Chng'])
+    assert picked is rich
+
+
+def test_vocabulary_prefers_richer_entry_only_when_confirmed():
+    """An unconfirmed entry with row labels must never outrank a confirmed
+    one — user decisions alone set the schema."""
+    store, structure = _confirmed_spiro_store()
+    rich = rf.find_by_structure(store, structure)
+    rich['row_labels'] = ['FEV1', 'FVC']
+    store['report_formats']['unconfirmed'] = {
+        'signature': 'u', 'structure': 'u', 'confirmed': False,
+        'row_labels': ['A', 'B', 'C'],
+        'column_roles': [
+            {'index': 0, 'label': '', 'role': 'name'},
+            {'index': 1, 'label': 'Pred', 'role': 'baseline'},
+            {'index': 2, 'label': 'Actual', 'role': 'measured'},
+            {'index': 3, 'label': '%Pred', 'role': 'percent_of'}],
+    }
+    picked = rf.find_by_vocabulary(store, ['', 'Pred', 'Actual', '%Pred', '%Chng'])
+    assert picked is rich
