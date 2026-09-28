@@ -624,6 +624,116 @@ def find_by_structure(store: Dict, structure: str) -> Optional[Dict]:
     return max(pool, key=lambda e: e.get('last_seen') or '')
 
 
+def _label_key(text: str) -> str:
+    """Bare normalised column label for vocabulary matching."""
+    return re.sub(r'[^a-z0-9%]+', '', (text or '').lower())
+
+
+def entry_vocabulary(entry: Dict) -> set:
+    """Column labels a confirmed layout knows — bare and qualifier-joined —
+    so a scan that flattens a band heading into its column labels still
+    speaks this layout's language."""
+    vocab = set()
+    for c in (entry or {}).get('column_roles') or []:
+        if c.get('role') == 'name':
+            continue
+        bare = _label_key(c.get('label') or '')
+        full = _label_key(' '.join(x for x in (c.get('qualifier'),
+                                             c.get('label')) if x))
+        if bare:
+            vocab.add(bare)
+        if full:
+            vocab.add(full)
+    return vocab
+
+
+def find_by_vocabulary(store: Dict, headings: List[str],
+                       qualifiers: Optional[List[str]] = None) -> Optional[Dict]:
+    """A confirmed layout speaking this grid's column language.
+
+    `structure` keys a layout on the exact grid one scan produced; a rescan
+    that transcribes the same report differently loses that match. The column
+    vocabulary is sturdier — what a laboratory prints changes far less than
+    what a model transcribes. Only confirmed entries qualify: this is the
+    user's reading being applied, never another machine guess."""
+    fresh = {_label_key(h) for h in (headings or [])}
+    fresh.update(_label_key(q) for q in (qualifiers or []))
+    if headings and qualifiers:
+        for h, q in zip(headings, qualifiers):
+            fresh.add(_label_key(' '.join(x for x in (q, h) if x)))
+    fresh.discard('')
+    if not fresh:
+        return None
+    best, best_score = None, 0.0
+    for e in (store.get('report_formats') or {}).values():
+        if not (e or {}).get('confirmed'):
+            continue
+        vocab = entry_vocabulary(e)
+        if not vocab:
+            continue
+        common = len(fresh & vocab)
+        score = common / max(1, min(len(fresh), len(vocab)))
+        if common >= 3 and score >= 0.6 and score > best_score:
+            best, best_score = e, score
+    return best
+
+
+def _positions_agree(entry: Dict, description: Dict) -> bool:
+    """Roles overlay positionally, so a vocabulary match only qualifies when
+    most columns also sit where the confirmed layout expects them — a
+    reordered grid of the same width would otherwise be read wrongly."""
+    roles = entry.get('column_roles') or []
+    cols = description.get('columns') or []
+    if len(roles) != len(cols):
+        return False
+    agree = 0
+    for spec in roles:
+        idx = spec.get('index')
+        if not isinstance(idx, int) or idx >= len(cols):
+            continue
+        col = cols[idx]
+        printed = {_label_key(col.get('label') or ''),
+                   _label_key(' '.join(x for x in (col.get('qualifier'),
+                                                   col.get('label')) if x))}
+        expected = {_label_key(spec.get('label') or ''),
+                    _label_key(' '.join(x for x in (spec.get('qualifier'),
+                                                    spec.get('label')) if x))}
+        if printed & expected:
+            agree += 1
+    return agree >= max(1, int(len(roles) * 0.6))
+
+
+def expected_headers(entry: Dict) -> List[str]:
+    """Column display names for a guided re-read — qualifier + label as the
+    report prints them ('Pre-Bronch Actual'), position 0 as 'Test'."""
+    out = []
+    for c in sorted((entry or {}).get('column_roles') or [],
+                    key=lambda c: c.get('index') or 0):
+        name = ' '.join(x for x in ((c.get('qualifier') or '').strip(),
+                                    (c.get('label') or '').strip()) if x)
+        out.append(name or 'Test')
+    return out
+
+
+def note_row_labels(store: Dict, structure: str, rows: List[Dict],
+                    limit: int = 50) -> None:
+    """Record the row labels a user kept for this layout — the report's own
+    test names, not patient data. A later scan that mislays its name column
+    can be re-read asking for these names explicitly."""
+    entry = find_by_structure(store, structure)
+    if entry is None:
+        return
+    labels = entry.setdefault('row_labels', [])
+    seen = {l.lower() for l in labels}
+    for r in rows or []:
+        name = str((r or {}).get('name_base')
+                   or (r or {}).get('test_name') or '').strip()
+        if name and name.lower() not in seen:
+            labels.append(name)
+            seen.add(name.lower())
+    del labels[limit:]
+
+
 # --- shared layout knowledge -------------------------------------------------
 
 def seed_from_shared(store: Dict, shared: Dict) -> int:
@@ -725,8 +835,17 @@ def apply_remembered(description: Dict, store: Dict) -> bool:
     roles and the qualifier-name style they taught."""
     structure = description.get('structure') or structure_of(description)
     entry = find_by_structure(store, structure)
-    if not entry or not entry.get('confirmed'):
-        return False
+    if not (entry or {}).get('confirmed'):
+        # A rescan can transcribe the same report into a different grid —
+        # a band heading flattened into labels, a column split or merged.
+        # The user's confirmed reading still wins over a fresh guess when
+        # the column vocabulary matches and the width is compatible.
+        alt = find_by_vocabulary(store, description.get('labels') or [],
+                                 description.get('qualifiers') or [])
+        if alt and _positions_agree(alt, description):
+            entry = alt
+        else:
+            return False
     applied = False
     if entry.get('name_style'):
         description['name_style'] = entry['name_style']

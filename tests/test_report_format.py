@@ -1205,3 +1205,67 @@ def test_compact_emission_extracts_one_row_per_test_with_user_headings():
     fvc = next(r for r in results if r['test_name'] == 'FVC')
     assert fvc['fields']['%Chng'] == '-6.8'
     assert len(results) == 3  # one per grid row, not one per measured column
+
+
+# --- user-confirmed layout beats a fresh reading of the same report ---------
+
+def test_apply_remembered_falls_back_to_column_vocabulary():
+    """A rescan that relabels a column produces a different structure hash —
+    the confirmed layout must still apply when the vocabulary matches and
+    the grid is the same width. The user's reading wins over the fresh one."""
+    store, structure = _confirmed_spiro_store()
+    entry = rf.find_by_structure(store, structure)
+    entry['emission'] = 'compact'
+
+    rows, sep = _spiro_table()
+    rows[sep - 1][6] = 'Post-Bronch Change'  # relabelled → new structure
+    description = rf.describe(rows, sep)
+    assert description['structure'] != structure
+    assert rf.find_by_structure(store, description['structure']) is None
+    assert rf.apply_remembered(description, store) is True
+    assert description.get('emission') == 'compact'
+    roles = {c['index']: c['role'] for c in description['columns']}
+    assert roles[4] == 'measured' and roles[6] == 'percent_change'
+
+
+def test_vocabulary_match_needs_width_and_confirmed():
+    """A different-width grid or an unconfirmed layout gets no overlay —
+    the fallback is the user's confirmed reading, not any similar table."""
+    store, structure = _confirmed_spiro_store()
+    rows, sep = _table('''
+        | Test | Pred | Actual | %Pred | %Chng | Reference Range | Units |
+        | --- | --- | --- | --- | --- | --- | --- |
+        | FEV1 | 1.62 | 0.96 | 59 | 36.2 | > 1.0 | L |
+    ''')
+    description = rf.describe(rows, sep)  # 7 columns, confirmed wants 9
+    assert rf.apply_remembered(description, store) is False
+
+    fresh = rf.describe(*_table('''
+        | Analyte | Result | Flag | Reference | Units |
+        | --- | --- | --- | --- | --- |
+        | Sodium | 141 |  | 135-145 | mmol/L |
+    '''))
+    assert rf.find_by_vocabulary(store, fresh['labels']) is None
+
+    unconfirmed = {}
+    rows, sep = _spiro_table()
+    d2 = rf.describe(rows, sep)
+    rf.remember(unconfirmed, d2)  # seen but never confirmed
+    assert rf.apply_remembered(d2, unconfirmed) is False
+
+
+def test_note_row_labels_records_kept_names():
+    store, structure = _confirmed_spiro_store()
+    rf.note_row_labels(store, structure, [
+        {'test_name': 'FEV1'}, {'name_base': 'FVC'}, {'test_name': 'fev1'}])
+    entry = rf.find_by_structure(store, structure)
+    assert entry['row_labels'] == ['FEV1', 'FVC']  # deduped, order kept
+
+
+def test_expected_headers_flatten_qualifier_and_label():
+    store, structure = _confirmed_spiro_store()
+    headers = rf.expected_headers(rf.find_by_structure(store, structure))
+    assert headers[0] == 'Test'
+    assert headers[1] == 'Pre-Bronch Pred'
+    assert headers[8] == 'Units'
+    assert len(headers) == 9

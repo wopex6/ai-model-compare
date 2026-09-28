@@ -332,6 +332,20 @@ correction, not a column verdict: `learn_from_reject` skips demotion when a
 manual row shares the rejected row's name stem, or a garbled scan would
 teach the layout that real measured columns are `text`.
 
+**A confirmed layout outranks a fresh reading of the same report.** Three
+scans of one page can produce three different grids (band headings flattened
+into rows, the name column dropped), and an exact `structure` match then
+misses the user's correction. Two fallbacks implement precedence:
+`apply_remembered` tries `find_by_vocabulary` (confirmed entries only,
+column-label language + equal width) when the structure lookup fails; and
+`_layout_guided_read` inside `_extract_text_from_file_bytes` re-reads the
+image against the confirmed schema — `expected_headers` for columns and
+`entry['row_labels']` (recorded by `note_row_labels` at apply-review) for
+row names — when the grid has the right vocabulary but the wrong width or
+the expected labels never made it into the name column. The guided grid is
+validated (width, label coverage) before it replaces anything. Upload
+callers seed shared formats *before* OCR so the guided read sees them.
+
 **Position is the data.** A 2-D report is read by coordinates, not by token
 order: each emitted row carries `source_column` (its column index) so
 learning can target the position it came from. Two integrity rules guard the

@@ -7284,8 +7284,14 @@ def _get_pdf_reader():
     raise RuntimeError('No PDF library available (need pypdf or PyPDF2)')
 
 
-def _extract_text_from_file_bytes(file_bytes, ext):
-    """Extract plain text from uploaded PDF or image bytes. Raises ValueError/RuntimeError on failure."""
+def _extract_text_from_file_bytes(file_bytes, ext, store=None):
+    """Extract plain text from uploaded PDF or image bytes. Raises ValueError/RuntimeError on failure.
+
+    `store` (optional) is the profile data dict: when a scan produces a grid
+    that speaks a confirmed layout's column vocabulary but comes back
+    mis-shaped, the image is re-read against the user's confirmed schema so
+    their earlier correction — not the model's fresh guess — decides the
+    structure."""
     if ext == '.pdf':
         import io
         try:
@@ -7517,6 +7523,118 @@ def _extract_text_from_file_bytes(file_bytes, ext):
         others = [grid_to_markdown(g) for g in grids if g is not grid]
         return '\n\n'.join([rebuilt] + others)
 
+    def _guided_table_call(entry):
+        """Re-read the page against a user-confirmed layout's schema.
+
+        The confirmed columns and row labels come from a human correction,
+        not a model guess — so when a scan mis-shapes a report we have seen
+        before, the user's earlier decision sets the question the image is
+        asked. The model only supplies the cells.
+        """
+        from ai_compare.table_consensus import strip_code_fences as _strip
+        headers = report_format.expected_headers(entry)
+        if len(headers) < 2:
+            return ''
+        labels = list(entry.get('row_labels') or [])[:30]
+        lines = [
+            'Re-read the results table in this document image. The table is '
+            'known to have exactly {} columns. Emit it as a markdown table '
+            'with exactly this header row:'.format(len(headers)),
+            '',
+            '| ' + ' | '.join(headers) + ' |',
+            '',
+            'The first column is the test name printed at the start of each '
+            'row.',
+        ]
+        if labels:
+            lines.append('Its data rows are labelled: '
+                         + ', '.join(labels) + '.')
+        lines += [
+            'Rules:',
+            '- Copy every row label exactly as printed; a data row must never '
+            'have a blank first cell.',
+            '- A heading that spans several columns belongs to those columns, '
+            'not to a row - never emit it as a data row.',
+            '- Place each value in the column it is printed under; when a '
+            'cell is empty emit an empty cell - never shift values sideways '
+            'and never duplicate a value into two columns.',
+            '- Emit each data row exactly once - do not repeat a block of '
+            'rows.',
+            '- Copy values digit for digit with all decimal places and any '
+            'flag letter.',
+            'Output only the markdown table. No commentary.',
+        ]
+        try:
+            raw = client.chat.completions.create(
+                model='gpt-4o',
+                messages=[{'role': 'user', 'content': [
+                    {'type': 'text', 'text': '\n'.join(lines)},
+                    image_part]}],
+                temperature=0.0,
+                max_tokens=4000
+            ).choices[0].message.content.strip()
+        except Exception:
+            return ''
+        return _strip(raw).strip()
+
+    def _layout_guided_read(table_md, store):
+        """Swap a mis-shaped grid for a re-read under a confirmed layout.
+
+        Fires only when a produced grid speaks a confirmed layout's column
+        vocabulary but got the shape wrong (wrong width, or the expected row
+        labels never made it into the name column). The guided re-read is
+        validated before it replaces anything: right width, and enough of the
+        confirmed row labels present. A failed or unconvincing re-read leaves
+        the original grid untouched.
+        """
+        from ai_compare.table_consensus import parse_markdown_grids, \
+            grid_to_markdown
+        grids = parse_markdown_grids(table_md)
+        if not grids:
+            return ''
+        changed = False
+        for gi, grid in enumerate(grids):
+            if not grid:
+                continue
+            entry = report_format.find_by_vocabulary(
+                store, [str(c or '') for c in grid[0]])
+            if not entry:
+                continue
+            expected = len(entry.get('column_roles') or [])
+            labels = [l for l in (entry.get('row_labels') or [])][:30]
+            stems = {report_format._name_stem(str((r or [''])[0] or ''))
+                     for r in grid[1:]}
+            stems.discard('')
+            missing = (labels and
+                       sum(1 for l in labels
+                           if report_format._name_stem(l) in stems)
+                       < max(1, len(labels) // 2))
+            if len(grid[0]) == expected and not missing:
+                continue  # right shape — the parse-layer overlay handles it
+            guided = _guided_table_call(entry)
+            if not guided:
+                continue
+            new_grids = parse_markdown_grids(guided)
+            if not new_grids:
+                continue
+            new_grid = max(new_grids, key=len)
+            if len(new_grid) < 2 or len(new_grid[0]) != expected:
+                continue
+            if labels:
+                new_stems = {report_format._name_stem(
+                                 str((r or [''])[0] or ''))
+                             for r in new_grid[1:]}
+                new_stems.discard('')
+                hit = sum(1 for l in labels
+                          if report_format._name_stem(l) in new_stems)
+                if hit < max(1, len(labels) // 2):
+                    continue
+            grids[gi] = new_grid
+            changed = True
+        if not changed:
+            return ''
+        return '\n\n'.join(grid_to_markdown(g) for g in grids)
+
     # Vision OCR misreads dense text in random, uncorrelated ways, so read the
     # document more than once and let the passes vote on each cell.  The first pass
     # is greedy; later passes need some temperature to vary, otherwise they would
@@ -7568,6 +7686,17 @@ def _extract_text_from_file_bytes(file_bytes, ext):
                     merged = ''
                 if merged and merged.strip() and content_score(merged) >= content_score(best):
                     best = merged
+
+            # A layout the user has confirmed outranks the model's fresh
+            # reading of the same report — re-read against their schema when
+            # this scan's grid speaks its language but mis-shapes it.
+            if store:
+                try:
+                    guided = _layout_guided_read(best, store)
+                    if guided:
+                        best = guided
+                except Exception:
+                    pass  # a failed guided read must never block the upload
 
             return best
         except (APIConnectionError, APITimeoutError) as e:
@@ -7692,8 +7821,10 @@ def upload_health_document():
         # Always re-run OCR and analysis (no caching) so prompt improvements take effect
         extracted_text_path = user_dir / f"{content_hash}.txt"
         result_path = user_dir / f"{content_hash}_result.json"
+        _seed_shared_report_formats(profile)
         try:
-            extracted_text = _extract_text_from_file_bytes(file_bytes, ext)
+            extracted_text = _extract_text_from_file_bytes(
+                file_bytes, ext, store=profile.data)
         except ValueError as e:
             return jsonify({'error': str(e)}), 400
         except RuntimeError as e:
@@ -7797,6 +7928,7 @@ def _upload_health_document_batch(user_id, profile, files):
     batch_text_path = user_dir / "{}.txt".format(batch_id)
     result_path = user_dir / "{}_result.json".format(batch_id)
 
+    _seed_shared_report_formats(profile)
     pages, stored_docs = [], []
     for idx, p in enumerate(prepared, 1):
         stored_doc = None
@@ -7819,7 +7951,8 @@ def _upload_health_document_batch(user_id, profile, files):
                 profile.data['uploaded_documents'].append(stored_doc)
 
         try:
-            text = _extract_text_from_file_bytes(p['bytes'], p['ext'])
+            text = _extract_text_from_file_bytes(
+                p['bytes'], p['ext'], store=profile.data)
         except ValueError as e:
             return jsonify({'error': '{}: {}'.format(p['file'].filename, e)}), 400
         except RuntimeError as e:
@@ -7938,8 +8071,10 @@ def reparse_uploaded_document():
         if result_path.exists():
             result_path.unlink()
 
+        _seed_shared_report_formats(profile)
         try:
-            extracted_text = _extract_text_from_file_bytes(file_bytes, ext)
+            extracted_text = _extract_text_from_file_bytes(
+                file_bytes, ext, store=profile.data)
         except ValueError as e:
             return jsonify({'error': str(e)}), 400
         except RuntimeError as e:
@@ -8146,6 +8281,15 @@ def apply_health_review():
             for table in analysis.get('tables') or []:
                 if table.get('columns'):
                     report_format.confirm(profile.data, table)
+        # The row labels the user kept are the report's own test names — a
+        # rescan that mislays its name column can be re-read asking for them.
+        kept_by_structure = {}
+        for test in extracted.get('test_results') or []:
+            st = (test or {}).get('format_structure')
+            if st:
+                kept_by_structure.setdefault(st, []).append(test)
+        for st, rows in kept_by_structure.items():
+            report_format.note_row_labels(profile.data, st, rows)
         learned = []
         for before_row, after_row in edit_pairs:
             what = report_format.learn_from_edit(profile.data, before_row, after_row)
