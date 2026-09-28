@@ -1063,3 +1063,62 @@ def test_an_unexplained_rename_teaches_no_name_pattern():
     after = {'format_structure': 'struct1', 'test_name': 'FEV1 something else'}
     assert rf.learn_from_edit(store, before, after) is None
     assert 'name_pattern' not in store['report_formats']['sig1']
+
+
+# --- shared layout knowledge -------------------------------------------------
+
+def test_confirmed_layout_seeds_another_profiles_store():
+    """Profile A confirms a layout; profile B scanning the same grid inherits
+    the corrected column roles — the whole point of the shared store."""
+    store_a, structure = _store_with_confirmed_roles()
+    entry = next(iter(store_a['report_formats'].values()))
+    entry['last_report_date'] = '2026-09-27'
+    entry['last_report_date_at'] = '2026-09-27T10:00:00'
+
+    shared = {}
+    assert rf.promote_to_shared(store_a, shared) is True
+    assert structure in [e['structure'] for e in shared.values()]
+    # report dates never cross profiles
+    assert 'last_report_date' not in next(iter(shared.values()))
+
+    store_b = {}
+    seeded = rf.seed_from_shared(store_b, shared)
+    assert seeded == 1
+    b_entry = next(iter(store_b['report_formats'].values()))
+    assert b_entry['confirmed'] is True
+    assert b_entry['structure'] == structure
+    assert 'last_report_date' not in b_entry
+    # Seeding twice is a no-op — the profile owns its copy now
+    assert rf.seed_from_shared(store_b, shared) == 0
+
+
+def test_promote_to_shared_is_idempotent_and_prefers_newer():
+    store, structure = _store_with_confirmed_roles()
+    entry = next(iter(store['report_formats'].values()))
+    entry['confirmed_at'] = '2026-09-28T03:00:00'
+    shared = {}
+    assert rf.promote_to_shared(store, shared) is True
+    assert rf.promote_to_shared(store, shared) is False  # same confirmed_at
+
+    # An older profile confirmation must not overwrite the newer shared one
+    store_old, _ = _store_with_confirmed_roles()
+    old_entry = next(iter(store_old['report_formats'].values()))
+    old_entry['structure'] = structure
+    old_entry['confirmed_at'] = '2026-09-01T00:00:00'
+    assert rf.promote_to_shared(store_old, shared) is False
+    assert shared[next(iter(shared))]['confirmed_at'] == '2026-09-28T03:00:00'
+
+
+def test_unconfirmed_layouts_never_seed_or_promote():
+    rows, sep = _table("""
+        | Analyte | | | |
+        | --- | --- | --- | --- |
+        | Potassium | 5.9 | 3.5 - 5.5 | mmol/L |
+    """)
+    description = rf.describe(rows, sep)
+    store = {}
+    rf.remember(store, description)  # seen, not confirmed
+    shared = {}
+    assert rf.promote_to_shared(store, shared) is False
+    other = {'x': {'structure': description['structure'], 'confirmed': False}}
+    assert rf.seed_from_shared(store, other) == 0

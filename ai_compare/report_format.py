@@ -24,6 +24,7 @@ and recorded. That is the "old format is fine, new format gets analysed" stage.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import re
 from datetime import datetime
@@ -621,6 +622,62 @@ def find_by_structure(store: Dict, structure: str) -> Optional[Dict]:
     confirmed = [e for e in matches if e.get('confirmed')]
     pool = confirmed or matches
     return max(pool, key=lambda e: e.get('last_seen') or '')
+
+
+# --- shared layout knowledge -------------------------------------------------
+
+def seed_from_shared(store: Dict, shared: Dict) -> int:
+    """Copy confirmed layouts a profile hasn't met into its own store.
+
+    Column roles keyed by structure carry no patient data — they are what the
+    report printed plus how a user read it — so one user's correction can
+    teach everyone's next scan of the same grid. The profile keeps its own
+    copy: later edits refine it rather than fighting over a shared row.
+    Report dates are stripped — a date learned from one user's document must
+    never land on another user's rows.
+    """
+    registry = store.setdefault('report_formats', {})
+    added = 0
+    for sig, entry in (shared or {}).items():
+        structure = (entry or {}).get('structure')
+        if not structure or not entry.get('confirmed') or sig in registry:
+            continue
+        if find_by_structure(store, structure) is not None:
+            continue
+        seeded = copy.deepcopy(entry)
+        seeded.pop('last_report_date', None)
+        seeded.pop('last_report_date_at', None)
+        seeded['seeded_from_shared'] = True
+        registry[sig] = seeded
+        added += 1
+    return added
+
+
+def promote_to_shared(store: Dict, shared: Dict) -> bool:
+    """Mirror the profile's confirmed layouts into the shared store so other
+    users inherit the correction. The most recently confirmed reading wins —
+    two users who genuinely disagree both keep their own copy, and the shared
+    one follows whoever confirmed last. Returns True when shared changed."""
+    changed = False
+    for sig, entry in (store.get('report_formats') or {}).items():
+        if not (entry or {}).get('confirmed'):
+            continue
+        structure = entry.get('structure')
+        if not structure:
+            continue
+        existing = find_by_structure({'report_formats': shared}, structure)
+        prev = (existing or {}).get('confirmed_at') or ''
+        cur = entry.get('confirmed_at') or ''
+        if existing is not None and prev == cur and prev:
+            continue  # shared already holds this exact reading
+        if prev and cur and cur < prev:
+            continue  # another user confirmed a newer reading
+        promoted = copy.deepcopy(entry)
+        promoted.pop('last_report_date', None)
+        promoted.pop('last_report_date_at', None)
+        shared[sig] = promoted
+        changed = True
+    return changed
 
 
 def apply_column_roles(description: Dict, column_roles: List[Dict],

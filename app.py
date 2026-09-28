@@ -6393,7 +6393,24 @@ from ai_compare.medical_advisor_health_context import (
     parse_report_pages,
     _canonical_test_name,
     _fill_test_defaults,
+    load_shared_report_store,
+    save_shared_report_store,
 )
+
+
+def _seed_shared_report_formats(profile):
+    """Give this profile every confirmed layout other users taught the
+    system. Column roles carry no patient data, so layout knowledge is safe
+    to share — a new user should get the same reading a confirmed user got."""
+    report_format.seed_from_shared(profile.data, load_shared_report_store())
+
+
+def _promote_shared_report_formats(profile):
+    """Mirror this profile's confirmed layouts into the shared store so the
+    next user scanning the same grid inherits the correction."""
+    shared = load_shared_report_store()
+    if report_format.promote_to_shared(profile.data, shared):
+        save_shared_report_store(shared)
 from ai_compare import health_insights
 from ai_compare import health_freshness
 from ai_compare import health_push
@@ -8053,6 +8070,7 @@ def apply_health_report_format():
         # A batch page always re-reads through its stored pages — the combined
         # text the client sends back loses the page boundaries the merge needs.
         pages = _batch_pages_for_doc(profile, doc)
+        _seed_shared_report_formats(profile)
         if pages:
             # Re-read the batch the way it was analysed: page provenance,
             # document-date propagation and overlap dedupe all still apply.
@@ -8067,6 +8085,7 @@ def apply_health_report_format():
             for table in format_analysis.get('tables') or []:
                 if table.get('columns'):
                     report_format.confirm(profile.data, table)
+            _promote_shared_report_formats(profile)
         for t in parsed:
             t['test_name'] = _canonical_test_name(t.get('test_name', '')) or t.get('test_name', '')
             t['date'] = profile._normalize_test_date(str(t.get('date') or ''))
@@ -8141,6 +8160,9 @@ def apply_health_review():
                 extracted.get('test_results') or [])
             if what:
                 learned.append(what)
+        # A layout this user just confirmed is now shared knowledge — the
+        # next profile scanning the same grid inherits the corrected roles.
+        _promote_shared_report_formats(profile)
         for test in extracted.get('test_results') or []:
             structure = (test or {}).get('format_structure')
             date = str((test or {}).get('date') or '').strip()
@@ -8563,6 +8585,7 @@ def delete_health_profile_item():
                  'date': removed.get('date', ''),
                  'reference_range': removed.get('reference_range', '')})
             report_format.learn_from_delete(profile.data, removed, items)
+            _promote_shared_report_formats(profile)
         profile.save()
         return jsonify({'success': True, 'item': removed, 'profile': profile.to_dict()})
     except Exception as e:
@@ -8627,6 +8650,7 @@ def update_health_profile_item():
                     profile.data, 'updated', items[index].get('test_name', ''),
                     {'changes': changes, 'date': items[index].get('date', '')})
             report_format.learn_from_edit(profile.data, before, items[index])
+            _promote_shared_report_formats(profile)
         else:
             items[index].update(updates)
         # Editing an item by hand confirms it, even if AI originally suggested

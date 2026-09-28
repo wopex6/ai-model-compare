@@ -34,10 +34,38 @@ from ai_compare.health_freshness import (
 
 
 HEALTH_DATA_DIR = Path(__file__).parent.parent / "health_profiles"
+# Structure-keyed column roles carry no patient data, so a confirmed layout
+# one user taught the system is shared with every other user's next scan of
+# the same grid. The file lives beside the profiles but is layout metadata
+# only — report headings and roles, never a name, value or date.
+SHARED_FORMATS_PATH = HEALTH_DATA_DIR / "_report_formats.json"
 BACKUP_DIR = HEALTH_DATA_DIR / "_backups"
 # Rotating copies kept per user so a bad write or mistaken edit can be
 # recovered. The file is small, so keeping many is cheap insurance.
 BACKUP_KEEP = 20
+
+
+def load_shared_report_store() -> Dict:
+    """The cross-user layout registry. Corrupt/absent means start fresh —
+    never block extraction on shared metadata."""
+    try:
+        if SHARED_FORMATS_PATH.exists():
+            data = json.loads(SHARED_FORMATS_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+    except Exception:
+        pass
+    return {}
+
+
+def save_shared_report_store(shared: Dict) -> None:
+    try:
+        HEALTH_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        SHARED_FORMATS_PATH.write_text(
+            json.dumps(shared, ensure_ascii=False, indent=1),
+            encoding="utf-8")
+    except Exception:
+        pass
 
 
 class ProfileCorruptError(ValueError):
@@ -3697,6 +3725,10 @@ NEW TEXT TO ANALYZE:
             # Prefer the OCR markdown table values over any AI-re-interpreted ones,
             # but keep any (test, date) pair the table parse missed so a dropped row
             # is still recovered from the AI extraction.
+            # Layouts confirmed by any user teach this scan too — the profile
+            # gets its own copy of each structure it hasn't met.
+            report_format.seed_from_shared(profile.data,
+                                           load_shared_report_store())
             if pages:
                 parsed_from_table, format_analysis = parse_report_pages(
                     [{'name': pages[i].get('name'), 'text': canon_pages[i]}

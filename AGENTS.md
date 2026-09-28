@@ -319,6 +319,19 @@ provenance so the decomposition knows the printed base. `_deleted_fields`
 names the user removed drop out of the stored `fields` bag on merge — gap-fill
 must never resurrect them.
 
+**Confirmed layouts are shared across users.** `report_formats` lives per
+profile, so without a bridge each new user re-learns every grid from scratch.
+`health_profiles/_report_formats.json` is the shared store: extraction calls
+`seed_from_shared` (copies confirmed layouts the profile lacks — with
+`last_report_date` stripped, since a date learned from one user's document
+must never land on another's rows) and every confirm/learn call site calls
+`promote_to_shared` (latest `confirmed_at` wins). Roles are report metadata —
+headings and positions, never values or names — so sharing leaks no patient
+data. A rejected row the user re-entered by hand counts as a *value*
+correction, not a column verdict: `learn_from_reject` skips demotion when a
+manual row shares the rejected row's name stem, or a garbled scan would
+teach the layout that real measured columns are `text`.
+
 **Position is the data.** A 2-D report is read by coordinates, not by token
 order: each emitted row carries `source_column` (its column index) so
 learning can target the position it came from. Two integrity rules guard the
