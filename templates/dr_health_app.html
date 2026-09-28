@@ -999,7 +999,7 @@
     <!-- ============ DATA MANAGER MODAL ============ -->
     <div id="data-manager-modal" class="modal">
         <div class="modal-header">
-            <h2><i class="fas fa-database"></i> Manage My Data</h2>
+            <h2><i class="fas fa-database"></i> Manage Data</h2>
             <button class="modal-close" id="dm-close" title="Close"><i class="fas fa-times"></i></button>
         </div>
         <div class="modal-content"><div class="dm-bar"><div id="dm-index" class="dm-index"></div><input id="dm-search" type="text" placeholder="Search test names…"></div><div id="dm-content"></div></div>
@@ -3461,6 +3461,14 @@
     }
 
     const DM_HIDDEN = new Set(['added_at', 'updated_at', 'user_id', 'id']);
+    // Provenance the server owns — shown on the card, never a free-text box.
+    const DM_MANAGED = new Set([
+        '_import_batch', 'manual', 'source', 'verified_by_user', 'history',
+        'format_structure', 'format_signature', 'source_role', 'source_column',
+        'name_base', 'date_source', 'qualifier', 'section',
+        'source_page', 'source_file', 'ref_locked', 'unit_locked',
+        'last_confirmed_at',
+    ]);
     const DM_PREFERRED = {
         conditions: ['name', 'status', 'diagnosed_date', 'details'],
         test_results: ['test_name', 'value', 'unit', 'reference_range', 'date', 'notes'],
@@ -3712,19 +3720,23 @@
         // can never be typed in, and the edit silently can't be saved.
         // 'history' is server-owned: editing it as text would overwrite the
         // structured array with a '[object Object]' string.
+        const managed = DM_MANAGED;
+        // 'fields' is edited per heading below, not as one box — a raw
+        // String(item.fields) round-trips as '[object Object]' and wipes it.
         const fields = [...new Set([...(DM_PREFERRED[cat] || []), ...Object.keys(item)])]
-            .filter(k => !hidden.has(k) && k !== 'history');
+            .filter(k => !hidden.has(k) && !managed.has(k) && k !== 'fields'
+                    && !(item[k] && typeof item[k] === 'object'));
         const inputs = {};
 
-        fields.forEach(k => {
+        const addInput = (key, caption, val) => {
             const label = document.createElement('label');
             label.className = 'dm-edit-label';
-            label.textContent = k.replace(/_/g, ' ');
-            const isLong = (k === 'details' || k === 'notes' || k === 'insight' || k === 'description') || String(item[k] || '').length > 60;
+            label.textContent = caption;
+            const isLong = (key === 'details' || key === 'notes' || key === 'insight' || key === 'description') || String(val || '').length > 60;
             const el = document.createElement(isLong ? 'textarea' : 'input');
             if (isLong) el.rows = 3;
-            const rawVal = item[k] === null || item[k] === undefined ? '' : String(item[k]);
-            if (el.tagName === 'INPUT' && (k === 'date' || k.endsWith('_date'))) {
+            const rawVal = val === null || val === undefined ? '' : String(val);
+            if (el.tagName === 'INPUT' && (key === 'date' || key.endsWith('_date'))) {
                 // type=date only accepts ISO; fall back to text so values like
                 // 09/09/2026 are shown instead of silently blanked
                 const iso = normalizeDateInput(rawVal);
@@ -3733,12 +3745,20 @@
             } else {
                 el.value = rawVal;
             }
-            el.dataset.key = k;
-            if (cat === 'test_results' && k === 'reference_range') el.placeholder = 'e.g. 10 - 45 (blank allowed)';
+            el.dataset.key = key;
+            if (cat === 'test_results' && key === 'reference_range') el.placeholder = 'e.g. 10 - 45 (blank allowed)';
             form.appendChild(label);
             form.appendChild(el);
-            inputs[k] = el;
-        });
+            inputs[key] = el;
+        };
+
+        fields.forEach(k => addInput(k, k.replace(/_/g, ' '), item[k]));
+        // The report-native bag — one input per heading, gathered back into a
+        // 'fields' object on save.
+        const bag = item.fields;
+        if (bag && typeof bag === 'object' && !Array.isArray(bag)) {
+            Object.keys(bag).forEach(h => addInput('fields.' + h, h, bag[h]));
+        }
 
         const actions = document.createElement('div');
         actions.className = 'dm-actions';
@@ -3766,7 +3786,17 @@
             // Send only the fields the form shows — echoing back the whole
             // stored row would clobber server-owned fields like history.
             const updates = {};
-            Object.keys(inputs).forEach(k => updates[k] = inputs[k].value);
+            const bag = {};
+            Object.keys(inputs).forEach(k => {
+                if (k.startsWith('fields.')) {
+                    if (inputs[k].value.trim()) bag[k.slice(7)] = inputs[k].value;
+                } else {
+                    updates[k] = inputs[k].value;
+                }
+            });
+            if (Object.keys(bag).length || (item.fields && typeof item.fields === 'object')) {
+                updates.fields = bag;  // blanked boxes mean drop that entry
+            }
             status.textContent = 'Saving...';
             const isNew = idx === -1;
             try {

@@ -1161,20 +1161,21 @@ def test_emergency_field_candidates_from_document_text():
     """Phone-only emergency fields are suggested from stored document text —
     names, addresses, Medicare numbers, insurers and member numbers."""
     import app as app_mod
+    # Fictional person — never put real patient details in a tracked file.
     sample = (
-        'TSE, WAI\n'
-        '4 HIGHVALE CRES, BERWICK. 3806\n'
-        'Phone: 0415151791\n'
-        'Birthdate: 12/06/1962  Sex: M  Medicare Number: 2297496521\n'
+        'CITIZEN, JANE\n'
+        '12 SAMPLE ST, TESTVILLE. 3000\n'
+        'Phone: 0400123456\n'
+        'Birthdate: 01/02/1970  Sex: F  Medicare Number: 2123456789\n'
         'Health Insurance: MEDIBANK  Member No: AB123456\n'
         'Medicare valid to: 05/2030\n'
     )
     out = app_mod._emergency_field_candidates([('report.pdf', sample)])
-    assert 'Ken' in out['full_name']
-    assert out['date_of_birth'] == ['12/06/1962']
-    assert any('HIGHVALE' in a for a in out['address'])
-    assert '0415151791' in out['phone']
-    assert out['medicare'] == ['2297496521']
+    assert 'Jane Citizen' in out['full_name']
+    assert out['date_of_birth'] == ['01/02/1970']
+    assert any('SAMPLE' in a for a in out['address'])
+    assert '0400123456' in out['phone']
+    assert out['medicare'] == ['2123456789']
     assert out['medicare_expiry'] == ['05/2030']
     assert 'Medibank' in out['insurer']
     assert 'AB123456' in out['insurance_member']
