@@ -1,15 +1,15 @@
 # Handoff snapshot
 
-_Generated 2026-09-28 17:17 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-28 18:36 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Confirmed-layout precedence over fresh AI readings: apply_remembered vocabulary fallback + _layout_guided_read re-reads a mis-shaped scan against the user's confirmed schema (expected_headers + row_labels recorded at apply-review). Prod shared store + profile 17 entry a7e37dfc patched with emission=compact, aliases, row_labels. ST's rescan had produced structure 45f2dfdc (band headings flattened into rows, test names dropped) — next rescan should hit the guided re-read. Left: verify ST's next rescan reproduces Sau Tse's compact format end-to-end.
+Recovered Sau Tse (profile 17) from _prod17_now.json snapshot after accidental wipe — 10 rows + insights restored, audit preserved (81 entries). Fixed label-variant vocabulary matching (flattened 'Pre-Bronch Pred' vs bare 'Pred' — the bug that stopped ST's rescan from triggering guided re-read) and dedupe of split grids on re-read. Deployed + verified. Left: user to rescan/re-analyse ST's spirometry — guided re-read should now fire and produce Sau Tse's compact format. Blood-test layouts: none exist in learned stores (profile 21's blood data predates the format system); generic pipeline covers it.
 
 ## Git
 
 **Branch:** `cursor/emergency-card-paramedic-fields`  
-**Uncommitted files:** 29
+**Uncommitted files:** 31
 
 > Uncommitted work is the main handoff hazard: the next agent
 > cannot tell finished edits from half-written ones. Commit
@@ -20,9 +20,11 @@ Confirmed-layout precedence over fresh AI readings: apply_remembered vocabulary 
 ?? _merge_dupes.py
 ?? _prod17_backup.json
 ?? _prod17_now.json
+?? _prod17_now2.json
 ?? _prod_result.json
 ?? _st_rescan.json
 ?? _st_rescan.txt
+?? _st_rescan2.json
 ?? _st_result.json
 ?? _st_spiro.json
 ?? check_wk_credentials.py
@@ -50,14 +52,14 @@ Confirmed-layout precedence over fresh AI readings: apply_remembered vocabulary 
 Recent commits:
 
 ```
+6e0bcba Dr. Health: match layouts on label suffixes; dedupe split grids on re-read
+b8388b8 Handoff: confirmed-layout precedence (guided re-read) shipped; verify ST rescan next
 839842f Dr. Health: confirmed layout outranks a fresh mis-shaped reading
 7984a17 Dr. Health: learn compact row emission from reject-and-retype edits
 43ea936 Dr. Health: share confirmed report layouts across users
 a2a6e5d Handoff: [object Object] fixed in edit form; PII scrubbed; prod 17 cleaned
 5cdb09c Dr. Health: fix '[object Object]' in Manage Data edit form; scrub real PII from test
 837461e Dr. Health: never let a non-dict 'fields' update clobber the stored bag
-efad9df Dr. Health: render the fields bag as 'k: v' pairs in Manage My Data
-f7daf03 Dr. Health learning: manual re-entry shields columns from rejection demotion
 ```
 
 ## Production (PythonAnywhere)
@@ -102,14 +104,14 @@ All passing.
 ........................................................................ [ 62%]
 ........................................................................ [ 77%]
 ........................................................................ [ 93%]
-...............................                                          [100%]
+................................                                         [100%]
 ============================== warnings summary ===============================
 ..\..\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37
   C:\Users\trabc\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-463 passed, 1 warning in 24.01s
+464 passed, 1 warning in 26.01s
 [AutoDoc] Monitoring stopped
 ```
 
