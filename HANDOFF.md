@@ -1,15 +1,15 @@
 # Handoff snapshot
 
-_Generated 2026-09-28 18:36 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-28 19:14 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Recovered Sau Tse (profile 17) from _prod17_now.json snapshot after accidental wipe — 10 rows + insights restored, audit preserved (81 entries). Fixed label-variant vocabulary matching (flattened 'Pre-Bronch Pred' vs bare 'Pred' — the bug that stopped ST's rescan from triggering guided re-read) and dedupe of split grids on re-read. Deployed + verified. Left: user to rescan/re-analyse ST's spirometry — guided re-read should now fire and produce Sau Tse's compact format. Blood-test layouts: none exist in learned stores (profile 21's blood data predates the format system); generic pipeline covers it.
+ST rescan still wrong: transcription produced mis-shaped grids (band headers as rows, transposed DLCO) that hit poisoned confirmed entries — guided read never fired (same-width no-labels match). Fixed: vocabulary tie-break prefers entry with row_labels, guided read detects transposed fragments (headings=row labels) and empty name columns, dedup drops transposed dupes. Repaired demoted roles in shared store + profile 17. Deployed; awaiting another ST re-analyse to verify compact emission.
 
 ## Git
 
 **Branch:** `cursor/emergency-card-paramedic-fields`  
-**Uncommitted files:** 31
+**Uncommitted files:** 32
 
 > Uncommitted work is the main handoff hazard: the next agent
 > cannot tell finished edits from half-written ones. Commit
@@ -25,6 +25,7 @@ Recovered Sau Tse (profile 17) from _prod17_now.json snapshot after accidental w
 ?? _st_rescan.json
 ?? _st_rescan.txt
 ?? _st_rescan2.json
+?? _st_rescan3.json
 ?? _st_result.json
 ?? _st_spiro.json
 ?? check_wk_credentials.py
@@ -52,19 +53,19 @@ Recovered Sau Tse (profile 17) from _prod17_now.json snapshot after accidental w
 Recent commits:
 
 ```
+41fafc3 Guided re-read: prefer the fullest confirmed schema, detect mis-shape
+4a258a2 Handoff: Sau Tse restored; label-variant matching shipped
 6e0bcba Dr. Health: match layouts on label suffixes; dedupe split grids on re-read
 b8388b8 Handoff: confirmed-layout precedence (guided re-read) shipped; verify ST rescan next
 839842f Dr. Health: confirmed layout outranks a fresh mis-shaped reading
 7984a17 Dr. Health: learn compact row emission from reject-and-retype edits
 43ea936 Dr. Health: share confirmed report layouts across users
 a2a6e5d Handoff: [object Object] fixed in edit form; PII scrubbed; prod 17 cleaned
-5cdb09c Dr. Health: fix '[object Object]' in Manage Data edit form; scrub real PII from test
-837461e Dr. Health: never let a non-dict 'fields' update clobber the stored bag
 ```
 
 ## Production (PythonAnywhere)
 
-**4 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
+**38 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
 
 ```
 ok       tests/test_review_flow.py
@@ -91,7 +92,7 @@ ok       web_enhancement_test_runner.py
 ok       webhook_deploy.py
 ok       wisdom_profiles/23.json
 ok       wisdom_profiles/23_hypotheses.json
-4 file(s) stale. Re-run with --push to upload.
+38 file(s) stale. Re-run with --push to upload.
 ```
 
 Reload often returns `409 slow_startup_error` on the first attempt — retry rather than debug it.
@@ -101,17 +102,17 @@ Reload often returns `409 slow_startup_error` on the first attempt — retry rat
 All passing.
 
 ```
-........................................................................ [ 62%]
+........................................................................ [ 61%]
 ........................................................................ [ 77%]
-........................................................................ [ 93%]
-................................                                         [100%]
+........................................................................ [ 92%]
+..................................                                       [100%]
 ============================== warnings summary ===============================
 ..\..\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37
   C:\Users\trabc\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-464 passed, 1 warning in 26.01s
+466 passed, 1 warning in 23.70s
 [AutoDoc] Monitoring stopped
 ```
 
