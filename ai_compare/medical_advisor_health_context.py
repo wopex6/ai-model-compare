@@ -916,8 +916,11 @@ def _fill_test_defaults(results):
         # before appending, or the value grows a second copy ('0.96 L L').
         already = bool(want) and bool(re.search(
             r'(?:^|\s)' + re.escape(want) + r'\s*$', value_text, re.I))
+        # Rows that already carry `unit` in its own slot keep a bare value —
+        # appending would just store the same unit twice ('5.30 ml/min/mmHg/L').
         if (not _extract_unit_text(value_text) and want
-                and not already and not t.get('unit_locked')):
+                and not already and not t.get('unit_locked')
+                and not t.get('unit')):
             t['value'] = (value_text + ' ' + want).strip()
 
 
