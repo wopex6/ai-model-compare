@@ -7726,10 +7726,13 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
             stems = {report_format._name_stem(str((r or [''])[0] or ''))
                      for r in data}
             stems.discard('')
+            # Any expected row label absent means rows were dropped in
+            # transcription — half a report's names gone is still a mis-shape,
+            # and the guided re-read exists to recover exactly that.
             missing = (labels and
                        sum(1 for l in labels
                            if report_format._name_stem(l) in stems)
-                       < max(1, len(labels) // 2))
+                       < len(labels))
             unnamed = (len(data) > 2 and
                        sum(1 for r in data
                            if not str((r or [''])[0] or '').strip())
