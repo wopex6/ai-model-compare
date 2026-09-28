@@ -204,3 +204,72 @@ def grid_to_markdown(grid):
     for row in padded[1:]:
         lines.append('| ' + ' | '.join(row) + ' |')
     return '\n'.join(lines)
+
+
+_NUM_IN_RE = re.compile(r'-?\d+(?:\.\d+)?')
+
+
+def split_tables(text):
+    """Markdown tables as (header_rows, data_rows), separator position kept.
+
+    parse_markdown_grids flattens every row into one list, which silently
+    makes a printed band heading (Pre-Bronch / Post-Bronch) either the column
+    header or a data row.  Every row above the separator is a header row —
+    the band heading carries real meaning and must survive a splice.
+    """
+    tables, cur, sep = [], [], None
+
+    def _flush():
+        nonlocal cur, sep
+        if not cur:
+            return
+        at = sep if sep else 1
+        h, d = cur[:at], cur[at:]
+        if not h and d:
+            h, d = d[:1], d[1:]
+        if h:
+            tables.append((h, d))
+        cur, sep = [], None
+
+    for line in strip_code_fences(text).splitlines():
+        if line.strip().startswith('|'):
+            if _is_separator(line):
+                if sep is None:
+                    sep = len(cur)
+                continue
+            cur.append(_split_row(line))
+        else:
+            _flush()
+    _flush()
+    return tables
+
+
+def table_to_markdown(headers, data):
+    """Emit a table keeping every header row above the separator."""
+    width = max([len(r) for r in headers + data] or [1])
+    pad = lambda r: list(r) + [''] * (width - len(r))
+    lines = ['| ' + ' | '.join(pad(r)) + ' |' for r in headers]
+    lines.append('|' + '|'.join(['---'] * width) + '|')
+    lines += ['| ' + ' | '.join(pad(r)) + ' |' for r in data]
+    return '\n'.join(lines)
+
+
+def promote_header_rows(header, data):
+    """Repair a table whose separator row is missing.
+
+    A model that emits a band-heading row and a column-header row but forgets
+    the `|---|` line leaves the parser guessing where headers end.  Leading
+    data rows with at least two filled cells but no numeric payload are
+    header rows — promote them back so the band heading keeps qualifying the
+    column labels.
+    """
+    if len(header) != 1 or len(data) < 2:
+        return header, data
+    i = 0
+    while i < len(data) and \
+            sum(1 for c in data[i] if str(c or '').strip()) >= 2 and \
+            not any(_NUM_IN_RE.search(str(c or '')) for c in data[i][1:]):
+        i += 1
+    if i:
+        return header + data[:i], data[i:]
+    return header, data

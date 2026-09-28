@@ -7523,7 +7523,26 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
         others = [grid_to_markdown(g) for g in grids if g is not grid]
         return '\n\n'.join([rebuilt] + others)
 
-    def _guided_table_call(entry):
+    def _rotate_part(deg):
+        """The prepared image physically rotated — a phone photo stored
+        sideways defeats the OCR prompts long before any layout check can
+        help, and EXIF normalisation cannot see baked-in rotation."""
+        try:
+            from PIL import Image
+            import io
+            im = Image.open(io.BytesIO(img_bytes))
+            im.load()
+            im = im.rotate(deg, expand=True)
+            buf = io.BytesIO()
+            im.save(buf, format='PNG')
+            return {"type": "image_url", "image_url": {
+                "url": "data:image/png;base64,"
+                       + base64.b64encode(buf.getvalue()).decode('utf-8'),
+                "detail": "high"}}
+        except Exception:
+            return None
+
+    def _guided_table_call(entry, part):
         """Re-read the page against a user-confirmed layout's schema.
 
         The confirmed columns and row labels come from a human correction,
@@ -7575,13 +7594,86 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
                 model='gpt-4o',
                 messages=[{'role': 'user', 'content': [
                     {'type': 'text', 'text': '\n'.join(lines)},
-                    image_part]}],
+                    part]}],
                 temperature=0.0,
                 max_tokens=4000
             ).choices[0].message.content.strip()
         except Exception:
             return ''
         return _strip(raw).strip()
+
+    def _guided_grid_ok(candidate, labels):
+        """A guided re-read only replaces the original grid when it can be
+        trusted: a real table, carrying at least half of the row labels the
+        confirmed layout expects."""
+        from ai_compare.table_consensus import (split_tables,
+                                                promote_header_rows)
+        new_tables = [promote_header_rows(h, d)
+                      for h, d in split_tables(candidate)]
+        if not new_tables:
+            return None
+        new_h, new_d = max(new_tables, key=lambda t: len(t[0]) + len(t[1]))
+        if not new_h or not new_d or len(new_h[-1]) < 2:
+            return None
+        if labels:
+            new_stems = {report_format._name_stem(str((r or [''])[0] or ''))
+                         for r in new_d}
+            new_stems.discard('')
+            hit = sum(1 for l in labels
+                      if report_format._name_stem(l) in new_stems)
+            if hit < max(1, len(labels) // 2):
+                return None
+        return new_h, new_d
+
+    def _grid_score(new_grid, labels):
+        """Internal-consistency score for a guided re-read: the fraction of
+        checks that hold.  Two orientations of the same photo can both produce
+        plausible-looking tables — the upright reading is the one whose
+        arithmetic agrees with itself and whose known rows actually carry
+        values.  Empty rows are charged as failures: a labelled row the
+        confirmed layout expects has data on the page."""
+        h, d = new_grid
+        w = max([len(r) for r in h + d] or [1])
+        try:
+            desc = report_format.describe(h + [['---'] * w] + d, len(h))
+        except Exception:
+            return 0.0
+        ok = total = 0
+        label_stems = {report_format._name_stem(l) for l in labels}
+        for r in d:
+            stem = report_format._name_stem(str((r or [''])[0] or ''))
+            if stem and stem in label_stems:
+                total += 1
+                if sum(1 for c in r[1:]
+                       if report_format.number_in(c) is not None) >= 2:
+                    ok += 1
+        for rel in desc.get('relations') or []:
+            kind = rel.get('kind')
+            if kind == 'percent_of':
+                a, b, c = rel.get('measured'), rel.get('baseline'), \
+                    rel.get('column')
+                calc = lambda x, y: 100.0 * x / y if y else None
+            elif kind == 'percent_change':
+                a, b, c = rel.get('from'), rel.get('to'), rel.get('column')
+                calc = lambda x, y: 100.0 * (y - x) / x if x else None
+            else:
+                continue
+            for r in d:
+                x = report_format.number_in(r[a]) \
+                    if a is not None and a < len(r) else None
+                y = report_format.number_in(r[b]) \
+                    if b is not None and b < len(r) else None
+                got = report_format.number_in(r[c]) \
+                    if c is not None and c < len(r) else None
+                if x is None or y is None or got is None:
+                    continue
+                want = calc(x, y)
+                if want is None:
+                    continue
+                total += 1
+                if abs(want - got) / max(abs(want), abs(got), 1.0) <= 0.1:
+                    ok += 1
+        return ok / total if total else 0.0
 
     def _layout_guided_read(table_md, store):
         """Swap a mis-shaped grid for a re-read under a confirmed layout.
@@ -7593,9 +7685,9 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
         confirmed row labels present. A failed or unconvincing re-read leaves
         the original grid untouched.
         """
-        from ai_compare.table_consensus import parse_markdown_grids, \
-            grid_to_markdown
-        grids = parse_markdown_grids(table_md)
+        from ai_compare.table_consensus import (split_tables,
+                                                table_to_markdown)
+        grids = split_tables(table_md)
         if not grids:
             return ''
         changed = False
@@ -7603,20 +7695,19 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
                             # whole page, so a second call would just re-emit
                             # the same table
         drop = set()
-        for gi, grid in enumerate(grids):
-            if not grid or gi in drop:
+        for gi, (heads, data) in enumerate(grids):
+            if not data or gi in drop:
                 continue
+            head = heads[-1]
             entry = report_format.find_by_vocabulary(
-                store, [str(c or '') for c in grid[0]])
-            if not entry:
-                continue
+                store, [str(c or '') for c in head])
             schema = entry
-            if not schema.get('row_labels'):
+            if not schema or not schema.get('row_labels'):
                 # The matching entry carries no recorded row labels — but a
                 # sibling confirmed layout of the same report may, and this
                 # grid's headings are those labels (a transposed fragment).
                 head_stems = {report_format._name_stem(str(c or ''))
-                              for c in grid[0]}
+                              for c in head}
                 head_stems.discard('')
                 for other in (store.get('report_formats') or {}).values():
                     if not isinstance(other, dict) \
@@ -7627,70 +7718,88 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
                     if len(overlap) >= 3:
                         schema = other
                         break
+            if schema is None:
+                continue
             sig = schema.get('signature') or str(id(schema))
             expected = len(schema.get('column_roles') or [])
             labels = [l for l in (schema.get('row_labels') or [])][:30]
             stems = {report_format._name_stem(str((r or [''])[0] or ''))
-                     for r in grid[1:]}
+                     for r in data}
             stems.discard('')
             missing = (labels and
                        sum(1 for l in labels
                            if report_format._name_stem(l) in stems)
                        < max(1, len(labels) // 2))
-            unnamed = (len(grid) > 3 and
-                       sum(1 for r in grid[1:]
+            unnamed = (len(data) > 2 and
+                       sum(1 for r in data
                            if not str((r or [''])[0] or '').strip())
-                       > (len(grid) - 1) // 2)
+                       > len(data) // 2)
             covered = False
             if not missing and not unnamed:
                 # Every payload column identified against the confirmed
                 # schema means nothing is lost, whatever order they printed
                 # in — the label-identity overlay reads it; no re-read needed.
+                w = max([len(r) for r in heads + data] or [1])
                 desc = report_format.describe(
-                    [grid[0], ['---'] * len(grid[0])] + grid[1:], 1)
+                    heads + [['---'] * w] + data, len(heads))
                 remapped = report_format._remap_by_labels(schema, desc)
                 if remapped is not None:
                     payload = [c for c in (desc.get('columns') or [])
                                if c.get('role') != 'name']
                     covered = sum(1 for s in remapped
                                   if s.get('role') != 'name') >= len(payload)
-            if (len(grid[0]) == expected or covered) \
+            if (len(head) == expected or covered) \
                     and not missing and not unnamed:
                 continue  # right shape — the parse-layer overlay handles it
             if sig not in guided_cache:
-                guided_cache[sig] = _guided_table_call(schema)
-            guided = guided_cache[sig]
-            if not guided:
+                guided_cache[sig] = None
+                # A sideways photo survives EXIF normalisation — the pixels
+                # themselves are rotated, so every read comes back scrambled.
+                # Re-ask the same question on rotated copies; the confirmed
+                # row labels decide whether a read is usable at all, and the
+                # report's own arithmetic (%Pred = 100·Actual/Pred) picks the
+                # orientation that agrees with itself.
+                best, best_score = None, -1.0
+                for part in (image_part, _rotate_part(90),
+                             _rotate_part(-90), _rotate_part(180)):
+                    if part is None:
+                        continue
+                    cand = _guided_grid_ok(
+                        _guided_table_call(schema, part), labels)
+                    if cand is None:
+                        continue
+                    score = _grid_score(cand, labels)
+                    if best is None or score > best_score:
+                        best, best_score = cand, score
+                        if score >= 0.999:
+                            break
+                    else:
+                        break
+                guided_cache[sig] = best or ''
+            new_grid = guided_cache[sig]
+            if not new_grid:
                 continue
-            new_grids = parse_markdown_grids(guided)
-            if not new_grids:
-                continue
-            new_grid = max(new_grids, key=len)
-            if len(new_grid) < 2 or len(new_grid[0]) < 2:
-                continue
+            new_h, new_d = new_grid
             new_stems = {report_format._name_stem(str((r or [''])[0] or ''))
-                         for r in new_grid[1:]}
+                         for r in new_d}
             new_stems.discard('')
-            if labels:
-                hit = sum(1 for l in labels
-                          if report_format._name_stem(l) in new_stems)
-                if hit < max(1, len(labels) // 2):
-                    continue
             grids[gi] = new_grid
             changed = True
             # A model that splits one physical table into two grids emits the
             # same rows twice; after the re-read, a later grid whose labels
             # are all inside the guided grid is that same table duplicated.
             for gj in range(gi + 1, len(grids)):
-                other = grids[gj]
-                if not other or gj in drop:
+                if gj in drop:
+                    continue
+                other_h, other_d = grids[gj]
+                if not other_h:
                     continue
                 other_stems = {report_format._name_stem(
                                    str((r or [''])[0] or ''))
-                               for r in other[1:]}
+                               for r in other_d}
                 other_stems.discard('')
                 other_heads = {report_format._name_stem(str(c or ''))
-                               for c in other[0]}
+                               for r in other_h for c in r}
                 other_heads.discard('')
                 # A repeated grid shares the row labels; a transposed
                 # fragment carries them as column headings instead. Either
@@ -7703,8 +7812,9 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
                     drop.add(gj)
         if not changed:
             return ''
-        return '\n\n'.join(grid_to_markdown(g)
-                           for gi, g in enumerate(grids) if gi not in drop)
+        return '\n\n'.join(table_to_markdown(h, d)
+                           for gi, (h, d) in enumerate(grids)
+                           if gi not in drop)
 
     # Vision OCR misreads dense text in random, uncorrelated ways, so read the
     # document more than once and let the passes vote on each cell.  The first pass

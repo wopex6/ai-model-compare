@@ -11,6 +11,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from ai_compare import report_format as rf
+from ai_compare import table_consensus as tc
 
 
 def _table(text):
@@ -1439,3 +1440,56 @@ def test_unrelated_report_is_not_claimed_by_the_confirmed_layout():
     ''')
     description = rf.describe(rows, sep)
     assert rf.apply_remembered(description, store) is False
+
+
+def test_split_tables_keeps_band_heading_with_the_header():
+    """Every row above the separator is a header row: a printed band heading
+    (Pre-Bronch / Post-Bronch) must survive a splice, not be flattened into
+    either the column header or the data."""
+    heads, data = tc.split_tables('''
+        |  | Pre-Bronch |  |  | Post-Bronch |  |  |
+        |  | Actual | Pred | %Pred | Actual | %Pred | %Chng |
+        | --- | --- | --- | --- | --- | --- | --- |
+        | FEV1 (L) | 0.96 | 1.62 | 59 | 1.30 | 80 | 36.2 |
+    ''')[0]
+    assert heads == [['', 'Pre-Bronch', '', '', 'Post-Bronch', '', ''],
+                     ['', 'Actual', 'Pred', '%Pred', 'Actual', '%Pred', '%Chng']]
+    assert data[0][0] == 'FEV1 (L)'
+
+
+def test_table_to_markdown_round_trips_multi_header_tables():
+    heads = [['', 'Pre-Bronch', '', '', 'Post-Bronch', '', ''],
+             ['', 'Actual', 'Pred', '%Pred', 'Actual', '%Pred', '%Chng']]
+    data = [['FEV1 (L)', '0.96', '1.62', '59', '1.30', '80', '36.2']]
+    heads2, data2 = tc.split_tables(tc.table_to_markdown(heads, data))[0]
+    assert heads2 == heads and data2 == data
+
+
+def test_promote_header_rows_repairs_a_missing_separator():
+    """The guided read sometimes emits band + column headers but skips the
+    separator row. The leading non-numeric rows are headers — promoting them
+    back is what lets the band heading qualify the column labels."""
+    heads, data = tc.split_tables('''
+        |  | Pre-Bronch |  |  | Post-Bronch |  |  |
+        |  | Actual | Pred | %Pred | Actual | %Pred | %Chng |
+        | FEV1 (L) | 0.96 | 1.62 | 59 | 1.30 | 80 | 36.2 |
+        |  | DIFFUSION |  |  |  |  |  |
+        | DLCOunc | 13.37 | 16.93 | 79 |  |  |  |
+    ''')[0]
+    heads, data = tc.promote_header_rows(heads, data)
+    assert heads == [['', 'Pre-Bronch', '', '', 'Post-Bronch', '', ''],
+                     ['', 'Actual', 'Pred', '%Pred', 'Actual', '%Pred', '%Chng']]
+    assert data[0][0] == 'FEV1 (L)'
+    # The single-cell DIFFUSION row is a section band inside the data, not a
+    # header row — it must not be promoted.
+    assert data[1][1] == 'DIFFUSION'
+
+
+def test_promote_header_rows_leaves_real_data_alone():
+    heads, data = tc.split_tables('''
+        | Test | Result | Units |
+        | Haemoglobin | 152 | g/L |
+        | MCV | 88.2 | fL |
+    ''')[0]
+    h2, d2 = tc.promote_header_rows(heads, data)
+    assert h2 == heads and d2 == data
