@@ -7644,8 +7644,17 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
             stem = report_format._name_stem(str((r or [''])[0] or ''))
             if stem and stem in label_stems:
                 total += 1
-                if sum(1 for c in r[1:]
-                       if report_format.number_in(c) is not None) >= 2:
+                # Two numeric cells is not enough: a block shifted sideways
+                # carries numbers in the wrong columns and leaves blank holes
+                # inside the populated span. The real print is contiguous.
+                filled = [i for i in range(1, len(r))
+                          if str(r[i] or '').strip()]
+                hole = len(filled) >= 2 and any(
+                    not str(r[i] or '').strip()
+                    for i in range(filled[0], filled[-1]))
+                if not hole and sum(1 for c in r[1:]
+                                    if report_format.number_in(c)
+                                    is not None) >= 2:
                     ok += 1
         for rel in desc.get('relations') or []:
             kind = rel.get('kind')
@@ -7666,6 +7675,12 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
                 got = report_format.number_in(r[c]) \
                     if c is not None and c < len(r) else None
                 if x is None or y is None or got is None:
+                    continue
+                # A dropped measurement shifted sideways echoes the baseline
+                # into the measured cell — 100 = 100·x/x passes the check
+                # while saying nothing. Charge the echo as a failure.
+                if kind == 'percent_of' and abs(x - y) < 1e-9:
+                    total += 1
                     continue
                 want = calc(x, y)
                 if want is None:
@@ -7702,6 +7717,9 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
             entry = report_format.find_by_vocabulary(
                 store, [str(c or '') for c in head])
             schema = entry
+            data_stems = {report_format._name_stem(str((r or [''])[0] or ''))
+                          for r in data}
+            data_stems.discard('')
             if not schema or not schema.get('row_labels'):
                 # The matching entry carries no recorded row labels — but a
                 # sibling confirmed layout of the same report may, and this
@@ -7718,6 +7736,27 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
                     if len(overlap) >= 3:
                         schema = other
                         break
+                # Or the same report in a *narrower* cut: the name column
+                # holds the test names a confirmed richer layout recorded,
+                # while a stale label-less layout won the vocabulary match.
+                # The layout that knows the report's rows is ground truth.
+                if schema is entry or not schema or \
+                        not schema.get('row_labels'):
+                    best, best_hit = None, 0
+                    for other in (store.get('report_formats') or {}).values():
+                        if not isinstance(other, dict) \
+                                or not other.get('confirmed'):
+                            continue
+                        olabels = other.get('row_labels') or []
+                        if not olabels:
+                            continue
+                        hit = len({report_format._name_stem(l)
+                                   for l in olabels} & data_stems)
+                        if hit > best_hit:
+                            best, best_hit = other, hit
+                    if best is not None and best_hit >= max(
+                            3, (len(best.get('row_labels') or []) + 1) // 2):
+                        schema = best
             if schema is None:
                 continue
             sig = schema.get('signature') or str(id(schema))
@@ -7739,6 +7778,7 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
                        > len(data) // 2)
             covered = False
             content_empty = False
+            lost = False
             if not missing and not unnamed:
                 # Every payload column identified against the confirmed
                 # schema means nothing is lost, whatever order they printed
@@ -7752,6 +7792,24 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
                                if c.get('role') != 'name']
                     covered = sum(1 for s in remapped
                                   if s.get('role') != 'name') >= len(payload)
+                # Coverage is directional: every fresh column finding a spec
+                # is not enough when the schema's informative columns (Pred,
+                # a second measured band) never made it into the grid. A
+                # narrower stale layout matching the vocabulary would then
+                # read a report that lost columns. Auxiliary columns (range,
+                # unit, flag) absent from the print are fine — they only
+                # populate optional fields.
+                if labels and remapped is not None:
+                    aux = {'range', 'unit', 'flag', 'text', 'empty', 'date',
+                           'name'}
+                    from collections import Counter
+                    need = Counter(s.get('role') for s in
+                                   (schema.get('column_roles') or [])
+                                   if s.get('role') not in aux)
+                    got = Counter(s.get('role') for s in remapped
+                                  if s.get('role') not in aux)
+                    if need - got:
+                        lost = True
                 # But coverage says nothing about the cells: a scan that
                 # shifts a block sideways leaves an expected row's measured
                 # cell empty while every column still maps. A labelled row
@@ -7827,7 +7885,7 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
                             if streak >= 3:
                                 content_empty = True
                                 break
-            if (len(head) == expected or covered) \
+            if (len(head) == expected or covered) and not lost \
                     and not missing and not unnamed and not content_empty:
                 continue  # right shape — the parse-layer overlay handles it
             if sig not in guided_cache:
@@ -7848,12 +7906,10 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
                     if cand is None:
                         continue
                     score = _grid_score(cand, labels)
-                    if best is None or score > best_score:
+                    if score > best_score:
                         best, best_score = cand, score
                         if score >= 0.999:
                             break
-                    else:
-                        break
                 guided_cache[sig] = best or ''
             new_grid = guided_cache[sig]
             if not new_grid:
