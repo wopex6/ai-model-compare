@@ -7625,13 +7625,14 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
                 return None
         return new_h, new_d
 
-    def _grid_score(new_grid, labels):
+    def _grid_score(new_grid, labels, schema=None):
         """Internal-consistency score for a guided re-read: the fraction of
         checks that hold.  Two orientations of the same photo can both produce
         plausible-looking tables — the upright reading is the one whose
-        arithmetic agrees with itself and whose known rows actually carry
-        values.  Empty rows are charged as failures: a labelled row the
-        confirmed layout expects has data on the page."""
+        arithmetic agrees with itself, whose known rows actually carry
+        values, and which kept the confirmed layout's columns.  Empty rows
+        are charged as failures: a labelled row the confirmed layout expects
+        has data on the page."""
         h, d = new_grid
         w = max([len(r) for r in h + d] or [1])
         try:
@@ -7688,7 +7689,25 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
                 total += 1
                 if abs(want - got) / max(abs(want), abs(got), 1.0) <= 0.1:
                     ok += 1
-        return ok / total if total else 0.0
+        score = ok / total if total else 0.0
+        # A confident-looking narrow read can lose whole schema columns (the
+        # Pred column, the Post-Bronch band) and still pass every internal
+        # check. Scale the score by how many of the confirmed layout's
+        # informative columns this candidate still carries.
+        if schema is not None:
+            remapped = report_format._remap_by_labels(schema, desc)
+            if remapped is not None:
+                aux = {'range', 'unit', 'flag', 'text', 'empty', 'date',
+                       'name'}
+                from collections import Counter
+                need = Counter(s.get('role') for s in
+                               (schema.get('column_roles') or [])
+                               if s.get('role') not in aux)
+                have = Counter(s.get('role') for s in remapped
+                               if s.get('role') not in aux)
+                short = need - have
+                score *= len(need) / (len(need) + sum(short.values()))
+        return score
 
     def _layout_guided_read(table_md, store):
         """Swap a mis-shaped grid for a re-read under a confirmed layout.
@@ -7905,7 +7924,7 @@ def _extract_text_from_file_bytes(file_bytes, ext, store=None):
                         _guided_table_call(schema, part), labels)
                     if cand is None:
                         continue
-                    score = _grid_score(cand, labels)
+                    score = _grid_score(cand, labels, schema)
                     if score > best_score:
                         best, best_score = cand, score
                         if score >= 0.999:
