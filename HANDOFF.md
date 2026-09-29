@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-29 09:35 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-29 11:08 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Spiro rescan: 14 local cycles on ST's sideways photo, last 5 consecutive golden. Added 3 misread gates to _layout_guided_read (blank measured cells, interior holes in a labelled row, 3+ consecutive rows echoing Actual==Pred). Qualifier repair via label remap; compact measured column survives mass delete/reject (profile 17 layout was self-poisoned, repaired). Committed f0272a3, deployed + digest-verified, /dr-health 200. Next: user re-analyses ST's doc in prod.
+PA rescan produced stale 6-col composed layout (sideways photo lost Pred/Post-Bronch cols; vocab-matched a label-less confirmed entry). Fixed: row_labels matched against data name column, coverage is directional (lost informative schema cols = mis-shape), orientation loop no longer breaks on non-improvement, _grid_score fails interior holes and Actual==Pred echoes. 6/6 golden locally (20 cycles total). Committed 6d43d1b, deployed, reload 200. Next: user re-analyses ST's doc in prod.
 
 ## Git
 
@@ -46,24 +46,24 @@ M AI_REGENERATION_SPEC.md
 
 ```
 AI_REGENERATION_SPEC.md      |   2 +-
- ENHANCEMENTS.md              | 176 +++++++++++++++++++++++++++++++++++++++++++
+ ENHANCEMENTS.md              | 232 +++++++++++++++++++++++++++++++++++++++++++
  README.md                    |   2 +-
  SYSTEM_REGENERATION_GUIDE.md |   2 +-
- 4 files changed, 179 insertions(+), 3 deletions(-)
+ 4 files changed, 235 insertions(+), 3 deletions(-)
 ```
 </details>
 
 Recent commits:
 
 ```
+6d43d1b Try every orientation before trusting a guided re-read
+d42dd36 Handoff: sideways-photo misread gates deployed
 f0272a3 Re-read grids that are shaped right but read wrong
 abb800f Handoff: compact-emission unit fix deployed
 d653636 Keep compact-emission values bare of their slotted unit
 def89d2 Don't glue a slotted unit onto the value in _fill_test_defaults
 16fdb6a Handoff + autodoc updates
 de0d959 Guided re-read: any missing expected row is a mis-shape
-21a7342 Handoff: ST rotated-photo scan solved end-to-end
-56120b6 AGENTS: note rotated-photo guided retry and multi-row headers
 ```
 
 ## Production (PythonAnywhere)
@@ -105,17 +105,17 @@ Reload often returns `409 slow_startup_error` on the first attempt — retry rat
 All passing.
 
 ```
-automated_greeting_system.py:416
-automated_greeting_system.py:416
-  C:\Users\trabc\CascadeProjects\ai-model-compare - Claude\automated_greeting_system.py:416: DeprecationWarning: The default datetime adapter is deprecated as of Python 3.12; see the sqlite3 documentation for suggested replacement recipes
-    cursor.execute('''
-
+........................................................................ [ 60%]
+........................................................................ [ 75%]
+........................................................................ [ 90%]
+............................................                             [100%]
+============================== warnings summary ===============================
 ..\..\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37
   C:\Users\trabc\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-476 passed, 5 warnings in 23.16s
+476 passed, 1 warning in 23.04s
 [AutoDoc] Monitoring stopped
 ```
 
