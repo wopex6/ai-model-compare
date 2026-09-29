@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-29 11:58 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-29 20:21 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Second PA rescan still wrote the identical 6-col scrambled .txt: guided fired but the orientation loop early-exited at score 1.0 on the FIRST candidate (original orientation) — a clean narrow read passes all internal checks since the missing Pred column leaves no relation to violate. Fixed: _grid_score now scales by schema coverage (lost informative columns discount the candidate), so the loop proceeds to rotated reads. 10 consecutive golden cycles (24 total). Commit 28c3af9 deployed, /dr-health 200. Next: user re-analyses ST doc in prod; if still wrong, check whether guided call itself errors on PA.
+Website/PWA gap fill shipped (fd1772f, deployed, /health-profile 200): one shared pendingReviewCardHtml for all review cards, role chips re-extract via report-format with no model call, stored-doc list gains Review/Analysis/Delete/Keep links, tools card covers digest+visit brief+explain-test+interactions+emergency card+vitals+export+undo-import, test-audit ledger rendered. Still PWA-only: push subscription, SW/offline shell, emergency home icon, review-prompt bell queue.
 
 ## Git
 
@@ -56,19 +56,19 @@ AI_REGENERATION_SPEC.md      |   2 +-
 Recent commits:
 
 ```
+fd1772f Port the PWA's document inspection and health tools to the website
+62620f0 Handoff: schema-coverage scoring for guided re-reads deployed
 28c3af9 Score guided re-reads against the schema's missing columns
 3bf8afc Handoff: directional coverage + orientation-loop fix deployed
 6d43d1b Try every orientation before trusting a guided re-read
 d42dd36 Handoff: sideways-photo misread gates deployed
 f0272a3 Re-read grids that are shaped right but read wrong
 abb800f Handoff: compact-emission unit fix deployed
-d653636 Keep compact-emission values bare of their slotted unit
-def89d2 Don't glue a slotted unit onto the value in _fill_test_defaults
 ```
 
 ## Production (PythonAnywhere)
 
-**4 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
+Local and production match.
 
 ```
 ok       tests/test_review_flow.py
@@ -95,10 +95,8 @@ ok       web_enhancement_test_runner.py
 ok       webhook_deploy.py
 ok       wisdom_profiles/23.json
 ok       wisdom_profiles/23_hypotheses.json
-4 file(s) stale. Re-run with --push to upload.
+Everything on the server matches local.
 ```
-
-Reload often returns `409 slow_startup_error` on the first attempt — retry rather than debug it.
 
 ## Tests
 
@@ -115,7 +113,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-476 passed, 1 warning in 24.36s
+476 passed, 1 warning in 36.54s
 [AutoDoc] Monitoring stopped
 ```
 
