@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-29 11:08 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-29 11:58 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-PA rescan produced stale 6-col composed layout (sideways photo lost Pred/Post-Bronch cols; vocab-matched a label-less confirmed entry). Fixed: row_labels matched against data name column, coverage is directional (lost informative schema cols = mis-shape), orientation loop no longer breaks on non-improvement, _grid_score fails interior holes and Actual==Pred echoes. 6/6 golden locally (20 cycles total). Committed 6d43d1b, deployed, reload 200. Next: user re-analyses ST's doc in prod.
+Second PA rescan still wrote the identical 6-col scrambled .txt: guided fired but the orientation loop early-exited at score 1.0 on the FIRST candidate (original orientation) — a clean narrow read passes all internal checks since the missing Pred column leaves no relation to violate. Fixed: _grid_score now scales by schema coverage (lost informative columns discount the candidate), so the loop proceeds to rotated reads. 10 consecutive golden cycles (24 total). Commit 28c3af9 deployed, /dr-health 200. Next: user re-analyses ST doc in prod; if still wrong, check whether guided call itself errors on PA.
 
 ## Git
 
@@ -46,24 +46,24 @@ M AI_REGENERATION_SPEC.md
 
 ```
 AI_REGENERATION_SPEC.md      |   2 +-
- ENHANCEMENTS.md              | 232 +++++++++++++++++++++++++++++++++++++++++++
+ ENHANCEMENTS.md              | 256 +++++++++++++++++++++++++++++++++++++++++++
  README.md                    |   2 +-
  SYSTEM_REGENERATION_GUIDE.md |   2 +-
- 4 files changed, 235 insertions(+), 3 deletions(-)
+ 4 files changed, 259 insertions(+), 3 deletions(-)
 ```
 </details>
 
 Recent commits:
 
 ```
+28c3af9 Score guided re-reads against the schema's missing columns
+3bf8afc Handoff: directional coverage + orientation-loop fix deployed
 6d43d1b Try every orientation before trusting a guided re-read
 d42dd36 Handoff: sideways-photo misread gates deployed
 f0272a3 Re-read grids that are shaped right but read wrong
 abb800f Handoff: compact-emission unit fix deployed
 d653636 Keep compact-emission values bare of their slotted unit
 def89d2 Don't glue a slotted unit onto the value in _fill_test_defaults
-16fdb6a Handoff + autodoc updates
-de0d959 Guided re-read: any missing expected row is a mis-shape
 ```
 
 ## Production (PythonAnywhere)
@@ -115,7 +115,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-476 passed, 1 warning in 23.04s
+476 passed, 1 warning in 24.36s
 [AutoDoc] Monitoring stopped
 ```
 
