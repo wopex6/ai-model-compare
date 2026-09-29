@@ -395,6 +395,29 @@ Examples:
                 <div id="uploadResults" style="display:none;margin-top:12px;padding:12px;background:white;border-radius:8px;border:1px solid #e0e0e0;"></div>
             </div>
 
+            <!-- HEALTH TOOLS — same endpoints the PWA hub drives -->
+            <details id="healthToolsCard" style="margin-top:14px;padding:12px;background:#f6fbf6;border-radius:10px;border:1px solid #c8e6c9;">
+                <summary style="cursor:pointer;font-size:0.9rem;color:#2e7d32;font-weight:600;"><i class="fas fa-toolbox"></i> Health tools</summary>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0 4px;">
+                    <button class="btn-add" style="background:#2e7d32;padding:5px 10px;font-size:0.78rem;" onclick="toolInteractions()"><i class="fas fa-triangle-exclamation"></i> Interactions</button>
+                    <button class="btn-add" style="background:#2e7d32;padding:5px 10px;font-size:0.78rem;" onclick="toolVisitBrief()"><i class="fas fa-briefcase-medical"></i> Visit brief</button>
+                    <button class="btn-add" style="background:#2e7d32;padding:5px 10px;font-size:0.78rem;" onclick="toolDigest()"><i class="fas fa-newspaper"></i> Periodic review</button>
+                    <button class="btn-add" style="background:#2e7d32;padding:5px 10px;font-size:0.78rem;" onclick="toolEmergencyCard()"><i class="fas fa-kit-medical"></i> Emergency card</button>
+                    <button class="btn-add" style="background:#2e7d32;padding:5px 10px;font-size:0.78rem;" onclick="toolExport()"><i class="fas fa-file-export"></i> Export data</button>
+                    <button class="btn-add" style="background:#78909c;padding:5px 10px;font-size:0.78rem;" onclick="toolUndoImport()"><i class="fas fa-rotate-left"></i> Undo last import</button>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
+                    <select id="explainTestSelect" style="flex:1;min-width:180px;padding:5px;border:1px solid #ccc;border-radius:6px;font-size:0.8rem;"></select>
+                    <button class="btn-add" style="background:#2e7d32;padding:5px 10px;font-size:0.78rem;" onclick="toolExplainTest()"><i class="fas fa-circle-question"></i> Explain test</button>
+                </div>
+                <div id="healthToolOutput" style="font-size:0.82rem;margin-top:8px;"></div>
+            </details>
+
+            <details id="testAuditCard" style="margin-top:10px;padding:12px;background:#f5f5f5;border-radius:10px;border:1px solid #e0e0e0;" ontoggle="if(this.open)loadTestAudit()">
+                <summary style="cursor:pointer;font-size:0.9rem;color:#555;font-weight:600;"><i class="fas fa-clock-rotate-left"></i> Test data changes <span id="test-audit-count" style="color:#999;font-weight:400;"></span></summary>
+                <div id="test-audit-list" style="margin-top:10px;max-height:280px;overflow-y:auto;"><em style="color:#999;">Expand to load.</em></div>
+            </details>
+
             <hr style="margin:20px 0;">
             <h4 style="font-size:0.95rem;color:#333;"><i class="fas fa-bolt"></i> Quick Add</h4>
             <div style="display:grid;gap:12px;">
@@ -531,7 +554,11 @@ Examples:
                 return `<label style="display:block;margin:3px 0;font-size:0.85rem;cursor:pointer;">
                     <input type="checkbox" class="reanalyse-cb" value="${sn}" style="margin-right:6px;">
                     ${name} (${when})
-                    <a href='javascript:void(0)' onclick='viewDocument(${JSON.stringify(rawSn)})' style='font-size:0.78rem;color:#2e7d32;cursor:pointer;'>View</a>
+                    <a href='javascript:void(0)' onclick='event.stopPropagation();viewDocument(${JSON.stringify(rawSn)})' style='font-size:0.78rem;color:#2e7d32;cursor:pointer;'>View</a>
+                    · <a href='javascript:void(0)' onclick='event.stopPropagation();openStoredReview(${JSON.stringify(rawSn)})' style='font-size:0.78rem;color:#1565c0;cursor:pointer;'>Review</a>
+                    · <a href='javascript:void(0)' onclick='event.stopPropagation();downloadStoredAnalysis(${JSON.stringify(rawSn)})' style='font-size:0.78rem;color:#1565c0;cursor:pointer;'>Analysis</a>
+                    · <a href='javascript:void(0)' onclick='event.stopPropagation();deleteStoredDocument(${JSON.stringify(rawSn)})' style='font-size:0.78rem;color:#c62828;cursor:pointer;'>Delete</a>
+                    · <a href='javascript:void(0)' onclick='event.stopPropagation();toggleKeepDocument(${JSON.stringify(rawSn)}, ${!doc.keep_forever})' style='font-size:0.78rem;color:#6a1b9a;cursor:pointer;'>${doc.keep_forever ? 'Unkeep' : 'Keep'}</a>
                 </label>`;
             });
 
@@ -1302,9 +1329,510 @@ Examples:
             });
         }
 
+        // The roles a report-table column can hold — same list the PWA review
+        // modal offers. Rendering differs between the two pages; the allowed
+        // vocabulary must not.
+        const FORMAT_ROLES = ['name', 'measured', 'dated', 'stated', 'baseline',
+            'percent_of', 'percent_change', 'range', 'unit', 'flag', 'text', 'empty'];
+
+        // One card for a pending review — reanalyse, upload, stored-analysis
+        // reopen and role re-read all render through this, so the pieces the
+        // server round-trips (extracted, format_analysis, extracted_text,
+        // stored document) are wired in exactly one place.
+        function pendingReviewCardHtml(result, opts = {}) {
+            const pending = result.pending_review || {};
+            const encoded = encodeURIComponent(JSON.stringify(pending));
+            const analysisAttr = result.format_analysis
+                ? ` data-analysis='${encodeURIComponent(JSON.stringify(result.format_analysis))}'` : '';
+            const textAttr = result.extracted_text
+                ? ` data-text='${encodeURIComponent(result.extracted_text)}'` : '';
+            const previewAttr = result.extracted_text_preview
+                ? ` data-preview='${encodeURIComponent(result.extracted_text_preview)}'` : '';
+            const stored = (result.stored_document && result.stored_document.stored_name) || '';
+            const storedAttr = stored ? ` data-stored='${escapeHtml(stored)}'` : '';
+            const sourceAttr = ` data-source='${escapeHtml(result.source_file || '')}'`;
+            const style = opts.wrapperStyle
+                ? ` style='${opts.wrapperStyle}'` : '';
+            let html = `<div class='pending-review-card' data-extracted='${encoded}'${analysisAttr}${textAttr}${previewAttr}${storedAttr}${sourceAttr}${style}>`;
+            html += `<h4 style='margin:0 0 10px;color:#1565c0;font-size:0.9rem;'><i class='fas fa-clipboard-check'></i> Review before saving: ${escapeHtml(opts.label || result.source_file || 'document')}</h4>`;
+            if (result.stored_document) {
+                const sd = result.stored_document;
+                const expires = sd.expires_at ? new Date(sd.expires_at).toLocaleDateString('en-AU') : 'unknown';
+                const what = (result.page_count > 1) ? result.page_count + ' pages retained' : 'File retained';
+                html += `<div style='margin-bottom:8px;font-size:0.78rem;color:#455a64;background:#e3f2fd;padding:6px 8px;border-radius:6px;'>`;
+                html += `<i class='fas fa-archive'></i> ${what} for ${sd.retention_days || '?'} day(s) until ${expires}.`;
+                html += `</div>`;
+            }
+            if (result.extracted_text_preview) {
+                html += `<details style='margin-bottom:8px;'><summary style='cursor:pointer;font-size:0.8rem;color:#666;'>Show extracted text</summary><pre style='font-size:0.75rem;white-space:pre-wrap;max-height:150px;overflow-y:auto;background:#f5f5f5;padding:8px;border-radius:6px;margin-top:6px;'>${escapeHtml(result.extracted_text_preview)}</pre></details>`;
+            }
+            html += renderPendingReview(pending);
+            html += formatChipsHtml(result.format_analysis);
+            const align = opts.align === 'right' ? 'text-align:right;' : '';
+            const cLabel = opts.confirmLabel || 'Confirm & Save';
+            const rLabel = opts.rejectLabel || 'Discard';
+            html += `<div style='margin-top:10px;${align}'>`;
+            html += `<button class='btn-add' style='background:#2e7d32;margin-right:6px;' onclick='confirmPendingReview(this)'><i class='fas fa-check-circle'></i> ${cLabel}</button>`;
+            html += `<button class='btn-add' style='background:#c62828;' onclick='this.closest(".pending-review-card").remove()'><i class='fas fa-times-circle'></i> ${rLabel}</button>`;
+            html += `</div></div>`;
+            return html;
+        }
+
+        // "How the columns were read" — a role chip per table column. Same
+        // content as the PWA's renderFormatChips, in this page's string markup.
+        function formatChipsHtml(analysis) {
+            if (!analysis || !Array.isArray(analysis.tables) || !analysis.tables.length) return '';
+            let html = `<div style='margin:8px 0;padding:8px;background:#fafafa;border:1px solid #e0e0e0;border-radius:6px;'>` +
+                `<div style='font-size:0.8rem;font-weight:600;color:#555;margin-bottom:4px;'><i class='fas fa-table-columns'></i> How the columns were read</div>`;
+            analysis.tables.forEach((t, ti) => {
+                const tags = [];
+                if (t.recognition === 'new') tags.push('first time seeing this layout');
+                if (t.applied_confirmed) tags.push('using your last correction');
+                if (t.layout) tags.push(t.layout);
+                if (t.source_page) tags.push('page ' + t.source_page);
+                const hint = (t.section ? t.section + ' — ' : '') +
+                    (tags.join(' · ') || 'change a role to re-read the same table');
+                html += `<div style='font-size:0.75rem;color:#888;margin:6px 0 2px;'>${escapeHtml(hint)}</div>`;
+                html += `<div style='display:flex;flex-wrap:wrap;gap:4px;'>`;
+                (t.columns || []).forEach((c, ci) => {
+                    const cap = (c.qualifier ? c.qualifier + ' ' : '') +
+                        (c.label || ('col ' + c.index));
+                    const optsHtml = FORMAT_ROLES.map(r =>
+                        `<option value='${r}'${r === c.role ? ' selected' : ''}>${r}</option>`).join('');
+                    html += `<label style='display:inline-flex;align-items:center;gap:3px;font-size:0.72rem;border:1px solid #cfd8dc;border-radius:10px;padding:2px 6px;background:#fff;'>` +
+                        `<span>${escapeHtml(cap)}</span>` +
+                        `<select data-t='${ti}' data-c='${ci}' onchange='applyRoleChange(this)' style='font-size:0.72rem;border:none;background:transparent;color:#1565c0;cursor:pointer;max-width:110px;'>${optsHtml}</select></label>`;
+                });
+                html += `</div>`;
+            });
+            return html + `</div>`;
+        }
+
+        // Re-extract the same stored table with one column's role corrected —
+        // no model call. The response carries fresh rows + analysis, so the
+        // whole card is rebuilt through the same builder.
+        async function applyRoleChange(sel) {
+            const card = sel.closest('.pending-review-card');
+            if (!card) return;
+            const analysis = card.dataset.analysis
+                ? JSON.parse(decodeURIComponent(card.dataset.analysis)) : null;
+            const ti = parseInt(sel.dataset.t, 10);
+            const ci = parseInt(sel.dataset.c, 10);
+            const table = analysis && analysis.tables && analysis.tables[ti];
+            if (!table || !table.columns || !table.columns[ci]) return;
+            table.columns[ci].role = sel.value;
+            table.columns[ci].basis = 'user';
+            const text = card.dataset.text ? decodeURIComponent(card.dataset.text) : '';
+            if (!text) {
+                alert('No table text to re-read — use Re-analyse instead.');
+                return;
+            }
+            const overlays = analysis.tables.map((t, i) => ({
+                index: i,
+                structure: t.structure,
+                signature: t.signature,
+                column_roles: (t.columns || []).map(c => ({
+                    index: c.index, label: c.label, qualifier: c.qualifier, role: c.role
+                }))
+            }));
+            sel.disabled = true;
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/report-format', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        extracted_text: text,
+                        stored_name: card.dataset.stored || undefined,
+                        tables: overlays,
+                        confirm: false
+                    })
+                });
+                const data = await resp.json();
+                if (!resp.ok || data.success === false) {
+                    sel.disabled = false;
+                    alert(data.error || 'Could not re-read the table.');
+                    return;
+                }
+                const pending = JSON.parse(decodeURIComponent(card.dataset.extracted));
+                pending.test_results = data.test_results || [];
+                card.outerHTML = pendingReviewCardHtml({
+                    pending_review: pending,
+                    format_analysis: data.format_analysis || analysis,
+                    extracted_text: text,
+                    extracted_text_preview: card.dataset.preview
+                        ? decodeURIComponent(card.dataset.preview) : '',
+                    source_file: card.dataset.source || '',
+                    stored_document: card.dataset.stored
+                        ? { stored_name: card.dataset.stored } : null,
+                });
+            } catch (e) {
+                sel.disabled = false;
+                alert('Could not re-read the table.');
+            }
+        }
+
+        // Reopen the stored analysis for a document — a file read on the
+        // server, no re-analysis (and no AI cost).
+        async function openStoredReview(storedName) {
+            const statusDiv = document.getElementById('uploadStatus');
+            const resultsDiv = document.getElementById('uploadResults');
+            statusDiv.style.display = 'block';
+            statusDiv.innerHTML = `<i class='fas fa-spinner fa-spin'></i> Loading stored analysis…`;
+            try {
+                const resp = await AuthHelper.authenticatedFetch(
+                    '/api/health-profile/document-result?stored_name=' + encodeURIComponent(storedName));
+                const data = await resp.json();
+                if (!resp.ok || !data.pending_review) {
+                    statusDiv.innerHTML = `<span style='color:#c62828;'>${escapeHtml(data.error || 'No stored analysis for this document.')}</span>`;
+                    return;
+                }
+                resultsDiv.innerHTML = pendingReviewCardHtml(data, {
+                    confirmLabel: 'Confirm & Save', rejectLabel: 'Discard', align: 'right' });
+                resultsDiv.style.display = 'block';
+                statusDiv.style.display = 'none';
+            } catch (e) {
+                statusDiv.innerHTML = `<span style='color:#c62828;'>Could not load the stored analysis.</span>`;
+            }
+        }
+
+        // Save the whole analysis of one document as a file: transcribed text,
+        // every extracted row, every skipped row and why, each column's role.
+        async function downloadStoredAnalysis(storedName) {
+            const statusDiv = document.getElementById('uploadStatus');
+            statusDiv.style.display = 'block';
+            statusDiv.innerHTML = `<i class='fas fa-spinner fa-spin'></i> Preparing analysis file…`;
+            try {
+                const resp = await AuthHelper.authenticatedFetch(
+                    '/api/health-profile/document-result?download=1&stored_name=' +
+                    encodeURIComponent(storedName));
+                if (!resp.ok) {
+                    let message = 'Could not build the analysis file.';
+                    try { message = (await resp.json()).error || message; } catch (e) {}
+                    statusDiv.innerHTML = `<span style='color:#c62828;'>${escapeHtml(message)}</span>`;
+                    return;
+                }
+                const blob = await resp.blob();
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = storedName.replace(/[^A-Za-z0-9._-]+/g, '_') + '.analysis.json';
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 10000);
+                statusDiv.innerHTML = 'Analysis file saved.';
+            } catch (e) {
+                statusDiv.innerHTML = `<span style='color:#c62828;'>Could not build the analysis file.</span>`;
+            }
+        }
+
+        // Keep a document past its retention window — the file is the original
+        // evidence for the facts extracted from it.
+        async function toggleKeepDocument(storedName, keep) {
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/documents', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ stored_name: storedName, keep_forever: keep })
+                });
+                const data = await resp.json();
+                if (!resp.ok || data.success === false) {
+                    alert(data.error || 'Could not update the document.');
+                    return;
+                }
+                loadProfile();
+            } catch (e) {
+                alert('Could not update the document.');
+            }
+        }
+
+        async function deleteStoredDocument(storedName) {
+            if (!confirm('Delete this stored document and its saved analysis?')) return;
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/documents', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ stored_name: storedName })
+                });
+                const data = await resp.json();
+                if (!resp.ok || data.success === false) {
+                    alert(data.error || 'Could not delete the document.');
+                    return;
+                }
+                loadProfile();
+            } catch (e) {
+                alert('Could not delete the document.');
+            }
+        }
+
+        // --- Health tools: the same endpoints the PWA hub drives, rendered in
+        // this page's markup. One output area; each tool owns its renderer.
+        function toolOut(html) {
+            const el = document.getElementById('healthToolOutput');
+            if (el) el.innerHTML = html;
+        }
+        function toolBusy(msg) { toolOut(`<em style='color:#777;'><i class='fas fa-spinner fa-spin'></i> ${escapeHtml(msg)}</em>`); }
+        function toolErr(msg) { toolOut(`<div style='padding:6px 8px;background:#ffebee;border-radius:6px;color:#c62828;'>${escapeHtml(msg)}</div>`); }
+        function toolNote(html) { return `<div style='padding:6px 8px;background:#fff;border:1px solid #e0e0e0;border-radius:6px;margin-bottom:4px;'>${html}</div>`; }
+        function toolWarn(html) { return `<div style='padding:6px 8px;background:#fff8e1;border-left:3px solid #e6a000;border-radius:4px;margin-bottom:4px;'>${html}</div>`; }
+
+        async function toolInteractions() {
+            toolBusy('Checking recorded medications and supplements…');
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/interactions');
+                const data = await resp.json();
+                const list = (data && Array.isArray(data.interactions)) ? data.interactions : [];
+                if (!list.length) {
+                    toolOut(`<div style='padding:6px 8px;background:#e8f5e9;border-radius:6px;color:#2e7d32;'><i class='fas fa-circle-check'></i> No interactions found between your recorded medications and supplements.</div>`);
+                    return;
+                }
+                toolOut(list.map(it => toolWarn(
+                    `<strong>${escapeHtml(String(it.pair || it.drugs || ''))}</strong><br>${escapeHtml(String(it.description || it.warning || it))}`
+                )).join(''));
+            } catch (e) { toolErr('Could not check interactions.'); }
+        }
+
+        async function toolVisitBrief() {
+            toolBusy('Building a brief for your GP visit…');
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/visit-brief');
+                const data = await resp.json();
+                const b = data && data.brief;
+                if (!b) { toolErr('Could not build the brief.'); return; }
+                let html = `<div style='font-weight:600;margin-bottom:4px;'>GP visit brief${b.name ? ' — ' + escapeHtml(b.name) : ''}</div>`;
+                const line = (label, value) => {
+                    if (value === null || value === undefined || value === '') return '';
+                    if (Array.isArray(value) && !value.length) return '';
+                    const v = Array.isArray(value) ? value.join(', ') : value;
+                    return `<div><span style='color:#888;'>${escapeHtml(label)}:</span> ${escapeHtml(String(v))}</div>`;
+                };
+                html += line('Date of birth', b.date_of_birth) + line('Age', b.age) + line('Language', b.language);
+                html += line('GP', b.gp_name ? b.gp_name + (b.gp_phone ? ' ' + b.gp_phone : '') : '');
+                html += line('Allergies', b.allergies) + line('Conditions', b.conditions);
+                html += line('Medications', b.medications) + line('Anticoagulants', b.anticoagulants);
+                const testLine = t => `${escapeHtml(t.test_name || '')} <strong>${escapeHtml(t.value || '')}</strong>` +
+                    (t.reference_range ? ` <span style='color:#888;'>(${escapeHtml(t.reference_range)})</span>` : '') +
+                    (t.date ? ` <span style='color:#888;'>${escapeHtml(t.date)}</span>` : '');
+                (b.abnormal_tests || []).forEach(t => { html += toolWarn(`<i class='fas fa-flag'></i> ${testLine(t)} <em>${escapeHtml(t.flag || '')}</em>`); });
+                (b.normalised_tests || []).forEach(t => { html += toolNote(`${testLine(t)} <em>back in range</em>`); });
+                (b.questions_for_doctor || []).forEach(q => {
+                    html += toolNote(`<i class='fas fa-user-doctor'></i> ${escapeHtml(q.question || '')}` +
+                        (q.context ? `<br><span style='color:#888;'>${escapeHtml(q.context)}</span>` : ''));
+                });
+                html += line('Advance care', b.advance_care);
+                toolOut(html);
+            } catch (e) { toolErr('Could not build the brief.'); }
+        }
+
+        async function toolDigest() {
+            toolBusy('Building your periodic review…');
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/digest?mark_seen=1');
+                const data = await resp.json();
+                const d = data && data.digest;
+                if (!d) { toolErr('Could not build your review.'); return; }
+                const labelFor = k => String(k || '').replace(/_/g, ' ').toLowerCase();
+                let html = toolNote(`<strong>${escapeHtml(d.period === 'monthly' ? 'Monthly review' : 'Weekly review')}</strong><br>` +
+                    `${escapeHtml(d.period_start || '')} to ${escapeHtml(d.period_end || '')}`);
+                if (d.added_total) {
+                    const bits = Object.keys(d.added || {}).map(k => `${d.added[k]} ${labelFor(k)}`);
+                    html += toolNote(`<strong>New in this period</strong><br>${escapeHtml(bits.join(', '))}`);
+                } else {
+                    html += toolNote(`<strong>New in this period</strong><br>Nothing was added.`);
+                }
+                (d.recent_changes || []).slice(0, 20).forEach(c => {
+                    html += toolNote(`${escapeHtml(String(c.when || '').slice(0, 10))} — ${escapeHtml(labelFor(c.category))}: ` +
+                        `<strong>${escapeHtml(c.name || 'item')}</strong> <em>${escapeHtml(c.event || '')}</em>` +
+                        (c.detail ? `<br><span style='color:#888;'>${escapeHtml(c.detail)}</span>` : ''));
+                });
+                (d.expiring_documents || []).forEach(doc => {
+                    html += toolWarn(`<i class='fas fa-file-circle-exclamation'></i> ${escapeHtml(doc.original_name || doc.stored_name || 'Document')} is deleted in ${escapeHtml(String(doc.days_until_expiry))} day(s).`);
+                });
+                const obsHtml = o => `<strong>${escapeHtml(o.title || '')}</strong>` +
+                    (o.detail ? `<br>${escapeHtml(o.detail)}` : '') +
+                    (o.action ? `<br><span style='color:#1565c0;'>${escapeHtml(o.action)}</span>` : '');
+                (d.red_flags || []).forEach(o => {
+                    html += `<div style='padding:6px 8px;background:#ffebee;border-left:3px solid #c62828;border-radius:4px;margin-bottom:4px;'>${obsHtml(o)}</div>`;
+                });
+                (d.reminders_due || []).forEach(r => {
+                    html += toolWarn(`<i class='fas fa-bell'></i> ${escapeHtml(r.title || '')}` +
+                        (r.status ? ` <em>${escapeHtml(String(r.status).replace(/_/g, ' '))}</em>` : ''));
+                });
+                (d.observations || []).filter(o => o.severity !== 'urgent').forEach(o => {
+                    html += toolNote(obsHtml(o));
+                });
+                (d.suggestions || []).forEach(s => {
+                    html += toolNote(`<span style='font-size:0.7rem;background:#ede7f6;color:#5e35b1;padding:1px 5px;border-radius:6px;'>AI</span> ` +
+                        `<strong>${escapeHtml(s.title || '')}</strong><br>${escapeHtml(s.detail || '')}`);
+                });
+                (d.questions_for_doctor || []).forEach(q => {
+                    html += toolNote(`<i class='fas fa-user-doctor'></i> ${escapeHtml(q.question || q.title || '')}` +
+                        (q.context ? `<br><span style='color:#888;'>${escapeHtml(q.context)}</span>` : ''));
+                });
+                if (d.disclaimer) html += `<div style='font-size:0.72rem;color:#999;margin-top:6px;'>${escapeHtml(d.disclaimer)}</div>`;
+                toolOut(html);
+            } catch (e) { toolErr('Could not build your review.'); }
+        }
+
+        async function toolEmergencyCard() {
+            toolBusy('Loading the emergency card…');
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/emergency-card');
+                const data = await resp.json();
+                const c = data && data.card;
+                if (!c) { toolErr('Could not load the emergency card.'); return; }
+                const line = (label, value) => {
+                    if (value === null || value === undefined || value === '') return '';
+                    if (Array.isArray(value) && !value.length) return '';
+                    const v = Array.isArray(value) ? value.join(', ') : value;
+                    return `<div><span style='color:#888;'>${escapeHtml(label)}:</span> <strong>${escapeHtml(String(v))}</strong></div>`;
+                };
+                let html = `<div style='padding:10px;border:2px solid #c62828;border-radius:8px;background:#fff;'>` +
+                    `<div style='color:#c62828;font-weight:700;margin-bottom:6px;'><i class='fas fa-kit-medical'></i> EMERGENCY CARD</div>`;
+                html += line('Name', c.name) + line('Age', c.age) + line('Blood', c.blood) +
+                    line('Date of birth', c.date_of_birth) + line('Language', c.language);
+                html += line('Conditions', c.conditions) + line('Medications', c.medications) +
+                    line('Allergies', c.allergies) + line('Anticoagulants', c.anticoagulants);
+                html += line('History', c.history) + line('Advance care', c.advance_care);
+                html += line('Doctors', c.doctors) +
+                    line('GP', c.gp_name ? c.gp_name + (c.gp_phone ? ' ' + c.gp_phone : '') : '');
+                html += line('Emergency contact', c.ec_name ?
+                    `${c.ec_name}${c.ec_rel ? ' (' + c.ec_rel + ')' : ''}${c.ec_phone ? ' ' + c.ec_phone : ''}` : '');
+                html += `</div>`;
+                html += `<div style='font-size:0.75rem;color:#888;margin-top:4px;'>Derived from your Personal, Conditions, Medications and Allergies sections — edit it there. ` +
+                    `Pair code for the phone's Emergency icon: <code>${escapeHtml(data.pair_code || '')}</code></div>`;
+                toolOut(html);
+            } catch (e) { toolErr('Could not load the emergency card.'); }
+        }
+
+        async function toolExport() {
+            toolBusy('Preparing your data export…');
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/export');
+                if (!resp.ok) { toolErr('Could not export the data.'); return; }
+                const blob = await resp.blob();
+                const cd = resp.headers.get('Content-Disposition') || '';
+                const m = cd.match(/filename="?([^";]+)"?/);
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = (m && m[1]) || 'health-profile-export.zip';
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                setTimeout(() => URL.revokeObjectURL(url), 10000);
+                toolOut('');
+            } catch (e) { toolErr('Could not export the data.'); }
+        }
+
+        async function toolUndoImport() {
+            if (!confirm('Undo the last document import? Rows it added are removed.')) return;
+            toolBusy('Undoing the last import…');
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/undo-import', { method: 'POST' });
+                const data = await resp.json();
+                if (!resp.ok || data.success === false) { toolErr(data.error || 'Nothing to undo.'); return; }
+                toolOut('');
+                loadProfile();
+            } catch (e) { toolErr('Could not undo the import.'); }
+        }
+
+        async function toolExplainTest() {
+            const sel = document.getElementById('explainTestSelect');
+            const index = sel ? parseInt(sel.value, 10) : NaN;
+            if (isNaN(index)) { toolErr('Pick a test result first.'); return; }
+            toolBusy('Asking the AI to explain that result…');
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/explain-test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ index })
+                });
+                const data = await resp.json();
+                const ex = data && data.explanation;
+                if (!resp.ok || !ex) { toolErr((data && data.error) || 'Could not explain this result.'); return; }
+                if (ex.reason) { toolOut(toolNote(escapeHtml(ex.reason))); return; }
+                let html = toolNote(`<strong>${escapeHtml(ex.test_name || '')}</strong> ${escapeHtml(ex.value || '')}` +
+                    (ex.date ? ` <span style='color:#888;'>${escapeHtml(ex.date)}</span>` : ''));
+                (ex.suggestions || []).forEach(s => {
+                    html += toolNote(`<strong>${escapeHtml(s.title || s.advice || '')}</strong>` +
+                        (s.detail || s.reason ? `<br>${escapeHtml(s.detail || s.reason)}` : ''));
+                });
+                (ex.questions_for_doctor || []).forEach(q => {
+                    html += toolNote(`<i class='fas fa-user-doctor'></i> ${escapeHtml(q.question || '')}`);
+                });
+                if (ex.disclaimer) html += `<div style='font-size:0.72rem;color:#999;margin-top:6px;'>${escapeHtml(ex.disclaimer)}</div>`;
+                toolOut(html);
+            } catch (e) { toolErr('Could not explain this result.'); }
+        }
+
+        function populateExplainTests() {
+            const sel = document.getElementById('explainTestSelect');
+            if (!sel) return;
+            const rows = (currentProfile && currentProfile.test_results) || [];
+            sel.innerHTML = rows.map((t, i) =>
+                `<option value='${i}'>${escapeHtml(t.test_name || 'test')} — ${escapeHtml(t.value || '')}${t.date ? ' (' + escapeHtml(t.date) + ')' : ''}</option>`
+            ).join('');
+        }
+        const toolsCard = document.getElementById('healthToolsCard');
+        if (toolsCard) toolsCard.addEventListener('toggle', () => { if (toolsCard.open) populateExplainTests(); });
+
+        let testAuditLoaded = false;
+        async function loadTestAudit() {
+            const el = document.getElementById('test-audit-list');
+            if (!el || testAuditLoaded) return;
+            testAuditLoaded = true;
+            el.innerHTML = `<em style='color:#999;'><i class='fas fa-spinner fa-spin'></i> Loading...</em>`;
+            try {
+                const resp = await AuthHelper.authenticatedFetch('/api/health-profile/test-audit');
+                if (!resp.ok) { el.innerHTML = `<em style='color:#999;'>Could not load the audit.</em>`; return; }
+                const data = await resp.json();
+                const entries = data.entries || [];
+                const countEl = document.getElementById('test-audit-count');
+                if (countEl) countEl.textContent = `(last ${data.days} days)`;
+                if (!entries.length) {
+                    el.innerHTML = `<em style='color:#999;'>No test-data changes in the last ${data.days} days.</em>`;
+                    return;
+                }
+                const actionMeta = {
+                    added:   { label: 'Added',   color: '#2e7d32' },
+                    updated: { label: 'Edited',  color: '#e6a000' },
+                    deleted: { label: 'Deleted', color: '#c62828' },
+                    merged:  { label: 'Merged',  color: '#666' },
+                };
+                el.innerHTML = entries.map(en => {
+                    const meta = actionMeta[en.action] || { label: en.action, color: '#666' };
+                    const at = en.at ? new Date(en.at) : null;
+                    const when = (at && !isNaN(at))
+                        ? at.toLocaleDateString() + ' ' + at.toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})
+                        : '';
+                    const d = en.detail || {};
+                    let what = '';
+                    if (en.action === 'updated' && Array.isArray(d.changes)) {
+                        what = d.changes.map(c =>
+                            `${escapeHtml(c.field)}: ${escapeHtml(String(c.from ?? '')) || '—'} → ${escapeHtml(String(c.to ?? '')) || '—'}`
+                        ).join('; ');
+                    } else if (en.action === 'merged') {
+                        what = `${d.removed || 0} duplicate row(s) merged`;
+                    } else {
+                        what = [d.value, d.reference_range ? `ref ${d.reference_range}` : '', d.date,
+                                d.undo ? 'undo of last import' : '']
+                            .filter(Boolean).map(escapeHtml).join(' · ');
+                    }
+                    return `<div style='font-size:0.82rem;padding:4px 0;border-bottom:1px solid #eee;'>` +
+                        `<span style='color:${meta.color};font-weight:600;'>${meta.label}</span> ` +
+                        `<strong>${escapeHtml(en.test || 'test results')}</strong>` +
+                        (what ? ` <span style='color:#555;'>${what}</span>` : '') +
+                        `<br><span style='color:#999;font-size:0.72rem;'>${when}${en.source ? ' · ' + escapeHtml(en.source) : ''}</span></div>`;
+                }).join('');
+            } catch (e) {
+                el.innerHTML = `<em style='color:#999;'>Could not load the audit.</em>`;
+            }
+        }
+
         async function confirmPendingReview(btn) {
             const card = btn.closest('.pending-review-card');
-            const extracted = JSON.parse(decodeURIComponent(btn.dataset.extracted));
+            const extracted = JSON.parse(decodeURIComponent(card.dataset.extracted));
             // Pre-edit rows are the 'before' for layout learning — keep them
             // before we overwrite extracted.test_results.
             const originals = extracted.test_results || [];
@@ -1484,27 +2012,12 @@ Examples:
 
                 const pending = result.pending_review;
                 if (pending && Object.keys(pending).length > 0) {
-                    const encoded = encodeURIComponent(JSON.stringify(pending));
-                    const analysisAttr = result.format_analysis
-                        ? ` data-analysis='${encodeURIComponent(JSON.stringify(result.format_analysis))}'` : '';
-                    let allHtml = `<div class='pending-review-card' data-extracted='${encoded}'${analysisAttr}>`;
-                    allHtml += `<h4 style='margin:0 0 10px;color:#1565c0;font-size:0.9rem;'><i class='fas fa-clipboard-check'></i> Review before saving: ${result.source_file || stored_name}</h4>`;
-                    if (result.stored_document) {
-                        const sd = result.stored_document;
-                        const expires = sd.expires_at ? new Date(sd.expires_at).toLocaleDateString('en-AU') : 'unknown';
-                        allHtml += `<div style='margin-bottom:8px;font-size:0.78rem;color:#455a64;background:#e3f2fd;padding:6px 8px;border-radius:6px;'>`;
-                        allHtml += `<i class='fas fa-archive'></i> File retained for ${sd.retention_days} day(s) until ${expires}.`;
-                        allHtml += `</div>`;
-                    }
-                    if (result.extracted_text_preview) {
-                        allHtml += `<details style='margin-bottom:8px;'><summary style='cursor:pointer;font-size:0.8rem;color:#666;'>Show extracted text</summary><pre style='font-size:0.75rem;white-space:pre-wrap;max-height:150px;overflow-y:auto;background:#f5f5f5;padding:8px;border-radius:6px;margin-top:6px;'>${result.extracted_text_preview}</pre></details>`;
-                    }
-                    allHtml += renderPendingReview(pending);
-                    allHtml += `<div style='margin-top:10px;text-align:right;'>`;
-                    allHtml += `<button class='btn-add' style='background:#2e7d32;' onclick='confirmPendingReview(this)' data-extracted='${encoded}'><i class='fas fa-check-circle'></i> Confirm & Save</button>`;
-                    allHtml += ` <button class='btn-add' style='background:#c62828;' onclick='this.closest(&quot;.pending-review-card&quot;).remove()'><i class='fas fa-times-circle'></i> Reject</button>`;
-                    allHtml += `</div></div>`;
-
+                    const allHtml = pendingReviewCardHtml(result, {
+                        label: result.source_file || stored_name,
+                        confirmLabel: 'Confirm & Save',
+                        rejectLabel: 'Reject',
+                        align: 'right',
+                    });
                     if (append) {
                         resultsDiv.insertAdjacentHTML('beforeend', allHtml);
                     } else {
@@ -1614,26 +2127,12 @@ Examples:
                         const label = result.source_file || names;
                     const pending = result.pending_review;
                     if (pending && Object.keys(pending).length > 0) {
-                        const encoded = encodeURIComponent(JSON.stringify(pending));
-                        const analysisAttr = result.format_analysis
-                            ? ` data-analysis='${encodeURIComponent(JSON.stringify(result.format_analysis))}'` : '';
-                        allHtml += `<div style='margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #e0e0e0;' class='pending-review-card'${analysisAttr}>`;
-                        allHtml += `<h4 style='margin:0 0 10px;color:#1565c0;font-size:0.9rem;'><i class='fas fa-clipboard-check'></i> Review before saving: ${label}</h4>`;
-                        if (result.stored_document) {
-                            const sd = result.stored_document;
-                            const expires = sd.expires_at ? new Date(sd.expires_at).toLocaleDateString('en-AU') : 'unknown';
-                            allHtml += `<div style='margin-bottom:8px;font-size:0.78rem;color:#455a64;background:#e3f2fd;padding:6px 8px;border-radius:6px;'>`;
-                            allHtml += `<i class='fas fa-archive'></i> ${result.page_count > 1 ? result.page_count + ' pages retained' : 'File retained'} for ${sd.retention_days} day(s) until ${expires}.`;
-                            allHtml += `</div>`;
-                        }
-                        if (result.extracted_text_preview) {
-                            allHtml += `<details style='margin-bottom:8px;'><summary style='cursor:pointer;font-size:0.8rem;color:#666;'>Show extracted text</summary><pre style='font-size:0.75rem;white-space:pre-wrap;max-height:150px;overflow-y:auto;background:#f5f5f5;padding:8px;border-radius:6px;margin-top:6px;'>${result.extracted_text_preview}</pre></details>`;
-                        }
-                        allHtml += renderPendingReview(pending);
-                        allHtml += `<div style='margin-top:10px;'>`;
-                        allHtml += `<button class='btn-add' style='background:#2e7d32;margin-right:6px;' onclick='confirmPendingReview(this)' data-extracted='${encoded}'><i class='fas fa-save'></i> Confirm & Save to Profile</button>`;
-                        allHtml += `<button class='btn-add' style='background:#c62828;' onclick='this.closest(".pending-review-card").remove()'><i class='fas fa-trash'></i> Discard</button>`;
-                        allHtml += `</div></div>`;
+                        allHtml += pendingReviewCardHtml(result, {
+                            label,
+                            confirmLabel: 'Confirm & Save to Profile',
+                            rejectLabel: 'Discard',
+                            wrapperStyle: 'margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #e0e0e0;',
+                        });
                     } else if (result.actions && result.actions.length) {
                         totalActions += result.actions.length;
                         allHtml += `<div style="margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #e0e0e0;">`;
