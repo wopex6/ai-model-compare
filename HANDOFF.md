@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-30 21:21 by handoff.py — regenerate rather than edit._
+_Generated 2026-10-01 07:45 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Derived-value verification shipped (86df6d6, deployed): Tier 1 now recomputes Anion Gap, FEV1/FVC, Friedewald LDL and eGFR (CKD-EPI 2021) from same-date components and flags mismatches as watch observations; eGFR/BMI also emitted as computed info when absent. 248 tests pass. Next candidates: two-pass OCR diff for low-trust docs, unit normalization across labs, extract website JS into shared health_tools.js.
+Empty-column fix deployed (bd5a553): PWA Full Overview and website results tables now render Ref/Notes columns only when the group's data carries them — verified in node: spirometry group renders Date|Value, chem group keeps Ref.
 
 ## Git
 
@@ -56,19 +56,19 @@ AI_REGENERATION_SPEC.md      |   2 +-
 Recent commits:
 
 ```
+bd5a553 Hide empty Ref/Notes columns in overview tables
+6af8417 Handoff: derived-value verification deployed
 86df6d6 Verify derived figures against their components
 1a32efa Handoff: website gains the PWA's health tool surface
 fd1772f Port the PWA's document inspection and health tools to the website
 62620f0 Handoff: schema-coverage scoring for guided re-reads deployed
 28c3af9 Score guided re-reads against the schema's missing columns
 3bf8afc Handoff: directional coverage + orientation-loop fix deployed
-6d43d1b Try every orientation before trusting a guided re-read
-d42dd36 Handoff: sideways-photo misread gates deployed
 ```
 
 ## Production (PythonAnywhere)
 
-**4 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
+Local and production match.
 
 ```
 ok       tests/test_review_flow.py
@@ -95,10 +95,8 @@ ok       web_enhancement_test_runner.py
 ok       webhook_deploy.py
 ok       wisdom_profiles/23.json
 ok       wisdom_profiles/23_hypotheses.json
-4 file(s) stale. Re-run with --push to upload.
+Everything on the server matches local.
 ```
-
-Reload often returns `409 slow_startup_error` on the first attempt — retry rather than debug it.
 
 ## Tests
 
@@ -115,7 +113,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-495 passed, 1 warning in 53.26s
+495 passed, 1 warning in 63.58s (0:01:03)
 [AutoDoc] Monitoring stopped
 ```
 
