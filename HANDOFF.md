@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-09-29 20:21 by handoff.py — regenerate rather than edit._
+_Generated 2026-09-30 21:21 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Website/PWA gap fill shipped (fd1772f, deployed, /health-profile 200): one shared pendingReviewCardHtml for all review cards, role chips re-extract via report-format with no model call, stored-doc list gains Review/Analysis/Delete/Keep links, tools card covers digest+visit brief+explain-test+interactions+emergency card+vitals+export+undo-import, test-audit ledger rendered. Still PWA-only: push subscription, SW/offline shell, emergency home icon, review-prompt bell queue.
+Derived-value verification shipped (86df6d6, deployed): Tier 1 now recomputes Anion Gap, FEV1/FVC, Friedewald LDL and eGFR (CKD-EPI 2021) from same-date components and flags mismatches as watch observations; eGFR/BMI also emitted as computed info when absent. 248 tests pass. Next candidates: two-pass OCR diff for low-trust docs, unit normalization across labs, extract website JS into shared health_tools.js.
 
 ## Git
 
@@ -46,29 +46,29 @@ M AI_REGENERATION_SPEC.md
 
 ```
 AI_REGENERATION_SPEC.md      |   2 +-
- ENHANCEMENTS.md              | 256 +++++++++++++++++++++++++++++++++++++++++++
+ ENHANCEMENTS.md              | 280 +++++++++++++++++++++++++++++++++++++++++++
  README.md                    |   2 +-
  SYSTEM_REGENERATION_GUIDE.md |   2 +-
- 4 files changed, 259 insertions(+), 3 deletions(-)
+ 4 files changed, 283 insertions(+), 3 deletions(-)
 ```
 </details>
 
 Recent commits:
 
 ```
+86df6d6 Verify derived figures against their components
+1a32efa Handoff: website gains the PWA's health tool surface
 fd1772f Port the PWA's document inspection and health tools to the website
 62620f0 Handoff: schema-coverage scoring for guided re-reads deployed
 28c3af9 Score guided re-reads against the schema's missing columns
 3bf8afc Handoff: directional coverage + orientation-loop fix deployed
 6d43d1b Try every orientation before trusting a guided re-read
 d42dd36 Handoff: sideways-photo misread gates deployed
-f0272a3 Re-read grids that are shaped right but read wrong
-abb800f Handoff: compact-emission unit fix deployed
 ```
 
 ## Production (PythonAnywhere)
 
-Local and production match.
+**4 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
 
 ```
 ok       tests/test_review_flow.py
@@ -95,25 +95,27 @@ ok       web_enhancement_test_runner.py
 ok       webhook_deploy.py
 ok       wisdom_profiles/23.json
 ok       wisdom_profiles/23_hypotheses.json
-Everything on the server matches local.
+4 file(s) stale. Re-run with --push to upload.
 ```
+
+Reload often returns `409 slow_startup_error` on the first attempt — retry rather than debug it.
 
 ## Tests
 
 All passing.
 
 ```
-........................................................................ [ 60%]
-........................................................................ [ 75%]
-........................................................................ [ 90%]
-............................................                             [100%]
+........................................................................ [ 58%]
+........................................................................ [ 72%]
+........................................................................ [ 87%]
+...............................................................          [100%]
 ============================== warnings summary ===============================
 ..\..\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37
   C:\Users\trabc\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-476 passed, 1 warning in 36.54s
+495 passed, 1 warning in 53.26s
 [AutoDoc] Monitoring stopped
 ```
 
