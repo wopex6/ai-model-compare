@@ -2775,12 +2775,17 @@ Examples:
                 html += `<h2>Test Results (${p.test_results.length})</h2>`;
                 grouped.forEach(group => {
                     html += `<h3 style="font-size:11pt;margin:10px 0 6px;color:#1565c0;">${group.name} (${group.entries.length})</h3>`;
-                    html += `<table><tr><th>Test</th><th>Value</th><th>Ref Range</th><th>Date</th><th>Notes</th></tr>`;
+                    // Columns render only when the data carries them — a
+                    // report with no reference range gets no empty column.
+                    const hasRef = group.entries.some(t => t.reference_range);
+                    const hasNotes = group.entries.some(t => t.notes);
+                    const span = 3 + (hasRef ? 1 : 0) + (hasNotes ? 1 : 0);
+                    html += `<table><tr><th>Test</th><th>Value</th>${hasRef ? '<th>Ref Range</th>' : ''}<th>Date</th>${hasNotes ? '<th>Notes</th>' : ''}</tr>`;
                     group.entries.forEach(t => {
-                        html += `<tr><td><strong>${t.test_name}</strong></td><td>${t.value}</td><td>${formatRefRange(t.reference_range)}</td><td>${t.date||''}</td><td>${t.notes||''}</td></tr>`;
+                        html += `<tr><td><strong>${t.test_name}</strong></td><td>${t.value}</td>${hasRef ? `<td>${formatRefRange(t.reference_range)}</td>` : ''}<td>${t.date||''}</td>${hasNotes ? `<td>${t.notes||''}</td>` : ''}</tr>`;
                         if (t.fields && typeof t.fields === 'object') {
                             const extras = Object.keys(t.fields).map(k => k + ': ' + t.fields[k]).join(' · ');
-                            if (extras) html += `<tr><td colspan="5" style="font-size:0.75rem;color:#888;">${escapeHtml(extras)}</td></tr>`;
+                            if (extras) html += `<tr><td colspan="${span}" style="font-size:0.75rem;color:#888;">${escapeHtml(extras)}</td></tr>`;
                         }
                     });
                     html += `</table>`;
