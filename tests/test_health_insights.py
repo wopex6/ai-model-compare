@@ -475,5 +475,177 @@ class TestPromptLanguageAndExplain(unittest.TestCase):
         self.assertIn('Traditional Chinese', calls[0][1]['content'])
 
 
+class TestDerivedValues(unittest.TestCase):
+    """Stored figures that are functions of other stored figures are checked,
+    not trusted: components measured on the same date must reproduce them."""
+
+    @staticmethod
+    def _profile(*tests):
+        return {'test_results': list(tests)}
+
+    @staticmethod
+    def _t(name, value, day='2026-05-12', unit=''):
+        return {'test_name': name, 'value': value, 'date': day, 'unit': unit}
+
+    @staticmethod
+    def _titles(data):
+        return [o['title'] for o in hi.build_observations(data, date(2026, 6, 1))]
+
+    # ---- anion gap ---------------------------------------------------------
+
+    def test_anion_gap_matching_is_quiet(self):
+        data = self._profile(
+            self._t('Sodium', '140'), self._t('Chloride', '104'),
+            self._t('Bicarbonate', '26'), self._t('Anion Gap', '10'))
+        self.assertNotIn('Anion Gap does not add up', self._titles(data))
+
+    def test_anion_gap_mismatch_flags(self):
+        data = self._profile(
+            self._t('Na', '140'), self._t('Cl', '104'),
+            self._t('HCO3', '26'), self._t('Anion Gap', '25'))
+        self.assertIn('Anion Gap does not add up', self._titles(data))
+
+    def test_anion_gap_with_potassium_variant_accepted(self):
+        # Labs that include K print ~4 higher; that is a formula variant,
+        # not a misread.
+        data = self._profile(
+            self._t('Sodium', '140'), self._t('Potassium', '4.2'),
+            self._t('Chloride', '104'), self._t('Bicarbonate', '26'),
+            self._t('Anion Gap', '14.5'))
+        self.assertNotIn('Anion Gap does not add up', self._titles(data))
+
+    def test_components_on_different_days_are_not_mixed(self):
+        data = self._profile(
+            self._t('Sodium', '140', '2026-05-12'),
+            self._t('Chloride', '104', '2026-05-12'),
+            self._t('Bicarbonate', '26', '2026-06-01'),
+            self._t('Anion Gap', '99', '2026-05-12'))
+        self.assertNotIn('Anion Gap does not add up', self._titles(data))
+
+    # ---- FEV1/FVC -----------------------------------------------------------
+
+    def test_fev1_fvc_within_tolerance_is_quiet(self):
+        # ST's actual report: 0.96/1.47 = 65.3, printed 64.91 — rounding, fine.
+        data = self._profile(
+            self._t('FEV1', '0.96', unit='L'), self._t('FVC', '1.47', unit='L'),
+            self._t('FEV1/FVC', '64.91', unit='%'))
+        self.assertNotIn('FEV1/FVC does not add up', self._titles(data))
+
+    def test_fev1_fvc_digit_slip_flags(self):
+        data = self._profile(
+            self._t('FEV1', '0.96', unit='L'), self._t('FVC', '1.47', unit='L'),
+            self._t('FEV1/FVC', '96.0', unit='%'))
+        self.assertIn('FEV1/FVC does not add up', self._titles(data))
+
+    def test_fev1_fvc_ratio_form_accepted(self):
+        # Some reports print 0.65 rather than 65%.
+        data = self._profile(
+            self._t('FEV1', '0.96'), self._t('FVC', '1.47'),
+            self._t('FEV1/FVC', '0.65'))
+        self.assertNotIn('FEV1/FVC does not add up', self._titles(data))
+
+    # ---- LDL (Friedewald) ----------------------------------------------------
+
+    def test_ldl_mismatch_flags_mmol(self):
+        # Friedewald: 5.2 − 1.4 − 1.1/2.2 = 3.3; stored 6.9 is a misread.
+        data = self._profile(
+            self._t('Total Cholesterol', '5.2', unit='mmol/L'),
+            self._t('HDL', '1.4', unit='mmol/L'),
+            self._t('Triglycerides', '1.1', unit='mmol/L'),
+            self._t('LDL', '6.9', unit='mmol/L'))
+        self.assertIn('LDL cholesterol does not add up', self._titles(data))
+
+    def test_ldl_match_is_quiet_mmol(self):
+        data = self._profile(
+            self._t('Cholesterol', '5.2', unit='mmol/L'),
+            self._t('HDL Cholesterol', '1.4', unit='mmol/L'),
+            self._t('Trig', '1.1', unit='mmol/L'),
+            self._t('LDL-C', '3.4', unit='mmol/L'))
+        self.assertNotIn('LDL cholesterol does not add up', self._titles(data))
+
+    def test_ldl_skipped_when_triglycerides_too_high(self):
+        # Friedewald is invalid at TG ≥ 4.5 mmol/L — a disagreement there is
+        # the formula's limit, not a misread.
+        data = self._profile(
+            self._t('Cholesterol', '9.0', unit='mmol/L'),
+            self._t('HDL', '1.4', unit='mmol/L'),
+            self._t('Triglycerides', '8.0', unit='mmol/L'),
+            self._t('LDL', '3.0', unit='mmol/L'))
+        self.assertNotIn('LDL cholesterol does not add up', self._titles(data))
+
+    def test_lipid_system_inferred_from_magnitude(self):
+        # No unit strings — a cholesterol of 190 must be mg/dL.
+        data = self._profile(
+            self._t('Total Cholesterol', '200'),
+            self._t('HDL', '54'),
+            self._t('Triglycerides', '100'),
+            self._t('LDL', '126'))  # 200 − 54 − 100/5 = 126
+        self.assertNotIn('LDL cholesterol does not add up', self._titles(data))
+
+    # ---- eGFR ----------------------------------------------------------------
+
+    def test_egfr_mismatch_flags(self):
+        # 70yo female, creatinine 65 µmol/L → CKD-EPI ≈ 86; stored 40 is wrong.
+        data = self._profile(
+            self._t('Creatinine', '65', unit='umol/L'),
+            self._t('eGFR', '40'))
+        data['personal'] = {'age': 70, 'gender': 'female'}
+        self.assertIn('eGFR does not add up', self._titles(data))
+
+    def test_egfr_match_is_quiet(self):
+        data = self._profile(
+            self._t('Creatinine', '65', unit='µmol/L'),
+            self._t('eGFR', '85'))
+        data['personal'] = {'age': 70, 'gender': 'F'}
+        self.assertNotIn('eGFR does not add up', self._titles(data))
+
+    def test_egfr_computed_when_absent(self):
+        data = self._profile(self._t('Creatinine', '65', unit='umol/L'))
+        data['personal'] = {'age': 70, 'gender': 'female'}
+        obs = hi.build_observations(data, date(2026, 6, 1))
+        found = [o for o in obs if 'eGFR ≈' in o['title']]
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0]['severity'], hi.SEVERITY_INFO)
+        self.assertIn('computed', found[0]['title'])
+
+    def test_egfr_skipped_without_sex(self):
+        data = self._profile(
+            self._t('Creatinine', '65'), self._t('eGFR', '40'))
+        data['personal'] = {'age': 70}
+        self.assertNotIn('eGFR does not add up', self._titles(data))
+
+    # ---- BMI ------------------------------------------------------------------
+
+    def test_bmi_computed_when_absent(self):
+        data = self._profile()
+        data['personal'] = {'weight': '70 kg', 'height': '175 cm'}
+        obs = hi.build_observations(data, date(2026, 6, 1))
+        found = [o for o in obs if 'BMI ≈' in o['title']]
+        self.assertEqual(len(found), 1)
+        self.assertIn('22.86', found[0]['title'])
+
+    def test_bmi_not_computed_when_recorded(self):
+        data = self._profile(self._t('BMI', '23.1'))
+        data['personal'] = {'weight': '70 kg', 'height': '175 cm'}
+        obs = hi.build_observations(data, date(2026, 6, 1))
+        self.assertFalse([o for o in obs if 'BMI ≈' in o['title']])
+
+    def test_bmi_skipped_on_ambiguous_weight(self):
+        # A bare '180' could be kg or lb — leave it alone rather than guess.
+        data = self._profile()
+        data['personal'] = {'weight': '180', 'height': '175 cm'}
+        obs = hi.build_observations(data, date(2026, 6, 1))
+        self.assertFalse([o for o in obs if 'BMI ≈' in o['title']])
+
+    def test_height_in_feet_and_inches(self):
+        data = self._profile()
+        data['personal'] = {'weight': '154 lb', 'height': "5'8\""}
+        obs = hi.build_observations(data, date(2026, 6, 1))
+        found = [o for o in obs if 'BMI ≈' in o['title']]
+        self.assertEqual(len(found), 1)
+        # 154 lb / 1.727 m → ≈23.4
+        self.assertIn('23.', found[0]['title'])
+
+
 if __name__ == '__main__':
     unittest.main()

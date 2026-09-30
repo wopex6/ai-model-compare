@@ -625,6 +625,7 @@ def build_observations(data: Dict, today: Optional[date] = None) -> List[Dict]:
     out.extend(_missing_panel_observations(groups))
     out.extend(_polypharmacy_observations(data))
     out.extend(_unverified_observations(data))
+    out.extend(_derived_value_observations(groups, data))
     out.extend(_mood_observations(data, today))
 
     out.sort(key=lambda o: (_SEVERITY_ORDER.get(o['severity'], 9), o['title'].lower()))
@@ -815,6 +816,330 @@ def _mood_observations(data: Dict, today: date, window_days: int = 14) -> List[D
         str(window_days) + ' days recorded a difficult mood.',
         action='If this keeps up, it is worth telling someone you trust or your doctor.',
     )]
+
+
+# ------------------------------------------------------- derived-value checks ---
+
+# A stored figure that is a function of other stored figures can be checked
+# rather than trusted: the report may have printed it wrong, and the reading
+# may have slipped a digit. Components must come from the SAME date — inputs
+# drawn on different days are not inputs to one number.
+
+_D_KEYS = {
+    'anion_gap': ('anion gap',),
+    'fev1_fvc': ('fev1 fvc', 'fev1fvc', 'fev1 fvc ratio', 'fev1 fvc percent'),
+    'ldl': ('ldl', 'ldl cholesterol', 'ldlc', 'ldl chol', 'calculated ldl',
+            'ldl calc', 'ldl calculated'),
+    'egfr': ('egfr', 'gfr', 'estimated gfr', 'egfr ckd epi', 'ckd epi',
+             'egfr creat'),
+}
+_C_KEYS = {
+    'sodium': ('sodium', 'na'),
+    'chloride': ('chloride', 'cl'),
+    'bicarbonate': ('bicarbonate', 'hco3', 'bicarb', 'total co2', 'co2', 'tco2'),
+    'potassium': ('potassium', 'k'),
+    'cholesterol': ('cholesterol', 'total cholesterol', 'chol', 'tc',
+                    'total chol'),
+    'hdl': ('hdl', 'hdl cholesterol', 'hdlc', 'hdl chol'),
+    'triglycerides': ('triglycerides', 'trig', 'trigs', 'tg'),
+    'creatinine': ('creatinine', 'creat', 'scr', 'serum creatinine'),
+    'fev1': ('fev1', 'fev 1', 'forced expiratory volume 1',
+             'forced expiratory volume'),
+    'fvc': ('fvc', 'forced vital capacity'),
+}
+
+
+def _series(groups: Dict, keys) -> List[Dict]:
+    """Dated, numeric entries across the alias keys for one analyte."""
+    out = []
+    for k in keys:
+        out.extend(groups.get(k) or [])
+    return [e for e in out if e.get('_date') and e.get('_number') is not None]
+
+
+def _common_draw(*series_lists):
+    """Newest day every series has a row, plus that day's row from each.
+
+    Returns (date, [row, row, ...]) or None — a derived figure is only
+    checkable when all its inputs were measured together.
+    """
+    pools = []
+    for s in series_lists:
+        days = {}
+        for e in s:
+            days.setdefault(e['_date'], e)
+        if not days:
+            return None
+        pools.append(days)
+    common = set(pools[0])
+    for p in pools[1:]:
+        common &= set(p)
+    if not common:
+        return None
+    day = max(common)
+    return day, [p[day] for p in pools]
+
+
+def _mismatch_observation(label, stored, expected, day, derived_row, comps,
+                          formula) -> Dict:
+    return _observation(
+        stable_id('derived', label, iso(day)),
+        SEVERITY_WATCH,
+        label + ' does not add up',
+        'The stored ' + label + ' of ' + _fmt(stored) + ' does not match the ' +
+        _fmt(expected) + ' computed from ' + formula + ' for the results dated ' +
+        iso(day) + '.',
+        evidence=[_evidence(derived_row)] + [_evidence(c) for c in comps],
+        action=('One of these numbers may have been misread — check the '
+                'original report, or the lab may use a different formula.'),
+    )
+
+
+def _lipid_system(rows) -> Optional[str]:
+    unit = ' '.join(str(r.get('unit') or '') for r in rows).lower()
+    if 'mmol' in unit:
+        return 'mmol'
+    if 'mg' in unit:
+        return 'mg'
+    # Bare values: cholesterol sits near 5 in mmol/L and near 200 in mg/dL.
+    tc = next((r['_number'] for r in rows if r['_number']), None)
+    if tc is None:
+        return None
+    return 'mmol' if tc < 15 else 'mg'
+
+
+def _creatinine_mgdl(row) -> float:
+    num = row['_number']
+    unit = str(row.get('unit') or '').lower()
+    if 'umol' in unit or 'µmol' in unit or 'micromol' in unit:
+        return num / 88.4
+    if 'mg' in unit:
+        return num
+    # µmol/L reads as tens-to-hundreds; mg/dL as a small decimal.
+    return num / 88.4 if num > 15 else num
+
+
+def _egfr_ckd_epi(creat_mgdl: float, age: int, female: bool) -> float:
+    """CKD-EPI 2021 (race-free) — the equation most labs print."""
+    k, a, sex = (0.7, -0.241, 1.012) if female else (0.9, -0.302, 1.0)
+    ratio = creat_mgdl / k
+    return (142.0 * min(ratio, 1.0) ** a * max(ratio, 1.0) ** -1.200
+            * (0.9938 ** age) * sex)
+
+
+def _personal_age(data: Dict, on: Optional[date]) -> Optional[int]:
+    personal = data.get('personal') or {}
+    age = extract_numeric(personal.get('age'))
+    if age:
+        return int(age)
+    dob = parse_date(personal.get('date_of_birth'))
+    if dob and on:
+        return on.year - dob.year - ((on.month, on.day) < (dob.month, dob.day))
+    return None
+
+
+def _personal_sex(data: Dict) -> Optional[bool]:
+    """True for female, False for male, None when unknown. 'male' is a
+    substring of 'female', so test the female spellings first."""
+    g = str((data.get('personal') or {}).get('gender') or '').lower()
+    if 'female' in g or 'woman' in g or g.startswith('f'):
+        return True
+    if 'male' in g or 'man' in g or g.startswith('m'):
+        return False
+    return None
+
+
+def _weight_kg(data: Dict) -> Optional[float]:
+    raw = str((data.get('personal') or {}).get('weight') or '')
+    num = extract_numeric(raw)
+    if num is None:
+        return None
+    low = raw.lower()
+    if 'lb' in low or 'pound' in low:
+        return num * 0.45359237
+    if 'kg' in low:
+        return num
+    # A bare number is kg when it reads like kg; above that it could equally
+    # be pounds, so leave it alone rather than guess.
+    return num if 25 <= num <= 140 else None
+
+
+def _height_m(data: Dict) -> Optional[float]:
+    raw = str((data.get('personal') or {}).get('height') or '')
+    num = extract_numeric(raw)
+    if num is None:
+        return None
+    m = re.match(r"(\d+)\s*'\s*(\d+)?", raw)
+    if m:
+        feet, inches = int(m.group(1)), int(m.group(2) or 0)
+        return (feet * 12 + inches) * 0.0254
+    low = raw.lower()
+    if 'cm' in low:
+        return num / 100.0
+    # Bare numbers over 3 are centimetres; under 3, metres.
+    return num / 100.0 if num > 3 else num
+
+
+def _check_anion_gap(groups) -> List[Dict]:
+    series = [_series(groups, _D_KEYS['anion_gap']),
+              _series(groups, _C_KEYS['sodium']),
+              _series(groups, _C_KEYS['chloride']),
+              _series(groups, _C_KEYS['bicarbonate'])]
+    if not series[0]:
+        return []
+    potassium = _series(groups, _C_KEYS['potassium'])
+    if potassium:
+        series.append(potassium)
+    draw = _common_draw(*series)
+    if not draw:
+        return []
+    day, rows = draw
+    ag, na, cl, hco3 = rows[0], rows[1], rows[2], rows[3]
+    expected = na['_number'] - cl['_number'] - hco3['_number']
+    if abs(ag['_number'] - expected) <= 2.0:
+        return []
+    # Some labs include potassium; accept that variant too.
+    if len(rows) > 4:
+        expected_k = expected + rows[4]['_number']
+        if abs(ag['_number'] - expected_k) <= 2.0:
+            return []
+    return [_mismatch_observation(
+        'Anion Gap', ag['_number'], expected, day, ag, rows[1:4],
+        'sodium − chloride − bicarbonate')]
+
+
+def _check_fev1_fvc(groups) -> List[Dict]:
+    series = [_series(groups, _D_KEYS['fev1_fvc']),
+              _series(groups, _C_KEYS['fev1']),
+              _series(groups, _C_KEYS['fvc'])]
+    if not series[0]:
+        return []
+    draw = _common_draw(*series)
+    if not draw:
+        return []
+    day, rows = draw
+    ratio, fev1, fvc = rows[0], rows[1], rows[2]
+    if not fvc['_number']:
+        return []
+    expected = 100.0 * fev1['_number'] / fvc['_number']
+    tol = max(3.0, abs(expected) * 0.05)
+    stored = ratio['_number']
+    if abs(stored - expected) <= tol:
+        return []
+    # A few reports print the ratio itself (0.65) rather than the percentage.
+    if stored <= 1.5 and abs(stored * 100.0 - expected) <= tol:
+        return []
+    return [_mismatch_observation(
+        'FEV1/FVC', stored, expected, day, ratio, [fev1, fvc],
+        '100 × FEV1 ÷ FVC')]
+
+
+def _check_ldl(groups) -> List[Dict]:
+    series = [_series(groups, _D_KEYS['ldl']),
+              _series(groups, _C_KEYS['cholesterol']),
+              _series(groups, _C_KEYS['hdl']),
+              _series(groups, _C_KEYS['triglycerides'])]
+    if not series[0]:
+        return []
+    draw = _common_draw(*series)
+    if not draw:
+        return []
+    day, rows = draw
+    ldl, tc, hdl, tg = rows[0], rows[1], rows[2], rows[3]
+    system = _lipid_system(rows)
+    if system is None:
+        return []
+    # Friedewald is invalid above this triglyceride level — skip, not flag.
+    if (system == 'mmol' and tg['_number'] >= 4.5) or \
+            (system == 'mg' and tg['_number'] >= 400):
+        return []
+    divisor = 2.2 if system == 'mmol' else 5.0
+    expected = tc['_number'] - hdl['_number'] - tg['_number'] / divisor
+    stored = ldl['_number']
+    margin = 0.5 if system == 'mmol' else 18.0
+    if abs(stored - expected) <= max(margin, abs(expected) * 0.2):
+        return []
+    return [_mismatch_observation(
+        'LDL cholesterol', stored, expected, day, ldl, [tc, hdl, tg],
+        'total − HDL − triglycerides/' + _fmt(divisor))]
+
+
+def _check_egfr(groups, data) -> List[Dict]:
+    female = _personal_sex(data)
+    if female is None:
+        return []
+    series = [_series(groups, _D_KEYS['egfr']),
+              _series(groups, _C_KEYS['creatinine'])]
+    if not series[1]:
+        return []
+    if not series[0]:
+        # No printed eGFR — compute one when the inputs are on file. It is
+        # marked computed, never stored as a result.
+        creats = [e for e in series[1] if e['_date']]
+        if not creats:
+            return []
+        latest = max(creats, key=lambda e: (e['_date'], e['_index']))
+        age = _personal_age(data, latest['_date'])
+        if not age or age < 18:
+            return []
+        egfr = _egfr_ckd_epi(_creatinine_mgdl(latest), age, female)
+        return [_observation(
+            stable_id('egfr_computed', iso(latest['_date'])),
+            SEVERITY_INFO,
+            'eGFR ≈ ' + _fmt(egfr) + ' mL/min/1.73m² (computed)',
+            'No eGFR is on file. Using your creatinine of ' +
+            _fmt(latest['_number']) + ' ' + str(latest.get('unit') or '') +
+            ' from ' + iso(latest['_date']) + ', age ' + str(age) + ' and the '
+            'CKD-EPI 2021 equation, the estimate is about ' + _fmt(egfr) + '.',
+            evidence=[_evidence(latest)],
+            action='This is computed from your stored data, not a lab result.'),
+        ]
+    draw = _common_draw(*series)
+    if not draw:
+        return []
+    day, rows = draw
+    egfr_row, creat = rows[0], rows[1]
+    age = _personal_age(data, day)
+    if not age or age < 18:
+        return []
+    expected = _egfr_ckd_epi(_creatinine_mgdl(creat), age, female)
+    stored = egfr_row['_number']
+    if abs(stored - expected) <= max(8.0, abs(expected) * 0.12):
+        return []
+    return [_mismatch_observation(
+        'eGFR', stored, expected, day, egfr_row, [creat],
+        'creatinine, age and sex (CKD-EPI 2021)')]
+
+
+def _check_bmi(groups, data) -> List[Dict]:
+    """BMI is never verified against a report — profile weight drifts — but
+    it can be computed when nothing recorded it."""
+    if _series(groups, ('bmi', 'body mass index')):
+        return []
+    kg, m = _weight_kg(data), _height_m(data)
+    if not kg or not m:
+        return []
+    bmi = kg / (m * m)
+    if not 8 <= bmi <= 80:
+        return []
+    return [_observation(
+        stable_id('bmi_computed', _fmt(kg), _fmt(m)),
+        SEVERITY_INFO,
+        'BMI ≈ ' + _fmt(bmi) + ' kg/m² (computed)',
+        'From your recorded weight of ' + _fmt(kg) + ' kg and height of ' +
+        _fmt(m * 100.0) + ' cm.',
+        action='This is computed from your stored data, not a measurement.'),
+    ]
+
+
+def _derived_value_observations(groups: Dict, data: Dict) -> List[Dict]:
+    out = []
+    out.extend(_check_anion_gap(groups))
+    out.extend(_check_fev1_fvc(groups))
+    out.extend(_check_ldl(groups))
+    out.extend(_check_egfr(groups, data))
+    out.extend(_check_bmi(groups, data))
+    return out
 
 
 def red_flags(observations: List[Dict]) -> List[Dict]:

@@ -521,6 +521,13 @@ during a backfill — it hides stale data instead of surfacing it.
   (deterministic Tier 1 observations, hash-gated and validated Tier 2 AI
   advice, a standing disclaimer). Do not loosen validation or let unverified
   AI-inferred data become citable.
+- **Derived figures are verified, not trusted.** Tier 1 recomputes a stored
+  Anion Gap, FEV1/FVC, Friedewald LDL and eGFR (CKD-EPI 2021) from the other
+  results drawn on the SAME date, and flags a mismatch as a `watch`
+  observation — an OCR slip in any one number surfaces. Only add a check whose
+  inputs genuinely share a draw date; mixing draws is worse than no check.
+  eGFR and BMI are also emitted as clearly-marked *computed* info
+  observations when components exist but no stored figure does.
 
 ---
 
