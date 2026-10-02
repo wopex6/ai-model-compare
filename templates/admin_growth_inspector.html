@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Growth Inspector — internal model (admin)</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; margin: 0;
+               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+        .wrap { max-width: 1100px; margin: 0 auto; padding: 20px; }
+        .card { background: #fff; border-radius: 14px; padding: 20px 24px; margin-bottom: 20px;
+                box-shadow: 0 4px 20px rgba(0,0,0,.1); }
+        h1 { margin: 0 0 4px; font-size: 1.6rem; color: #333; }
+        h2 { margin: 0 0 12px; font-size: 1.1rem; color: #4c51bf; }
+        .sub { color: #666; font-size: .9rem; margin: 0 0 14px; }
+        .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        select, button { padding: 9px 14px; border-radius: 8px; border: 1px solid #ddd; font-size: .95rem; }
+        button { background: #667eea; color: #fff; border: none; cursor: pointer; font-weight: 600; }
+        button:hover { background: #5a67d8; }
+        button.ghost { background: #edf2f7; color: #4a5568; }
+        .tag { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: .75rem; font-weight: 600; }
+        .t-hold { background: #fef3c7; color: #92400e; } .t-low { background: #d1fae5; color: #065f46; }
+        .t-medium { background: #e0e7ff; color: #3730a3; } .t-high { background: #fee2e2; color: #991b1b; }
+        .t-mode { background: #f3e8ff; color: #6b21a8; }
+        table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+        th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eee; vertical-align: top; }
+        th { color: #6b7280; font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; }
+        .ev { color: #6b7280; font-size: .8rem; margin-top: 4px; }
+        .empty { color: #9ca3af; font-style: italic; }
+        .err { color: #b91c1c; }
+        .kv { display: grid; grid-template-columns: 220px 1fr; gap: 4px 14px; font-size: .9rem; }
+        .kv b { color: #374151; }
+        pre { background: #f8fafc; padding: 10px; border-radius: 8px; overflow: auto; font-size: .8rem; max-height: 260px; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="card">
+        <h1><i class="fas fa-microscope"></i> Growth Inspector</h1>
+        <p class="sub">The app's private model of a user — reflections, receptivity, topics, commitments.
+           Development/testing only; none of this is shown to the user.</p>
+        <div class="controls">
+            <select id="userSel" style="min-width:260px"><option value="">Loading users…</option></select>
+            <button onclick="loadState()"><i class="fas fa-eye"></i> Inspect</button>
+            <button class="ghost" onclick="derive()"><i class="fas fa-bolt"></i> Derive reflections</button>
+            <span id="status"></span>
+        </div>
+    </div>
+    <div id="out"></div>
+</div>
+
+<script>
+const token = () => localStorage.getItem('token') || sessionStorage.getItem('token');
+const authH = () => ({ 'Authorization': `Bearer ${token()}` });
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function loadUsers() {
+    const r = await fetch('/api/admin/users', { headers: authH() });
+    const sel = document.getElementById('userSel');
+    if (!r.ok) { sel.innerHTML = `<option value="">${r.status === 403 ? 'Admin access required' : 'Failed to load users'}</option>`; return; }
+    const users = await r.json();
+    sel.innerHTML = '<option value="">— choose a user —</option>' +
+        (Array.isArray(users) ? users : users.users || [])
+            .map(u => `<option value="${u.id}">${esc(u.username)} (id ${u.id}${u.user_role ? ', ' + esc(u.user_role) : ''})</option>`).join('');
+}
+
+function section(title, html) {
+    return `<div class="card"><h2>${title}</h2>${html}</div>`;
+}
+
+function renderReflections(list) {
+    if (!list.length) return '<span class="empty">No reflections derived yet — press “Derive reflections”.</span>';
+    return `<table><tr><th>Claim</th><th>Sens.</th><th>Status</th><th>Trigger</th><th>Evidence</th><th>Updated</th></tr>` +
+        list.map(r => `<tr>
+            <td>${esc(r.claim)}<div class="ev">key: ${esc(r.claim_key)} · src: ${esc(r.source)}</div></td>
+            <td><span class="tag t-${esc(r.sensitivity)}">${esc(r.sensitivity)}</span></td>
+            <td><span class="tag t-hold">${esc(r.status)}</span></td>
+            <td>${esc(r.trigger)}</td>
+            <td>${(r.evidence || []).map(e => `<div class="ev">${esc(e.source)}${e.ref != null ? ' #' + esc(e.ref) : ''}: ${esc(e.note)}</div>`).join('')}</td>
+            <td class="ev">${esc((r.updated_at || '').slice(0, 16))}</td>
+        </tr>`).join('') + '</table>';
+}
+
+function renderCommitments(list) {
+    if (!list.length) return '<span class="empty">None.</span>';
+    return `<table><tr><th>Source</th><th>Label</th><th>Mode</th><th>Status</th><th>Detail</th></tr>` +
+        list.map(c => `<tr><td>${esc(c.source)}</td><td>${esc(c.label)}</td>
+            <td><span class="tag t-mode">${esc(c.mode)}</span></td>
+            <td>${esc(c.status)}</td><td>${esc(c.detail || '')}</td></tr>`).join('') + '</table>';
+}
+
+function renderState(s) {
+    const h = s.habits || {}, p = s.profile || {}, rec = s.receptivity || {};
+    let out = '';
+    out += section('Receptivity', `<div class="kv">
+        <b>Openness</b><span>${esc(rec.openness)} (${esc(rec.source || '')})</span>
+        <b>Per-subject sensitivity</b><span>${esc(JSON.stringify(rec.sensitivity || {}))}</span></div>`);
+    out += section(`Reflections — the app's private read (${(s.reflections || []).length})`, renderReflections(s.reflections || []));
+    out += section(`Commitments (${(s.commitments || []).length})`, renderCommitments(s.commitments || []));
+    out += section('Topics', (s.topics || []).length
+        ? `<table><tr><th>Topic</th><th>Kind</th><th>Stage</th><th>Trigger</th></tr>` +
+          s.topics.map(t => `<tr><td>${esc(t.topic)}</td><td>${esc(t.kind)}</td><td>${esc(t.stage)}</td><td>${esc(t.stage_trigger)}</td></tr>`).join('') + '</table>'
+        : '<span class="empty">No learning topics yet.</span>');
+    out += section('Habits', `<div class="kv">
+        <b>Weekly completion</b><span>${h.weekly_completion_rate != null ? (h.weekly_completion_rate * 100).toFixed(0) + '%' : '—'}</span>
+        <b>Mood trend</b><span>${esc(h.mood_trend || '—')}</span>
+        <b>Due today</b><span>${esc((h.due_today || []).join(', ') || '—')}</span></div>` +
+        ((h.active_habits || []).length ? `<table><tr><th>Habit</th><th>Category</th><th>Streak</th><th>Total</th></tr>` +
+            h.active_habits.map(x => `<tr><td>${esc(x.name)}</td><td>${esc(x.category)}</td><td>${esc(x.streak)}</td><td>${esc(x.total_completions)}</td></tr>`).join('') + '</table>' : ''));
+    out += section('Companion profile', `<div class="kv">
+        <b>Trust level</b><span>${esc(p.trust_level ?? '—')}</span>
+        <b>Message depth</b><span>${esc(p.avg_message_depth || '—')}</span>
+        <b>Interactions</b><span>${esc(p.total_interactions ?? '—')}</span>
+        <b>Values</b><span>${esc(JSON.stringify(p.detected_values || {}))}</span>
+        <b>Domains</b><span>${esc(JSON.stringify(p.life_domains || {}))}</span></div>`);
+    out += section(`Stated context (${(s.explicit || []).length})`, (s.explicit || []).length
+        ? `<table><tr><th>Type</th><th>Value</th><th>Said</th><th>Priority</th><th>When</th></tr>` +
+          s.explicit.map(c => `<tr><td>${esc(c.type)}</td><td>${esc(c.value)}</td><td class="ev">${esc(c.statement)}</td><td>${esc(c.priority)}</td><td class="ev">${esc((c.timestamp || '').slice(0, 10))}</td></tr>`).join('') + '</table>'
+        : '<span class="empty">Nothing stated yet.</span>');
+    out += section('Feedback signals', (s.feedback || []).length
+        ? `<table><tr><th>When</th><th>Type</th><th>Ref</th><th>Signal</th><th>Detail</th></tr>` +
+          s.feedback.map(f => `<tr><td class="ev">${esc((f.at || '').slice(0, 16))}</td><td>${esc(f.item_type)}</td><td>${esc(f.item_ref)}</td><td>${esc(f.signal)}</td><td>${esc(f.detail)}</td></tr>`).join('') + '</table>'
+        : '<span class="empty">No feedback signals recorded.</span>');
+    return out;
+}
+
+async function loadState() {
+    const uid = document.getElementById('userSel').value;
+    const st = document.getElementById('status');
+    if (!uid) { st.innerHTML = '<span class="err">Pick a user first.</span>'; return; }
+    st.textContent = 'Loading…';
+    const r = await fetch(`/api/growth/insights/${uid}`, { headers: authH() });
+    if (!r.ok) {
+        st.innerHTML = `<span class="err">${r.status === 403 ? 'Admin access required' : 'Error ' + r.status}</span>`;
+        document.getElementById('out').innerHTML = '';
+        return;
+    }
+    st.textContent = '';
+    document.getElementById('out').innerHTML = renderState((await r.json()).state);
+}
+
+async function derive() {
+    const uid = document.getElementById('userSel').value;
+    const st = document.getElementById('status');
+    if (!uid) { st.innerHTML = '<span class="err">Pick a user first.</span>'; return; }
+    st.textContent = 'Deriving…';
+    const r = await fetch(`/api/growth/insights/${uid}/derive`, { method: 'POST', headers: authH() });
+    if (!r.ok) { st.innerHTML = `<span class="err">Error ${r.status}</span>`; return; }
+    const res = await r.json();
+    st.textContent = `${res.result.created} created, ${res.result.updated} refreshed`;
+    loadState();
+}
+
+loadUsers();
+</script>
+</body>
+</html>

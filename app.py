@@ -491,6 +491,10 @@ try:
     emotional_intelligence = get_emotional_intelligence(smart_response_conn)
     life_pattern_detector = get_life_pattern_detector(smart_response_conn)
     habit_tracker = get_habit_tracker(smart_response_conn)
+    from smart_response.growth_engine import get_growth_engine
+    growth_engine = get_growth_engine(smart_response_conn, habit_tracker,
+                                    life_companion_profiler)
+    print("✓ Growth Engine initialized (unified state + reflection model)")
     decision_support = get_decision_support(smart_response_conn)
     life_transition_guide = get_life_transition_guide(smart_response_conn)
     companion_cache = get_companion_cache()
@@ -693,6 +697,7 @@ except Exception as e:
     emotional_intelligence = None
     life_pattern_detector = None
     habit_tracker = None
+    growth_engine = None
     decision_support = None
     life_transition_guide = None
     companion_cache = None
@@ -6971,6 +6976,69 @@ def engagement_thread_action(thread_id, action):
     if action not in ('confirm', 'dismiss', 'drop', 'reopen', 'snooze', 'answer'):
         return jsonify({'error': 'Unknown action.'}), 404
     return _engagement_action(thread_id, action)
+
+
+# ---------------------------------------------------------------------------
+# Growth engine — unified state read + the private reflection model.
+# /api/growth/state exposes user-visible facts only (transparency boundary:
+# facts inspectable, interpretations calibrated). The private model —
+# reflections, receptivity, triggers — is reachable only through the admin
+# inspector endpoints, which exist for development/testing visibility.
+# ---------------------------------------------------------------------------
+
+@app.route('/api/growth/state', methods=['GET'])
+@require_auth
+def growth_state():
+    """The signed-in user's unified growth state — facts only."""
+    if growth_engine is None:
+        return jsonify({'error': 'Growth engine unavailable.'}), 503
+    try:
+        return jsonify({'success': True,
+                        'state': growth_engine.growth_state(
+                            request.current_user['user_id'])})
+    except Exception as e:
+        return _safe_error(e, 'growth_state')
+
+
+def _growth_admin_or_403():
+    role = integrated_db.get_user_role(request.current_user['user_id'])
+    return has_admin_access(role)
+
+
+@app.route('/api/growth/insights/<int:user_id>', methods=['GET'])
+@require_auth
+def growth_insights(user_id):
+    """Full internal model for a user — admin inspector (dev/testing)."""
+    if not _growth_admin_or_403():
+        return jsonify({'error': 'Admin access required'}), 403
+    if growth_engine is None:
+        return jsonify({'error': 'Growth engine unavailable.'}), 503
+    try:
+        return jsonify({'success': True,
+                        'state': growth_engine.inspector_payload(user_id)})
+    except Exception as e:
+        return _safe_error(e, 'growth_insights')
+
+
+@app.route('/api/growth/insights/<int:user_id>/derive', methods=['POST'])
+@require_auth
+def growth_derive(user_id):
+    """Run the deterministic reflection pass for a user — admin only."""
+    if not _growth_admin_or_403():
+        return jsonify({'error': 'Admin access required'}), 403
+    if growth_engine is None:
+        return jsonify({'error': 'Growth engine unavailable.'}), 503
+    try:
+        return jsonify({'success': True,
+                        'result': growth_engine.derive_reflections(user_id)})
+    except Exception as e:
+        return _safe_error(e, 'growth_derive')
+
+
+@app.route('/admin/growth-inspector')
+def admin_growth_inspector_page():
+    """Admin page: inspect the app's private model of a user."""
+    return render_template('admin_growth_inspector.html')
 
 
 @app.route('/api/push-key', methods=['GET'])
