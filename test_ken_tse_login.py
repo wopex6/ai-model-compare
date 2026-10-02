@@ -14,7 +14,7 @@ result = cursor.fetchone()
 if result:
     username, email, role, password_hash = result
     print("=" * 50)
-    print("WAI TSE ACCOUNT:")
+    print("KEN TSE ACCOUNT:")
     print(f"  Username: {username}")
     print(f"  Email: {email}")
     print(f"  Role: {role}")

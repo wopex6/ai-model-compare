@@ -825,7 +825,7 @@ def test_pages_naming_different_patients_are_flagged():
     _, analysis = m.parse_report_pages(
         [{'name': 'a.jpg', 'text': page_a},
          {'name': 'b.jpg', 'text': page_b}], store={})
-    assert analysis.get('patient_conflict') == ['someone else', 'wai t']
+    assert analysis.get('patient_conflict') == ['ken t', 'someone else']
 
 
 def test_single_page_batch_matches_single_text_parse():
