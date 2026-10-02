@@ -93,3 +93,6 @@ vendor/_extracted/
 
 # user profile data - keep local only
 wisdom_profiles/
+# more user data kept local only
+uploads/*.mp3
+uploads/*.mp4

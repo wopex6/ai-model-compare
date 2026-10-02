@@ -34,6 +34,7 @@ _EXCLUDE_DIRS = (
     'health_profiles/',            # patient data (gitignored, belt+braces)
     'health_uploaded_documents/',  # patient data (gitignored, belt+braces)
     'wisdom_profiles/',            # user profile data (gitignored, belt+braces)
+    'personality_profiles/',        # user profile data (gitignored, belt+braces)
 )
 _EXCLUDE_FILES = {
     'pa_sync.py', 'deploy_anywhere.py', 'handoff.py',
