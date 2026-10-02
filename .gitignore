@@ -90,3 +90,6 @@ debug_*.md
 
 # extracted at runtime on the server — never commit
 vendor/_extracted/
+
+# user profile data - keep local only
+wisdom_profiles/

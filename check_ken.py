@@ -20,7 +20,7 @@ cursor.execute("PRAGMA table_info(users)")
 col_names = [col[1] for col in cursor.fetchall()]
 
 print("\n" + "=" * 50)
-print("KEN TSE INFO:")
+print("KEN INFO:")
 if ken:
     for i, col_name in enumerate(col_names):
         if col_name != 'password':  # Don't print password
