@@ -4,7 +4,7 @@ _Generated 2026-10-02 21:51 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Full history rewrite done: all Tse/Wai traces + personal-data paths purged; personality_profiles untracked; force-push pending
+Full history rewrite done: all /Ken traces + personal-data paths purged; personality_profiles untracked; force-push pending
 
 ## Git
 
