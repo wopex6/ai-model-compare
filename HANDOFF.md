@@ -1,10 +1,10 @@
 # Handoff snapshot
 
-_Generated 2026-10-02 20:03 by handoff.py — regenerate rather than edit._
+_Generated 2026-10-02 20:33 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Growth Companion Phase 0 landed: growth_engine.py (unified state + derive_reflections + commitments view over engagement threads/habits/explicit goals), /api/growth/state, admin inspector at /admin/growth-inspector + /api/growth/insights/<id>[/derive] (admin-gated), living design doc docs/growth_companion.md, 13 tests. Deployed & verified on production. Next: Phase 1 /grow light surface (companion chat + card feed) per megaplan.
+Phase 1 deployed: /grow light surface live (feed cards with inline signals + coordinator chat + correctable facts panel). Inspector token fix (authToken). 21 growth tests pass. Next: Phase 2 learning topics + stage tracking, then delivery calibration.
 
 ## Git
 
@@ -46,55 +46,55 @@ M AI_REGENERATION_SPEC.md
 
 ```
 AI_REGENERATION_SPEC.md      |   2 +-
- ENHANCEMENTS.md              | 336 +++++++++++++++++++++++++++++++++++++++++++
+ ENHANCEMENTS.md              | 352 +++++++++++++++++++++++++++++++++++++++++++
  README.md                    |   2 +-
  SYSTEM_REGENERATION_GUIDE.md |   2 +-
- 4 files changed, 339 insertions(+), 3 deletions(-)
+ 4 files changed, 355 insertions(+), 3 deletions(-)
 ```
 </details>
 
 Recent commits:
 
 ```
+4189a42 Phase 1: /grow light surface â€” card feed + companion chat + correctable facts
+313df20 Handoff: Growth Engine Phase 0 deployed
 a176dc3 Growth Engine Phase 0: unified state + private reflection model + admin inspector
 0c79697 Handoff: empty-column fix deployed
 bd5a553 Hide empty Ref/Notes columns in overview tables
 6af8417 Handoff: derived-value verification deployed
 86df6d6 Verify derived figures against their components
 1a32efa Handoff: website gains the PWA's health tool surface
-fd1772f Port the PWA's document inspection and health tools to the website
-62620f0 Handoff: schema-coverage scoring for guided re-reads deployed
 ```
 
 ## Production (PythonAnywhere)
 
-**369 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
+**4 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
 
 ```
-ok       migrate_old_assessments_to_history.py
-ok       migrate_production_latest_schema.py
-ok       migrate_production_phase_3_1.py
-ok       migrate_routed_messages.py
-ok       migrate_smart_response_tables.py
-ok       motivational_coach_demo.py
-ok       ocr_snapshots/app_20260824_211115.py
-ok       ocr_snapshots/test_ocr_live_20260824_211115.py
-ok       pa_console.py
-ok       personality_profiles/WK7_profile.json
-ok       personality_profiles/WK_profile.json
-ok       personality_profiles/sessions/WK7_session.json
-ok       personality_profiles/sessions/WK_session.json
-ok       personality_profiles/sessions/test_user_1761913076470_session.json
-ok       personality_profiles/sessions/test_user_1761913255521_session.json
-ok       personality_profiles/sessions/test_user_1761913670659_session.json
-ok       personality_profiles/sessions/test_user_1761913706407_session.json
-ok       personality_profiles/sessions/test_user_1761954180907_session.json
-ok       personality_profiles/sessions/test_user_1761955083583_session.json
-ok       personality_profiles/sessions/test_user_1761955380402_session.json
-ok       personality_profiles/sessions/test_user_1761957912201_session.json
-ok       personality_profiles/sessions/test_user_1761959949391_session.json
-ok       personality_profiles/sessions/test_user_1761960293931_session.json
-ok       personality_profiles/sessions/test_user_1762054114844_session.json
+ok       tests/test_review_flow.py
+ok       tests/test_ui_features.py
+ok       tests/test_user_logon_shared_modules.py
+ok       tests/test_web_enhancements.py
+ok       token_test.py
+ok       update_database.py
+ok       update_wk_password.py
+ok       upload_database_to_pythonanywhere.ps1
+ok       uploads/ai_a6043c74-8f82-40d8-863c-971ba0f40619.md
+ok       verbosity_system.py
+ok       verify_database_schema.py
+ok       verify_delete.py
+ok       verify_personality_system.py
+ok       verify_production_ready.py
+ok       verify_shared_processing.py
+ok       verify_table_schemas.py
+ok       verify_timestamp_storage.py
+ok       view_phase3_data.py
+ok       web_enhancement_plan.md
+ok       web_enhancement_test_results.json
+ok       web_enhancement_test_runner.py
+ok       webhook_deploy.py
+ok       wisdom_profiles/23.json
+ok       wisdom_profiles/23_hypotheses.json
 4 file(s) stale. Re-run with --push to upload.
 ```
 
@@ -115,7 +115,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-495 passed, 1 warning in 50.24s
+495 passed, 1 warning in 48.08s
 [AutoDoc] Monitoring stopped
 ```
 
