@@ -453,6 +453,87 @@ class GrowthEngine:
                 'candidates': len(candidates)}
 
     # ------------------------------------------------------------------
+    # Feed — deterministic card assembly (facts only, never reflections)
+    # ------------------------------------------------------------------
+    def build_feed(self, user_id: int) -> List[Dict]:
+        """Cards for the /grow feed, ordered by the ranking policy in
+        docs/growth_companion.md: open loops (engagement chips) first, then
+        due habits, then check-in, then wins, then a starter prompt when
+        there is nothing else. Every card carries an id so feedback signals
+        can reference it."""
+        uid = str(user_id)
+        cards: List[Dict] = []
+
+        # 1. Open loops — engagement candidates ('Track this?') then due threads
+        try:
+            from ai_compare import engagement
+            for chip in engagement.suggestions(uid):
+                cards.append({
+                    'id': f"eng:{chip.get('thread_id')}",
+                    'type': chip.get('type', 'thread'),
+                    'title': chip.get('title', ''),
+                    'text': chip.get('text', ''),
+                    'kind': chip.get('kind', ''),
+                    'thread_id': chip.get('thread_id'),
+                    'replies': chip.get('replies') or [],
+                    'url': chip.get('url'),
+                })
+        except Exception as e:
+            print(f"[GrowthEngine] feed engagement error: {e}")
+
+        habits = self._habit_summary(user_id)
+
+        # 2. Due-today habits — one card, one Done button each
+        due = [h for h in (habits.get('active_habits') or [])
+               if h['name'] in (habits.get('due_today') or [])]
+        if due:
+            cards.append({
+                'id': 'habits:due_today', 'type': 'habits_due',
+                'title': 'Due today', 'text': '',
+                'habits': [{'id': h['id'], 'name': h['name']} for h in due],
+            })
+
+        # 3. Mood check-in if none today
+        recent = habits.get('recent_checkins') or []
+        today = datetime.now().date().isoformat()
+        if not any(c.get('date') == today for c in recent):
+            cards.append({
+                'id': 'checkin:today', 'type': 'checkin',
+                'title': 'How are you today?',
+                'text': 'One word is enough.',
+                'replies': ['Great', 'Good', 'Okay', 'Low', 'Bad'],
+            })
+
+        # 4. Win card — strongest active streak
+        streaks = habits.get('current_streaks') or {}
+        if streaks:
+            name, streak = max(streaks.items(), key=lambda kv: kv[1])
+            if streak >= 7:
+                cards.append({
+                    'id': f"win:{name}", 'type': 'win',
+                    'title': f'{streak}-day streak',
+                    'text': f'"{name}" — that is consistency, not luck.',
+                })
+
+        # 5. Starter card — first for a brand-new user (the seed question is
+        # the designed cold start), or the fallback when nothing else exists.
+        explicit = self._explicit_items(user_id)
+        profile = self._profile(user_id)
+        is_new = (not explicit and not (habits.get('active_habits'))
+                  and not (profile.get('total_interactions') or 0))
+        starter = {
+            'id': 'starter', 'type': 'starter',
+            'title': 'Start here',
+            'text': 'Tell me one thing you are working on or thinking '
+                    'about lately — that is all it takes to begin.',
+        }
+        if is_new:
+            cards.insert(0, starter)
+        elif not cards:
+            cards.append(starter)
+        return cards
+
+    # ------------------------------------------------------------------
     # Inspector payload — the admin/dev window into the private model
     # ------------------------------------------------------------------
     def _reflections(self, user_id: int) -> List[Dict]:

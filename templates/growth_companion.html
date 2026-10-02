@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Grow — your companion</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+               background: #f1f5f9; color: #1e293b; }
+        .wrap { max-width: 640px; margin: 0 auto; padding: 14px 14px 90px; }
+        header { padding: 14px 4px 10px; display: flex; align-items: center; justify-content: space-between; }
+        header h1 { font-size: 1.25rem; margin: 0; }
+        header .sub { font-size: .8rem; color: #64748b; }
+        .facts-btn { background: none; border: 1px solid #cbd5e1; border-radius: 999px;
+                     padding: 6px 12px; font-size: .78rem; color: #475569; cursor: pointer; }
+
+        .card { background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 12px;
+                box-shadow: 0 1px 4px rgba(15,23,42,.08); position: relative; }
+        .card .kind { font-size: .68rem; text-transform: uppercase; letter-spacing: .06em;
+                      color: #94a3b8; font-weight: 700; }
+        .card h3 { margin: 4px 0 6px; font-size: 1rem; }
+        .card p { margin: 0 0 10px; font-size: .92rem; color: #334155; line-height: 1.45; }
+        .card .dismiss { position: absolute; top: 10px; right: 12px; border: none; background: none;
+                         color: #cbd5e1; cursor: pointer; font-size: .95rem; }
+        .replies { display: flex; flex-wrap: wrap; gap: 8px; }
+        .replies button, .sig { border: 1px solid #c7d2fe; background: #eef2ff; color: #4338ca;
+                 border-radius: 999px; padding: 7px 14px; font-size: .85rem; cursor: pointer; }
+        .replies button:hover { background: #e0e7ff; }
+        .habit-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; }
+        .win { border-left: 4px solid #f59e0b; }
+        .starter { border-left: 4px solid #667eea; }
+        .checkin { border-left: 4px solid #34d399; }
+
+        #chat { margin-top: 6px; }
+        #msgs { min-height: 120px; }
+        .msg { margin: 10px 0; display: flex; }
+        .msg .b { max-width: 82%; padding: 10px 14px; border-radius: 16px; font-size: .92rem; line-height: 1.45;
+                  white-space: pre-wrap; }
+        .msg.user { justify-content: flex-end; }
+        .msg.user .b { background: #667eea; color: #fff; border-bottom-right-radius: 4px; }
+        .msg.ai .b { background: #fff; border: 1px solid #e2e8f0; border-bottom-left-radius: 4px; }
+        .msg .who { font-size: .68rem; color: #94a3b8; margin-bottom: 3px; }
+        .composer { position: fixed; bottom: 0; left: 0; right: 0; background: #fff;
+                    border-top: 1px solid #e2e8f0; padding: 10px; }
+        .composer .inner { max-width: 640px; margin: 0 auto; display: flex; gap: 8px; }
+        .composer input { flex: 1; padding: 12px 14px; border: 1px solid #cbd5e1; border-radius: 999px;
+                          font-size: .95rem; }
+        .composer button { padding: 0 18px; border-radius: 999px; border: none; background: #667eea;
+                           color: #fff; font-weight: 600; cursor: pointer; }
+
+        #facts { display: none; }
+        #facts.open { display: block; }
+        .fact-row { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0;
+                    border-bottom: 1px solid #f1f5f9; font-size: .88rem; }
+        .fact-row button { border: none; background: none; color: #dc2626; cursor: pointer;
+                           font-size: .78rem; white-space: nowrap; }
+        .muted { color: #94a3b8; font-size: .8rem; }
+        .err { color: #b91c1c; font-size: .85rem; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <header>
+        <div>
+            <h1>Aria</h1>
+            <div class="sub">your growth companion</div>
+        </div>
+        <button class="facts-btn" onclick="toggleFacts()"><i class="fas fa-eye"></i> what I know</button>
+    </header>
+
+    <div id="facts" class="card"></div>
+    <div id="feed"></div>
+
+    <div id="chat">
+        <div id="msgs"></div>
+    </div>
+</div>
+
+<div class="composer"><div class="inner">
+    <input id="chatIn" placeholder="Tell Aria…" autocomplete="off">
+    <button id="sendBtn" onclick="sendChat()"><i class="fas fa-paper-plane"></i></button>
+</div></div>
+
+<script>
+const token = () => localStorage.getItem('authToken') || sessionStorage.getItem('authToken');
+const authH = () => ({ 'Authorization': `Bearer ${token()}`, 'Content-Type': 'application/json' });
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------- signal loop: every card returns a signal ---------- */
+async function signal(cardId, sig, detail = '') {
+    try {
+        await fetch('/api/growth/feedback', { method: 'POST', headers: authH(),
+            body: JSON.stringify({ item_type: 'card', item_ref: cardId, signal: sig, detail }) });
+    } catch (e) { /* feedback is best-effort */ }
+    if (sig === 'not_for_me') {
+        const el = document.getElementById('card-' + CSS.escape(cardId));
+        if (el) el.remove();
+    }
+}
+
+/* ---------- engagement thread actions ---------- */
+async function threadAction(cardId, threadId, action, answer = '') {
+    const body = action === 'answer' ? { answer, quick: true } : {};
+    const r = await fetch(`/api/engagement/threads/${encodeURIComponent(threadId)}/${action}`,
+                          { method: 'POST', headers: authH(), body: JSON.stringify(body) });
+    if (r.ok) {
+        signal(cardId, action === 'dismiss' ? 'not_for_me' : 'done', answer);
+        const el = document.getElementById('card-' + CSS.escape(cardId));
+        if (el && action !== 'answer') el.remove();
+        if (el && action === 'answer') el.remove();
+        loadFeed();
+    }
+}
+
+async function habitDone(cardId, habitId, btn) {
+    const r = await fetch(`/api/user/habits/${habitId}/complete`, { method: 'POST', headers: authH(), body: '{}' });
+    if (r.ok) { btn.closest('.habit-row').style.opacity = .4; btn.disabled = true; signal(cardId, 'done'); }
+}
+
+async function checkin(cardId, mood) {
+    const r = await fetch('/api/user/checkin', { method: 'POST', headers: authH(),
+        body: JSON.stringify({ mood: mood.toLowerCase() }) });
+    if (r.ok) { signal(cardId, 'answered', mood); document.getElementById('card-' + CSS.escape(cardId)).remove(); }
+}
+
+/* ---------- card rendering ---------- */
+function cardHtml(c) {
+    const dismiss = `<button class="dismiss" title="Not for me" onclick="signal('${esc(c.id)}','not_for_me')"><i class="fas fa-times"></i></button>`;
+    let inner = `<span class="kind">${esc(c.kind || c.type)}</span><h3>${esc(c.title)}</h3>`;
+    if (c.text) inner += `<p>${esc(c.text)}</p>`;
+
+    if (c.type === 'candidate') {
+        inner += `<div class="replies">
+            <button onclick="threadAction('${esc(c.id)}','${esc(c.thread_id)}','confirm')">Track it</button>
+            <button onclick="threadAction('${esc(c.id)}','${esc(c.thread_id)}','dismiss')">Not now</button></div>`;
+    } else if (c.type === 'thread') {
+        inner += `<div class="replies">` + (c.replies || []).map(r =>
+            `<button onclick="threadAction('${esc(c.id)}','${esc(c.thread_id)}','answer','${esc(r)}')">${esc(r)}</button>`).join('') + `</div>`;
+    } else if (c.type === 'habits_due') {
+        inner += (c.habits || []).map(h => `<div class="habit-row"><span>${esc(h.name)}</span>
+            <button class="sig" onclick="habitDone('${esc(c.id)}',${h.id},this)">Done</button></div>`).join('');
+    } else if (c.type === 'checkin') {
+        inner += `<div class="replies">` + (c.replies || []).map(r =>
+            `<button onclick="checkin('${esc(c.id)}','${esc(r)}')">${esc(r)}</button>`).join('') + `</div>`;
+    } else if (c.type === 'starter') {
+        inner += `<div class="replies"><button onclick="document.getElementById('chatIn').focus()">Say it</button></div>`;
+    } else {
+        inner += `<div class="replies">
+            <button onclick="signal('${esc(c.id)}','landed')">Landed</button>
+            <button onclick="signal('${esc(c.id)}','tell_me_more')">Tell me more</button></div>`;
+    }
+    return `<div class="card ${esc(c.type)}" id="card-${esc(c.id)}">${dismiss}${inner}</div>`;
+}
+
+async function loadFeed() {
+    const r = await fetch('/api/growth/feed', { headers: authH() });
+    const el = document.getElementById('feed');
+    if (r.status === 401) { window.location.href = '/login'; return; }
+    if (!r.ok) { el.innerHTML = `<div class="card"><span class="err">Could not load (${r.status})</span></div>`; return; }
+    const cards = (await r.json()).cards || [];
+    el.innerHTML = cards.map(cardHtml).join('');
+}
+
+/* ---------- chat (coordinator persona via the shared route) ---------- */
+function bubble(text, who, name) {
+    const d = document.createElement('div');
+    d.className = 'msg ' + who;
+    d.innerHTML = `<div><div class="who">${who === 'user' ? 'you' : esc(name || 'Aria')}</div><div class="b"></div></div>`;
+    d.querySelector('.b').textContent = text;
+    document.getElementById('msgs').appendChild(d);
+    d.scrollIntoView({ block: 'nearest' });
+    return d;
+}
+
+async function loadHistory() {
+    const r = await fetch('/api/domain-characters/history/coordinator?limit=20', { headers: authH() });
+    if (!r.ok) return;
+    const data = await r.json();
+    for (const e of (data.history || data.messages || [])) {
+        if (e.user_message) bubble(e.user_message, 'user');
+        if (e.ai_response) bubble(e.ai_response, 'ai');
+    }
+}
+
+async function sendChat() {
+    const input = document.getElementById('chatIn');
+    const msg = input.value.trim();
+    if (!msg) return;
+    input.value = '';
+    bubble(msg, 'user');
+    const thinking = bubble('…', 'ai');
+    try {
+        const r = await fetch('/api/domain-characters/route', { method: 'POST', headers: authH(),
+            body: JSON.stringify({ message: msg, character_id: 'coordinator', use_ai: true }) });
+        const data = await r.json();
+        thinking.remove();
+        const shown = (data.responses || []).filter(x => x.should_display !== false && x.content);
+        if (shown.length) shown.forEach(x => bubble(x.content, 'ai', x.display_name));
+        else bubble('Sorry — nothing came back. Try again?', 'ai');
+        loadFeed();  // a message may open a candidate thread
+    } catch (e) {
+        thinking.remove();
+        bubble('Connection error — please try again.', 'ai');
+    }
+}
+document.getElementById('chatIn').addEventListener('keypress', e => { if (e.key === 'Enter') sendChat(); });
+
+/* ---------- facts panel: transparency boundary ---------- */
+async function toggleFacts() {
+    const el = document.getElementById('facts');
+    if (el.classList.toggle('open')) {
+        const r = await fetch('/api/growth/state', { headers: authH() });
+        if (!r.ok) { el.innerHTML = `<span class="err">Could not load (${r.status})</span>`; return; }
+        const s = (await r.json()).state;
+        const items = s.explicit || [];
+        el.innerHTML = `<h3>What I have on file — correct anything wrong</h3>` +
+            (items.length ? items.map(c => `<div class="fact-row">
+                <span>${esc(c.value)} <span class="muted">· ${esc(c.type)} · ${esc((c.timestamp || '').slice(0,10))}</span><br>
+                <span class="muted">${esc(c.statement)}</span></span>
+                <button onclick="correctFact(${c.id}, this)">not true</button></div>`).join('')
+            : '<span class="muted">Nothing on file yet — tell me something below.</span>');
+    }
+}
+
+async function correctFact(id, btn) {
+    const r = await fetch(`/api/growth/facts/${id}/correct`, { method: 'POST', headers: authH(), body: '{}' });
+    if (r.ok) { btn.closest('.fact-row').style.opacity = .35; btn.disabled = true; }
+}
+
+if (!token()) { window.location.href = '/login'; }
+loadFeed();
+loadHistory();
+</script>
+</body>
+</html>

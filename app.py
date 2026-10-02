@@ -7041,6 +7041,67 @@ def admin_growth_inspector_page():
     return render_template('admin_growth_inspector.html')
 
 
+@app.route('/api/growth/feed', methods=['GET'])
+@require_auth
+def growth_feed():
+    """The /grow card feed — deterministic, facts only."""
+    if growth_engine is None:
+        return jsonify({'error': 'Growth engine unavailable.'}), 503
+    try:
+        return jsonify({'success': True,
+                        'cards': growth_engine.build_feed(
+                            request.current_user['user_id'])})
+    except Exception as e:
+        return _safe_error(e, 'growth_feed')
+
+
+@app.route('/api/growth/feedback', methods=['POST'])
+@require_auth
+def growth_feedback():
+    """Record an inline signal on a feed card (landed / not_for_me /
+    tell_me_more / done …) — the signal loop every card must return."""
+    if growth_engine is None:
+        return jsonify({'error': 'Growth engine unavailable.'}), 503
+    try:
+        data = request.get_json(silent=True) or {}
+        signal = str(data.get('signal') or '').strip()
+        if not signal:
+            return jsonify({'error': 'signal is required'}), 400
+        growth_engine.record_feedback(
+            request.current_user['user_id'],
+            str(data.get('item_type') or ''),
+            str(data.get('item_ref') or ''),
+            signal,
+            str(data.get('detail') or '')[:500])
+        return jsonify({'success': True})
+    except Exception as e:
+        return _safe_error(e, 'growth_feedback')
+
+
+@app.route('/api/growth/facts/<int:context_id>/correct', methods=['POST'])
+@require_auth
+def growth_fact_correct(context_id):
+    """User-correctable facts: mark an explicit_context item inactive and log
+    the correction as feedback (transparency boundary — facts inspectable)."""
+    try:
+        if explicit_context_handler:
+            explicit_context_handler.deactivate_context(context_id)
+        if growth_engine:
+            growth_engine.record_feedback(
+                request.current_user['user_id'], 'explicit_context',
+                str(context_id), 'corrected',
+                str((request.get_json(silent=True) or {}).get('detail') or '')[:500])
+        return jsonify({'success': True})
+    except Exception as e:
+        return _safe_error(e, 'growth_fact_correct')
+
+
+@app.route('/grow')
+def growth_companion_page():
+    """The Growth Companion — light mode: card feed + companion chat."""
+    return render_template('growth_companion.html')
+
+
 @app.route('/api/push-key', methods=['GET'])
 @require_auth
 def app_push_key():

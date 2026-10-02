@@ -217,3 +217,105 @@ def test_growth_state_requires_auth():
     client = app_mod.app.test_client()
     r = client.get('/api/growth/state')
     assert r.status_code == 401
+
+
+# --- feed ------------------------------------------------------------------
+
+def test_feed_starter_first_for_new_user(env):
+    cards = env.engine.build_feed(999)
+    assert cards[0]['type'] == 'starter'
+
+
+def test_feed_no_starter_for_established_user(env):
+    env.habits.create_habit(7, 'Walk', category='health')
+    p = CompanionProfile(user_id=7)
+    p.total_interactions = 20
+    env.profiler._save_profile(7, p)
+    cards = env.engine.build_feed(7)
+    assert cards[0]['type'] != 'starter'
+
+
+def test_feed_orders_loops_first(env):
+    import sqlite3 as _sq
+    from ai_compare import engagement
+    env.habits.create_habit(7, 'Walk', category='health')   # due today
+    tid = engagement.create_thread('7', 'call accountant', kind='commitment')
+    # make the thread due now
+    conn = _sq.connect(str(engagement.DB_PATH))  # monkeypatched to tmp by env
+    conn.execute("UPDATE threads SET next_due_at=? WHERE id=?",
+                 ((datetime.now() - timedelta(hours=1)).isoformat(), tid))
+    conn.commit(); conn.close()
+    cards = env.engine.build_feed(7)
+    types = [c['type'] for c in cards]
+    assert types.index('thread') < types.index('habits_due')
+    assert 'checkin' in types
+
+
+def test_feed_win_card(env):
+    h = env.habits.create_habit(7, 'Run', category='health')
+    env.db.execute('UPDATE habits SET current_streak=?, best_streak=? WHERE id=?',
+                   (9, 9, h.id))
+    env.db.commit()
+    _insert_checkins(env.db, 7, [4])  # has today's check-in → no checkin card
+    cards = env.engine.build_feed(7)
+    assert any(c['type'] == 'win' and '9-day' in c['title'] for c in cards)
+
+
+def test_feed_includes_candidate_chip(env):
+    from ai_compare import engagement
+    engagement.create_thread('7', 'meditation habit', kind='habit',
+                             candidate=True)
+    cards = env.engine.build_feed(7)
+    assert any(c['type'] == 'candidate' and c['thread_id'] for c in cards)
+
+
+# --- new endpoints ---------------------------------------------------------
+
+def test_feedback_endpoint(env, monkeypatch):
+    import app as app_mod
+    app_mod.app.config['TESTING'] = True
+    monkeypatch.setattr(app_mod, 'growth_engine', env.engine)
+    client = app_mod.app.test_client()
+    with client.session_transaction() as sess:
+        sess['user_id'] = 7
+    r = client.post('/api/growth/feedback',
+                    json={'item_type': 'card', 'item_ref': 'win:Run',
+                          'signal': 'landed'})
+    assert r.status_code == 200
+    fb = env.engine._feedback(7)
+    assert fb[0]['signal'] == 'landed' and fb[0]['item_ref'] == 'win:Run'
+
+
+def test_fact_correct_endpoint(env, monkeypatch):
+    import app as app_mod
+    from smart_response.explicit_context_handler import ExplicitContextHandler
+    monkeypatch.setattr(ExplicitContextHandler, '__init__',
+                        lambda self, conn: setattr(self, 'db', conn))
+    handler = ExplicitContextHandler.__new__(ExplicitContextHandler)
+    handler.db = env.db
+    app_mod.app.config['TESTING'] = True
+    monkeypatch.setattr(app_mod, 'growth_engine', env.engine)
+    monkeypatch.setattr(app_mod, 'explicit_context_handler', handler)
+    client = app_mod.app.test_client()
+    with client.session_transaction() as sess:
+        sess['user_id'] = 7
+    _insert_explicit(env.db, 7, 'goal', 'learn piano', 'I want to learn piano')
+    cid = env.db.execute('SELECT id FROM explicit_context LIMIT 1').fetchone()[0]
+    r = client.post(f'/api/growth/facts/{cid}/correct', json={})
+    assert r.status_code == 200
+    active = env.db.execute('SELECT active FROM explicit_context WHERE id=?',
+                            (cid,)).fetchone()[0]
+    assert active == 0
+    assert env.engine._feedback(7)[0]['signal'] == 'corrected'
+
+
+def test_feed_endpoint_auth(env, monkeypatch):
+    import app as app_mod
+    app_mod.app.config['TESTING'] = True
+    monkeypatch.setattr(app_mod, 'growth_engine', env.engine)
+    client = app_mod.app.test_client()
+    assert client.get('/api/growth/feed').status_code == 401
+    with client.session_transaction() as sess:
+        sess['user_id'] = 7
+    r = client.get('/api/growth/feed')
+    assert r.status_code == 200 and 'cards' in r.get_json()

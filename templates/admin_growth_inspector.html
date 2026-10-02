@@ -42,6 +42,7 @@
            Development/testing only; none of this is shown to the user.</p>
         <div class="controls">
             <select id="userSel" style="min-width:260px"><option value="">Loading users…</option></select>
+            <input id="userIdManual" placeholder="or user id" style="width:100px;padding:9px;border-radius:8px;border:1px solid #ddd">
             <button onclick="loadState()"><i class="fas fa-eye"></i> Inspect</button>
             <button class="ghost" onclick="derive()"><i class="fas fa-bolt"></i> Derive reflections</button>
             <span id="status"></span>
@@ -51,14 +52,20 @@
 </div>
 
 <script>
-const token = () => localStorage.getItem('token') || sessionStorage.getItem('token');
+const token = () => localStorage.getItem('authToken') || sessionStorage.getItem('authToken')
+               || localStorage.getItem('token') || sessionStorage.getItem('token');
 const authH = () => ({ 'Authorization': `Bearer ${token()}` });
+const needLogin = () => 'No auth token — log in at /chatchat first, then return here.';
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 async function loadUsers() {
-    const r = await fetch('/api/admin/users', { headers: authH() });
     const sel = document.getElementById('userSel');
-    if (!r.ok) { sel.innerHTML = `<option value="">${r.status === 403 ? 'Admin access required' : 'Failed to load users'}</option>`; return; }
+    if (!token()) { sel.innerHTML = `<option value="">${needLogin()}</option>`; return; }
+    const r = await fetch('/api/admin/users', { headers: authH() });
+    if (!r.ok) {
+        const msg = r.status === 401 ? needLogin() : r.status === 403 ? 'Admin access required' : `Failed to load users (${r.status})`;
+        sel.innerHTML = `<option value="">${msg}</option>`; return;
+    }
     const users = await r.json();
     sel.innerHTML = '<option value="">— choose a user —</option>' +
         (Array.isArray(users) ? users : users.users || [])
@@ -125,8 +132,10 @@ function renderState(s) {
     return out;
 }
 
+const selUser = () => document.getElementById('userSel').value || document.getElementById('userIdManual').value;
+
 async function loadState() {
-    const uid = document.getElementById('userSel').value;
+    const uid = selUser();
     const st = document.getElementById('status');
     if (!uid) { st.innerHTML = '<span class="err">Pick a user first.</span>'; return; }
     st.textContent = 'Loading…';
@@ -141,7 +150,7 @@ async function loadState() {
 }
 
 async function derive() {
-    const uid = document.getElementById('userSel').value;
+    const uid = selUser();
     const st = document.getElementById('status');
     if (!uid) { st.innerHTML = '<span class="err">Pick a user first.</span>'; return; }
     st.textContent = 'Deriving…';
