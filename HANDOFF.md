@@ -1,24 +1,25 @@
 # Handoff snapshot
 
-_Generated 2026-10-02 21:51 by handoff.py — regenerate rather than edit._
+_Generated 2026-10-03 06:21 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Full history rewrite done: all /Ken traces + personal-data paths purged; personality_profiles untracked; force-push pending
+Phase 2 built: learning topics + stage tracking in /grow feed; deploy pending
 
 ## Git
 
 **Branch:** `cursor/emergency-card-paramedic-fields`  
-**Uncommitted files:** 23
+**Uncommitted files:** 24
 
 > Uncommitted work is the main handoff hazard: the next agent
 > cannot tell finished edits from half-written ones. Commit
 > before switching, even as `wip:`.
 
 ```
-M  .gitignore
-M  pa_sync.py
-A  static/avatars/dr_nova.jpg
+M docs/growth_companion.md
+ M smart_response/growth_engine.py
+ M templates/growth_companion.html
+ M tests/test_growth_engine.py
 ?? check_wk_credentials.py
 ?? debug_auth.py
 ?? direct_password_test.py
@@ -44,36 +45,43 @@ A  static/avatars/dr_nova.jpg
 <details><summary>diff --stat</summary>
 
 ```
-.gitignore                 |   3 +++
- pa_sync.py                 |   1 +
- static/avatars/dr_nova.jpg | Bin 0 -> 1522220 bytes
- 3 files changed, 4 insertions(+)
+docs/growth_companion.md        |  12 ++
+ smart_response/growth_engine.py | 278 +++++++++++++++++++++++++++++++++++++++-
+ templates/growth_companion.html |  15 +++
+ tests/test_growth_engine.py     |  99 ++++++++++++++
+ 4 files changed, 403 insertions(+), 1 deletion(-)
+warning: LF will be replaced by CRLF in smart_response/growth_engine.py.
+The file will have its original line endings in your working directory
+warning: LF will be replaced by CRLF in templates/growth_companion.html.
+The file will have its original line endings in your working directory
+warning: LF will be replaced by CRLF in tests/test_growth_engine.py.
+The file will have its original line endings in your working directory
 ```
 </details>
 
 Recent commits:
 
 ```
-fc41348 Remove '' surname entirely; untrack wisdom_profiles
-621fc12 Rename default admin user "Ken" to "Ken" across repo
-1a73747 Handoff: Phase 1 /grow surface deployed
-d7eed63 Phase 1: /grow light surface â€” card feed + companion chat + correctable facts
-750cd42 Handoff: Growth Engine Phase 0 deployed
-ecd3a49 Growth Engine Phase 0: unified state + private reflection model + admin inspector
-569db1f Handoff: empty-column fix deployed
-369abb3 Hide empty Ref/Notes columns in overview tables
+b5a25a6 Handoff: identity scrub complete
+9a9aa71 Post-rewrite cleanup: gitignore personality_profiles/uploads media, pa_sync exclusion, restore avatar
+cb6d64b Remove '' surname entirely; untrack wisdom_profiles
+4a6d39e Rename default admin user "Ken" to "Ken" across repo
+112700b Handoff: Phase 1 /grow surface deployed
+0ed316a Phase 1: /grow light surface â€” card feed + companion chat + correctable facts
+478dfd2 Handoff: Growth Engine Phase 0 deployed
+15f6e1e Growth Engine Phase 0: unified state + private reflection model + admin inspector
 ```
 
 ## Production (PythonAnywhere)
 
-**147 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
+**78 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
 
 ```
-STALE    tests/test_real_conversations.py  local=16c209a93eaa remote=f7e1cd98b56d
-STALE    tests/test_report_format.py  local=4bbaac395ddc remote=07bc7dcff3d6
-STALE    tests/test_review_flow.py  local=65d2f53785cb remote=2a16d5f9f448
+STALE    tests/test_real_conversations.py  local=2b249b268bb1 remote=f7e1cd98b56d
+STALE    tests/test_report_format.py  local=6f470b1a6460 remote=07bc7dcff3d6
+ok       tests/test_review_flow.py
 ok       tests/test_ui_features.py
-STALE    tests/test_user_logon_shared_modules.py  local=ca12e2256781 remote=46573208bde1
+ok       tests/test_user_logon_shared_modules.py
 ok       tests/test_web_enhancements.py
 ok       token_test.py
 ok       update_database.py
@@ -93,7 +101,7 @@ ok       web_enhancement_plan.md
 ok       web_enhancement_test_results.json
 ok       web_enhancement_test_runner.py
 ok       webhook_deploy.py
-147 file(s) stale. Re-run with --push to upload.
+78 file(s) stale. Re-run with --push to upload.
 ```
 
 Reload often returns `409 slow_startup_error` on the first attempt — retry rather than debug it.
@@ -113,7 +121,7 @@ All passing.
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-495 passed, 1 warning in 49.90s
+495 passed, 1 warning in 31.36s
 [AutoDoc] Monitoring stopped
 ```
 

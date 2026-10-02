@@ -19,6 +19,7 @@ All reads are pure Python. No model calls. All writes carry provenance.
 """
 
 import json
+import re
 import sqlite3
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
@@ -47,6 +48,52 @@ VALUE_CATEGORY_KEYWORDS = {
     'productivity': ('work', 'productive', 'career', 'project', 'focus'),
     'creativity': ('creat', 'write', 'art', 'music', 'paint'),
 }
+
+# ---------------------------------------------------------------------------
+# Learning topics (Phase 2) — the 8-stage external track and the 4-stage
+# internal track. Stages only move forward, only on evidence, and every move
+# records its trigger text.
+# ---------------------------------------------------------------------------
+
+INTERNAL_TOPIC_KEYWORDS = (
+    'emotion', 'feeling', 'feel ', 'stress', 'anxiet', 'mood', 'self',
+    'confidence', 'relationship', 'fear', 'grief', 'loneli', 'motivation',
+    'self-doubt', 'anger', 'shame', 'identity', 'purpose', 'meaning',
+)
+
+EXTERNAL_STAGE_LABELS = {
+    1: 'heard', 2: 'understood', 3: 'felt', 4: 'accepted',
+    5: 'applied', 6: 'proficient', 7: 'mastery', 8: 'transfer',
+}
+INTERNAL_STAGE_LABELS = {
+    1: 'noticed', 2: 'acknowledged', 3: 'explored', 4: 'integrated',
+}
+MAX_INTERNAL_STAGE = 4
+
+TOPIC_RESURFACE_DAYS = 3    # don't resurface a topic card more often than this
+
+# Stage-aware card copy. Short, honest, never fake-deep.
+TOPIC_STAGE_COPY = {
+    'external': {
+        1: 'This came up for you. Still on your radar?',
+        2: 'You have looked at this a few times now — what part of it matters most right now?',
+        3: 'Next time this comes up, just notice how it lands before deciding what to do.',
+        4: 'One small thing you could actually try with this?',
+        5: 'This is becoming practice, not just an idea — what changed?',
+        6: 'You have real reps on this now. What would you tell someone earlier in it?',
+        7: 'This looks close to second nature — where does it still slip?',
+        8: 'You have taken this into another part of life — what carried over?',
+    },
+    'internal': {
+        1: 'This has come up a few times.',
+        2: 'How has this been showing up lately?',
+        3: 'What is underneath it, do you think?',
+        4: 'You have been working with this — what have you learned about yourself?',
+    },
+}
+
+# Feedback signals that count as embodied engagement with a topic card
+TOPIC_ENGAGED_SIGNALS = ('acted', 'tell_me_more', 'positive', 'done', 'landed')
 
 
 class GrowthEngine:
@@ -453,6 +500,193 @@ class GrowthEngine:
                 'candidates': len(candidates)}
 
     # ------------------------------------------------------------------
+    # Learning topics — derivation + deterministic stage tracking
+    # ------------------------------------------------------------------
+    def _topic_candidates(self, user_id: int) -> Dict[str, Dict]:
+        """Topic strings from existing machinery, never invented.
+
+        Returns {normalized_topic: {'sources': set, 'days': set, 'raw': str}}.
+        """
+        out: Dict[str, Dict] = {}
+
+        def add(text: str, source: str, day: str):
+            text = (text or '').strip()
+            if not text or len(text) < 3 or len(text) > 120:
+                return
+            key = text.lower()
+            slot = out.setdefault(key, {'sources': set(), 'days': set(),
+                                        'raw': text})
+            slot['sources'].add(source)
+            if day:
+                slot['days'].add(day[:10])
+
+        profile = self._profile(user_id)
+        for t in profile.get('topics_discussed') or []:
+            add(t, 'topics_discussed', '')
+
+        for c in self._explicit_items(user_id):
+            if c['type'] in ('goal', 'preference', 'self_description'):
+                add(c['value'], f"explicit:{c['type']}", c['timestamp'])
+
+        for t in self._engagement_threads(user_id):
+            add(t.get('subject', ''), 'engagement', '')
+
+        return out
+
+    def _topic_linkage(self, user_id: int, topic: str) -> Dict:
+        """Commitments linked to a topic by shared words, plus completion
+        evidence (done threads, habit completions)."""
+        tokens = {w for w in re.findall(r"[a-z']+", topic.lower())
+                  if len(w) > 3}
+        linked = done = 0
+        # Commitments = engagement threads + habits only. explicit_context
+        # goals are how a topic *arises*, not structure around it — counting
+        # the source goal as its own commitment would jump every topic
+        # straight to 'accepted'.
+        try:
+            from ai_compare import engagement
+            threads = engagement.list_threads(str(user_id), include_closed=True)
+        except Exception:
+            threads = []
+        for t in threads:
+            words = set(re.findall(r"[a-z']+", (t.get('subject') or '').lower()))
+            if tokens & words:
+                linked += 1
+                if t.get('status') == 'done':
+                    done += 1
+        for h in (self._habit_summary(user_id).get('active_habits') or []):
+            words = set(re.findall(r"[a-z']+", (h['name'] or '').lower()))
+            if tokens & words:
+                linked += 1
+                if (h.get('total_completions') or 0) >= 3:
+                    done += 1
+        return {'linked': linked, 'done': done}
+
+    def _topic_feedback_signals(self, user_id: int) -> Dict[str, Dict]:
+        """Per-topic feedback: engaged signals, last surfaced date."""
+        cur = self.db.cursor()
+        try:
+            # Cards signal as item_type='card', item_ref='topic:<name>'; the
+            # API may also post item_type='topic' with the bare name.
+            cur.execute('''
+                SELECT item_ref, signal, created_at FROM growth_feedback
+                WHERE user_id = ?
+                  AND (item_type = 'topic' OR item_ref LIKE 'topic:%')
+            ''', (user_id,))
+            rows = cur.fetchall()
+        except Exception:
+            return {}
+        out: Dict[str, Dict] = {}
+        for ref, signal, at in rows:
+            key = ref[len('topic:'):] if ref.startswith('topic:') else ref
+            slot = out.setdefault(key, {'engaged': False, 'surfaced': ''})
+            if signal in TOPIC_ENGAGED_SIGNALS:
+                slot['engaged'] = True
+            if signal == 'surfaced' and (at or '') > slot['surfaced']:
+                slot['surfaced'] = at
+        return out
+
+    def _eval_stage(self, kind: str, ev: Dict) -> tuple:
+        """Evidence -> (stage, trigger). Stages only what evidence supports."""
+        mentions = len(ev['days'])
+        sources = len(ev['sources'])
+        if kind == 'internal':
+            if ev['engaged'] and mentions >= 4:
+                return 4, 'engaged with the card and the topic keeps recurring'
+            if ev['engaged']:
+                return 3, 'user engaged with the topic card'
+            if mentions >= 2:
+                return 2, 'came up on more than one day'
+            return 1, 'first seen'
+        # external
+        if ev['done'] >= 2:
+            return 6, 'linked commitments completed more than once'
+        if ev['done'] >= 1:
+            return 5, 'a linked commitment was completed'
+        if ev['linked'] >= 1:
+            return 4, 'a commitment now exists for this topic'
+        if ev['engaged']:
+            return 3, 'user engaged with the topic card'
+        if mentions >= 2 or sources >= 2:
+            return 2, 'raised more than once / across sources'
+        return 1, 'first seen'
+
+    def derive_topics(self, user_id: int, now: Optional[datetime] = None) -> Dict:
+        """Populate/refresh growth_topics from observed data. Idempotent:
+        upsert by (user, topic); stage never regresses; every move records
+        the trigger that earned it."""
+        self._ensure_tables()
+        now_s = (now or datetime.now()).isoformat()
+        candidates = self._topic_candidates(user_id)
+        signals = self._topic_feedback_signals(user_id)
+        cur = self.db.cursor()
+        created = advanced = 0
+        for topic, ev in candidates.items():
+            kind = ('internal' if any(k in topic
+                                      for k in INTERNAL_TOPIC_KEYWORDS)
+                    else 'external')
+            fb = signals.get(topic, {})
+            link = self._topic_linkage(user_id, topic)
+            stage, trigger = self._eval_stage(
+                kind, {**ev, 'engaged': fb.get('engaged', False), **link})
+            cur.execute('''
+                SELECT id, stage FROM growth_topics
+                WHERE user_id = ? AND topic = ?
+            ''', (user_id, topic))
+            row = cur.fetchone()
+            if row:
+                if stage > row[1]:
+                    cur.execute('''
+                        UPDATE growth_topics SET stage = ?, stage_trigger = ?,
+                            updated_at = ? WHERE id = ?
+                    ''', (stage, trigger, now_s, row[0]))
+                    advanced += 1
+            else:
+                cur.execute('''
+                    INSERT INTO growth_topics
+                        (user_id, topic, kind, stage, stage_trigger, source)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (user_id, topic, kind, stage, trigger,
+                      ','.join(sorted(ev['sources']))))
+                created += 1
+        self.db.commit()
+        return {'created': created, 'advanced': advanced,
+                'total': len(candidates)}
+
+    def _topic_card(self, user_id: int) -> Optional[Dict]:
+        """One topic card: the furthest-along topic not surfaced recently.
+        Facts only — stage label + stage-appropriate prompt."""
+        self._ensure_tables()
+        cutoff = (datetime.now()
+                  - timedelta(days=TOPIC_RESURFACE_DAYS)).isoformat()
+        surfaced = {r: s['surfaced']
+                    for r, s in self._topic_feedback_signals(user_id).items()}
+        cur = self.db.cursor()
+        cur.execute('''
+            SELECT topic, kind, stage FROM growth_topics
+            WHERE user_id = ? AND dismissed = 0
+            ORDER BY stage DESC, updated_at DESC
+        ''', (user_id,))
+        for topic, kind, stage in cur.fetchall():
+            if stage > MAX_INTERNAL_STAGE and kind == 'internal':
+                stage = MAX_INTERNAL_STAGE
+            if stage > 5:
+                continue  # past 'applied' — don't keep prompting
+            if (surfaced.get(topic) or '') > cutoff:
+                continue  # surfaced recently — throttle
+            labels = (INTERNAL_STAGE_LABELS if kind == 'internal'
+                      else EXTERNAL_STAGE_LABELS)
+            copy = TOPIC_STAGE_COPY[kind].get(
+                stage, TOPIC_STAGE_COPY[kind][1])
+            return {
+                'id': f'topic:{topic}', 'type': 'topic',
+                'title': topic, 'stage': stage,
+                'stage_label': labels.get(stage, ''),
+                'text': copy,
+            }
+        return None
+
+    # ------------------------------------------------------------------
     # Feed — deterministic card assembly (facts only, never reflections)
     # ------------------------------------------------------------------
     def build_feed(self, user_id: int) -> List[Dict]:
@@ -515,7 +749,21 @@ class GrowthEngine:
                     'text': f'"{name}" — that is consistency, not luck.',
                 })
 
-        # 5. Starter card — first for a brand-new user (the seed question is
+        # 5. Topic card — the learning topic furthest along that hasn't been
+        # surfaced recently. Derivation runs here (cheap, deterministic) so
+        # topics self-populate without a scheduler.
+        try:
+            self.derive_topics(user_id)
+            topic_card = self._topic_card(user_id)
+            if topic_card:
+                cards.append(topic_card)
+                self.record_feedback(user_id, 'topic',
+                                     topic_card['id'][len('topic:'):],
+                                     'surfaced')
+        except Exception as e:
+            print(f"[GrowthEngine] feed topic error: {e}")
+
+        # 6. Starter card — first for a brand-new user (the seed question is
         # the designed cold start), or the fallback when nothing else exists.
         explicit = self._explicit_items(user_id)
         profile = self._profile(user_id)
@@ -589,6 +837,34 @@ class GrowthEngine:
             INSERT INTO growth_feedback (user_id, item_type, item_ref, signal, detail)
             VALUES (?, ?, ?, ?, ?)
         ''', (user_id, item_type, item_ref, signal, detail))
+        # Topic cards arrive as item_type='card', item_ref='topic:<name>' —
+        # normalise so both spellings hit the same handling.
+        topic = ''
+        if item_type == 'topic':
+            topic = item_ref
+        elif item_ref.startswith('topic:'):
+            topic = item_ref[len('topic:'):]
+        if topic:
+            if signal in ('dismissed', 'not_for_me'):
+                cur.execute('''
+                    UPDATE growth_topics SET dismissed = 1, updated_at = ?
+                    WHERE user_id = ? AND topic = ?
+                ''', (datetime.now().isoformat(), user_id, topic))
+            elif signal in TOPIC_ENGAGED_SIGNALS:
+                # Embodied engagement advances the stage immediately — the
+                # signal is the evidence, not a later batch pass.
+                cur.execute('''
+                    SELECT id, stage FROM growth_topics
+                    WHERE user_id = ? AND topic = ?
+                ''', (user_id, topic))
+                row = cur.fetchone()
+                if row and row[1] < 3:
+                    cur.execute('''
+                        UPDATE growth_topics SET stage = 3,
+                            stage_trigger = ?, updated_at = ?
+                        WHERE id = ?
+                    ''', ('user engaged with the topic card',
+                          datetime.now().isoformat(), row[0]))
         self.db.commit()
 
     def inspector_payload(self, user_id: int) -> Dict:

@@ -31,6 +31,7 @@
         .habit-row { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; }
         .win { border-left: 4px solid #f59e0b; }
         .starter { border-left: 4px solid #667eea; }
+        .topic { border-left: 4px solid #2fa4a0; }
         .checkin { border-left: 4px solid #34d399; }
 
         #chat { margin-top: 6px; }
@@ -119,6 +120,14 @@ async function habitDone(cardId, habitId, btn) {
     if (r.ok) { btn.closest('.habit-row').style.opacity = .4; btn.disabled = true; signal(cardId, 'done'); }
 }
 
+function discussTopic(topic, cardId) {
+    const input = document.getElementById('chatIn');
+    input.value = `I'd like to talk about: ${topic}`;
+    input.focus();
+    input.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    signal(cardId, 'tell_me_more');
+}
+
 async function checkin(cardId, mood) {
     const r = await fetch('/api/user/checkin', { method: 'POST', headers: authH(),
         body: JSON.stringify({ mood: mood.toLowerCase() }) });
@@ -144,6 +153,12 @@ function cardHtml(c) {
     } else if (c.type === 'checkin') {
         inner += `<div class="replies">` + (c.replies || []).map(r =>
             `<button onclick="checkin('${esc(c.id)}','${esc(r)}')">${esc(r)}</button>`).join('') + `</div>`;
+    } else if (c.type === 'topic') {
+        inner = `<span class="kind">${esc(c.stage_label || 'topic')}</span><h3>${esc(c.title)}</h3>` +
+            (c.text ? `<p>${esc(c.text)}</p>` : '') +
+            `<div class="replies">
+            <button onclick="discussTopic('${esc(c.title)}','${esc(c.id)}')">Talk about it</button>
+            <button onclick="signal('${esc(c.id)}','landed')">Noted</button></div>`;
     } else if (c.type === 'starter') {
         inner += `<div class="replies"><button onclick="document.getElementById('chatIn').focus()">Say it</button></div>`;
     } else {

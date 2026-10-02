@@ -319,3 +319,102 @@ def test_feed_endpoint_auth(env, monkeypatch):
         sess['user_id'] = 7
     r = client.get('/api/growth/feed')
     assert r.status_code == 200 and 'cards' in r.get_json()
+
+
+# --- learning topics + stage tracking (Phase 2) ------------------------------
+
+def _topic_row(env, user_id, topic):
+    return env.db.execute(
+        'SELECT kind, stage, stage_trigger, dismissed FROM growth_topics '
+        'WHERE user_id=? AND topic=?', (user_id, topic)).fetchone()
+
+
+def test_derive_topics_from_stated_goals(env):
+    _insert_explicit(env.db, 7, 'goal', 'learn piano', 'I want to learn piano')
+    res = env.engine.derive_topics(7)
+    assert res['created'] == 1
+    kind, stage, trigger, _ = _topic_row(env, 7, 'learn piano')
+    assert kind == 'external' and stage == 1 and trigger == 'first seen'
+
+
+def test_topic_kind_internal_for_emotional_topics(env):
+    p = CompanionProfile(user_id=7)
+    p.topics_discussed = ['social anxiety']
+    env.profiler._save_profile(7, p)
+    env.engine.derive_topics(7)
+    assert _topic_row(env, 7, 'social anxiety')[0] == 'internal'
+
+
+def test_topic_stage_two_on_repeated_mentions(env):
+    _insert_explicit(env.db, 7, 'goal', 'learn piano', 'goal 1', days_ago=3)
+    _insert_explicit(env.db, 7, 'preference', 'learn piano',
+                     'I prefer piano', days_ago=1)
+    env.engine.derive_topics(7)
+    kind, stage, trigger, _ = _topic_row(env, 7, 'learn piano')
+    assert stage == 2 and 'more than once' in trigger
+
+
+def test_engagement_signal_advances_to_stage_three(env):
+    _insert_explicit(env.db, 7, 'goal', 'learn piano', 'goal')
+    env.engine.derive_topics(7)
+    env.engine.record_feedback(7, 'card', 'topic:learn piano', 'tell_me_more')
+    assert _topic_row(env, 7, 'learn piano')[1] == 3
+
+
+def test_linked_commitment_gives_stage_four(env):
+    _insert_explicit(env.db, 7, 'goal', 'meditation', 'I want to meditate')
+    env.habits.create_habit(7, 'Meditation practice', category='mindfulness')
+    env.engine.derive_topics(7)
+    assert _topic_row(env, 7, 'meditation')[1] == 4
+
+
+def test_done_thread_gives_stage_five(env):
+    from ai_compare import engagement
+    _insert_explicit(env.db, 7, 'goal', 'meditation', 'I want to meditate')
+    tid = engagement.create_thread('7', 'meditation daily', kind='habit')
+    conn = env.db  # engagement uses its own db; mark done directly
+    import sqlite3 as _sq
+    c = _sq.connect(str(engagement.DB_PATH))
+    c.execute("UPDATE threads SET status='done' WHERE id=?", (tid,))
+    c.commit(); c.close()
+    env.engine.derive_topics(7)
+    assert _topic_row(env, 7, 'meditation')[1] == 5
+
+
+def test_topic_stage_never_regresses(env):
+    _insert_explicit(env.db, 7, 'goal', 'learn piano', 'goal')
+    env.engine.record_feedback(7, 'card', 'topic:learn piano', 'landed')
+    env.engine.derive_topics(7)   # stage 3 via signal
+    # remove the goal — evidence shrinks but stage must not fall
+    env.db.execute('DELETE FROM explicit_context'); env.db.commit()
+    env.engine.derive_topics(7)
+    assert _topic_row(env, 7, 'learn piano')[1] == 3
+
+
+def test_topic_card_in_feed_and_throttled(env):
+    _insert_explicit(env.db, 7, 'goal', 'learn piano', 'goal')
+    cards = env.engine.build_feed(7)
+    t = [c for c in cards if c['type'] == 'topic']
+    assert t and t[0]['title'] == 'learn piano'
+    assert t[0]['stage_label'] == 'heard'
+    # second build within the resurface window → no topic card
+    cards2 = env.engine.build_feed(7)
+    assert not any(c['type'] == 'topic' for c in cards2)
+
+
+def test_dismissed_topic_never_shown(env):
+    _insert_explicit(env.db, 7, 'goal', 'learn piano', 'goal')
+    env.engine.derive_topics(7)
+    env.engine.record_feedback(7, 'card', 'topic:learn piano', 'not_for_me')
+    assert _topic_row(env, 7, 'learn piano')[3] == 1
+    cards = env.engine.build_feed(7)
+    assert not any(c['type'] == 'topic' for c in cards)
+
+
+def test_internal_topic_stage_copy_uses_internal_labels(env):
+    p = CompanionProfile(user_id=7)
+    p.topics_discussed = ['social anxiety']
+    env.profiler._save_profile(7, p)
+    cards = env.engine.build_feed(7)
+    t = [c for c in cards if c['type'] == 'topic']
+    assert t and t[0]['stage_label'] == 'noticed'

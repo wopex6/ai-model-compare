@@ -171,3 +171,15 @@ plan-completion by mode. Never: session length, DAU, notification opens.
 - Small circle: designed, deferred until core loop proves out.
 - Admin inspector is the dev/test window into the private model.
 - Phase 0 build: engine + state endpoint + inspector; reads pure-Python.
+- Phase 1 build: `/grow` — card feed + coordinator chat + correctable facts.
+- Phase 2 build: learning topics — `derive_topics()` populates
+  `growth_topics` from observed sources only (topics_discussed, explicit
+  goals/preferences/self-descriptions, engagement subjects; never invented).
+  Stage advances deterministically on evidence: multi-day mentions → 2,
+  engaged card signal → 3, linked thread/habit → 4, completed linked
+  commitment → 5, repeated completions → 6 (7–8 not auto-reachable yet).
+  Stages never regress; every move stores its trigger text. Feed surfaces
+  one topic card at a time, stage-labelled, throttled to once per topic per
+  `TOPIC_RESURFACE_DAYS`; `not_for_me` dismisses it permanently. Topic
+  kinds split internal (4-stage: noticed→acknowledged→explored→integrated)
+  vs external (8-stage) by keyword; refinement is deliberate future work.
