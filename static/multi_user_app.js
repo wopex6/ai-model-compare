@@ -3078,14 +3078,11 @@ class IntegratedAIChatbot {
                     this.checkMilestones();
                 }
                 
-                // Avatar: speak the response
+                // Avatar: speak the response — ONE controller only, or the
+                // whole reply gets narrated once per avatar (double audio).
                 if (result.ai_response) {
-                    if (this._chatAvatar) {
-                        this._chatAvatar.speak(result.ai_response);
-                    }
-                    if (this._floatAvatar) {
-                        this._floatAvatar.speak(result.ai_response);
-                    }
+                    const speaker = this._floatAvatar || this._chatAvatar;
+                    if (speaker) speaker.speak(result.ai_response);
                 }
 
                 // Show AI response with timestamp

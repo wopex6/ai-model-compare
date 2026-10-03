@@ -289,7 +289,10 @@ const AvatarWidget = (() => {
      */
     function onAIResponse(controllers, responseText) {
         if (!responseText) return;
-        controllers.filter(Boolean).forEach(ctrl => ctrl.speak(responseText));
+        // One speaker only — narrating through every controller repeats
+        // the whole response once per avatar.
+        const speaker = controllers.filter(Boolean)[0];
+        if (speaker) speaker.speak(responseText);
     }
 
     function onAIThinking(controllers) {

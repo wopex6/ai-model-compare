@@ -384,13 +384,19 @@ const AvatarEngine = (() => {
             if (!text || this._muted || _globalMuted) { console.warn('[Avatar TTS] Blocked by mute/empty'); return; }
             if (!window.speechSynthesis) { console.warn('[Avatar TTS] No speechSynthesis API'); return; }
 
-            // Cancel any ongoing speech first
+            // Cancel any ongoing speech first. The generation token guards
+            // the deferred start: two speak() calls inside the 50ms window
+            // would otherwise BOTH queue their chunks (each thinks it was
+            // the last cancel) and every utterance gets read twice.
             this._ttsCancelled = true;
+            this._ttsGen = (this._ttsGen || 0) + 1;
+            const gen = this._ttsGen;
             window.speechSynthesis.cancel();
 
             // Chrome drops speak() called synchronously after cancel().
             // Defer the start by one event-loop tick.
             setTimeout(() => {
+                if (gen !== this._ttsGen) return;  // a newer speak() superseded us
                 this._ttsCancelled = false;
 
                 const chunks = this._splitText(text);
@@ -456,13 +462,18 @@ const AvatarEngine = (() => {
         }
 
         _splitText(text) {
-            // Split at sentence endings, keeping chunks ≤ 200 chars
-            const MAX = 200;
-            const sentences = text.match(/[^.!?\n]{1,200}[.!?\n]?/g) || [text];
+            // Split at sentence endings, keeping chunks ≤ 200 chars.
+            // A '.' between digits is a decimal point, not a sentence end —
+            // protect it so "5.75 km" doesn't become "5." + "75 km".
+            const DOT = '@@';
+            const guarded = String(text).replace(/(\d)\.(\d)/g, '$1' + DOT + '$2');
+            const sentences = guarded.match(/[^.!?\n]{1,200}[.!?\n]?/g) || [guarded];
             const chunks = [];
             for (const s of sentences) {
-                if (s.trim()) chunks.push(s.trim());
+                const t = s.replaceAll(DOT, '.').trim();
+                if (t) chunks.push(t);
             }
+            const MAX = 200;
             return chunks.length ? chunks : [text.slice(0, MAX)];
         }
 
