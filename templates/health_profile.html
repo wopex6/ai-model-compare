@@ -515,7 +515,8 @@ Examples:
                 renderProfile(data.profile);
                 loadAdviceAndReminders();
             } catch(e) {
-                display.innerHTML = '<p style="color:#c62828;">Error loading profile. Please sign in first.</p>';
+                console.error('loadProfile failed:', e);
+                display.innerHTML = '<p style="color:#c62828;">Error loading profile: ' + escapeHtml(e.message || String(e)) + '</p>';
             }
         }
 
@@ -879,7 +880,7 @@ Examples:
                     li += `<button class="btn-delete" onclick="deleteItem('symptoms',${idx},'${escapeHtml(s.description || '')}')" title="Delete"><i class="fas fa-trash"></i></button></span>`;
                     li += escapeHtml(s.description || '');
                     li += historyNote(s, isPast);
-                    if (s.triggers && s.triggers.length) li += `<br><small style="color:#888;">Triggers: ${escapeHtml(s.triggers.join(', '))}</small>`;
+                    if (s.triggers && s.triggers.length) li += `<br><small style="color:#888;">Triggers: ${escapeHtml([].concat(s.triggers).join(', '))}</small>`;
                     return li + `</li>`;
                 });
 
@@ -2798,7 +2799,7 @@ Examples:
                 p.symptoms.forEach(s => {
                     html += `<li><strong>${s.description}</strong>`;
                     if (s.severity) html += ` (${s.severity})`;
-                    if (s.triggers?.length) html += ` — Triggers: ${s.triggers.join(', ')}`;
+                    if (s.triggers?.length) html += ` — Triggers: ${[].concat(s.triggers).join(', ')}`;
                     html += `</li>`;
                 });
                 html += `</ul>`;

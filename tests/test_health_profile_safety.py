@@ -1875,3 +1875,35 @@ def test_audit_added_carries_fields_bag():
             'Method': 'Spirometry', 'Pre-Bronch %Pred': '59'}
     finally:
         _cleanup(user_id)
+
+
+def test_load_normalizes_string_triggers():
+    # A legacy ingest wrote triggers as one string; renderers call .join() and
+    # crashed the whole profile page. Load-time coercion must wrap it.
+    user_id = _user()
+    try:
+        path = HEALTH_DATA_DIR / f'{user_id}.json'
+        path.write_text(json.dumps({
+            'user_id': user_id,
+            'symptoms': [
+                {'description': 'nerve pain', 'triggers': 'pinching'},
+                {'description': 'headache', 'triggers': ['stress']},
+                {'description': 'cough'},
+            ],
+        }), encoding='utf-8')
+        data = HealthProfile(user_id).data['symptoms']
+        assert data[0]['triggers'] == ['pinching']
+        assert data[1]['triggers'] == ['stress']
+        assert data[2]['triggers'] == []
+    finally:
+        _cleanup(user_id)
+
+
+def test_add_symptom_coerces_string_triggers():
+    user_id = _user()
+    try:
+        profile = HealthProfile(user_id)
+        assert profile.add_symptom('ache', triggers='stress')
+        assert profile.data['symptoms'][0]['triggers'] == ['stress']
+    finally:
+        _cleanup(user_id)

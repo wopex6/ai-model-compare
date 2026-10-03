@@ -1,26 +1,28 @@
 # Handoff snapshot
 
-_Generated 2026-10-03 10:26 by handoff.py — regenerate rather than edit._
+_Generated 2026-10-03 16:08 by handoff.py — regenerate rather than edit._
 
 ## In progress
 
-Phase 3 built: receptivity learning + delivery ladder + propose cards in /grow; deploy pending
+Fixed health_profile render crash: symptom triggers stored as string crashed .join(); added load-time normalization + add_symptom coercion + template concat guard + real error message in catch. Copied Ken T (uid 21) health profile + uploaded docs to Ken (uid 1) on production via Files API; verified via live API. Next: deploy this fix.
 
 ## Git
 
 **Branch:** `cursor/emergency-card-paramedic-fields`  
-**Uncommitted files:** 25
+**Uncommitted files:** 27
 
 > Uncommitted work is the main handoff hazard: the next agent
 > cannot tell finished edits from half-written ones. Commit
 > before switching, even as `wip:`.
 
 ```
-M docs/growth_companion.md
- M smart_response/growth_engine.py
- M templates/admin_growth_inspector.html
- M templates/growth_companion.html
- M tests/test_growth_engine.py
+M AI_REGENERATION_SPEC.md
+ M ENHANCEMENTS.md
+ M README.md
+ M SYSTEM_REGENERATION_GUIDE.md
+ M ai_compare/medical_advisor_health_context.py
+ M templates/health_profile.html
+ M tests/test_health_profile_safety.py
 ?? check_wk_credentials.py
 ?? debug_auth.py
 ?? direct_password_test.py
@@ -46,19 +48,15 @@ M docs/growth_companion.md
 <details><summary>diff --stat</summary>
 
 ```
-docs/growth_companion.md              |  14 ++
- smart_response/growth_engine.py       | 247 ++++++++++++++++++++++++++++++++--
- templates/admin_growth_inspector.html |   3 +-
- templates/growth_companion.html       |  18 +++
- tests/test_growth_engine.py           | 133 +++++++++++++++++-
- 5 files changed, 402 insertions(+), 13 deletions(-)
-warning: LF will be replaced by CRLF in smart_response/growth_engine.py.
-The file will have its original line endings in your working directory
-warning: LF will be replaced by CRLF in templates/admin_growth_inspector.html.
-The file will have its original line endings in your working directory
-warning: LF will be replaced by CRLF in templates/growth_companion.html.
-The file will have its original line endings in your working directory
-warning: LF will be replaced by CRLF in tests/test_growth_engine.py.
+AI_REGENERATION_SPEC.md                      |  2 +-
+ ENHANCEMENTS.md                              |  8 +++++++
+ README.md                                    |  2 +-
+ SYSTEM_REGENERATION_GUIDE.md                 |  2 +-
+ ai_compare/medical_advisor_health_context.py | 25 ++++++++++++++++++++++
+ templates/health_profile.html                |  7 +++---
+ tests/test_health_profile_safety.py          | 32 ++++++++++++++++++++++++++++
+ 7 files changed, 72 insertions(+), 6 deletions(-)
+warning: LF will be replaced by CRLF in templates/health_profile.html.
 The file will have its original line endings in your working directory
 ```
 </details>
@@ -66,19 +64,19 @@ The file will have its original line endings in your working directory
 Recent commits:
 
 ```
+7b51808 Fix TTS double-narration and decimal-point chunking
+176f262 /grow: auto-growing composer, logout button, signed-in name
+3b169b0 Fix card removal on /grow: getElementById takes raw ids, not CSS.escape
+b45728b Phase 3: receptivity learning + delivery calibration ladder
 cf1ccbb Phase 2: learning topics + deterministic stage tracking in /grow
 b5a25a6 Handoff: identity scrub complete
 9a9aa71 Post-rewrite cleanup: gitignore personality_profiles/uploads media, pa_sync exclusion, restore avatar
 cb6d64b Remove '' surname entirely; untrack wisdom_profiles
-4a6d39e Rename default admin user "Ken" to "Ken" across repo
-112700b Handoff: Phase 1 /grow surface deployed
-0ed316a Phase 1: /grow light surface â€” card feed + companion chat + correctable facts
-478dfd2 Handoff: Growth Engine Phase 0 deployed
 ```
 
 ## Production (PythonAnywhere)
 
-**5 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
+**7 file(s) differ from production.** Deploy with `python pa_sync.py --push`.
 
 ```
 ok       tests/test_real_conversations.py
@@ -105,7 +103,7 @@ ok       web_enhancement_plan.md
 ok       web_enhancement_test_results.json
 ok       web_enhancement_test_runner.py
 ok       webhook_deploy.py
-5 file(s) stale. Re-run with --push to upload.
+7 file(s) stale. Re-run with --push to upload.
 ```
 
 Reload often returns `409 slow_startup_error` on the first attempt — retry rather than debug it.
@@ -115,17 +113,17 @@ Reload often returns `409 slow_startup_error` on the first attempt — retry rat
 All passing.
 
 ```
-automated_greeting_system.py:416
-automated_greeting_system.py:416
-  C:\Users\trabc\CascadeProjects\ai-model-compare - Claude\automated_greeting_system.py:416: DeprecationWarning: The default datetime adapter is deprecated as of Python 3.12; see the sqlite3 documentation for suggested replacement recipes
-    cursor.execute('''
-
+........................................................................ [ 58%]
+........................................................................ [ 72%]
+........................................................................ [ 87%]
+...............................................................          [100%]
+============================== warnings summary ===============================
 ..\..\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37
   C:\Users\trabc\AppData\Roaming\Python\Python312\site-packages\dateutil\tz\tz.py:37: DeprecationWarning: datetime.datetime.utcfromtimestamp() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.fromtimestamp(timestamp, datetime.UTC).
     EPOCH = datetime.datetime.utcfromtimestamp(0)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-495 passed, 5 warnings in 23.77s
+495 passed, 1 warning in 67.41s (0:01:07)
 [AutoDoc] Monitoring stopped
 ```
 

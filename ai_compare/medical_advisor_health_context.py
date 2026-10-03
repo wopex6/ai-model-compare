@@ -1202,6 +1202,28 @@ def medication_card_labels(medications) -> List[str]:
     return labels
 
 
+def _normalize_symptom_triggers(data: Dict) -> int:
+    """Coerce a symptom's `triggers` to a list.
+
+    An early ingest path stored a plain string, which has `.length` but no
+    `.join()` — every render of that profile failed. Returns items fixed.
+    """
+    fixed = 0
+    for s in data.get('symptoms') or []:
+        if not isinstance(s, dict):
+            continue
+        t = s.get('triggers')
+        if isinstance(t, str):
+            s['triggers'] = [t] if t.strip() else []
+            fixed += 1
+        elif t is None:
+            s['triggers'] = []
+        elif not isinstance(t, list):
+            s['triggers'] = [t]
+            fixed += 1
+    return fixed
+
+
 class HealthProfile:
     """Persistent health profile for a user"""
 
@@ -1277,6 +1299,7 @@ class HealthProfile:
                 )
         backfill_legacy_provenance(data)
         backfill_lifecycle(data)
+        _normalize_symptom_triggers(data)
         return data
 
     def _default_profile(self) -> Dict:
@@ -1795,6 +1818,8 @@ class HealthProfile:
     def add_symptom(self, description: str, triggers: List[str] = None,
                     severity: str = "moderate", onset: str = "", frequency: str = "") -> bool:
         """Add a symptom. Returns True if actually added or it has recurred."""
+        if isinstance(triggers, str):
+            triggers = [triggers]
         existing = self.data.get("symptoms", [])
         desc_lower = str(description or "").lower().strip()
         for s in existing:
