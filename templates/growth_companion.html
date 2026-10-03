@@ -134,6 +134,19 @@ async function checkin(cardId, mood) {
     if (r.ok) { signal(cardId, 'answered', mood); document.getElementById('card-' + CSS.escape(cardId)).remove(); }
 }
 
+async function reflRespond(cardId, sig) {
+    await signal(cardId, sig);
+    if (sig === 'correct') {
+        const input = document.getElementById('chatIn');
+        input.value = 'That observation is not quite right: ';
+        input.focus();
+        input.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        return;  // keep the card until they've said what it should be
+    }
+    const el = document.getElementById('card-' + CSS.escape(cardId));
+    if (el) el.remove();
+}
+
 /* ---------- card rendering ---------- */
 function cardHtml(c) {
     const dismiss = `<button class="dismiss" title="Not for me" onclick="signal('${esc(c.id)}','not_for_me')"><i class="fas fa-times"></i></button>`;
@@ -159,6 +172,11 @@ function cardHtml(c) {
             `<div class="replies">
             <button onclick="discussTopic('${esc(c.title)}','${esc(c.id)}')">Talk about it</button>
             <button onclick="signal('${esc(c.id)}','landed')">Noted</button></div>`;
+    } else if (c.type === 'propose') {
+        inner += `<div class="replies">
+            <button onclick="reflRespond('${esc(c.id)}','confirm')">Rings true</button>
+            <button onclick="reflRespond('${esc(c.id)}','correct')">Not quite</button>
+            <button onclick="reflRespond('${esc(c.id)}','snoozed')">Not now</button></div>`;
     } else if (c.type === 'starter') {
         inner += `<div class="replies"><button onclick="document.getElementById('chatIn').focus()">Say it</button></div>`;
     } else {

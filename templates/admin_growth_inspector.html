@@ -78,11 +78,12 @@ function section(title, html) {
 
 function renderReflections(list) {
     if (!list.length) return '<span class="empty">No reflections derived yet — press “Derive reflections”.</span>';
-    return `<table><tr><th>Claim</th><th>Sens.</th><th>Status</th><th>Trigger</th><th>Evidence</th><th>Updated</th></tr>` +
+    return `<table><tr><th>Claim</th><th>Sens.</th><th>Status</th><th>Strategy</th><th>Trigger</th><th>Evidence</th><th>Updated</th></tr>` +
         list.map(r => `<tr>
             <td>${esc(r.claim)}<div class="ev">key: ${esc(r.claim_key)} · src: ${esc(r.source)}</div></td>
             <td><span class="tag t-${esc(r.sensitivity)}">${esc(r.sensitivity)}</span></td>
             <td><span class="tag t-hold">${esc(r.status)}</span></td>
+            <td>${esc(r.strategy || '')}<div class="ev">${esc(r.strategy_reason || '')}</div></td>
             <td>${esc(r.trigger)}</td>
             <td>${(r.evidence || []).map(e => `<div class="ev">${esc(e.source)}${e.ref != null ? ' #' + esc(e.ref) : ''}: ${esc(e.note)}</div>`).join('')}</td>
             <td class="ev">${esc((r.updated_at || '').slice(0, 16))}</td>

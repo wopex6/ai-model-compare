@@ -95,6 +95,24 @@ TOPIC_STAGE_COPY = {
 # Feedback signals that count as embodied engagement with a topic card
 TOPIC_ENGAGED_SIGNALS = ('acted', 'tell_me_more', 'positive', 'done', 'landed')
 
+# ---------------------------------------------------------------------------
+# Receptivity (Phase 3) — learned from the feedback loop, per user and per
+# subject. Receptivity tunes the COMPANION'S prompts (topic/propose cards);
+# it never silences the user's own commitments (habits, check-ins, threads).
+# 'surfaced' rows are engine bookkeeping, not user signals — never counted.
+# ---------------------------------------------------------------------------
+
+POSITIVE_SIGNALS = TOPIC_ENGAGED_SIGNALS + (
+    'confirm', 'confirmed', 'accepted', 'answered', 'corrected', 'correct')
+NEGATIVE_SIGNALS = ('dismissed', 'not_for_me', 'rejected')
+NEUTRAL_SIGNALS = ('surfaced', 'snoozed')   # bookkeeping / deferral
+
+PROPOSE_RESURFACE_DAYS = 2   # at most one propose card per reflection this often
+TOPIC_SUBJECT_SUPPRESS = 0.2  # per-topic score below this → stop surfacing it
+
+# Openness a reflection's sensitivity needs before it may be proposed.
+PROPOSE_OPENNESS = {'low': 0.4, 'medium': 0.65, 'high': 1.1}  # high: never propose
+
 
 class GrowthEngine:
     """Unified growth-state read + private reflection model.
@@ -653,14 +671,17 @@ class GrowthEngine:
         return {'created': created, 'advanced': advanced,
                 'total': len(candidates)}
 
-    def _topic_card(self, user_id: int) -> Optional[Dict]:
-        """One topic card: the furthest-along topic not surfaced recently.
-        Facts only — stage label + stage-appropriate prompt."""
+    def _topic_card(self, user_id: int,
+                    receptivity: Optional[Dict] = None) -> Optional[Dict]:
+        """One topic card: the furthest-along topic not surfaced recently
+        and not suppressed by its own feedback score. Facts only — stage
+        label + stage-appropriate prompt."""
         self._ensure_tables()
         cutoff = (datetime.now()
                   - timedelta(days=TOPIC_RESURFACE_DAYS)).isoformat()
         surfaced = {r: s['surfaced']
                     for r, s in self._topic_feedback_signals(user_id).items()}
+        scores = (receptivity or {}).get('sensitivity') or {}
         cur = self.db.cursor()
         cur.execute('''
             SELECT topic, kind, stage FROM growth_topics
@@ -674,6 +695,9 @@ class GrowthEngine:
                 continue  # past 'applied' — don't keep prompting
             if (surfaced.get(topic) or '') > cutoff:
                 continue  # surfaced recently — throttle
+            if scores.get(f'topic:{topic}', {}).get('score', 1.0) \
+                    < TOPIC_SUBJECT_SUPPRESS:
+                continue  # user keeps rejecting this topic — stop asking
             labels = (INTERNAL_STAGE_LABELS if kind == 'internal'
                       else EXTERNAL_STAGE_LABELS)
             copy = TOPIC_STAGE_COPY[kind].get(
@@ -687,14 +711,151 @@ class GrowthEngine:
         return None
 
     # ------------------------------------------------------------------
+    # Receptivity — learned openness, per user and per subject
+    # ------------------------------------------------------------------
+    def learn_receptivity(self, user_id: int) -> Dict:
+        """Recompute receptivity from the whole growth_feedback history.
+
+        openness   — global 0..1 willingness to engage with prompts.
+                     Laplace-smoothed around 0.5 so a handful of signals
+                     can't swing it to an extreme.
+        sensitivity — per-subject scores (item_type, or 'topic:<name>' /
+                     'refl:<id>' for per-item learning). Below
+                     TOPIC_SUBJECT_SUPPRESS the subject stops surfacing.
+
+        'corrected' counts as positive participation — correcting the
+        mirror is engagement, not rejection. 'surfaced'/'snoozed' are
+        bookkeeping/deferral and never move the score.
+        """
+        self._ensure_tables()
+        cur = self.db.cursor()
+        try:
+            cur.execute('''
+                SELECT item_type, item_ref, signal, created_at
+                FROM growth_feedback WHERE user_id = ?
+            ''', (user_id,))
+            rows = cur.fetchall()
+        except Exception as e:
+            print(f"[GrowthEngine] receptivity read error: {e}")
+            rows = []
+
+        subjects: Dict[str, Dict] = {}
+        pos = neg = 0
+        for item_type, ref, signal, at in rows:
+            if signal in NEUTRAL_SIGNALS:
+                continue
+            if ref.startswith(('topic:', 'refl:')):
+                subject = ref
+            else:
+                subject = item_type or 'card'
+            s = subjects.setdefault(
+                subject, {'positive': 0, 'negative': 0, 'last': ''})
+            if signal in POSITIVE_SIGNALS:
+                s['positive'] += 1
+                pos += 1
+            elif signal in NEGATIVE_SIGNALS:
+                s['negative'] += 1
+                neg += 1
+            else:
+                continue
+            if (at or '') > s['last']:
+                s['last'] = at or ''
+
+        def score(p: int, n: int, smooth: int) -> float:
+            return max(0.05, min(0.95,
+                                 0.5 + 0.5 * (p - n) / (p + n + smooth)))
+
+        for s in subjects.values():
+            s['score'] = round(score(s['positive'], s['negative'], 4), 3)
+        openness = round(score(pos, neg, 6), 3)
+
+        cur.execute('''
+            INSERT INTO growth_receptivity (user_id, openness,
+                                            sensitivity_json, updated_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET
+                openness = excluded.openness,
+                sensitivity_json = excluded.sensitivity_json,
+                updated_at = excluded.updated_at
+        ''', (user_id, openness, json.dumps(subjects),
+              datetime.now().isoformat()))
+        self.db.commit()
+        return {'openness': openness, 'sensitivity': subjects,
+                'source': 'learned'}
+
+    # ------------------------------------------------------------------
+    # Delivery calibration — hold/seed/lead/propose/show
+    # ------------------------------------------------------------------
+    def delivery_strategy(self, reflection: Dict,
+                          receptivity: Dict) -> tuple:
+        """(strategy, reason) for a reflection under learned receptivity.
+
+        Push strategies only — 'show' is the pull path and is never chosen
+        here. A resolved reflection (confirmed/corrected/dismissed) stays
+        out of the push rotation regardless of openness.
+        """
+        status = reflection.get('status') or 'hold'
+        if status in ('confirmed', 'corrected', 'dismissed'):
+            return 'done', f'status is {status}'
+        o = (receptivity or {}).get('openness', 0.5)
+        sens = reflection.get('sensitivity') or 'medium'
+        need = PROPOSE_OPENNESS.get(sens, 0.65)
+        if o >= need:
+            return 'propose', f'openness {o} >= {need} for {sens} sensitivity'
+        if sens == 'high':
+            return 'hold', (f'high sensitivity needs openness >= 0.85 '
+                            f'to lead, never to propose (openness {o})')
+        if o >= 0.4:
+            return 'seed', (f'openness {o} below propose threshold {need}; '
+                            'observation only, no conclusion')
+        return 'hold', f'openness {o} too low for {sens} sensitivity'
+
+    def _propose_card(self, user_id: int,
+                      receptivity: Dict) -> Optional[Dict]:
+        """At most one 'propose' card: the gentlest reflection whose
+        strategy clears the ladder and which wasn't surfaced recently."""
+        self._ensure_tables()
+        cutoff = (datetime.now()
+                  - timedelta(days=PROPOSE_RESURFACE_DAYS)).isoformat()
+        cur = self.db.cursor()
+        try:
+            cur.execute('''
+                SELECT item_ref, created_at FROM growth_feedback
+                WHERE user_id = ? AND signal = 'surfaced'
+                  AND item_ref LIKE 'refl:%'
+            ''', (user_id,))
+            surfaced = {r[0]: r[1] for r in cur.fetchall()}
+        except Exception:
+            surfaced = {}
+        rank = {'low': 0, 'medium': 1, 'high': 2}
+        for ref in sorted(self._reflections(user_id),
+                          key=lambda r: (rank.get(r['sensitivity'], 1),
+                                         r['updated_at'])):
+            strategy, _ = self.delivery_strategy(ref, receptivity)
+            if strategy != 'propose':
+                continue
+            ref_id = f"refl:{ref['id']}"
+            if (surfaced.get(ref_id) or '') > cutoff:
+                continue
+            return {
+                'id': ref_id, 'type': 'propose',
+                'title': 'Something I noticed',
+                'text': f"{ref['claim']} — does that ring true?",
+                'kind': 'observation',
+            }
+        return None
+
+    # ------------------------------------------------------------------
     # Feed — deterministic card assembly (facts only, never reflections)
     # ------------------------------------------------------------------
     def build_feed(self, user_id: int) -> List[Dict]:
         """Cards for the /grow feed, ordered by the ranking policy in
         docs/growth_companion.md: open loops (engagement chips) first, then
-        due habits, then check-in, then wins, then a starter prompt when
-        there is nothing else. Every card carries an id so feedback signals
-        can reference it."""
+        due habits, then check-in, then wins, then learning topics, then —
+        last and most delicate — at most one calibrated 'propose' card
+        carrying a reflection the user is ready to hear. Reflections only
+        ever reach the feed through that ladder; nothing raw is shown.
+        Every card carries an id so feedback signals can reference it."""
         uid = str(user_id)
         cards: List[Dict] = []
 
@@ -749,12 +910,19 @@ class GrowthEngine:
                     'text': f'"{name}" — that is consistency, not luck.',
                 })
 
+        # Receptivity learning runs here (cheap, deterministic) — the
+        # feedback loop tunes both topic surfacing and the propose ladder.
+        try:
+            receptivity = self.learn_receptivity(user_id)
+        except Exception as e:
+            print(f"[GrowthEngine] receptivity error: {e}")
+            receptivity = {}
+
         # 5. Topic card — the learning topic furthest along that hasn't been
-        # surfaced recently. Derivation runs here (cheap, deterministic) so
-        # topics self-populate without a scheduler.
+        # surfaced recently or suppressed by its own feedback score.
         try:
             self.derive_topics(user_id)
-            topic_card = self._topic_card(user_id)
+            topic_card = self._topic_card(user_id, receptivity)
             if topic_card:
                 cards.append(topic_card)
                 self.record_feedback(user_id, 'topic',
@@ -762,6 +930,18 @@ class GrowthEngine:
                                      'surfaced')
         except Exception as e:
             print(f"[GrowthEngine] feed topic error: {e}")
+
+        # 6. Propose card — the one place a reflection may reach the user:
+        # only when the ladder says 'propose', throttled, and always with
+        # confirm/correct/not-now replies (the calibration loop).
+        try:
+            propose = self._propose_card(user_id, receptivity)
+            if propose:
+                cards.append(propose)
+                self.record_feedback(user_id, 'refl', propose['id'],
+                                     'surfaced')
+        except Exception as e:
+            print(f"[GrowthEngine] feed propose error: {e}")
 
         # 6. Starter card — first for a brand-new user (the seed question is
         # the designed cold start), or the fallback when nothing else exists.
@@ -865,13 +1045,58 @@ class GrowthEngine:
                         WHERE id = ?
                     ''', ('user engaged with the topic card',
                           datetime.now().isoformat(), row[0]))
+        elif item_ref.startswith('refl:'):
+            # A propose-card response. The user's word is last: confirm,
+            # correct and dismiss all land on the reflection's status, and
+            # every response is appended to its delivery_log.
+            try:
+                ref_id = int(item_ref[len('refl:'):])
+            except ValueError:
+                ref_id = 0
+            if ref_id and signal != 'surfaced':
+                new_status = {
+                    'confirm': 'confirmed', 'confirmed': 'confirmed',
+                    'correct': 'corrected', 'corrected': 'corrected',
+                    'dismissed': 'dismissed', 'not_for_me': 'dismissed',
+                }.get(signal)
+                cur.execute('''
+                    SELECT status, delivery_log FROM growth_reflections
+                    WHERE id = ? AND user_id = ?
+                ''', (ref_id, user_id))
+                row = cur.fetchone()
+                if row:
+                    log = json.loads(row[1] or '[]')
+                    log.append({'signal': signal,
+                                'at': datetime.now().isoformat()})
+                    if new_status and row[0] != new_status:
+                        cur.execute('''
+                            UPDATE growth_reflections SET status = ?,
+                                delivery_log = ?, updated_at = ?
+                            WHERE id = ?
+                        ''', (new_status, json.dumps(log),
+                              datetime.now().isoformat(), ref_id))
+                    else:
+                        cur.execute('''
+                            UPDATE growth_reflections SET delivery_log = ?,
+                                updated_at = ? WHERE id = ?
+                        ''', (json.dumps(log),
+                              datetime.now().isoformat(), ref_id))
         self.db.commit()
 
     def inspector_payload(self, user_id: int) -> Dict:
         """Everything the app privately models about a user — admin view."""
         state = self.growth_state(user_id)
-        state['reflections'] = self._reflections(user_id)
-        state['receptivity'] = self._receptivity(user_id)
+        try:
+            receptivity = self.learn_receptivity(user_id)
+        except Exception:
+            receptivity = self._receptivity(user_id)
+        reflections = self._reflections(user_id)
+        for r in reflections:
+            strategy, reason = self.delivery_strategy(r, receptivity)
+            r['strategy'] = strategy
+            r['strategy_reason'] = reason
+        state['reflections'] = reflections
+        state['receptivity'] = receptivity
         state['feedback'] = self._feedback(user_id)
         return state
 

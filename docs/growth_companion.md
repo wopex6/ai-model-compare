@@ -183,3 +183,17 @@ plan-completion by mode. Never: session length, DAU, notification opens.
   `TOPIC_RESURFACE_DAYS`; `not_for_me` dismisses it permanently. Topic
   kinds split internal (4-stage: noticed→acknowledged→explored→integrated)
   vs external (8-stage) by keyword; refinement is deliberate future work.
+- Phase 3 build: receptivity + delivery ladder. `learn_receptivity()`
+  recomputes `growth_receptivity` from the whole feedback history —
+  global `openness` (Laplace-smoothed around 0.5) plus per-subject
+  scores keyed by item_type or `topic:`/`refl:` ref. `surfaced`/`snoozed`
+  never count; `corrected` counts as engagement, not rejection.
+  `delivery_strategy()` maps sensitivity × openness onto
+  hold/seed/propose deterministically (high-sensitivity is NEVER
+  card-proposed — pull only); resolved reflections leave the rotation.
+  A subject scoring below `TOPIC_SUBJECT_SUPPRESS` stops surfacing without
+  being dismissed. At most one `propose` card per feed, throttled per
+  reflection; its confirm/correct/snooze replies land on
+  `status`/`delivery_log` — the mirror confirm/correct ratio metric now
+  has data. Receptivity tunes the companion's prompts only — habits,
+  check-ins and threads (the user's own commitments) are never dampened.

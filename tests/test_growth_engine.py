@@ -171,7 +171,10 @@ def test_inspector_includes_private_model(env):
     env.engine.derive_reflections(7)
     payload = env.engine.inspector_payload(7)
     assert payload['reflections']
-    assert payload['receptivity']['source'] == 'default'
+    # Phase 3: the inspector computes receptivity live, so it is 'learned'
+    # even before any feedback — openness sits at the smoothed default 0.5.
+    assert payload['receptivity']['source'] == 'learned'
+    assert payload['receptivity']['openness'] == 0.5
     assert 'commitments' in payload and 'topics' in payload
 
 
@@ -418,3 +421,131 @@ def test_internal_topic_stage_copy_uses_internal_labels(env):
     cards = env.engine.build_feed(7)
     t = [c for c in cards if c['type'] == 'topic']
     assert t and t[0]['stage_label'] == 'noticed'
+
+
+# --- receptivity + delivery ladder (Phase 3) -------------------------------
+
+def test_receptivity_neutral_without_feedback(env):
+    learned = env.engine.learn_receptivity(7)
+    assert learned['openness'] == 0.5
+    row = env.db.execute('SELECT openness FROM growth_receptivity '
+                         'WHERE user_id=7').fetchone()
+    assert row and row[0] == 0.5
+
+
+def test_receptivity_rises_on_engagement(env):
+    for i in range(5):
+        env.engine.record_feedback(7, 'card', f'checkin:{i}', 'landed')
+    rec = env.engine.learn_receptivity(7)
+    assert rec['openness'] > 0.5
+    assert rec['sensitivity']['card']['positive'] == 5
+
+
+def test_receptivity_falls_on_rejection(env):
+    for _ in range(8):
+        env.engine.record_feedback(7, 'card', 'topic:piano', 'rejected')
+    rec = env.engine.learn_receptivity(7)
+    assert rec['openness'] < 0.3
+    assert rec['sensitivity']['topic:piano']['score'] < 0.2
+
+
+def test_surfaced_is_not_a_user_signal(env):
+    env.engine.record_feedback(7, 'topic', 'piano', 'surfaced')
+    env.engine.record_feedback(7, 'refl', 'refl:3', 'surfaced')
+    rec = env.engine.learn_receptivity(7)
+    assert rec['openness'] == 0.5
+    assert not rec['sensitivity']
+
+
+def test_delivery_strategy_ladder(env):
+    e = env.engine
+    low = {'sensitivity': 'low', 'status': 'hold'}
+    med = {'sensitivity': 'medium', 'status': 'hold'}
+    hi = {'sensitivity': 'high', 'status': 'hold'}
+    closed = {'openness': 0.2}
+    assert e.delivery_strategy(low, closed)[0] == 'hold'
+    assert e.delivery_strategy(low, {'openness': 0.5})[0] == 'propose'
+    assert e.delivery_strategy(med, {'openness': 0.5})[0] == 'seed'
+    assert e.delivery_strategy(med, {'openness': 0.7})[0] == 'propose'
+    # high sensitivity is never card-proposed — pull ('show') or
+    # conversational 'lead' only, no matter how open the user is
+    assert e.delivery_strategy(hi, {'openness': 0.95})[0] == 'hold'
+
+
+def test_delivery_strategy_resolved_never_pushed(env):
+    r = {'sensitivity': 'low', 'status': 'confirmed'}
+    assert env.engine.delivery_strategy(r, {'openness': 0.95})[0] == 'done'
+
+
+def test_propose_card_requires_openness(env):
+    _insert_explicit(env.db, 7, 'goal', 'learn piano', 'x', days_ago=30)
+    env.engine.derive_reflections(7)   # stale_goal — medium sensitivity
+    cards = env.engine.build_feed(7)
+    assert not any(c['type'] == 'propose' for c in cards)
+    for i in range(5):
+        env.engine.record_feedback(7, 'card', f'w{i}', 'landed')
+    cards = env.engine.build_feed(7)
+    p = [c for c in cards if c['type'] == 'propose']
+    assert p and 'learn piano' in p[0]['text']
+
+
+def test_propose_never_surfaces_high_sensitivity(env):
+    _insert_checkins(env.db, 7, [1, 1, 1, 1])   # mood_declining → high
+    env.engine.derive_reflections(7)
+    for i in range(10):
+        env.engine.record_feedback(7, 'card', f'w{i}', 'landed')
+    cards = env.engine.build_feed(7)
+    assert not any(c['type'] == 'propose' for c in cards)
+
+
+def test_propose_card_throttled(env):
+    _insert_explicit(env.db, 7, 'goal', 'learn piano', 'x', days_ago=30)
+    env.engine.derive_reflections(7)
+    for i in range(5):
+        env.engine.record_feedback(7, 'card', f'w{i}', 'landed')
+    assert any(c['type'] == 'propose' for c in env.engine.build_feed(7))
+    assert not any(c['type'] == 'propose' for c in env.engine.build_feed(7))
+
+
+def test_propose_response_lands_on_reflection(env):
+    _insert_explicit(env.db, 7, 'goal', 'learn piano', 'x', days_ago=30)
+    env.engine.derive_reflections(7)
+    rid = env.engine._reflections(7)[0]['id']
+    env.engine.record_feedback(7, 'card', f'refl:{rid}', 'confirm')
+    r = env.engine._reflections(7)[0]
+    assert r['status'] == 'confirmed'
+    assert r['delivery_log'][-1]['signal'] == 'confirm'
+    # resolved → out of the push rotation forever
+    assert env.engine.delivery_strategy(r, {'openness': 0.95})[0] == 'done'
+
+
+def test_propose_correct_marks_corrected(env):
+    _insert_explicit(env.db, 7, 'goal', 'learn piano', 'x', days_ago=30)
+    env.engine.derive_reflections(7)
+    rid = env.engine._reflections(7)[0]['id']
+    env.engine.record_feedback(7, 'card', f'refl:{rid}', 'correct')
+    assert env.engine._reflections(7)[0]['status'] == 'corrected'
+
+
+def test_topic_suppressed_by_per_subject_score(env):
+    _insert_explicit(env.db, 7, 'goal', 'learn piano', 'x')
+    _insert_explicit(env.db, 7, 'goal', 'gardening', 'x')
+    env.engine.derive_topics(7)
+    # 'rejected' lowers the subject score without dismissing the row —
+    # the topic stays in the model, it just stops being asked about
+    for _ in range(8):
+        env.engine.record_feedback(7, 'card', 'topic:learn piano', 'rejected')
+    cards = env.engine.build_feed(7)
+    t = [c for c in cards if c['type'] == 'topic']
+    assert t and t[0]['title'] == 'gardening'
+    assert _topic_row(env, 7, 'learn piano')[3] == 0  # not dismissed
+
+
+def test_inspector_shows_learned_strategy(env):
+    _insert_explicit(env.db, 7, 'goal', 'learn piano', 'x', days_ago=30)
+    env.engine.derive_reflections(7)
+    for i in range(5):
+        env.engine.record_feedback(7, 'card', f'w{i}', 'landed')
+    payload = env.engine.inspector_payload(7)
+    assert payload['receptivity']['source'] == 'learned'
+    assert payload['reflections'][0]['strategy'] == 'propose'
