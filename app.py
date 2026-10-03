@@ -6994,6 +6994,7 @@ def growth_state():
         return jsonify({'error': 'Growth engine unavailable.'}), 503
     try:
         return jsonify({'success': True,
+                        'username': request.current_user.get('username', ''),
                         'state': growth_engine.growth_state(
                             request.current_user['user_id'])})
     except Exception as e:

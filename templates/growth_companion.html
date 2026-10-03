@@ -9,12 +9,16 @@
         * { box-sizing: border-box; }
         body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
                background: #f1f5f9; color: #1e293b; }
-        .wrap { max-width: 640px; margin: 0 auto; padding: 14px 14px 90px; }
+        .wrap { max-width: 640px; margin: 0 auto; padding: 14px 14px 160px; }
         header { padding: 14px 4px 10px; display: flex; align-items: center; justify-content: space-between; }
         header h1 { font-size: 1.25rem; margin: 0; }
         header .sub { font-size: .8rem; color: #64748b; }
         .facts-btn { background: none; border: 1px solid #cbd5e1; border-radius: 999px;
                      padding: 6px 12px; font-size: .78rem; color: #475569; cursor: pointer; }
+        .icon-btn { background: none; border: none; color: #94a3b8; cursor: pointer;
+                    font-size: 1rem; padding: 6px 8px; }
+        .icon-btn:hover { color: #dc2626; }
+        #who { font-size: .8rem; color: #64748b; }
 
         .card { background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 12px;
                 box-shadow: 0 1px 4px rgba(15,23,42,.08); position: relative; }
@@ -46,8 +50,10 @@
         .composer { position: fixed; bottom: 0; left: 0; right: 0; background: #fff;
                     border-top: 1px solid #e2e8f0; padding: 10px; }
         .composer .inner { max-width: 640px; margin: 0 auto; display: flex; gap: 8px; }
-        .composer input { flex: 1; padding: 12px 14px; border: 1px solid #cbd5e1; border-radius: 999px;
-                          font-size: .95rem; }
+        .composer textarea { flex: 1; padding: 12px 14px; border: 1px solid #cbd5e1;
+                             border-radius: 18px; font-size: .95rem; font-family: inherit;
+                             line-height: 1.45; resize: none; overflow-y: auto;
+                             max-height: 130px; /* ~5 lines */ }
         .composer button { padding: 0 18px; border-radius: 999px; border: none; background: #667eea;
                            color: #fff; font-weight: 600; cursor: pointer; }
 
@@ -66,9 +72,12 @@
     <header>
         <div>
             <h1>Aria</h1>
-            <div class="sub">your growth companion</div>
+            <div class="sub">your growth companion<span id="who"></span></div>
         </div>
-        <button class="facts-btn" onclick="toggleFacts()"><i class="fas fa-eye"></i> what I know</button>
+        <div>
+            <button class="facts-btn" onclick="toggleFacts()"><i class="fas fa-eye"></i> what I know</button>
+            <button class="icon-btn" title="Log out" onclick="logout()"><i class="fas fa-sign-out-alt"></i></button>
+        </div>
     </header>
 
     <div id="facts" class="card"></div>
@@ -80,7 +89,7 @@
 </div>
 
 <div class="composer"><div class="inner">
-    <input id="chatIn" placeholder="Tell Aria…" autocomplete="off">
+    <textarea id="chatIn" rows="1" placeholder="Tell Aria…"></textarea>
     <button id="sendBtn" onclick="sendChat()"><i class="fas fa-paper-plane"></i></button>
 </div></div>
 
@@ -123,6 +132,7 @@ async function habitDone(cardId, habitId, btn) {
 function discussTopic(topic, cardId) {
     const input = document.getElementById('chatIn');
     input.value = `I'd like to talk about: ${topic}`;
+    autogrow(input);
     input.focus();
     input.scrollIntoView({ block: 'center', behavior: 'smooth' });
     signal(cardId, 'tell_me_more');
@@ -143,6 +153,7 @@ async function reflRespond(cardId, sig) {
     if (sig === 'correct') {
         const input = document.getElementById('chatIn');
         input.value = 'That observation is not quite right: ';
+        autogrow(input);
         input.focus();
         input.scrollIntoView({ block: 'center', behavior: 'smooth' });
         return;  // keep the card until they've said what it should be
@@ -226,6 +237,7 @@ async function sendChat() {
     const msg = input.value.trim();
     if (!msg) return;
     input.value = '';
+    autogrow(input);
     bubble(msg, 'user');
     const thinking = bubble('…', 'ai');
     try {
@@ -242,7 +254,12 @@ async function sendChat() {
         bubble('Connection error — please try again.', 'ai');
     }
 }
-document.getElementById('chatIn').addEventListener('keypress', e => { if (e.key === 'Enter') sendChat(); });
+const chatIn = document.getElementById('chatIn');
+function autogrow(t) { t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 130) + 'px'; }
+chatIn.addEventListener('input', () => autogrow(chatIn));
+chatIn.addEventListener('keypress', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); }
+});
 
 /* ---------- facts panel: transparency boundary ---------- */
 async function toggleFacts() {
@@ -266,9 +283,25 @@ async function correctFact(id, btn) {
     if (r.ok) { btn.closest('.fact-row').style.opacity = .35; btn.disabled = true; }
 }
 
+/* ---------- identity + logout ---------- */
+async function loadWho() {
+    const r = await fetch('/api/growth/state', { headers: authH() });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d.username) document.getElementById('who').textContent = ` · for ${d.username}`;
+}
+
+async function logout() {
+    try { await fetch('/api/auth/logout', { method: 'POST', headers: authH() }); } catch (e) {}
+    localStorage.removeItem('authToken');
+    sessionStorage.removeItem('authToken');
+    window.location.href = '/login';
+}
+
 if (!token()) { window.location.href = '/login'; }
 loadFeed();
 loadHistory();
+loadWho();
 </script>
 </body>
 </html>
