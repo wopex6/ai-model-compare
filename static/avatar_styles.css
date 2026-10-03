@@ -23,9 +23,19 @@
     display: none;
 }
 
-.avatar-panel.collapsed {
-    width: 120px;
-    padding-bottom: 10px;
+/* Collapsed = name + controls in one compact chip. Width hugs the content:
+   a fixed 120px clipped the three header buttons on longer names. */
+.avatar-panel.collapsed,
+.avatar-floater .avatar-panel.collapsed {
+    width: auto;
+    min-width: 0;
+    padding: 8px;
+}
+.avatar-panel.collapsed .avatar-header {
+    margin-bottom: 0;
+}
+.avatar-panel.collapsed .avatar-canvas-container {
+    display: none;
 }
 
 /* Header */

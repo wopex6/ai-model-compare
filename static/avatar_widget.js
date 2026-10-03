@@ -182,15 +182,19 @@ const AvatarWidget = (() => {
         // Persist so chatchat dashboard always shows the last-visited character's avatar
         try { localStorage.setItem('activeCharacterId', characterId); } catch {}
 
-        const sidePanelId  = sideContainerId  + '-panel';
+        const sidePanelId  = sideContainerId ? sideContainerId + '-panel' : null;
         const floatPanelId = floatContainerId + '-panel';
 
-        // Build panels (livePortrait takes precedence over photoUrl)
-        const sideCtrl  = _buildIn(sideContainerId,  sidePanelId,  characterId, userGender, null, null);
+        // Build panels (livePortrait takes precedence over photoUrl).
+        // sideContainerId may be null — the page then has a single avatar.
+        const sideCtrl  = sideContainerId
+            ? _buildIn(sideContainerId, sidePanelId, characterId, userGender, null, null)
+            : null;
         const floatCtrl = _buildIn(floatContainerId, floatPanelId, characterId, userGender, photoUrl, livePortraitUrl);
 
         // Determine initial side visibility
-        const sideContainer = document.getElementById(sideContainerId);
+        const sideContainer = sideContainerId ? document.getElementById(sideContainerId) : null;
+        const floatContainer = document.getElementById(floatContainerId);
         const storedVisible = localStorage.getItem('avatarVisible') === 'true';
         const startVisible = showByDefault !== null ? showByDefault : storedVisible;
 
@@ -201,19 +205,28 @@ const AvatarWidget = (() => {
         // Wire toggle chip
         const chip = document.getElementById(toggleChipId);
         if (chip) {
-            if (startVisible) chip.classList.add('active');
-            chip.addEventListener('click', () => {
-                const isShown = sideContainer && sideContainer.style.display !== 'none';
-                if (isShown) {
-                    if (sideContainer) sideContainer.style.display = 'none';
-                    chip.classList.remove('active');
-                    localStorage.setItem('avatarVisible', 'false');
-                } else {
-                    if (sideContainer) sideContainer.style.display = 'flex';
-                    chip.classList.add('active');
-                    localStorage.setItem('avatarVisible', 'true');
-                }
-            });
+            if (sideContainer) {
+                if (startVisible) chip.classList.add('active');
+                chip.addEventListener('click', () => {
+                    const isShown = sideContainer && sideContainer.style.display !== 'none';
+                    if (isShown) {
+                        if (sideContainer) sideContainer.style.display = 'none';
+                        chip.classList.remove('active');
+                        localStorage.setItem('avatarVisible', 'false');
+                    } else {
+                        if (sideContainer) sideContainer.style.display = 'flex';
+                        chip.classList.add('active');
+                        localStorage.setItem('avatarVisible', 'true');
+                    }
+                });
+            } else if (floatContainer) {
+                // Single-avatar page: the chip shows/hides the floater instead.
+                chip.addEventListener('click', () => {
+                    const shown = floatContainer.classList.toggle('visible');
+                    chip.classList.toggle('active', shown);
+                    try { localStorage.setItem('avatarVisible', String(shown)); } catch (e) {}
+                });
+            }
         }
 
         // Wire side panel controls
@@ -228,11 +241,11 @@ const AvatarWidget = (() => {
         }
 
         // Wire float panel controls
-        const floatContainer = document.getElementById(floatContainerId);
         if (floatCtrl) {
             _wirePanel(floatPanelId, floatCtrl, {
                 onClose: () => {
                     if (floatContainer) floatContainer.classList.remove('visible');
+                    if (chip && !sideContainer) chip.classList.remove('active');
                 }
             });
         }

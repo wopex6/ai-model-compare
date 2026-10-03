@@ -1278,7 +1278,7 @@ class IntegratedAIChatbot {
         const result = AvatarWidget.init({
             characterId,
             userGender,
-            sideContainerId:  'avatar-side',
+            sideContainerId:  null,   // one avatar only: the floater
             floatContainerId: 'avatar-floater',
             toggleChipId:     'avatar-toggle-chip',
             greeting:         'Hi ' + uname + '! How can I help you today?',
