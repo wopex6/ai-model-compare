@@ -96,7 +96,7 @@ async function signal(cardId, sig, detail = '') {
             body: JSON.stringify({ item_type: 'card', item_ref: cardId, signal: sig, detail }) });
     } catch (e) { /* feedback is best-effort */ }
     if (sig === 'not_for_me') {
-        const el = document.getElementById('card-' + CSS.escape(cardId));
+        const el = document.getElementById('card-' + cardId);
         if (el) el.remove();
     }
 }
@@ -108,7 +108,7 @@ async function threadAction(cardId, threadId, action, answer = '') {
                           { method: 'POST', headers: authH(), body: JSON.stringify(body) });
     if (r.ok) {
         signal(cardId, action === 'dismiss' ? 'not_for_me' : 'done', answer);
-        const el = document.getElementById('card-' + CSS.escape(cardId));
+        const el = document.getElementById('card-' + cardId);
         if (el && action !== 'answer') el.remove();
         if (el && action === 'answer') el.remove();
         loadFeed();
@@ -131,7 +131,11 @@ function discussTopic(topic, cardId) {
 async function checkin(cardId, mood) {
     const r = await fetch('/api/user/checkin', { method: 'POST', headers: authH(),
         body: JSON.stringify({ mood: mood.toLowerCase() }) });
-    if (r.ok) { signal(cardId, 'answered', mood); document.getElementById('card-' + CSS.escape(cardId)).remove(); }
+    if (r.ok) {
+        signal(cardId, 'answered', mood);
+        const el = document.getElementById('card-' + cardId);
+        if (el) el.remove();
+    }
 }
 
 async function reflRespond(cardId, sig) {
@@ -143,7 +147,7 @@ async function reflRespond(cardId, sig) {
         input.scrollIntoView({ block: 'center', behavior: 'smooth' });
         return;  // keep the card until they've said what it should be
     }
-    const el = document.getElementById('card-' + CSS.escape(cardId));
+    const el = document.getElementById('card-' + cardId);
     if (el) el.remove();
 }
 
